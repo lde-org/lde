@@ -141,7 +141,7 @@ function sea.compile(main, files, sharedLibs)
 			:format(
 				file.content:gsub(".", CEscapes),
 				#file.content,
-				escapedName,
+				"@" .. escapedName,
 				escapedName
 			)
 	end
