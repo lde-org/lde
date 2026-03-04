@@ -3,7 +3,7 @@ description: "Install lpm package manager"
 
 inputs:
   version:
-    description: "Version to install (e.g., '0.6.2' or 'latest')"
+    description: "Version to install (e.g., '0.6.3' or 'latest')"
     required: false
     default: "latest"
 
