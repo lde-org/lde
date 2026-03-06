@@ -34,10 +34,10 @@ A more in-depth comparison can be found below.
 
 ## Installation
 
-| OS      | Command                                                                               |
-| ------- | ------------------------------------------------------------------------------------- |
-| Linux   | `curl -fsSL https://raw.githubusercontent.com/codebycruz/lpm/master/install.sh \| sh` |
-| Windows | `irm https://raw.githubusercontent.com/codebycruz/lpm/master/install.ps1 \| iex`      |
+| OS      | Command                                       |
+| ------- | --------------------------------------------- |
+| Linux   | `curl -fsSL https://lualpm.com/install \| sh` |
+| Windows | `irm https://lualpm.com/install.ps1 \| iex`   |
 
 _To upgrade your `lpm` version, simply run `lpm upgrade`!_
 
