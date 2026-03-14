@@ -1,22 +1,23 @@
 local fs = require("fs")
 local json = require("json")
-local path = require("path")
 
----@class lpm.Lockfile.Raw.GitDependency
+---@class lpm.Lockfile.GitDependency
 ---@field git string
----@field commit string
----@field ref string
+---@field commit string # Always resolved to a specific commit hash
+---@field branch string?
+---@field package string?
 
----@class lpm.Lockfile.Raw.PathDependency
+---@class lpm.Lockfile.PathDependency
 ---@field path string
+---@field package string?
 
----@alias lpm.Lockfile.Raw.Dependency
---- | lpm.Lockfile.Raw.GitDependency
---- | lpm.Lockfile.Raw.PathDependency
+---@alias lpm.Lockfile.Dependency
+--- | lpm.Lockfile.GitDependency
+--- | lpm.Lockfile.PathDependency
 
 ---@class lpm.Lockfile.Raw
 ---@field version "1"
----@field dependencies table<string, lpm.Lockfile.Raw.Dependency>
+---@field dependencies table<string, lpm.Lockfile.Dependency>
 
 ---@class lpm.Lockfile
 ---@field path string
@@ -25,17 +26,18 @@ local Lockfile = {}
 Lockfile.__index = Lockfile
 
 ---@param p string
+---@return lpm.Lockfile?
 function Lockfile.open(p)
 	local content = fs.read(p)
 	if not content then
-		error("Could not read lockfile: " .. p)
+		return nil
 	end
 
 	return setmetatable({ path = p, raw = json.decode(content) }, Lockfile)
 end
 
 ---@param p string
----@param dependencies table<string, lpm.Lockfile.Raw.Dependency>
+---@param dependencies table<string, lpm.Lockfile.Dependency>
 function Lockfile.new(p, dependencies)
 	return setmetatable({
 		path = p,
@@ -63,6 +65,8 @@ function Lockfile:getDependencies()
 	end
 end
 
+---@param name string
+---@return lpm.Lockfile.Dependency?
 function Lockfile:getDependency(name)
 	return self:getDependencies()[name]
 end

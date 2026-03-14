@@ -1,8 +1,10 @@
 local path = require("path")
 local fs = require("fs")
+local process = require("process")
 
 local global = require("lpm-core.global")
 local Package = require("lpm-core.package")
+local Lockfile = require("lpm-core.lockfile")
 
 ---@param package lpm.Package
 ---@param dependency lpm.Package
@@ -23,12 +25,12 @@ local function installDependency(package, dependency, alias)
 	dependency:build(destinationPath)
 end
 
---- Gets a proper lpm.Package instance from dependency info.
---- For git dependencies, this will clone it to the global git cache.
---- For path dependencies, this will resolve the path and load the package from there.
+--- Gets a proper lpm.Package instance from dependency info, and returns the
+--- resolved lockfile entry for it.
 ---@param alias string # The key in the dependencies table (used as the install name)
 ---@param depInfo lpm.Config.Dependency
 ---@param relativeTo string
+---@return lpm.Package, lpm.Lockfile.Dependency
 local function dependencyToPackage(alias, depInfo, relativeTo)
 	-- depInfo.package overrides the lookup name (aliasing support)
 	local packageName = depInfo.package or alias
@@ -36,9 +38,21 @@ local function dependencyToPackage(alias, depInfo, relativeTo)
 	if depInfo.git then
 		local repoDir = global.getOrInitGitRepo(packageName, depInfo.git, depInfo.branch, depInfo.commit)
 
+		-- Resolve the exact HEAD commit for pinning in the lockfile
+		local ok, output = process.exec("git", { "rev-parse", "HEAD" }, { cwd = repoDir })
+		local resolvedCommit = (ok and output) and output:gsub("%s+$", "") or depInfo.commit
+
+		---@type lpm.Lockfile.GitDependency
+		local lockEntry = {
+			git = depInfo.git,
+			commit = resolvedCommit,
+			branch = depInfo.branch,
+			package = depInfo.package,
+		}
+
 		local gitDependencyPackage = Package.open(repoDir)
 		if gitDependencyPackage and gitDependencyPackage:getName() == packageName then
-			return gitDependencyPackage
+			return gitDependencyPackage, lockEntry
 		end
 
 		for _, config in ipairs(fs.scan(repoDir, "**" .. path.separator .. "lpm.json")) do
@@ -46,7 +60,7 @@ local function dependencyToPackage(alias, depInfo, relativeTo)
 
 			gitDependencyPackage = Package.open(parentDir)
 			if gitDependencyPackage and gitDependencyPackage:getName() == packageName then
-				return gitDependencyPackage
+				return gitDependencyPackage, lockEntry
 			end
 		end
 
@@ -59,7 +73,13 @@ local function dependencyToPackage(alias, depInfo, relativeTo)
 			error("Failed to load local dependency package for: " .. alias .. "\nError: " .. err)
 		end
 
-		return localPackage
+		---@type lpm.Lockfile.PathDependency
+		local lockEntry = {
+			path = depInfo.path,
+			package = depInfo.package,
+		}
+
+		return localPackage, lockEntry
 	else
 		error("Unsupported dependency type for: " .. alias)
 	end
@@ -69,6 +89,7 @@ end
 ---@param dependencies table<string, lpm.Config.Dependency>?
 ---@param relativeTo string? # Directory to resolve relative paths from
 local function installDependencies(package, dependencies, relativeTo)
+	local isTopLevel = dependencies == nil
 	dependencies = dependencies or package:getDependencies()
 	relativeTo = relativeTo or package.dir
 
@@ -77,9 +98,15 @@ local function installDependencies(package, dependencies, relativeTo)
 		fs.mkdir(modulesDir)
 	end
 
+	local lockEntries = {}
 	for name, depInfo in pairs(dependencies) do
-		local dependencyPackage = dependencyToPackage(name, depInfo, relativeTo)
+		local dependencyPackage, lockEntry = dependencyToPackage(name, depInfo, relativeTo)
 		installDependency(package, dependencyPackage, name)
+		lockEntries[name] = lockEntry
+	end
+
+	if isTopLevel then
+		Lockfile.new(package:getLockfilePath(), lockEntries):save()
 	end
 end
 

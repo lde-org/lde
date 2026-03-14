@@ -217,6 +217,77 @@ out:close()
 end)
 
 --
+-- Lockfile
+--
+
+test.it("installDependencies writes a lockfile with resolved path dependency", function()
+	makePackageWithSrc("lockfile-dep", {
+		["init.lua"] = 'return "lockfile-dep"',
+	})
+
+	local mainDir = path.join(tmpBase, "lockfile-main")
+	fs.mkdir(mainDir)
+	fs.mkdir(path.join(mainDir, "src"))
+	fs.write(path.join(mainDir, "src", "init.lua"), 'return true')
+	fs.write(path.join(mainDir, "lpm.json"), json.encode({
+		name = "lockfile-main",
+		version = "0.1.0",
+		dependencies = {
+			["lockfile-dep"] = { path = "../lockfile-dep" },
+		},
+	}))
+
+	local pkg = Package.open(mainDir)
+	pkg:installDependencies()
+
+	local lockPath = path.join(mainDir, "lpm-lock.json")
+	test.equal(fs.exists(lockPath), true)
+
+	local content = json.decode(fs.read(lockPath))
+	test.equal(content.version, "1")
+	test.equal(content.dependencies["lockfile-dep"].path, "../lockfile-dep")
+end)
+
+test.it("installDependencies uses lockfile to pin dependency on reinstall", function()
+	makePackageWithSrc("pinned-dep", {
+		["init.lua"] = 'return "pinned"',
+	})
+	makePackageWithSrc("other-dep", {
+		["init.lua"] = 'return "other"',
+	})
+
+	local mainDir = path.join(tmpBase, "pinned-main")
+	fs.mkdir(mainDir)
+	fs.mkdir(path.join(mainDir, "src"))
+	fs.write(path.join(mainDir, "src", "init.lua"), 'return true')
+	fs.write(path.join(mainDir, "lpm.json"), json.encode({
+		name = "pinned-main",
+		version = "0.1.0",
+		dependencies = {
+			["pinned-dep"] = { path = "../pinned-dep" },
+		},
+	}))
+
+	local pkg = Package.open(mainDir)
+	pkg:installDependencies()
+
+	-- Manually overwrite the lockfile to point at other-dep instead
+	local Lockfile = require("lpm-core.lockfile")
+	Lockfile.new(path.join(mainDir, "lpm-lock.json"), {
+		["pinned-dep"] = { path = "../other-dep" },
+	}):save()
+
+	-- Remove the installed symlink so reinstall actually runs
+	fs.rmdir(path.join(mainDir, "target", "pinned-dep"))
+
+	-- Reinstall — should use the lockfile's path, getting other-dep's init.lua
+	pkg:installDependencies()
+
+	local content = fs.read(path.join(mainDir, "target", "pinned-dep", "init.lua"))
+	test.equal(content, 'return "other"')
+end)
+
+--
 -- Transitive dependencies
 --
 

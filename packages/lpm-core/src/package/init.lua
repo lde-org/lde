@@ -79,6 +79,7 @@ function Package:readConfig()
 	return newConfig
 end
 
+---@return lpm.Lockfile?
 function Package:readLockfile()
 	return Lockfile.open(self:getLockfilePath())
 end
@@ -90,7 +91,17 @@ function Package:__tostring()
 end
 
 function Package:getDependencies()
-	return self:readConfig().dependencies or {}
+	local deps = self:readConfig().dependencies or {}
+
+	local lockfile = self:readLockfile()
+	if not lockfile then return deps end
+
+	-- Prefer locked versions (which have pinned commits) over lpm.json
+	local merged = {}
+	for name, depInfo in pairs(deps) do
+		merged[name] = lockfile:getDependency(name) or depInfo
+	end
+	return merged
 end
 
 function Package:getDevDependencies()
