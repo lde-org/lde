@@ -5,3 +5,5 @@ target
 lpm
 !lpm/
 !lpm/*
+lpm-lock.json
+lpm.lock
