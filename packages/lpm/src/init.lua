@@ -80,6 +80,7 @@ local fs = require("fs")
 local process = require("process")
 
 local global = require("lpm-core.global")
+local Package = require("lpm-core.package")
 global.init()
 
 local args = clap.parse({ ... })
@@ -122,7 +123,20 @@ local ok, err = xpcall(function()
 		if commandHandler then
 			commandHandler(args)
 		else
-			ansi.printf("{red}Unknown command: %s", tostring(commandName))
+			-- Fall back to package scripts before erroring
+			local pkg = Package.open()
+			local scripts = pkg and pkg:readConfig().scripts
+
+			if scripts and scripts[commandName] then
+				pkg:build()
+				pkg:installDependencies()
+				local ok, err = pkg:runScript(commandName)
+				if not ok then
+					error("Script '" .. commandName .. "' failed: " .. err)
+				end
+			else
+				ansi.printf("{red}Unknown command: %s", tostring(commandName))
+			end
 		end
 	end
 end, function(err)

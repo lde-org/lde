@@ -25,7 +25,7 @@ end
 ---@param args string[]?
 ---@param vars table<string, string>? # Env vars
 ---@param cwd string
-local function runScriptWithLPM(package, scriptPath, args, vars, cwd)
+local function runFileWithLPM(package, scriptPath, args, vars, cwd)
 	local luaPath, luaCPath = getLuaPathsForPackage(package)
 
 	return runtime.executeFile(scriptPath, {
@@ -43,7 +43,7 @@ end
 ---@param vars table<string, string>? # Env vars
 ---@param engine string
 ---@param cwd string
-local function runScriptWithLuaCLI(package, scriptPath, args, vars, engine, cwd)
+local function runFileWithLuaCLI(package, scriptPath, args, vars, engine, cwd)
 	local luaPath, luaCPath = getLuaPathsForPackage(package)
 
 	local env = { LUA_PATH = luaPath, LUA_CPATH = luaCPath }
@@ -65,7 +65,7 @@ end
 ---@param cwd string? # Working directory for the script. Defaults to the package directory
 ---@return boolean? # Success
 ---@return string # Output
-local function runScript(package, scriptPath, args, vars, cwd)
+local function runFile(package, scriptPath, args, vars, cwd)
 	-- Ensure package is built so modules folder exists (and so it can require itself)
 	package:build()
 
@@ -84,12 +84,12 @@ local function runScript(package, scriptPath, args, vars, cwd)
 	local engine = config.engine or "lpm"
 	local ok, err
 	if engine == "lpm" then
-		ok, err = runScriptWithLPM(package, scriptPath, args, vars, cwd)
+		ok, err = runFileWithLPM(package, scriptPath, args, vars, cwd)
 	else
-		ok, err = runScriptWithLuaCLI(package, scriptPath, args, vars, engine, cwd)
+		ok, err = runFileWithLuaCLI(package, scriptPath, args, vars, engine, cwd)
 	end
 
 	return ok, err or (not ok and "Script exited with a non-zero exit code") or nil
 end
 
-return runScript
+return runFile

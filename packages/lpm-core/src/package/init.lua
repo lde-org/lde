@@ -7,6 +7,7 @@ local fs = require("fs")
 local env = require("env")
 local json = require("json")
 local path = require("path")
+local process = require("process")
 
 ---@class lpm.Package
 ---@field dir string
@@ -140,7 +141,23 @@ function Package:updateDevDependencies()
 end
 
 Package.compile = require("lpm-core.package.compile")
-Package.runScript = require("lpm-core.package.run")
+Package.runFile = require("lpm-core.package.run")
 Package.runTests = require("lpm-core.package.test")
+
+---@param name string # Name of a script defined in lpm.json scripts table
+---@return boolean?
+---@return string?
+function Package:runScript(name)
+	local scripts = self:readConfig().scripts
+	if not scripts or not scripts[name] then
+		error("No script named '" .. name .. "' in lpm.json")
+	end
+	return process.exec(scripts[name], nil, {
+		unsafe = true,
+		cwd = self:getDir(),
+		stdout = "inherit",
+		stderr = "inherit",
+	})
+end
 
 return Package

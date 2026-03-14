@@ -80,7 +80,7 @@ local function executePackage(pkg, scriptArgs, cwd)
 	pkg:build()
 	pkg:installDependencies()
 
-	local ok, err = pkg:runScript(nil, scriptArgs, nil, cwd)
+	local ok, err = pkg:runFile(nil, scriptArgs, nil, cwd)
 	if not ok then
 		error("Failed to run script: " .. err)
 	end

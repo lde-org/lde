@@ -5,6 +5,7 @@
 ---@field version string
 ---@field bin string?
 ---@field engine string?
+---@field scripts table<string, string>?
 ---@field dependencies lpm.Config.Dependencies?
 ---@field devDependencies lpm.Config.Dependencies?
 local Config = {}

@@ -15,20 +15,27 @@ local function run(args)
 	end
 
 	local scriptArgs = {}
-	local scriptPath = nil ---@type string?
+	local name = nil ---@type string?
 
 	local dash, dashPos = args:flag("")
 	if dash then
 		if dashPos ~= 0 then
-			scriptPath = args:pop()
+			name = args:pop()
 		end
 
 		scriptArgs = args:drain(dashPos)
 	else
-		scriptPath = args:pop()
+		name = args:pop()
 	end
 
-	local ok, err = pkg:runScript(scriptPath, scriptArgs)
+	local ok, err
+	local scripts = pkg:readConfig().scripts
+	if name and scripts and scripts[name] then
+		ok, err = pkg:runScript(name)
+	else
+		ok, err = pkg:runFile(name, scriptArgs)
+	end
+
 	if not ok then
 		error("Failed to run script: " .. err)
 	end

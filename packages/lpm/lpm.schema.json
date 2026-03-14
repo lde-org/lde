@@ -72,6 +72,14 @@
 			"type": "string",
 			"description": "Entry point script to run when using lpm run without a file argument"
 		},
+		"scripts": {
+			"type": "object",
+			"description": "Named scripts that can be run with lpm run <name> or lpm <name>",
+			"additionalProperties": {
+				"type": "string",
+				"description": "Shell command to execute"
+			}
+		},
 		"engine": {
 			"type": "string",
 			"enum": ["lua", "luajit", "lpm"],

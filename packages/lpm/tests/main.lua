@@ -94,7 +94,7 @@ end)
 -- cwd behavior
 --
 
-test.it("runScript: cwd is the package directory", function()
+test.it("runFile: cwd is the package directory", function()
 	fs.mkdir(tmpBase)
 	local dir = path.join(tmpBase, "cwd-run-test")
 	fs.mkdir(dir)
@@ -113,7 +113,7 @@ test.it("runScript: cwd is the package directory", function()
 	]])
 
 	local pkg = Package.open(dir)
-	local ok, err = pkg:runScript(nil, {})
+	local ok, err = pkg:runFile(nil, {})
 	test.equal(ok, true)
 	-- sentinel file should be relative to the package dir, not cwd of the test runner
 	test.equal(fs.exists(path.join(dir, "cwd-sentinel.txt")), true)
@@ -148,10 +148,37 @@ test.it("build.lua: cwd is the package directory, not the destination", function
 end)
 
 --
--- pkg:runScript bin field resolution
+-- pkg:runFile with explicit file path
 --
 
-test.it("runScript: uses bin as default entry point when set", function()
+test.it("runFile: runs an explicit relative file path", function()
+	fs.mkdir(tmpBase)
+	local dir = path.join(tmpBase, "runfile-explicit")
+	fs.mkdir(dir)
+	fs.mkdir(path.join(dir, "src"))
+	fs.write(path.join(dir, "src", "init.lua"), 'return true')
+	fs.mkdir(path.join(dir, "scripts"))
+	fs.write(path.join(dir, "scripts", "hello.lua"), [[
+		local f = assert(io.open("hello-sentinel.txt", "w"))
+		f:close()
+	]])
+	fs.write(path.join(dir, "lpm.json"), json.encode({
+		name = "runfile-explicit",
+		version = "0.1.0",
+		dependencies = {},
+	}))
+
+	local pkg = Package.open(dir)
+	local ok, err = pkg:runFile("./scripts/hello.lua")
+	test.equal(ok, true)
+	test.equal(fs.exists(path.join(dir, "hello-sentinel.txt")), true)
+end)
+
+--
+-- pkg:runFile bin field resolution
+--
+
+test.it("runFile: uses bin as default entry point when set", function()
 	fs.mkdir(tmpBase)
 	local dir = path.join(tmpBase, "bin-run-test")
 	fs.mkdir(dir)
@@ -169,11 +196,11 @@ test.it("runScript: uses bin as default entry point when set", function()
 	fs.write(path.join(srcDir, "cli.lua"), 'return true')
 
 	local pkg = Package.open(dir)
-	local ok, err = pkg:runScript(nil, {})
+	local ok, err = pkg:runFile(nil, {})
 	test.equal(ok, true)
 end)
 
-test.it("runScript: falls back to init.lua when bin is not set", function()
+test.it("runFile: falls back to init.lua when bin is not set", function()
 	fs.mkdir(tmpBase)
 	local dir = path.join(tmpBase, "bin-run-fallback")
 	fs.mkdir(dir)
@@ -189,8 +216,72 @@ test.it("runScript: falls back to init.lua when bin is not set", function()
 	fs.write(path.join(srcDir, "init.lua"), 'return true')
 
 	local pkg = Package.open(dir)
-	local ok, err = pkg:runScript(nil, {})
+	local ok, err = pkg:runFile(nil, {})
 	test.equal(ok, true)
+end)
+
+--
+-- pkg:runScript named script resolution
+--
+
+test.it("runScript: runs a named shell command from lpm.json scripts", function()
+	fs.mkdir(tmpBase)
+	local dir = path.join(tmpBase, "run-script-test")
+	fs.mkdir(dir)
+	fs.mkdir(path.join(dir, "src"))
+	fs.write(path.join(dir, "src", "init.lua"), 'return true')
+	fs.write(path.join(dir, "lpm.json"), json.encode({
+		name = "run-script-test",
+		version = "0.1.0",
+		scripts = { greet = "echo hello" },
+		dependencies = {},
+	}))
+
+	local pkg = Package.open(dir)
+	local ok = pkg:runScript("greet")
+	test.equal(ok, true)
+end)
+
+test.it("runScript: can invoke lpm run to execute a lua file", function()
+	fs.mkdir(tmpBase)
+	local dir = path.join(tmpBase, "run-script-lpm")
+	fs.mkdir(dir)
+	fs.mkdir(path.join(dir, "src"))
+	fs.write(path.join(dir, "src", "init.lua"), 'return true')
+	fs.mkdir(path.join(dir, "scripts"))
+	fs.write(path.join(dir, "scripts", "greet.lua"), [[
+		local f = assert(io.open("greet-sentinel.txt", "w"))
+		f:close()
+	]])
+	fs.write(path.join(dir, "lpm.json"), json.encode({
+		name = "run-script-lpm",
+		version = "0.1.0",
+		scripts = { greet = "lpm run ./scripts/greet.lua" },
+		dependencies = {},
+	}))
+
+	local pkg = Package.open(dir)
+	local ok = pkg:runScript("greet")
+	test.equal(ok, true)
+	test.equal(fs.exists(path.join(dir, "greet-sentinel.txt")), true)
+end)
+
+test.it("runScript: errors when script name is not in lpm.json", function()
+	fs.mkdir(tmpBase)
+	local dir = path.join(tmpBase, "run-script-missing")
+	fs.mkdir(dir)
+	fs.mkdir(path.join(dir, "src"))
+	fs.write(path.join(dir, "src", "init.lua"), 'return true')
+	fs.write(path.join(dir, "lpm.json"), json.encode({
+		name = "run-script-missing",
+		version = "0.1.0",
+		dependencies = {},
+	}))
+
+	local pkg = Package.open(dir)
+	local ok, err = pcall(function() pkg:runScript("doesnotexist") end)
+	test.equal(ok, false)
+	test.notEqual(string.find(err, "doesnotexist", 1, true), nil)
 end)
 
 --
