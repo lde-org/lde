@@ -9,6 +9,9 @@ local json = require("json")
 
 local tmpBase = path.join(env.tmpdir(), "lpm-build-tests")
 
+-- Clean up from any previous test run
+fs.rmdir(tmpBase)
+
 --- Creates a package with src directory and source files.
 local function makePackageWithSrc(name, srcFiles, config)
 	fs.mkdir(tmpBase)
@@ -136,7 +139,7 @@ test.it("installDependencies installs multiple dependencies", function()
 	test.equal(fs.exists(path.join(mainDir, "target", "multi-dep-b", "init.lua")), true)
 end)
 
-test.it("installDependencies skips already-installed dependencies", function()
+test.it("installDependencies skips already-installed symlink dependencies", function()
 	makePackageWithSrc("skip-dep", {
 		["init.lua"] = 'return "skip"',
 	})
@@ -159,6 +162,58 @@ test.it("installDependencies skips already-installed dependencies", function()
 	pkg:installDependencies()
 
 	test.equal(fs.exists(path.join(mainDir, "target", "skip-dep")), true)
+end)
+
+test.it("installDependencies re-runs build script on each call when output is a directory", function()
+	-- "rebuild-sub" has a build.lua that writes an incrementing counter to init.lua.
+	-- The counter persists in a sibling file next to the output dir so it survives
+	-- the fs.copy that happens before each build script run.
+	local buildScript = [[
+local outputDir = os.getenv("LPM_OUTPUT_DIR")
+local counterFile = outputDir .. ".count"
+local count = 0
+local f = io.open(counterFile, "r")
+if f then count = tonumber(f:read("*a")) or 0; f:close() end
+count = count + 1
+local h = io.open(counterFile, "wb"); h:write(tostring(count)); h:close()
+local out = io.open(outputDir .. "/init.lua", "wb")
+out:write(string.format("return %d", count))
+out:close()
+]]
+
+	local subDir = path.join(tmpBase, "rebuild-sub")
+	fs.mkdir(tmpBase)
+	fs.mkdir(subDir)
+	fs.mkdir(path.join(subDir, "src"))
+	fs.write(path.join(subDir, "src", "init.lua"), 'return 0')
+	fs.write(path.join(subDir, "build.lua"), buildScript)
+	fs.write(path.join(subDir, "lpm.json"), json.encode({
+		name = "rebuild-sub",
+		version = "0.1.0",
+	}))
+
+	local mainDir = path.join(tmpBase, "rebuild-main")
+	fs.mkdir(mainDir)
+	fs.mkdir(path.join(mainDir, "src"))
+	fs.write(path.join(mainDir, "src", "init.lua"), 'return true')
+	fs.write(path.join(mainDir, "lpm.json"), json.encode({
+		name = "rebuild-main",
+		version = "0.1.0",
+		dependencies = {
+			["rebuild-sub"] = { path = "../rebuild-sub" },
+		},
+	}))
+
+	local pkg = Package.open(mainDir)
+
+	pkg:installDependencies()
+	local content1 = fs.read(path.join(mainDir, "target", "rebuild-sub", "init.lua"))
+
+	pkg:installDependencies()
+	local content2 = fs.read(path.join(mainDir, "target", "rebuild-sub", "init.lua"))
+
+	test.equal(content1, "return 1")
+	test.equal(content2, "return 2")
 end)
 
 --
