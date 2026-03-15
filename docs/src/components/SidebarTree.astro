@@ -27,9 +27,9 @@ function isActive(href?: string): boolean {
 						<a
 							href={item.href}
 							class:list={[
-								"block px-3 py-1.5 rounded-md transition",
+								"block px-3 py-1.5 rounded-xl transition",
 								isActive(item.href)
-									? "bg-blue-500 text-white font-medium"
+									? "bg-blue-500 text-white font-semibold rounded-xl"
 									: "hover:bg-gray-100 dark:hover:bg-gray-800 opacity-70 hover:opacity-100",
 							]}
 						>
@@ -48,9 +48,9 @@ function isActive(href?: string): boolean {
 										<a
 											href={child.href}
 											class:list={[
-												"block px-3 py-1.5 rounded-md transition",
+												"block px-3 py-1.5 rounded-xl transition",
 												isActive(child.href)
-													? "bg-blue-500 text-white font-medium"
+													? "bg-blue-500 text-white font-semibold rounded-xl"
 													: "hover:bg-gray-100 dark:hover:bg-gray-800 opacity-70 hover:opacity-100",
 											]}
 										>
@@ -71,11 +71,11 @@ function isActive(href?: string): boolean {
 																grandchild.href
 															}
 															class:list={[
-																"block px-3 py-1.5 rounded-md transition",
+																"block px-3 py-1.5 rounded-xl transition",
 																isActive(
 																	grandchild.href,
 																)
-																	? "bg-blue-500 text-white font-medium"
+																	? "bg-blue-500 text-white font-semibold rounded-xl"
 																	: "hover:bg-gray-100 dark:hover:bg-gray-800 opacity-70 hover:opacity-100",
 															]}
 														>
