@@ -1,6 +1,6 @@
 ---
 title: Using LÖVE
-order: 1
+order: 3
 ---
 
 # Using LÖVE
