@@ -9,16 +9,16 @@ import cloudflare from "@astrojs/cloudflare";
 // https://astro.build/config
 export default defineConfig({
 	site: "https://lualpm.com",
-	adapter: cloudflare(),
+	adapter: cloudflare({
+		prerenderEnvironment: "node",
+	}),
 	vite: {
 		plugins: [tailwindcss()],
 	},
-
 	markdown: {
 		shikiConfig: {
 			theme: "css-variables",
 		},
 	},
-
 	integrations: [preact(), icon()],
 });
