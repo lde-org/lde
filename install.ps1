@@ -1,14 +1,11 @@
 $ErrorActionPreference = "Stop"
 
-$repo     = "codebycruz/lpm"
-$lpmDir   = "$env:USERPROFILE\.lpm"
-$artifact = "lpm-windows-x86-64.exe"
+$repo = "codebycruz/lpm"
+$dir  = "$env:USERPROFILE\.lpm"
+$bin  = Join-Path $dir "lpm.exe"
+$tag  = (Invoke-RestMethod "https://api.github.com/repos/$repo/releases/latest").tag_name
 
-$tag = (Invoke-RestMethod "https://api.github.com/repos/$repo/releases/latest").tag_name
-if (-not $tag) { Write-Error "Could not fetch latest release" }
+New-Item -ItemType Directory $dir -Force | Out-Null
+Invoke-WebRequest "https://github.com/$repo/releases/download/$tag/lpm-windows-x86-64.exe" -OutFile $bin
 
-New-Item -ItemType Directory -Path $lpmDir -Force | Out-Null
-$installPath = Join-Path $lpmDir "lpm.exe"
-Invoke-WebRequest "https://github.com/$repo/releases/download/$tag/$artifact" -OutFile $installPath
-
-& $installPath --setup
+& $bin --setup
