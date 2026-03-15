@@ -145,19 +145,20 @@ Package.runFile = require("lpm-core.package.run")
 Package.runTests = require("lpm-core.package.test")
 
 ---@param name string # Name of a script defined in lpm.json scripts table
+---@param capture boolean? # If true, capture stdout/stderr instead of inheriting them
 ---@return boolean?
 ---@return string?
-function Package:runScript(name)
+function Package:runScript(name, capture)
 	local scripts = self:readConfig().scripts
 	if not scripts or not scripts[name] then
 		error("No script named '" .. name .. "' in lpm.json")
 	end
-	return process.exec(scripts[name], nil, {
-		unsafe = true,
-		cwd = self:getDir(),
-		stdout = "inherit",
-		stderr = "inherit",
-	})
+	local opts = { unsafe = true, cwd = self:getDir() }
+	if not capture then
+		opts.stdout = "inherit"
+		opts.stderr = "inherit"
+	end
+	return process.exec(scripts[name], nil, opts)
 end
 
 return Package

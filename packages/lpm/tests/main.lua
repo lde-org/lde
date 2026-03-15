@@ -238,8 +238,9 @@ test.it("runScript: runs a named shell command from lpm.json scripts", function(
 	}))
 
 	local pkg = Package.open(dir)
-	local ok = pkg:runScript("greet")
+	local ok, output = pkg:runScript("greet", true)
 	test.equal(ok, true)
+	test.notEqual(output:find("hello"), nil)
 end)
 
 
