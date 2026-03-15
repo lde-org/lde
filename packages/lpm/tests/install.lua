@@ -54,7 +54,7 @@ else
 		local fakeHome = path.join(tmpBase, "home")
 		fs.mkdir(fakeHome)
 
-		local ok, _ = process.exec("bash", { installScript }, {
+		local ok, _ = process.exec("sh", { installScript }, {
 			env = { HOME = fakeHome },
 		})
 
@@ -66,7 +66,7 @@ else
 		local fakeHome = path.join(tmpBase, "home2")
 		fs.mkdir(fakeHome)
 
-		local ok, _ = process.exec("bash", { installScript }, {
+		local ok, _ = process.exec("sh", { installScript }, {
 			env = { HOME = fakeHome },
 		})
 		test.equal(ok, true)
