@@ -65,21 +65,21 @@ I made this to the best of my ability with limited information about LuaRocks an
 
 If anyone has any corrections, please do submit a pull request.
 
-|                         | lpm            | lux          | luarocks     |
-| ----------------------- | -------------- | ------------ | ------------ |
-| Written in              | Lua            | Rust         | Teal         |
-| Project format          | JSON           | TOML/Lua     | Lua          |
-| Add/remove deps         | ✓              | ✓            | ❌           |
-| Built-in test runner    | ✓ (lpm-test)   | ✓ (busted)   | ❌           |
-| Comes with luajit       | ✓              | ❌           | ❌           |
-| Lua version manager     | ❌             | ✓            | ❌           |
-| Compile to executable   | ✓              | ❌           | ❌           |
-| Git deps                | ✓              | ✓            | ❌           |
-| Registry deps           | ❌ ([#4][4])   | ✓ (luarocks) | ✓ (luarocks) |
-| Rockspec support        | ❌ ([#53][53]) | ✓            | ✓            |
-| Proper Lockfile Support | ✓              | ✓            | ❌           |
-| Lua build scripts       | build.lua      | rockspec     | rockspec     |
+|                       | lpm          | lux          | luarocks     |
+| --------------------- | ------------ | ------------ | ------------ |
+| Written in            | Lua          | Rust         | Teal         |
+| Project format        | JSON         | TOML/Lua     | Lua          |
+| Add/remove deps       | ✓            | ✓            | ❌           |
+| Built-in test runner  | ✓ (lpm-test) | ✓ (busted)   | ❌           |
+| Comes with luajit     | ✓            | ❌           | ❌           |
+| Lua version manager   | ❌           | ✓            | ❌           |
+| Compile to executable | ✓            | ❌           | ❌           |
+| Git deps              | ✓            | ✓            | ❌           |
+| Registry deps         | ❌ ([#4][4]) | ✓ (luarocks) | ✓ (luarocks) |
+| Custom Registry       | ✓            | ❌           | ✓            |
+| Lockfile              | ✓            | ✓            | ✓            |
+| Luarocks Support      | ❌           | ✓            | ✓            |
+| Lua build scripts     | build.lua    | rockspec     | rockspec     |
 
 [4]: https://github.com/codebycruz/lpm/issues/4
-[16]: https://github.com/codebycruz/lpm/issues/16
 [53]: https://github.com/codebycruz/lpm/issues/53
