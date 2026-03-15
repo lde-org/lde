@@ -1,0 +1,17 @@
+---
+import Layout from "../layouts/Layout.astro";
+import Registry from "../components/Registry.tsx";
+---
+
+<Layout title="Registry" description="Browse and search the lpm package registry.">
+	<div class="px-4 md:px-6 py-12 max-w-5xl mx-auto w-full">
+		<div class="mb-10">
+			<h1 class="text-3xl font-bold mb-3">Registry</h1>
+			<p class="text-black/60 dark:text-white/60">
+				Browse community packages. Install any package with <code class="text-sm font-mono px-1.5 py-0.5 rounded bg-black/5 dark:bg-white/10">lpm add &lt;name&gt;</code>.
+			</p>
+		</div>
+
+		<Registry client:load />
+	</div>
+</Layout>
