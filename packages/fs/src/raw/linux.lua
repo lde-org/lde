@@ -61,14 +61,8 @@ ffi.cdef([[
 	};
 ]])
 
-local modeToStatType = {
-	[0x4000] = "dir",
-	[0x8000] = "file",
-	[0xA000] = "symlink",
-}
-
 ---@class fs.raw.linux: fs.raw.posix
-return require("fs.raw.posix")(function(s)
+return require("fs.raw.posix")(function(s, modeToStatType)
 	return {
 		size = s.st_size,
 		modifyTime = s.st_mtime,

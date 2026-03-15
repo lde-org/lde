@@ -25,7 +25,7 @@ local modeToStatType = {
 }
 
 --- Call after defining struct dirent and struct stat in ffi.
----@param rawToCrossStat fun(s: any): fs.Stat
+---@param rawToCrossStat fun(s: ffi.cdata*, modeToStatType: table<number, fs.Stat.Type>): fs.Stat
 ---@return fs.raw.posix
 return function(rawToCrossStat)
 	ffi.cdef([[
@@ -85,14 +85,14 @@ return function(rawToCrossStat)
 	function fs.stat(p)
 		local s = rawStat(p)
 		if s == nil then return nil end
-		return rawToCrossStat(s)
+		return rawToCrossStat(s, modeToStatType)
 	end
 
 	---@param p string
 	function fs.lstat(p)
 		local s = rawLstat(p)
 		if s == nil then return nil end
-		return rawToCrossStat(s)
+		return rawToCrossStat(s, modeToStatType)
 	end
 
 	---@param p string
