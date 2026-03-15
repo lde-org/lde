@@ -26,8 +26,13 @@ end
 ---@field path string
 ---@field package string? # The actual package name at the path (used when aliasing)
 
+---@class lpm.Config.RegistryDependency
+---@field version string # Pinned version from the lpm registry
+---@field package string? # Actual package name in the registry, when aliasing
+
 ---@alias lpm.Config.Dependency
 --- | lpm.Config.GitDependency
 --- | lpm.Config.PathDependency
+--- | lpm.Config.RegistryDependency
 
 return Config

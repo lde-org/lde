@@ -1,8 +1,11 @@
 local global = {}
 
 local fs = require("fs")
+local json = require("json")
 local path = require("path")
 local process = require("process")
+
+local REGISTRY_URL = "https://github.com/codebycruz/lpm-registry"
 
 global.currentVersion = "0.6.4"
 
@@ -22,6 +25,89 @@ end
 
 function global.getToolsDir()
 	return path.join(global.getDir(), "tools")
+end
+
+function global.getRegistryDir()
+	return path.join(global.getDir(), "registry")
+end
+
+-- Only sync once per process invocation
+local registrySynced = false
+
+--- Clones the registry if not present, otherwise pulls to update.
+--- A failed pull (e.g. offline) is non-fatal; cached data is used.
+function global.syncRegistry()
+	if registrySynced then return end
+	registrySynced = true
+
+	local registryDir = global.getRegistryDir()
+	if not fs.exists(registryDir) then
+		local ok, err = process.spawn("git", { "clone", REGISTRY_URL, registryDir })
+		if not ok then
+			error("Failed to clone lpm registry: " .. (err or "unknown error"))
+		end
+	else
+		process.spawn("git", { "pull" }, { cwd = registryDir })
+	end
+end
+
+---@param name string
+---@return table? portfile
+---@return string? err
+function global.lookupRegistryPackage(name)
+	local portfilePath = path.join(global.getRegistryDir(), "packages", name .. ".json")
+	local content = fs.read(portfilePath)
+	if not content then
+		return nil, "Package '" .. name .. "' not found in registry"
+	end
+	return json.decode(content), nil
+end
+
+---@param a string
+---@param b string
+---@return boolean # true if a < b (semver comparison)
+local function versionLessThan(a, b)
+	local ma, mia, pa = a:match("^(%d+)%.(%d+)%.(%d+)$")
+	local mb, mib, pb = b:match("^(%d+)%.(%d+)%.(%d+)$")
+	ma, mia, pa = tonumber(ma) or 0, tonumber(mia) or 0, tonumber(pa) or 0
+	mb, mib, pb = tonumber(mb) or 0, tonumber(mib) or 0, tonumber(pb) or 0
+	if ma ~= mb then return ma < mb end
+	if mia ~= mib then return mia < mib end
+	return pa < pb
+end
+
+--- Resolves a version string (or nil for latest) to a commit hash.
+---@param portfile table
+---@param version string? # nil means latest
+---@return string version
+---@return string commit
+function global.resolveRegistryVersion(portfile, version)
+	local versions = portfile.versions
+	if not versions then
+		error("Package '" .. portfile.name .. "' has no versions in registry")
+	end
+
+	if version then
+		local commit = versions[version]
+		if not commit then
+			error("Version '" .. version .. "' of '" .. portfile.name .. "' not found in registry")
+		end
+		return version, commit
+	end
+
+	-- Find highest semver
+	local latest = nil
+	for v in pairs(versions) do
+		if latest == nil or versionLessThan(latest, v) then
+			latest = v
+		end
+	end
+
+	if not latest then
+		error("No versions available for package '" .. portfile.name .. "'")
+	end
+
+	return latest, versions[latest]
 end
 
 --- Builds the cache directory name for a git repo.

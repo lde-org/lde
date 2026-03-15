@@ -80,6 +80,41 @@ local function dependencyToPackage(alias, depInfo, relativeTo)
 		}
 
 		return localPackage, lockEntry
+	elseif depInfo.version then
+		-- Registry dependency: sync registry, look up portfile, resolve to git+commit
+		global.syncRegistry()
+
+		local portfile, registryErr = global.lookupRegistryPackage(packageName)
+		if not portfile then
+			error("Registry lookup failed for '" .. alias .. "': " .. registryErr)
+		end
+
+		local _, commit = global.resolveRegistryVersion(portfile, depInfo.version)
+
+		local repoDir = global.getOrInitGitRepo(packageName, portfile.git, portfile.branch, commit)
+
+		---@type lpm.Lockfile.GitDependency
+		local lockEntry = {
+			git = portfile.git,
+			commit = commit,
+			branch = portfile.branch,
+			package = depInfo.package,
+		}
+
+		local registryPackage = Package.open(repoDir)
+		if registryPackage and registryPackage:getName() == packageName then
+			return registryPackage, lockEntry
+		end
+
+		for _, config in ipairs(fs.scan(repoDir, "**" .. path.separator .. "lpm.json")) do
+			local parentDir = path.join(repoDir, path.dirname(config))
+			registryPackage = Package.open(parentDir)
+			if registryPackage and registryPackage:getName() == packageName then
+				return registryPackage, lockEntry
+			end
+		end
+
+		error("No lpm.json with name '" .. packageName .. "' found in registry package '" .. alias .. "'")
 	else
 		error("Unsupported dependency type for: " .. alias)
 	end

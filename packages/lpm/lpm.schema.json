@@ -43,6 +43,20 @@
 							}
 						},
 						"additionalProperties": false
+					},
+					{
+						"required": ["version"],
+						"properties": {
+							"version": {
+								"type": "string",
+								"description": "Registry package version to install"
+							},
+							"package": {
+								"type": "string",
+								"description": "Actual package name in the registry, when aliasing (key is the require name)"
+							}
+						},
+						"additionalProperties": false
 					}
 				]
 			}
