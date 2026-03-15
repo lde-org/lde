@@ -129,19 +129,38 @@ local function install(args)
 		if not pkg then error(err) end
 		writeWrapper(pkg:getName(), pkg.dir, pkg:getName())
 	else
-		-- No --git or --path: install project dependencies (existing behavior)
-		local pkg, err = Package.open()
-		if not pkg then
-			ansi.printf("{red}%s", err)
-			return
-		end
+		local name = args:pop()
+		if name then
+			-- lpm install <name>[@<version>]: install a tool from the registry
+			local packageName, versionStr = name:match("^([^@]+)@(.+)$")
+			if not packageName then packageName = name end
 
-		pkg:installDependencies()
-		if not args:flag("production") then
-			pkg:installDevDependencies()
-		end
+			global.syncRegistry()
+			local portfile, err = global.lookupRegistryPackage(packageName)
+			if not portfile then error(err) end
 
-		ansi.printf("{green}All dependencies installed successfully.")
+			local _, commit = global.resolveRegistryVersion(portfile, versionStr or nil)
+			local repoDir = global.getOrInitGitRepo(packageName, portfile.git, portfile.branch, commit)
+
+			local pkg
+			pkg, err = Package.open(repoDir)
+			if not pkg then error(err) end
+			writeWrapper(pkg:getName(), pkg.dir, pkg:getName())
+		else
+			-- No name, no --git, no --path: install project dependencies
+			local pkg, err = Package.open()
+			if not pkg then
+				ansi.printf("{red}%s", err)
+				return
+			end
+
+			pkg:installDependencies()
+			if not args:flag("production") then
+				pkg:installDevDependencies()
+			end
+
+			ansi.printf("{green}All dependencies installed successfully.")
+		end
 	end
 end
 
