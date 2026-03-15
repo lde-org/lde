@@ -1,0 +1,108 @@
+-- NOTE: These tests require network access — they clone from GitHub.
+local test = require("lpm-test")
+
+local Package = require("lpm-core.package")
+
+local fs = require("fs")
+local env = require("env")
+local path = require("path")
+local json = require("json")
+
+local tmpBase = path.join(env.tmpdir(), "lpm-git-tests")
+
+-- Clean up from any previous test run
+fs.rmdir(tmpBase)
+fs.mkdir(tmpBase)
+
+local GIT_URL = "https://github.com/codebycruz/lpm"
+local FIXTURE_NAME = "lpm-test-fixture"
+
+--- Creates a minimal package that depends on lpm-test-fixture via git.
+local function makeProjectWithGitDep(name, extraDepFields)
+	local dir = path.join(tmpBase, name)
+	fs.mkdir(dir)
+	fs.mkdir(path.join(dir, "src"))
+	fs.write(path.join(dir, "src", "init.lua"), "return true")
+
+	local dep = { git = GIT_URL, branch = "master" }
+	for k, v in pairs(extraDepFields or {}) do
+		dep[k] = v
+	end
+
+	fs.write(path.join(dir, "lpm.json"), json.encode({
+		name = name,
+		version = "0.1.0",
+		dependencies = { [FIXTURE_NAME] = dep },
+	}))
+
+	return dir
+end
+
+--
+-- Git dependency installation
+--
+
+test.it("installDependencies installs a git dependency", function()
+	local dir = makeProjectWithGitDep("git-basic")
+	local pkg = Package.open(dir)
+	pkg:installDependencies()
+
+	local fixturePath = path.join(dir, "target", FIXTURE_NAME, "init.lua")
+	test.equal(fs.exists(fixturePath), true)
+	test.equal(fs.read(fixturePath), 'return "lpm-test-fixture"\n')
+end)
+
+test.it("installDependencies writes a resolved commit to the lockfile for git deps", function()
+	local dir = makeProjectWithGitDep("git-lockfile")
+	local pkg = Package.open(dir)
+	pkg:installDependencies()
+
+	local lockRaw = fs.read(path.join(dir, "lpm-lock.json"))
+	test.notEqual(lockRaw, nil)
+
+	local lock = json.decode(lockRaw)
+	local entry = lock.dependencies[FIXTURE_NAME]
+	test.notEqual(entry, nil)
+	test.notEqual(entry.commit, nil)
+	-- Commit should be a 40-character hex SHA
+	test.equal(entry.commit:match("^%x+$") ~= nil, true)
+	test.equal(#entry.commit, 40)
+end)
+
+test.it("installDependencies uses the lockfile commit to skip re-cloning", function()
+	local dir = makeProjectWithGitDep("git-reuse")
+	local pkg = Package.open(dir)
+
+	-- First install — clones and writes lockfile
+	pkg:installDependencies()
+
+	local lock1 = json.decode(fs.read(path.join(dir, "lpm-lock.json")))
+	local commit1 = lock1.dependencies[FIXTURE_NAME].commit
+
+	-- Second install — should reuse the cached repo, lockfile commit unchanged
+	pkg:installDependencies()
+
+	local lock2 = json.decode(fs.read(path.join(dir, "lpm-lock.json")))
+	local commit2 = lock2.dependencies[FIXTURE_NAME].commit
+
+	test.equal(commit1, commit2)
+end)
+
+test.it("installDependencies respects a pinned commit in lpm.json", function()
+	-- Get the current HEAD commit first via an unpinned install
+	local refDir = makeProjectWithGitDep("git-pin-ref")
+	Package.open(refDir):installDependencies()
+	local refLock = json.decode(fs.read(path.join(refDir, "lpm-lock.json")))
+	local headCommit = refLock.dependencies[FIXTURE_NAME].commit
+
+	-- Now install a project that pins to that exact commit
+	local dir = makeProjectWithGitDep("git-pinned", { commit = headCommit })
+	local pkg = Package.open(dir)
+	pkg:installDependencies()
+
+	local lock = json.decode(fs.read(path.join(dir, "lpm-lock.json")))
+	test.equal(lock.dependencies[FIXTURE_NAME].commit, headCommit)
+
+	local fixturePath = path.join(dir, "target", FIXTURE_NAME, "init.lua")
+	test.equal(fs.exists(fixturePath), true)
+end)
