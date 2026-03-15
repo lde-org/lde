@@ -13,9 +13,7 @@ fs.mkdir(tmpBase)
 local thisFile = debug.getinfo(1, "S").source:sub(2)
 local repoRoot = path.join(path.dirname(thisFile), "..", "..", "..")
 
-local isWindows = process.platform == "win32"
-
-if isWindows then
+if process.platform == "win32" then
 	local installScript = path.join(repoRoot, "install.ps1")
 
 	test.it("install.ps1 installs lpm binary to %USERPROFILE%\\.lpm\\lpm.exe", function()
@@ -47,7 +45,7 @@ if isWindows then
 		local ok2, _ = process.exec(lpmBin, { "--version" })
 		test.equal(ok2, true)
 	end)
-else
+elseif process.platform == "linux" then
 	local installScript = path.join(repoRoot, "install.sh")
 
 	test.it("install.sh installs lpm binary to $HOME/.lpm/lpm", function()
