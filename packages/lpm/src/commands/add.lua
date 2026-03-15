@@ -7,8 +7,12 @@ local global = require("lpm-core.global")
 
 ---@param args clap.Args
 local function add(args)
-	local name = assert(args:pop(), "Usage: lpm add <name> --path <path> | --git <url>")
+	local rawName = assert(args:pop(), "Usage: lpm add <name>[@<version>] --path <path> | --git <url>")
 	local isDevelopment = args:flag("dev")
+
+	-- Support lpm add <name>@<version> syntax
+	local name, versionFromName = rawName:match("^([^@]+)@(.+)$")
+	if not name then name = rawName end
 
 	---@type ("git" | "path")?, string?
 	local depType, depValue
@@ -24,7 +28,7 @@ local function add(args)
 		depValue = pathValue
 	end
 
-	local registryVersion = args:option("version")
+	local registryVersion = args:option("version") or versionFromName
 
 	local p, err = Package.open()
 	if not p then
