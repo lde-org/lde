@@ -12,6 +12,7 @@ local ljDistTag = "latest"
 local function getPlatformArch()
 	local platform = process.platform == "linux" and "linux"
 		or process.platform == "win32" and "windows"
+		or process.platform == "darwin" and "macos"
 		or error("Unsupported platform: " .. process.platform)
 
 	local arch = jit.arch == "x64" and "x86-64"
