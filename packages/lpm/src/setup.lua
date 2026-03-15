@@ -48,7 +48,9 @@ local function updatePath(lpmDir, toolsDir)
 		local home = os.getenv("HOME") or ""
 		local rcFiles = {
 			home .. "/.zshrc",
+			home .. "/.zprofile",
 			home .. "/.bashrc",
+			home .. "/.bash_profile",
 			home .. "/.profile",
 		}
 
