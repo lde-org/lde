@@ -58,14 +58,16 @@ local function publish(args)
 
 	local branch = gitOutput({ "rev-parse", "--abbrev-ref", "HEAD" }, pkgDir) or "master"
 
-	local portfile = {
-		name = config.name,
-		description = config.description,
-		authors = config.authors,
-		git = gitUrl,
-		branch = branch,
-		versions = { [config.version] = commit },
-	}
+	local versions = {}
+	json.addField(versions, config.version, commit)
+
+	local portfile = {}
+	json.addField(portfile, "name", config.name)
+	json.addField(portfile, "description", config.description)
+	json.addField(portfile, "authors", config.authors)
+	json.addField(portfile, "git", gitUrl)
+	json.addField(portfile, "branch", branch)
+	json.addField(portfile, "versions", versions)
 
 	local portfileJson = json.encode(portfile)
 	local filename = "packages/" .. config.name .. ".json"
