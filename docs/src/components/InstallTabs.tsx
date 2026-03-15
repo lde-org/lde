@@ -11,7 +11,7 @@ function detectOS(): string {
 const tabs = [
 	{
 		id: "linux",
-		label: "Linux",
+		label: "Linux & macOS",
 		command: "curl -fsSL https://lualpm.com/install | sh",
 	},
 	{
