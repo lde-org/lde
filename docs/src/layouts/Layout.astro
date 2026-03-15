@@ -8,12 +8,13 @@ import "../styles/global.css";
 interface Props {
 	title?: string;
 	description?: string;
+	hideFooter?: boolean;
 }
 
 const DEFAULT_DESCRIPTION =
 	"Lpm is an open-source project providing easy accessibility to a Lua runtime alongside intuitive package management for dependencies.";
 
-const { title, description = DEFAULT_DESCRIPTION } = Astro.props;
+const { title, description = DEFAULT_DESCRIPTION, hideFooter = false } = Astro.props;
 const pageTitle = title ? `${title} - lpm` : "lpm";
 const ogImage = `${SITE_URL}/lpm-small.svg`;
 ---
@@ -65,7 +66,7 @@ const ogImage = `${SITE_URL}/lpm-small.svg`;
 	>
 		<Navbar />
 		<slot />
-		<Footer />
+		{!hideFooter && <Footer />}
 		<CodeBlocks client:only="preact" />
 	</body>
 </html>
