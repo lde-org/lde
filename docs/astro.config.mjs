@@ -9,7 +9,19 @@ import icon from "astro-icon";
 export default defineConfig({
 	site: "https://lualpm.com",
 	vite: {
-		plugins: [tailwindcss()],
+		plugins: [
+			tailwindcss(),
+			{
+				name: "registry-rewrite",
+				configureServer(server) {
+					server.middlewares.use((req, _, next) => {
+						if (req.url?.startsWith("/registry/"))
+							req.url = "/registry/index.html";
+						next();
+					});
+				},
+			},
+		],
 	},
 
 	markdown: {

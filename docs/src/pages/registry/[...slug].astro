@@ -1,0 +1,12 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import RegistryPage from "../../components/RegistryPage.tsx";
+
+export function getStaticPaths() {
+	return [];
+}
+---
+
+<Layout title="Registry" description="lpm package registry">
+	<RegistryPage client:load />
+</Layout>
