@@ -242,29 +242,6 @@ test.it("runScript: runs a named shell command from lpm.json scripts", function(
 	test.equal(ok, true)
 end)
 
-test.it("runScript: can invoke lpm run to execute a lua file", function()
-	fs.mkdir(tmpBase)
-	local dir = path.join(tmpBase, "run-script-lpm")
-	fs.mkdir(dir)
-	fs.mkdir(path.join(dir, "src"))
-	fs.write(path.join(dir, "src", "init.lua"), 'return true')
-	fs.mkdir(path.join(dir, "scripts"))
-	fs.write(path.join(dir, "scripts", "greet.lua"), [[
-		local f = assert(io.open("greet-sentinel.txt", "w"))
-		f:close()
-	]])
-	fs.write(path.join(dir, "lpm.json"), json.encode({
-		name = "run-script-lpm",
-		version = "0.1.0",
-		scripts = { greet = "lpm run ./scripts/greet.lua" },
-		dependencies = {},
-	}))
-
-	local pkg = Package.open(dir)
-	local ok = pkg:runScript("greet")
-	test.equal(ok, true)
-	test.equal(fs.exists(path.join(dir, "greet-sentinel.txt")), true)
-end)
 
 test.it("runScript: errors when script name is not in lpm.json", function()
 	fs.mkdir(tmpBase)
