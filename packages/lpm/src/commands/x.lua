@@ -134,12 +134,35 @@ local function x(args)
 		executePackage(pkg, scriptArgs, userCwd)
 	else
 		local name = args:pop()
-		if name then
-			ansi.printf("{yellow}lpm has no package registry yet. Use --git <url> or --path <dir> instead.")
-		else
-			ansi.printf("{red}Usage: lpm x --git <repo-url> [package-name] [args...]")
+		if not name then
+			ansi.printf("{red}Usage: lpm x <name>[@<version>] [args...]")
+			ansi.printf("{red}       lpm x --git <repo-url> [package-name] [args...]")
 			ansi.printf("{red}       lpm x --path <dir> [package-name] [args...]")
+			return
 		end
+
+		local packageName, versionStr = name:match("^([^@]+)@(.+)$")
+		if not packageName then
+			packageName = name
+		end
+
+		global.syncRegistry()
+		local portfile, err = global.lookupRegistryPackage(packageName)
+		if not portfile then
+			error(err)
+		end
+
+		local _, commit = global.resolveRegistryVersion(portfile, versionStr or nil)
+		local repoDir = global.getOrInitGitRepo(packageName, portfile.git, portfile.branch, commit)
+
+		local pkg
+		pkg, err = Package.open(repoDir)
+		if not pkg then
+			error(err)
+		end
+
+		local scriptArgs = args:drain() or {}
+		executePackage(pkg, scriptArgs, userCwd)
 	end
 end
 
