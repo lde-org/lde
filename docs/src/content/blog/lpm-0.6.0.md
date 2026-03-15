@@ -2,6 +2,7 @@
 title: Release v0.6.0
 author: David Cruz
 published: 2026-02-18
+description: Introduces lpm-test, a built-in test runner with test suites and assertions, along with lpm bundle, lpm update and format preservation for lpm add and lpm remove.
 ---
 
 > Upgrade to the latest version with `lpm upgrade`!

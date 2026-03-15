@@ -2,6 +2,7 @@
 title: Release v0.7.0
 author: David Cruz
 published: 2026-03-14
+description: Launches the lpm package registry with lpm publish, adds lockfile support for reproducible installs, and introduces registry dependencies via lpm add.
 ---
 
 > Upgrade to the latest version with `lpm upgrade`!

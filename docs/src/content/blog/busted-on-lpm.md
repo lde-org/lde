@@ -2,6 +2,7 @@
 title: Experimenting with busted ported to lpm
 author: David Cruz
 published: 2026-02-22
+description: Exploring a port of busted, Lua's most popular test runner, to run natively as an lpm tool and what it revealed about lpm's current limitations with luarocks packages.
 ---
 
 [busted](https://lunarmodules.github.io/busted/) is the most popular test runner for lua by far. As a test of lpm's capabilities, I've made it my goal to port it over to lpm over time.

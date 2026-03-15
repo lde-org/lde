@@ -2,6 +2,7 @@
 title: Release v0.6.1
 author: David Cruz
 published: 2026-02-20
+description: Adds lpm install and lpm uninstall for globally available tools, native C module support via LuaJIT exports, and C library bundling in compiled binaries.
 ---
 
 > Upgrade to the latest version with `lpm upgrade`!

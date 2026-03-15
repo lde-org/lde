@@ -2,6 +2,7 @@
 title: Release v0.6.3
 author: David Cruz
 published: 2026-03-04
+description: Introduces lpm --setup for one-step environment configuration, the lpx convenience wrapper, and simplified install scripts that delegate setup to lpm itself.
 ---
 
 > Upgrade to the latest version with `lpm upgrade`!
