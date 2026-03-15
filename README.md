@@ -31,6 +31,8 @@ A more in-depth comparison can be found below.
 - `lpm bundle` - Bundle your project into a single lua file
 - `lpm x` - Execute a project in another location, perfect for CLIs (alias: `lpx`)
 - `lpm tree` - View your dependencies at a glance
+- `lpm update` - Update your dependencies to their latest versions
+- `lpm publish` - Create a PR to add your package to [the registry](https://github.com/codebycruz/lpm-registry)
 
 ## Installation
 
