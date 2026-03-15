@@ -184,9 +184,14 @@ export default function PackageDetail({ pkg }: { pkg: RegistryPackage }) {
 										</span>
 									)}
 								</div>
-								<span class="font-mono text-xs text-black/30 dark:text-white/30">
+								<a
+									href={`${pkg.git.replace(/\.git$/, "")}/commit/${commit}`}
+									target="_blank"
+									rel="noopener noreferrer"
+									class="font-mono text-xs text-black/30 dark:text-white/30 hover:text-blue-500 transition-colors"
+								>
 									{commit.slice(0, 7)}
-								</span>
+								</a>
 							</div>
 						))}
 					</div>
