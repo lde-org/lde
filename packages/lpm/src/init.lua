@@ -90,6 +90,11 @@ if args:flag("version") and args:count() == 0 then
 	return
 end
 
+if args:flag("help") then
+	require("lpm.commands.help")(args)
+	return
+end
+
 if args:flag("update-path") or args:flag("setup") then
 	require("lpm.setup")()
 	return
