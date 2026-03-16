@@ -89,10 +89,10 @@ local function upgrade(args)
 		return
 	end
 
-	local tmpdir = env.tmpdir()
+	local binDir = path.dirname(binLocation)
 	local binName = path.basename(binLocation)
-	local tempNewLocation = path.join(tmpdir, binName .. ".new")
-	local tempOldLocation = path.join(tmpdir, binName .. ".old")
+	local tempNewLocation = path.join(binDir, binName .. ".new")
+	local tempOldLocation = path.join(binDir, binName .. ".old")
 
 	ansi.printf("{green}==> Downloading {white}%s {green}from {cyan}%s", artifactName, downloadUrl)
 
