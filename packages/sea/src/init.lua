@@ -23,9 +23,13 @@ local function getPlatformArch()
 end
 
 ---@return "musl" | "gnu" | nil
-local function getPlatformLibc()
-	if process.platform == "darwin" then return nil end
-	if process.platform == "windows" then return "gnu" end
+local function detectPlatformLibc()
+	if process.platform == "darwin" then
+		return nil
+	end
+	if process.platform == "windows" then
+		return "gnu"
+	end
 
 	-- note: for some reason 'ok' is nil here.
 	local _ok, out = process.exec("ldd", { "--version" })
@@ -40,7 +44,7 @@ end
 local function getLuajitPath()
 	local cacheDir = path.join(env.tmpdir(), "luajit-cache")
 	local platform, arch = getPlatformArch()
-	local libc = getPlatformLibc()
+	local libc = os.getenv("LPM_PLATFORM_LIBC") or detectPlatformLibc()
 
 	local target = table.concat({ "libluajit", platform, arch, libc }, "-")
 	local targetDir = path.join(cacheDir, target)
@@ -274,11 +278,24 @@ int main(int argc, char** argv) {
 	local includePath = path.join(ljPath, "include")
 	local libPath = path.join(ljPath, "lib")
 
+	local libluajitPath = path.join(libPath, "libluajit.a")
+
+	if not fs.exists(libluajitPath) then
+		-- artifact obtained on the nixpkgs build for instance
+		libluajitPath = path.join(libPath, "libluajit-5.1.a")
+		if not fs.exists(libluajitPath) then
+			error("Could not locate libluajit.a or libluajit-5.1.a in " .. libPath)
+		end
+	end
+
 	local args = {
 		"-I" .. includePath,
-		"-xc", "-",
-		"-o", outPath,
-		"-xnone", path.join(libPath, "libluajit.a"),
+		"-xc",
+		"-",
+		"-o",
+		outPath,
+		"-xnone",
+		libluajitPath,
 	}
 
 	if process.platform == "linux" then
