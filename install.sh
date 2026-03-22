@@ -4,11 +4,14 @@ set -e
 DIR="$HOME/.lpm"
 REPO="codebycruz/lpm"
 NIGHTLY=0
+VERSION=""
 
-for arg in "$@"; do
-    case "$arg" in
+while [ $# -gt 0 ]; do
+    case "$1" in
         --nightly) NIGHTLY=1 ;;
+        --version) VERSION="$2"; shift ;;
     esac
+    shift
 done
 
 OS="$(uname -s)"
@@ -24,6 +27,8 @@ esac
 
 if [ "$NIGHTLY" = "1" ]; then
     TAG="nightly"
+elif [ -n "$VERSION" ]; then
+    TAG="v$VERSION"
 else
     TAG=$(curl -sf "https://api.github.com/repos/$REPO/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
 fi

@@ -4,9 +4,13 @@ $repo    = "codebycruz/lpm"
 $dir     = "$env:USERPROFILE\.lpm"
 $bin     = Join-Path $dir "lpm.exe"
 $nightly = $args -contains "--nightly"
+$versionIndex = [array]::IndexOf($args, "--version")
+$version = if ($versionIndex -ge 0) { $args[$versionIndex + 1] } else { $null }
 
 if ($nightly) {
     $tag = "nightly"
+} elseif ($version) {
+    $tag = "v$version"
 } else {
     $tag = (Invoke-RestMethod "https://api.github.com/repos/$repo/releases/latest").tag_name
 }
