@@ -38,8 +38,8 @@ export default function InstallTabs() {
 	return (
 		<div class="flex flex-col gap-4">
 			<h2 class="text-xl font-medium">Install latest version</h2>
-			<div class="max-w-full border border-gray-700 rounded-lg overflow-hidden">
-				<div class="flex items-center border-b border-gray-700">
+			<div class="max-w-full border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+				<div class="flex items-center border-b border-gray-200 dark:border-gray-700">
 					{tabs.map((tab) => {
 						const isActive = active === tab.id;
 
@@ -50,8 +50,8 @@ export default function InstallTabs() {
 								onClick={() => setActive(tab.id)}
 								class={`px-4 py-2 cursor-pointer transition-colors text-sm border-b-2 -mb-px ${
 									isActive
-										? "border-blue-500 text-gray-200"
-										: "border-transparent text-gray-400 hover:text-gray-200"
+										? "border-blue-500 text-gray-800 dark:text-gray-200"
+										: "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
 								}`}
 							>
 								{tab.label}
@@ -67,15 +67,15 @@ export default function InstallTabs() {
 						Or download manually
 					</a>
 				</div>
-				<div class="flex items-center px-4 py-3 bg-gray-900 dark:bg-gray-900 overflow-x-auto">
-					<span class="text-blue-400 mr-3 select-none font-mono text-sm shrink-0">
+				<div class="flex items-center px-4 py-3 bg-gray-50 dark:bg-gray-900 overflow-x-auto">
+					<span class="text-blue-500 dark:text-blue-400 mr-3 select-none font-mono text-sm shrink-0">
 						$
 					</span>
 					<div class="relative flex items-center min-w-0">
-						<code class="text-sm text-gray-200 font-mono whitespace-nowrap invisible hidden lg:inline">
+						<code class="text-sm text-gray-800 dark:text-gray-200 font-mono whitespace-nowrap invisible hidden lg:inline">
 							{maxCommand}
 						</code>
-						<code class="text-sm text-gray-200 font-mono whitespace-nowrap lg:absolute lg:inset-0 lg:flex lg:items-center">
+						<code class="text-sm text-gray-800 dark:text-gray-200 font-mono whitespace-nowrap lg:absolute lg:inset-0 lg:flex lg:items-center">
 							{activeTab.command}
 						</code>
 					</div>
