@@ -18,20 +18,10 @@ jobs:
       matrix:
         include:
           - os: ubuntu-22.04
-            platform: linux
-            artifact: luajit-linux-x86-64-gnu
           - os: ubuntu-22.04-arm
-            platform: linux
-            artifact: luajit-linux-aarch64-gnu
           - os: windows-latest
-            platform: windows
-            artifact: luajit-windows-x86-64-gnu
           # - os: macos-15-intel
-          #   platform: macos
-          #   artifact: luajit-macos-x86-64
           - os: macos-15
-            platform: macos
-            artifact: luajit-macos-aarch64
 
     runs-on: ${{ matrix.os }}
 
@@ -39,36 +29,8 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      - name: Cache LuaJIT
-        id: cache-luajit
-        uses: actions/cache@v5
-        with:
-          path: ${{ matrix.artifact }}
-          key: ${{ matrix.artifact }}-latest
+      - name: Setup lpm
+        uses: codebycruz/lpm@master
 
-      - name: Download LuaJIT
-        if: steps.cache-luajit.outputs.cache-hit != 'true'
-        run: |
-          curl -L -o luajit.tar.gz https://github.com/codebycruz/lj-dist/releases/download/latest/${{ matrix.artifact }}.tar.gz
-          tar -xzf luajit.tar.gz
-          chmod +x ${{ matrix.artifact }}/luajit${{ matrix.platform == 'windows' && '.exe' || '' }}
-
-      - name: Build lpm (Unix)
-        if: matrix.platform != 'windows'
-        run: |
-          cd packages/lpm
-          BOOTSTRAP=1 $GITHUB_WORKSPACE/${{ matrix.artifact }}/luajit ./src/init.lua compile
-
-      - name: Build lpm (Windows)
-        if: matrix.platform == 'windows'
-        run: |
-          cd packages/lpm
-          $env:BOOTSTRAP=1; & "$env:GITHUB_WORKSPACE/${{ matrix.artifact }}/luajit.exe" ./src/init.lua compile
-
-      - name: Run tests (Unix)
-        if: matrix.platform != 'windows'
-        run: ./packages/lpm/lpm test
-
-      - name: Run tests (Windows)
-        if: matrix.platform == 'windows'
-        run: .\packages\lpm\lpm.exe test
+      - name: Run tests
+        run: lpm test
