@@ -1,67 +1,64 @@
 {
   description = "A package manager for Lua, written in Lua.";
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
-  inputs.systems.url = "github:nix-systems/default";
-  inputs.flake-utils = {
-    url = "github:numtide/flake-utils";
-    inputs.systems.follows = "systems";
-  };
 
   outputs =
-    { nixpkgs, flake-utils, ... }:
-    flake-utils.lib.eachDefaultSystem (
-      system:
-      let
-        pkgs = nixpkgs.legacyPackages.${system};
-
-        # Nixpkgs static builds always use musl
-        target = "libluajit-linux-x86-64-musl";
-        libluajit = pkgs.pkgsStatic.luajit;
-
-        lpm = pkgs.stdenv.mkDerivation {
-          pname = "lpm";
-          # NOTE: This will have to be updated when the version changes
-          version = "0.7.1";
-          src = ./.;
-
-          nativeBuildInputs = [
-            pkgs.luajit
-            libluajit
-          ];
-          buildPhase = ''
-            tmpdir="$out/tmp"
-            # Cache expected by the lua program
-            cachedir="$tmpdir/luajit-cache/${target}"
-
-            mkdir -p "$(dirname "$cachedir")"
-            ln -s "${libluajit}" "$cachedir"
-
-            cd packages/lpm
-            TMPDIR="$tmpdir" BOOTSTRAP=1 LPM_PLATFORM_LIBC=musl luajit ./src/init.lua compile --outfile lpm
-          '';
-          installPhase = ''
-            mkdir -p "$out/bin"
-            cp lpm "$out/bin"
-            rm -rf "$out/tmp"
-          '';
+    { self, nixpkgs, ... }:
+    let
+      platform_attrs = {
+        "aarch64-darwin" = {
+          url = "https://github.com/codebycruz/lpm/releases/download/v0.7.1/lpm-macos-aarch64";
+          hash = "0z8gpc17j9wqywd3i335bg4wv6fnpaqahxyg8q529cxrs2lc6nn7";
         };
-      in
-      {
-        packages.default = lpm;
-
-        devShells.default = pkgs.mkShell {
-          packages =
-            with pkgs;
-            [
-              luajit
-              stylua
-              lua-language-server
-            ]
-            #(Silzinc) NOTE: I'm not sure about bootstraping lpm like that,
-            # since the result changes with the commit. Is it necessary to develop lpm itself?
-            # Once the commit is merged, I will try fetching this lpm from a version on github.
-            ++ [ lpm ];
+        "aarch64-linux" = {
+          url = "https://github.com/codebycruz/lpm/releases/download/v0.7.1/lpm-linux-aarch64";
+          hash = "0zhn7n1gsl23q5w5zymjrfb1969wn5lsm3svskzx7aq7wq52i9rx";
         };
-      }
-    );
+        "x86_64-linux" = {
+          url = "https://github.com/codebycruz/lpm/releases/download/v0.7.1/lpm-linux-x86-64";
+          hash = "01ijw9j7k5b7f5c9s8i3260kzagpgr3gic5y6pjbw2ffffkcdfby";
+        };
+      };
+      forEachSystem =
+        fn:
+        nixpkgs.lib.genAttrs [
+          "aarch64-darwin"
+          "aarch64-linux"
+          # "x86_64-darwin" # not supported yet
+          "x86_64-linux"
+        ] (system: fn system nixpkgs.legacyPackages.${system});
+    in
+    {
+      packages = forEachSystem (
+        system: pkgs:
+        let
+          # Nixpkgs static builds always use musl
+          attrs = platform_attrs.${system};
+          lpm = pkgs.fetchurl {
+            name = "lpm";
+            url = attrs.url;
+            hash = "sha256-${attrs.hash}";
+          };
+        in
+        {
+          default = lpm;
+        }
+      );
+
+      devShells = forEachSystem (
+        system: pkgs: {
+          default = pkgs.mkShell {
+            packages =
+              with pkgs;
+              [
+                luajit
+                stylua
+                lua-language-server
+              ]
+              # inject lpm in the devshell
+              ++ [ self.packages.${system}.default ];
+          };
+        }
+      );
+    };
 }
