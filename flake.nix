@@ -35,7 +35,7 @@
       packages = forEachSystem (
         system: pkgs: {
           default = pkgs.stdenv.mkDerivation {
-            name = "lpm";
+            pname = "lpm";
             version = releaseTag;
             src = pkgs.fetchurl platform_attrs.${system};
             phases = [ "installPhase" ];
