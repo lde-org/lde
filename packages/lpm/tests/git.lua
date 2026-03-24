@@ -1,7 +1,7 @@
 -- NOTE: These tests require network access — they clone from GitHub.
 local test = require("lpm-test")
 
-local Package = require("lpm-core.package")
+local lpm = require("lpm-core")
 
 local fs = require("fs")
 local env = require("env")
@@ -32,7 +32,7 @@ local function makeProjectWithGitDep(name, extraDepFields)
 	fs.write(path.join(dir, "lpm.json"), json.encode({
 		name = name,
 		version = "0.1.0",
-		dependencies = { [FIXTURE_NAME] = dep },
+		dependencies = { [FIXTURE_NAME] = dep }
 	}))
 
 	return dir
@@ -44,7 +44,7 @@ end
 
 test.it("installDependencies installs a git dependency", function()
 	local dir = makeProjectWithGitDep("git-basic")
-	local pkg = Package.open(dir)
+	local pkg = lpm.Package.open(dir)
 	pkg:installDependencies()
 
 	local fixturePath = path.join(dir, "target", FIXTURE_NAME, "init.lua")
@@ -54,7 +54,7 @@ end)
 
 test.it("installDependencies writes a resolved commit to the lockfile for git deps", function()
 	local dir = makeProjectWithGitDep("git-lockfile")
-	local pkg = Package.open(dir)
+	local pkg = lpm.Package.open(dir)
 	pkg:installDependencies()
 
 	local lockRaw = fs.read(path.join(dir, "lpm-lock.json"))
@@ -71,7 +71,7 @@ end)
 
 test.it("installDependencies uses the lockfile commit to skip re-cloning", function()
 	local dir = makeProjectWithGitDep("git-reuse")
-	local pkg = Package.open(dir)
+	local pkg = lpm.Package.open(dir)
 
 	-- First install — clones and writes lockfile
 	pkg:installDependencies()
@@ -91,13 +91,13 @@ end)
 test.it("installDependencies respects a pinned commit in lpm.json", function()
 	-- Get the current HEAD commit first via an unpinned install
 	local refDir = makeProjectWithGitDep("git-pin-ref")
-	Package.open(refDir):installDependencies()
+	lpm.Package.open(refDir):installDependencies()
 	local refLock = json.decode(fs.read(path.join(refDir, "lpm-lock.json")))
 	local headCommit = refLock.dependencies[FIXTURE_NAME].commit
 
 	-- Now install a project that pins to that exact commit
 	local dir = makeProjectWithGitDep("git-pinned", { commit = headCommit })
-	local pkg = Package.open(dir)
+	local pkg = lpm.Package.open(dir)
 	pkg:installDependencies()
 
 	local lock = json.decode(fs.read(path.join(dir, "lpm-lock.json")))

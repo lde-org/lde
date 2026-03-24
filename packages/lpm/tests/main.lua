@@ -6,8 +6,7 @@ local path = require("path")
 local json = require("json")
 local process = require("process")
 
-local Package = require("lpm-core.package")
-local runtime = require("lpm-core.runtime")
+local lpm = require("lpm-core")
 
 local tmpBase = path.join(env.tmpdir(), "lpm-main-tests")
 
@@ -23,7 +22,7 @@ test.it("runtime.executeFile runs a Lua script", function()
 	local scriptPath = path.join(tmpBase, "hello.lua")
 	fs.write(scriptPath, 'return 42')
 
-	local ok, err = runtime.executeFile(scriptPath)
+	local ok, err = lpm.runtime.executeFile(scriptPath)
 	test.equal(ok, true)
 end)
 
@@ -32,7 +31,7 @@ test.it("runtime.executeFile returns false for scripts that error", function()
 	local scriptPath = path.join(tmpBase, "fail.lua")
 	fs.write(scriptPath, 'error("intentional error")')
 
-	local ok, err = runtime.executeFile(scriptPath)
+	local ok, err = lpm.runtime.executeFile(scriptPath)
 	test.equal(ok, false)
 	test.notEqual(err, nil)
 end)
@@ -47,7 +46,7 @@ test.it("runtime.executeFile supports preloaded modules", function()
 		end
 	]])
 
-	local ok, err = runtime.executeFile(scriptPath, {
+	local ok, err = lpm.runtime.executeFile(scriptPath, {
 		preload = {
 			["fake-mod"] = function() return { value = 123 } end
 		}
@@ -67,8 +66,8 @@ test.it("runtime.executeFile isolates globals between runs", function()
 		end
 	]])
 
-	runtime.executeFile(script1)
-	local ok, err = runtime.executeFile(script2)
+	lpm.runtime.executeFile(script1)
+	local ok, err = lpm.runtime.executeFile(script2)
 	test.equal(ok, true)
 end)
 
@@ -81,7 +80,7 @@ test.it("end-to-end: init, build, and verify package structure", function()
 	local dir = path.join(tmpBase, "e2e-project")
 	fs.mkdir(dir)
 
-	local pkg = Package.init(dir)
+	local pkg = lpm.Package.init(dir)
 	test.notEqual(pkg, nil)
 	test.equal(pkg:getName(), "e2e-project")
 
@@ -113,7 +112,7 @@ test.it("runFile: cwd is the package directory", function()
 		f:close()
 	]])
 
-	local pkg = Package.open(dir)
+	local pkg = lpm.Package.open(dir)
 	local ok, err = pkg:runFile(nil, {})
 	test.equal(ok, true)
 	-- sentinel file should be relative to the package dir, not cwd of the test runner
@@ -140,7 +139,7 @@ test.it("build.lua: cwd is the package directory, not the destination", function
 		f:close()
 	]])
 
-	local pkg = Package.open(dir)
+	local pkg = lpm.Package.open(dir)
 	pkg:build()
 
 	-- sentinel should be in the package dir, not the destination (target/cwd-build-test/)
@@ -169,7 +168,7 @@ test.it("runFile: runs an explicit relative file path", function()
 		dependencies = {}
 	}))
 
-	local pkg = Package.open(dir)
+	local pkg = lpm.Package.open(dir)
 	local ok, err = pkg:runFile("./scripts/hello.lua")
 	test.equal(ok, true)
 	test.equal(fs.exists(path.join(dir, "hello-sentinel.txt")), true)
@@ -196,7 +195,7 @@ test.it("runFile: uses bin as default entry point when set", function()
 	fs.write(path.join(srcDir, "init.lua"), 'error("should not run init.lua")')
 	fs.write(path.join(srcDir, "cli.lua"), 'return true')
 
-	local pkg = Package.open(dir)
+	local pkg = lpm.Package.open(dir)
 	local ok, err = pkg:runFile(nil, {})
 	test.equal(ok, true)
 end)
@@ -216,7 +215,7 @@ test.it("runFile: falls back to init.lua when bin is not set", function()
 	fs.mkdir(srcDir)
 	fs.write(path.join(srcDir, "init.lua"), 'return true')
 
-	local pkg = Package.open(dir)
+	local pkg = lpm.Package.open(dir)
 	local ok, err = pkg:runFile(nil, {})
 	test.equal(ok, true)
 end)
@@ -238,7 +237,7 @@ test.it("runScript: runs a named shell command from lpm.json scripts", function(
 		dependencies = {}
 	}))
 
-	local pkg = Package.open(dir)
+	local pkg = lpm.Package.open(dir)
 	local ok, output = pkg:runScript("greet", true)
 	test.equal(ok, true)
 	test.notEqual(output:find("hello"), nil)
@@ -257,7 +256,7 @@ test.it("runScript: errors when script name is not in lpm.json", function()
 		dependencies = {}
 	}))
 
-	local pkg = Package.open(dir)
+	local pkg = lpm.Package.open(dir)
 	local ok, err = pcall(function() pkg:runScript("doesnotexist") end)
 	test.equal(ok, false)
 	test.notEqual(string.find(err, "doesnotexist", 1, true), nil)
@@ -275,8 +274,7 @@ test.it("git dep: installs root package, not a sub-package, when repo has lpm.js
 	-- instead of the root package (e.g. "lpm-test").
 	--
 	-- We pre-populate the real git cache dir so getOrInitGitRepo skips cloning.
-	local global = require("lpm-core.global")
-	local repoDir = global.getGitRepoDir("my-root-pkg")
+	local repoDir = lpm.global.getGitRepoDir("my-root-pkg")
 	fs.rmdir(repoDir)
 	fs.mkdir(repoDir)
 
@@ -317,7 +315,7 @@ test.it("git dep: installs root package, not a sub-package, when repo has lpm.js
 		}
 	}))
 
-	local app = Package.open(appDir)
+	local app = lpm.Package.open(appDir)
 	app:installDependencies()
 
 	-- Should install "my-root-pkg", NOT "ansi"
@@ -352,7 +350,7 @@ test.it("end-to-end: package with dependency can install and build", function()
 		}
 	}))
 
-	local app = Package.open(appDir)
+	local app = lpm.Package.open(appDir)
 	test.notEqual(app, nil)
 
 	app:installDependencies()

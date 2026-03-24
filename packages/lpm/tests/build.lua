@@ -1,6 +1,6 @@
 local test = require("lpm-test")
 
-local Package = require("lpm-core.package")
+local lpm = require("lpm-core")
 
 local fs = require("fs")
 local env = require("env")
@@ -21,7 +21,7 @@ local function makePackageWithSrc(name, srcFiles, config)
 	config = config or {
 		name = name,
 		version = "0.1.0",
-		dependencies = {},
+		dependencies = {}
 	}
 
 	fs.write(path.join(dir, "lpm.json"), json.encode(config))
@@ -43,10 +43,10 @@ end
 
 test.it("Package:build creates a symlink in target/<name>", function()
 	local dir = makePackageWithSrc("build-basic", {
-		["init.lua"] = 'return "hello"',
+		["init.lua"] = 'return "hello"'
 	})
 
-	local pkg = Package.open(dir)
+	local pkg = lpm.Package.open(dir)
 	pkg:build()
 
 	local targetDir = pkg:getTargetDir()
@@ -56,10 +56,10 @@ end)
 test.it("Package:build target contains the source files", function()
 	local dir = makePackageWithSrc("build-contents", {
 		["init.lua"] = 'return { version = "1.0" }',
-		["helper.lua"] = 'return {}',
+		["helper.lua"] = 'return {}'
 	})
 
-	local pkg = Package.open(dir)
+	local pkg = lpm.Package.open(dir)
 	pkg:build()
 
 	local targetDir = pkg:getTargetDir()
@@ -69,10 +69,10 @@ end)
 
 test.it("Package:build is idempotent (can be called twice)", function()
 	local dir = makePackageWithSrc("build-idempotent", {
-		["init.lua"] = 'return true',
+		["init.lua"] = 'return true'
 	})
 
-	local pkg = Package.open(dir)
+	local pkg = lpm.Package.open(dir)
 	pkg:build()
 	pkg:build()
 
@@ -85,7 +85,7 @@ end)
 
 test.it("installDependencies installs a local path dependency", function()
 	local depDir = makePackageWithSrc("install-dep", {
-		["init.lua"] = 'return { name = "install-dep" }',
+		["init.lua"] = 'return { name = "install-dep" }'
 	})
 
 	local mainDir = path.join(tmpBase, "install-main")
@@ -97,11 +97,11 @@ test.it("installDependencies installs a local path dependency", function()
 		name = "install-main",
 		version = "0.1.0",
 		dependencies = {
-			["install-dep"] = { path = "../install-dep" },
-		},
+			["install-dep"] = { path = "../install-dep" }
+		}
 	}))
 
-	local pkg = Package.open(mainDir)
+	local pkg = lpm.Package.open(mainDir)
 	pkg:installDependencies()
 
 	local depInTarget = path.join(mainDir, "target", "install-dep")
@@ -111,11 +111,11 @@ end)
 
 test.it("installDependencies installs multiple dependencies", function()
 	makePackageWithSrc("multi-dep-a", {
-		["init.lua"] = 'return "a"',
+		["init.lua"] = 'return "a"'
 	})
 
 	makePackageWithSrc("multi-dep-b", {
-		["init.lua"] = 'return "b"',
+		["init.lua"] = 'return "b"'
 	})
 
 	local mainDir = path.join(tmpBase, "multi-main")
@@ -128,11 +128,11 @@ test.it("installDependencies installs multiple dependencies", function()
 		version = "0.1.0",
 		dependencies = {
 			["multi-dep-a"] = { path = "../multi-dep-a" },
-			["multi-dep-b"] = { path = "../multi-dep-b" },
-		},
+			["multi-dep-b"] = { path = "../multi-dep-b" }
+		}
 	}))
 
-	local pkg = Package.open(mainDir)
+	local pkg = lpm.Package.open(mainDir)
 	pkg:installDependencies()
 
 	test.equal(fs.exists(path.join(mainDir, "target", "multi-dep-a", "init.lua")), true)
@@ -141,7 +141,7 @@ end)
 
 test.it("installDependencies skips already-installed symlink dependencies", function()
 	makePackageWithSrc("skip-dep", {
-		["init.lua"] = 'return "skip"',
+		["init.lua"] = 'return "skip"'
 	})
 
 	local mainDir = path.join(tmpBase, "skip-main")
@@ -153,11 +153,11 @@ test.it("installDependencies skips already-installed symlink dependencies", func
 		name = "skip-main",
 		version = "0.1.0",
 		dependencies = {
-			["skip-dep"] = { path = "../skip-dep" },
-		},
+			["skip-dep"] = { path = "../skip-dep" }
+		}
 	}))
 
-	local pkg = Package.open(mainDir)
+	local pkg = lpm.Package.open(mainDir)
 	pkg:installDependencies()
 	pkg:installDependencies()
 
@@ -189,7 +189,7 @@ out:close()
 	fs.write(path.join(subDir, "build.lua"), buildScript)
 	fs.write(path.join(subDir, "lpm.json"), json.encode({
 		name = "rebuild-sub",
-		version = "0.1.0",
+		version = "0.1.0"
 	}))
 
 	local mainDir = path.join(tmpBase, "rebuild-main")
@@ -200,11 +200,11 @@ out:close()
 		name = "rebuild-main",
 		version = "0.1.0",
 		dependencies = {
-			["rebuild-sub"] = { path = "../rebuild-sub" },
-		},
+			["rebuild-sub"] = { path = "../rebuild-sub" }
+		}
 	}))
 
-	local pkg = Package.open(mainDir)
+	local pkg = lpm.Package.open(mainDir)
 
 	pkg:installDependencies()
 	local content1 = fs.read(path.join(mainDir, "target", "rebuild-sub", "init.lua"))
@@ -222,7 +222,7 @@ end)
 
 test.it("installDependencies writes a lockfile with resolved path dependency", function()
 	makePackageWithSrc("lockfile-dep", {
-		["init.lua"] = 'return "lockfile-dep"',
+		["init.lua"] = 'return "lockfile-dep"'
 	})
 
 	local mainDir = path.join(tmpBase, "lockfile-main")
@@ -233,11 +233,11 @@ test.it("installDependencies writes a lockfile with resolved path dependency", f
 		name = "lockfile-main",
 		version = "0.1.0",
 		dependencies = {
-			["lockfile-dep"] = { path = "../lockfile-dep" },
-		},
+			["lockfile-dep"] = { path = "../lockfile-dep" }
+		}
 	}))
 
-	local pkg = Package.open(mainDir)
+	local pkg = lpm.Package.open(mainDir)
 	pkg:installDependencies()
 
 	local lockPath = path.join(mainDir, "lpm-lock.json")
@@ -250,10 +250,10 @@ end)
 
 test.it("installDependencies uses lockfile to pin dependency on reinstall", function()
 	makePackageWithSrc("pinned-dep", {
-		["init.lua"] = 'return "pinned"',
+		["init.lua"] = 'return "pinned"'
 	})
 	makePackageWithSrc("other-dep", {
-		["init.lua"] = 'return "other"',
+		["init.lua"] = 'return "other"'
 	})
 
 	local mainDir = path.join(tmpBase, "pinned-main")
@@ -264,17 +264,16 @@ test.it("installDependencies uses lockfile to pin dependency on reinstall", func
 		name = "pinned-main",
 		version = "0.1.0",
 		dependencies = {
-			["pinned-dep"] = { path = "../pinned-dep" },
-		},
+			["pinned-dep"] = { path = "../pinned-dep" }
+		}
 	}))
 
-	local pkg = Package.open(mainDir)
+	local pkg = lpm.Package.open(mainDir)
 	pkg:installDependencies()
 
 	-- Manually overwrite the lockfile to point at other-dep instead
-	local Lockfile = require("lpm-core.lockfile")
-	Lockfile.new(path.join(mainDir, "lpm-lock.json"), {
-		["pinned-dep"] = { path = "../other-dep" },
+	lpm.Lockfile.new(path.join(mainDir, "lpm-lock.json"), {
+		["pinned-dep"] = { path = "../other-dep" }
 	}):save()
 
 	-- Remove the installed symlink/junction so reinstall actually runs
@@ -293,7 +292,7 @@ end)
 
 test.it("installDependencies installs transitive dependencies", function()
 	makePackageWithSrc("leaf-dep", {
-		["init.lua"] = 'return "leaf"',
+		["init.lua"] = 'return "leaf"'
 	})
 
 	local midDir = path.join(tmpBase, "mid-dep")
@@ -305,8 +304,8 @@ test.it("installDependencies installs transitive dependencies", function()
 		name = "mid-dep",
 		version = "0.1.0",
 		dependencies = {
-			["leaf-dep"] = { path = "../leaf-dep" },
-		},
+			["leaf-dep"] = { path = "../leaf-dep" }
+		}
 	}))
 
 	local rootDir = path.join(tmpBase, "trans-root")
@@ -318,11 +317,11 @@ test.it("installDependencies installs transitive dependencies", function()
 		name = "trans-root",
 		version = "0.1.0",
 		dependencies = {
-			["mid-dep"] = { path = "../mid-dep" },
-		},
+			["mid-dep"] = { path = "../mid-dep" }
+		}
 	}))
 
-	local pkg = Package.open(rootDir)
+	local pkg = lpm.Package.open(rootDir)
 	pkg:installDependencies()
 
 	test.equal(fs.exists(path.join(rootDir, "target", "mid-dep")), true)

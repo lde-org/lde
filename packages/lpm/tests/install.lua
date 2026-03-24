@@ -21,9 +21,9 @@ if process.platform == "win32" then
 		fs.mkdir(fakeProfile)
 
 		local ok, _ = process.exec("powershell", {
-			"-NoProfile", "-ExecutionPolicy", "Bypass", "-File", installScript,
+			"-NoProfile", "-ExecutionPolicy", "Bypass", "-File", installScript
 		}, {
-			env = { USERPROFILE = fakeProfile },
+			env = { USERPROFILE = fakeProfile }
 		})
 
 		test.equal(ok, true)
@@ -35,9 +35,9 @@ if process.platform == "win32" then
 		fs.mkdir(fakeProfile)
 
 		local ok, _ = process.exec("powershell", {
-			"-NoProfile", "-ExecutionPolicy", "Bypass", "-File", installScript,
+			"-NoProfile", "-ExecutionPolicy", "Bypass", "-File", installScript
 		}, {
-			env = { USERPROFILE = fakeProfile },
+			env = { USERPROFILE = fakeProfile }
 		})
 		test.equal(ok, true)
 
@@ -53,7 +53,7 @@ elseif process.platform == "linux" then
 		fs.mkdir(fakeHome)
 
 		local ok, _ = process.exec("sh", { installScript }, {
-			env = { HOME = fakeHome },
+			env = { HOME = fakeHome }
 		})
 
 		test.equal(ok, true)
@@ -65,7 +65,7 @@ elseif process.platform == "linux" then
 		fs.mkdir(fakeHome)
 
 		local ok, _ = process.exec("sh", { installScript }, {
-			env = { HOME = fakeHome },
+			env = { HOME = fakeHome }
 		})
 		test.equal(ok, true)
 
