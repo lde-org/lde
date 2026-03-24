@@ -5,20 +5,23 @@
   outputs =
     { self, nixpkgs, ... }:
     let
+      # GENERATED VERSION CONTROL - BEGIN
+      releaseTag = "v0.7.1";
       platform_attrs = {
         "aarch64-darwin" = {
           url = "https://github.com/codebycruz/lpm/releases/download/v0.7.1/lpm-macos-aarch64";
-          hash = "0z8gpc17j9wqywd3i335bg4wv6fnpaqahxyg8q529cxrs2lc6nn7";
+          sha256 = "0z8gpc17j9wqywd3i335bg4wv6fnpaqahxyg8q529cxrs2lc6nn7";
         };
         "aarch64-linux" = {
           url = "https://github.com/codebycruz/lpm/releases/download/v0.7.1/lpm-linux-aarch64";
-          hash = "0zhn7n1gsl23q5w5zymjrfb1969wn5lsm3svskzx7aq7wq52i9rx";
+          sha256 = "0zhn7n1gsl23q5w5zymjrfb1969wn5lsm3svskzx7aq7wq52i9rx";
         };
         "x86_64-linux" = {
           url = "https://github.com/codebycruz/lpm/releases/download/v0.7.1/lpm-linux-x86-64";
-          hash = "01ijw9j7k5b7f5c9s8i3260kzagpgr3gic5y6pjbw2ffffkcdfby";
+          sha256 = "01ijw9j7k5b7f5c9s8i3260kzagpgr3gic5y6pjbw2ffffkcdfby";
         };
       };
+      # GENERATED VERSION CONTROL - END
       forEachSystem =
         fn:
         nixpkgs.lib.genAttrs [
@@ -30,18 +33,16 @@
     in
     {
       packages = forEachSystem (
-        system: pkgs:
-        let
-          # Nixpkgs static builds always use musl
-          attrs = platform_attrs.${system};
-          lpm = pkgs.fetchurl {
+        system: pkgs: {
+          default = pkgs.stdenv.mkDerivation {
             name = "lpm";
-            url = attrs.url;
-            hash = "sha256-${attrs.hash}";
+            version = releaseTag;
+            src = pkgs.fetchurl platform_attrs.${system};
+            phases = [ "installPhase" ];
+            installPhase = ''
+              install -D "$src" "$out/bin/lpm"
+            '';
           };
-        in
-        {
-          default = lpm;
         }
       );
 
