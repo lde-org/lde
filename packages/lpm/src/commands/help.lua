@@ -23,22 +23,22 @@ local function help(_args)
 		{ cmd = "bundle",    ex = nil,           color = "magenta", desc = "Bundle current project into a single lua file" }
 	}
 
-	ansi.printf("{blue}lpm{reset} is a package manager for Lua, written in Lua.\n")
-	ansi.printf("Usage: lpm <command> {magenta}[options]")
-	ansi.printf("\nCommands:")
+	ansi.printf("{blue}{bold}lpm{reset} is a package manager for Lua, written in Lua.\n")
+	ansi.printf("{bold}Usage:{reset} lpm <command> {magenta}[options]")
+	ansi.printf("\n{bold}Commands:{reset}")
 	for _, command in ipairs(commands) do
 		if not command.cmd then -- Separator
 			print("")
 		else
-			local cmd = ansi.colorize(command.color, command.cmd)
+			local cmd = ansi.format("{bold}{" .. command.color .. "}" .. command.cmd)
 			local ex = ansi.colorize("gray", command.ex or "")
 
-			print(string.format("  %-18s %-20s %s", cmd, ex, command.desc))
+			ansi.printf("  %-23s %-21s %s", cmd, ex, command.desc)
 		end
 	end
 
-	ansi.printf("%-23s {blue} %s", "\nLearn more:", "https://lualpm.com")
-	ansi.printf("%-22s {blue} %s", "Join the discord:", "https://discord.gg/rHgp7DhkHm")
+	ansi.printf("{bold}%-25s{reset} {blue} %s", "\nLearn more:", "https://lualpm.com")
+	ansi.printf("{bold}%-24s{reset} {blue} %s", "Join the discord:", "https://discord.gg/rHgp7DhkHm")
 end
 
 return help
