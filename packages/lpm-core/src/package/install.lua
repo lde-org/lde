@@ -40,14 +40,17 @@ local function dependencyToPackage(alias, depInfo, relativeTo)
 
 		-- Resolve the exact HEAD commit for pinning in the lockfile
 		local ok, output = process.exec("git", { "rev-parse", "HEAD" }, { cwd = repoDir })
-		local resolvedCommit = (ok and output) and output:gsub("%s+$", "") or depInfo.commit
+		local resolvedCommit = (ok and output) and string.gsub(output, "%s+$", "") or depInfo.commit
+		if not resolvedCommit then
+			error("Failed to resolve HEAD commit for git dependency")
+		end
 
 		---@type lpm.Lockfile.GitDependency
 		local lockEntry = {
 			git = depInfo.git,
 			commit = resolvedCommit,
 			branch = depInfo.branch,
-			package = depInfo.package,
+			package = depInfo.package
 		}
 
 		local gitDependencyPackage = Package.open(repoDir)
@@ -76,7 +79,7 @@ local function dependencyToPackage(alias, depInfo, relativeTo)
 		---@type lpm.Lockfile.PathDependency
 		local lockEntry = {
 			path = depInfo.path,
-			package = depInfo.package,
+			package = depInfo.package
 		}
 
 		return localPackage, lockEntry
@@ -98,7 +101,7 @@ local function dependencyToPackage(alias, depInfo, relativeTo)
 			git = portfile.git,
 			commit = commit,
 			branch = portfile.branch,
-			package = depInfo.package,
+			package = depInfo.package
 		}
 
 		local registryPackage = Package.open(repoDir)

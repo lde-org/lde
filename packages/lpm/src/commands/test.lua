@@ -9,7 +9,7 @@ local env = require("env")
 ---@param msg string
 local function makeRelative(packageDir, msg)
 	local prefix = packageDir .. path.separator
-	return (msg:gsub(prefix, ""))
+	return (string.gsub(msg, prefix, ""))
 end
 
 ---@param results lpm.TestResults
@@ -70,8 +70,8 @@ local function printSummary(failures, passed, total)
 	end
 end
 
----@param args clap.Args
-local function test(args)
+---@param _args clap.Args
+local function test(_args)
 	local package = Package.open()
 
 	print()

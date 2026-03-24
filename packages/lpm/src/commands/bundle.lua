@@ -13,7 +13,7 @@ local stringEscapes = {
 	["\a"] = "\\a",
 	["\b"] = "\\b",
 	["\f"] = "\\f",
-	["\v"] = "\\v",
+	["\v"] = "\\v"
 }
 
 ---@param s string

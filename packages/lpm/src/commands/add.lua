@@ -38,8 +38,14 @@ local function add(args)
 
 	local configPath = p:getConfigPath()
 
+	local configRaw = fs.read(configPath)
+	if not configRaw then
+		ansi.printf("{red}Config file not found: %s", configPath)
+		return
+	end
+
 	---@type lpm.Config
-	local config = json.decode(fs.read(p:getConfigPath()))
+	local config = json.decode(configRaw)
 
 	local dependencyTable ---@type lpm.Config.Dependencies
 	if isDevelopment then

@@ -9,8 +9,8 @@ local depthColors = {
 	"cyan"
 }
 
----@param args clap.Args
-local function tree(args)
+---@param _args clap.Args
+local function tree(_args)
 	---@param pkg lpm.Package
 	---@param cfg lpm.Config.Dependency?
 	---@param depth number?

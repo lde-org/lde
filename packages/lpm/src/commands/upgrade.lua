@@ -14,7 +14,7 @@ local releasesUrl = "https://api.github.com/repos/codebycruz/lpm/releases"
 local artifactNames = {
 	win32 = "lpm-windows-x86-64.exe",
 	linux = "lpm-linux-x86-64",
-	darwin = "lpm-macos-x86-64",
+	darwin = "lpm-macos-x86-64"
 }
 
 ---@param args clap.Args
@@ -126,7 +126,7 @@ local function upgrade(args)
 		return
 	end
 
-	if process.platform ~= "win32" then
+	if process.platform ~= "win32" then ---@cast fs fs.raw.posix
 		fs.chmod(binLocation, tonumber("755", 8))
 	end
 

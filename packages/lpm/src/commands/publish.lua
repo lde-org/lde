@@ -30,7 +30,7 @@ end
 local function gitOutput(args, cwd)
 	local ok, output = process.exec("git", args, { cwd = cwd })
 	if not ok or not output then return nil end
-	return output:gsub("%s+$", "")
+	return (string.gsub(output, "%s+$", ""))
 end
 
 ---@param args clap.Args

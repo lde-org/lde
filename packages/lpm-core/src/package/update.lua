@@ -26,7 +26,7 @@ local function updateGitDependency(name, depInfo)
 		return false, "failed: " .. (output or "unknown error")
 	end
 
-	return true, (output or "updated"):gsub("%s+$", "")
+	return true, (string.gsub(output or "updated", "%s+$", ""))
 end
 
 --- Updates a registry dependency to the latest compatible version (same major).
@@ -39,6 +39,7 @@ end
 local function updateRegistryDependency(package, name, depInfo)
 	global.syncRegistry()
 
+	---@diagnostic disable-next-line # 'package' is a keyword so it complains being used as a field
 	local packageName = depInfo.package or name
 	local portfile, err = global.lookupRegistryPackage(packageName)
 	if not portfile then
@@ -59,8 +60,12 @@ local function updateRegistryDependency(package, name, depInfo)
 
 	-- Write the updated version back to lpm.json
 	local configPath = package:getConfigPath()
-	local config = json.decode(fs.read(configPath))
+	local configRaw = fs.read(configPath)
+	if not configRaw then
+		return false, "failed to read config"
+	end
 
+	local config = json.decode(configRaw)
 	if config.dependencies and config.dependencies[name] then
 		config.dependencies[name].version = best
 	elseif config.devDependencies and config.devDependencies[name] then

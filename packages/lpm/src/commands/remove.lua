@@ -16,7 +16,13 @@ local function remove(args)
 
 	local configPath = pkg:getConfigPath()
 
-	local config = json.decode(fs.read(pkg:getConfigPath()))
+	local configRaw = fs.read(configPath)
+	if not configRaw then
+		ansi.printf("{red}Failed to read config: %s", configPath)
+		return
+	end
+
+	local config = json.decode(configRaw)
 	if not config.dependencies then
 		config.dependencies = {}
 	end

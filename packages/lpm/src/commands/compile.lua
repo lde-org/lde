@@ -29,7 +29,7 @@ local function compile(args)
 		error("Failed to move executable: " .. err)
 	end
 
-	if process.platform ~= "win32" then
+	if process.platform ~= "win32" then ---@cast fs fs.raw.posix
 		fs.chmod(outFile, tonumber("755", 8))
 	end
 

@@ -21,3 +21,10 @@ indent_size = 2
 [*.lua]
 indent_style = tab
 indent_size = 4
+max_line_length = 120
+end_of_line = lf
+table_separator_style = comma
+trailing_table_separator = never
+call_arg_parentheses = keep
+insert_final_newline = true
+space_after_comment_dash = false
