@@ -7,8 +7,7 @@ local git = require("git")
 local Package = require("lpm-core.package")
 
 local function hasGit()
-	local ok = git.version()
-	return ok == true
+	return git.version() == true
 end
 
 ---@param dir string

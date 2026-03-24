@@ -93,6 +93,7 @@ local function updateDependencies(package, dependencies)
 		else
 			updated, message = false, "skipped (path dependency)"
 		end
+
 		results[name] = { updated = updated, message = message }
 	end
 

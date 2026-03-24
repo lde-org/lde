@@ -14,12 +14,16 @@ function git.clone(url, dir, branch, commit)
 		args[#args + 1] = branch
 	end
 
-	if commit then
-		args[#args + 1] = "--commit"
-		args[#args + 1] = commit
+	local ok, err = process.exec("git", args)
+	if not ok then
+		return ok, err
 	end
 
-	return process.exec("git", args)
+	if commit then
+		return git.checkout(commit, dir)
+	end
+
+	return ok, err
 end
 
 ---@param cwd string?
