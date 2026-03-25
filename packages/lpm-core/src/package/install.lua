@@ -121,6 +121,7 @@ end
 ---@param dependencies table<string, lpm.Config.Dependency>?
 ---@param relativeTo string?
 local function installDependencies(package, dependencies, relativeTo)
+	local isRoot = dependencies == nil
 	dependencies = dependencies or package:getDependencies()
 	relativeTo = relativeTo or package.dir
 
@@ -141,12 +142,14 @@ local function installDependencies(package, dependencies, relativeTo)
 		end
 	end
 
-	-- 3. Write a single flat lockfile for the root package only
-	local lockEntries = {}
-	for alias, entry in pairs(stack) do
-		lockEntries[alias] = entry.lock
+	-- 3. Write a single flat lockfile only for the root call
+	if isRoot then
+		local lockEntries = {}
+		for alias, entry in pairs(stack) do
+			lockEntries[alias] = entry.lock
+		end
+		Lockfile.new(package:getLockfilePath(), lockEntries):save()
 	end
-	Lockfile.new(package:getLockfilePath(), lockEntries):save()
 end
 
 return installDependencies
