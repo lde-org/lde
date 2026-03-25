@@ -82,7 +82,12 @@ local function dependencyToPackage(alias, depInfo, relativeTo)
 			error("Failed to parse rockspec for '" .. alias .. "': " .. tostring(spec))
 		end ---@cast spec rocked.raw.Output
 
-		local repoDir = global.getOrInitGitRepo(packageName, spec.source.url, depInfo.branch, depInfo.commit)
+		local sourceUrl = spec.source.url
+		if not sourceUrl:match("^git") then
+			error("Unsupported source for luarocks dep '" .. alias .. "': only git sources are supported, got: " .. sourceUrl)
+		end
+
+		local repoDir = global.getOrInitGitRepo(packageName, sourceUrl, depInfo.branch, depInfo.commit)
 		local resolvedCommit = select(2, git.getCommitHash(repoDir))
 		resolvedCommit = resolvedCommit and resolvedCommit:gsub("%s+$", "") or depInfo.commit
 
