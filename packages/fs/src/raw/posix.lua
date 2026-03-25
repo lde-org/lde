@@ -14,14 +14,14 @@ local dTypeToEntryType = {
 	[0] = "unknown",
 	[4] = "dir",
 	[8] = "file",
-	[10] = "symlink",
+	[10] = "symlink"
 }
 
 ---@type table<number, fs.Stat.Type>
 local modeToStatType = {
 	[0x4000] = "dir",
 	[0x8000] = "file",
-	[0xA000] = "symlink",
+	[0xA000] = "symlink"
 }
 
 --- Call after defining struct dirent and struct stat in ffi.
@@ -34,7 +34,7 @@ return function(rawToCrossStat)
 		int lstat(const char* pathname, struct stat* statbuf);
 	]])
 
-	---@class fs.raw.posix
+	---@class fs.raw.posix: fs.raw
 	local fs = {}
 
 	local newStat = ffi.typeof("struct stat")
@@ -69,7 +69,7 @@ return function(rawToCrossStat)
 				if name ~= "." and name ~= ".." then
 					return {
 						name = name,
-						type = dTypeToEntryType[entry.d_type] or "unknown",
+						type = dTypeToEntryType[entry.d_type] or "unknown"
 					}
 				end
 			end

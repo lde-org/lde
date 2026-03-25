@@ -5,16 +5,15 @@
 	"dependencies": {
 		"json": { "path": "../json" },
 		"ansi": { "path": "../ansi" },
-		"sea": { "path": "../sea" },
 		"path": { "path": "../path" },
 		"process": { "path": "../process" },
 		"clap": { "path": "../clap" },
 		"fs": { "path": "../fs" },
 		"env": { "path": "../env" },
-		"util": { "path": "../util" },
 		"http": { "path": "../http" },
 		"semver": { "path": "../semver" },
 		"lpm-core": { "path": "../lpm-core" },
-		"lpm-test": { "path": "../lpm-test" }
+		"winapi": { "git": "https://github.com/codebycruz/winapi" },
+		"git": { "path": "../git" }
 	}
 }

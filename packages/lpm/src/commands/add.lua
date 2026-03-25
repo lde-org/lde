@@ -2,8 +2,7 @@ local json = require("json")
 local ansi = require("ansi")
 local fs = require("fs")
 
-local Package = require("lpm-core.package")
-local global = require("lpm-core.global")
+local lpm = require("lpm-core")
 
 ---@param args clap.Args
 local function add(args)
@@ -30,7 +29,7 @@ local function add(args)
 
 	local registryVersion = args:option("version") or versionFromName
 
-	local p, err = Package.open()
+	local p, err = lpm.Package.open()
 	if not p then
 		ansi.printf("{red}%s", err)
 		return
@@ -38,8 +37,14 @@ local function add(args)
 
 	local configPath = p:getConfigPath()
 
+	local configRaw = fs.read(configPath)
+	if not configRaw then
+		ansi.printf("{red}Config file not found: %s", configPath)
+		return
+	end
+
 	---@type lpm.Config
-	local config = json.decode(fs.read(p:getConfigPath()))
+	local config = json.decode(configRaw)
 
 	local dependencyTable ---@type lpm.Config.Dependencies
 	if isDevelopment then
@@ -70,15 +75,15 @@ local function add(args)
 		dep = { git = depValue, branch = branch, commit = commit }
 	else
 		-- Registry dependency
-		global.syncRegistry()
+		lpm.global.syncRegistry()
 
-		local portfile, err = global.lookupRegistryPackage(name)
+		local portfile, err = lpm.global.lookupRegistryPackage(name)
 		if not portfile then
 			ansi.printf("{red}%s", err)
 			return
 		end
 
-		local resolvedVersion = global.resolveRegistryVersion(portfile, registryVersion or nil)
+		local resolvedVersion = lpm.global.resolveRegistryVersion(portfile, registryVersion or nil)
 		dep = { version = resolvedVersion }
 		ansi.printf("{green}Added dependency: %s{reset} ({cyan}version: %s{reset})", name, resolvedVersion)
 	end

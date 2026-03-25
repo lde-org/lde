@@ -1,0 +1,6 @@
+{
+	"name": "git",
+	"description": "Provides git command execution in a nice API. Requires git cli to be available.",
+	"version": "0.1.0",
+	"dependencies": { "process": { "path": "../process" } }
+}

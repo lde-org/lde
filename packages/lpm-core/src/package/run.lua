@@ -33,7 +33,7 @@ local function runFileWithLPM(package, scriptPath, args, vars, cwd)
 		env = vars,
 		cwd = cwd,
 		packagePath = luaPath,
-		packageCPath = luaCPath,
+		packageCPath = luaCPath
 	})
 end
 
@@ -89,7 +89,11 @@ local function runFile(package, scriptPath, args, vars, cwd)
 		ok, err = runFileWithLuaCLI(package, scriptPath, args, vars, engine, cwd)
 	end
 
-	return ok, err or (not ok and "Script exited with a non-zero exit code") or nil
+	if not ok then
+		return nil, err or "Script exited with a non-zero exit code"
+	end
+
+	return ok, err
 end
 
 return runFile

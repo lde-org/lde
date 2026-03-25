@@ -1,11 +1,10 @@
-local Package = require("lpm-core.package")
-
 local ansi = require("ansi")
 local env = require("env")
 local fs = require("fs")
+local git = require("git")
 local path = require("path")
-local process = require("process")
-local global = require("lpm-core.global")
+
+local lpm = require("lpm-core")
 
 --- Parses a GitHub /tree/<branch> URL into a clone URL and branch.
 --- e.g. "https://github.com/user/repo/tree/my-branch" -> "https://github.com/user/repo.git", "my-branch"
@@ -40,14 +39,9 @@ local function getOrCloneRepo(repoName, cloneUrl, branch)
 		safeName = repoName .. "-" .. branch
 	end
 
-	local repoDir = global.getGitRepoDir(safeName)
+	local repoDir = lpm.global.getGitRepoDir(safeName)
 	if not fs.exists(repoDir) then
-		local args = { "clone", cloneUrl, repoDir }
-		if branch then
-			args = { "clone", "--branch", branch, cloneUrl, repoDir }
-		end
-
-		local ok, err = process.spawn("git", args)
+		local ok, err = git.clone(cloneUrl, repoDir, branch)
 		if not ok then
 			error("Failed to clone git repository: " .. (err or "unknown error"))
 		end
@@ -64,7 +58,7 @@ end
 local function findNamedPackageIn(dir, name)
 	for _, config in ipairs(fs.scan(dir, "**" .. path.separator .. "lpm.json")) do
 		local parentDir = path.join(dir, path.dirname(config))
-		local pkg = Package.open(parentDir)
+		local pkg = lpm.Package.open(parentDir)
 		if pkg and pkg:getName() == name then
 			return pkg, nil
 		end
@@ -104,7 +98,7 @@ local function x(args)
 		if packageName then
 			pkg, err = findNamedPackageIn(repoDir, packageName)
 		else
-			pkg, err = Package.open(repoDir)
+			pkg, err = lpm.Package.open(repoDir)
 		end
 
 		if not pkg then
@@ -123,7 +117,7 @@ local function x(args)
 		if packageName then
 			pkg, err = findNamedPackageIn(resolved, packageName)
 		else
-			pkg, err = Package.open(resolved)
+			pkg, err = lpm.Package.open(resolved)
 		end
 
 		if not pkg then
@@ -146,17 +140,17 @@ local function x(args)
 			packageName = name
 		end
 
-		global.syncRegistry()
-		local portfile, err = global.lookupRegistryPackage(packageName)
+		lpm.global.syncRegistry()
+		local portfile, err = lpm.global.lookupRegistryPackage(packageName)
 		if not portfile then
 			error(err)
 		end
 
-		local _, commit = global.resolveRegistryVersion(portfile, versionStr or nil)
-		local repoDir = global.getOrInitGitRepo(packageName, portfile.git, portfile.branch, commit)
+		local _, commit = lpm.global.resolveRegistryVersion(portfile, versionStr or nil)
+		local repoDir = lpm.global.getOrInitGitRepo(packageName, portfile.git, portfile.branch, commit)
 
 		local pkg
-		pkg, err = Package.open(repoDir)
+		pkg, err = lpm.Package.open(repoDir)
 		if not pkg then
 			error(err)
 		end

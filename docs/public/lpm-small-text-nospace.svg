@@ -2,9 +2,9 @@
 <!-- Created with Inkscape (http://www.inkscape.org/) -->
 
 <svg
-   width="512"
-   height="512"
-   viewBox="0 0 512 512"
+   width="342.8909"
+   height="337.17984"
+   viewBox="0 0 342.8909 337.17984"
    version="1.1"
    id="svg1"
    xmlns:xlink="http://www.w3.org/1999/xlink"
@@ -58,8 +58,7 @@
          id="circle1"
          cx="392.24191"
          cy="154.54027"
-         r="82.26255"
-         d="m 474.50446,154.54027 a 82.26255,82.26255 0 0 1 -82.26255,82.26255 82.26255,82.26255 0 0 1 -82.26255,-82.26255 82.26255,82.26255 0 0 1 82.26255,-82.262552 82.26255,82.26255 0 0 1 82.26255,82.262552 z" />
+         r="82.26255" />
       <path
          id="lpe_path-effect1"
          style="fill:#ffffff;stroke-width:23.1584;-inkscape-stroke:none"
@@ -68,7 +67,8 @@
     </clipPath>
   </defs>
   <g
-     id="layer1">
+     id="layer1"
+     transform="translate(-97.733284,-89.588844)">
     <path
        style="fill:url(#linearGradient33);stroke-width:13.9861;-inkscape-stroke:none"
        id="rect20"

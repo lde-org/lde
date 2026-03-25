@@ -6,7 +6,7 @@
 
 ---
 
-[![Nightly](https://github.com/codebycruz/lpm/actions/workflows/build.yml/badge.svg)](https://github.com/codebycruz/lpm/actions/workflows/build.yml) [![Test](https://github.com/codebycruz/lpm/actions/workflows/test.yml/badge.svg)](https://github.com/codebycruz/lpm/actions/workflows/test.yml) [![Latest Release](https://img.shields.io/github/v/release/codebycruz/lpm?labelColor=2d333b)](https://github.com/codebycruz/lpm/releases/latest) [![Discord](https://img.shields.io/discord/1473159418257604752?logo=discord&logoColor=white&label=Discord&labelColor=2d333b)](https://discord.gg/rHgp7DhkHm)
+[![Build+Test](https://github.com/codebycruz/lpm/actions/workflows/nightly.yml/badge.svg)](https://github.com/codebycruz/lpm/actions/workflows/nightly.yml) [![Latest Release](https://img.shields.io/github/v/release/codebycruz/lpm?labelColor=2d333b)](https://github.com/codebycruz/lpm/releases/latest) [![Discord](https://img.shields.io/discord/1473159418257604752?logo=discord&logoColor=white&label=Discord&labelColor=2d333b)](https://discord.gg/rHgp7DhkHm)
 
 </div>
 

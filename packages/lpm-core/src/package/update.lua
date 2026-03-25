@@ -1,6 +1,6 @@
 local fs = require("fs")
 local json = require("json")
-local process = require("process")
+local git = require("git")
 local semver = require("semver")
 
 local global = require("lpm-core.global")
@@ -21,12 +21,12 @@ local function updateGitDependency(name, depInfo)
 		return false, "skipped (not installed)"
 	end
 
-	local ok, output = process.exec("git", { "pull" }, { cwd = repoDir })
+	local ok, output = git.pull(repoDir)
 	if not ok then
 		return false, "failed: " .. (output or "unknown error")
 	end
 
-	return true, (output or "updated"):gsub("%s+$", "")
+	return true, (string.gsub(output or "updated", "%s+$", ""))
 end
 
 --- Updates a registry dependency to the latest compatible version (same major).
@@ -39,7 +39,7 @@ end
 local function updateRegistryDependency(package, name, depInfo)
 	global.syncRegistry()
 
-	local packageName = depInfo.package or name
+	local packageName = depInfo.name or name
 	local portfile, err = global.lookupRegistryPackage(packageName)
 	if not portfile then
 		return false, "registry error: " .. err
@@ -59,8 +59,12 @@ local function updateRegistryDependency(package, name, depInfo)
 
 	-- Write the updated version back to lpm.json
 	local configPath = package:getConfigPath()
-	local config = json.decode(fs.read(configPath))
+	local configRaw = fs.read(configPath)
+	if not configRaw then
+		return false, "failed to read config"
+	end
 
+	local config = json.decode(configRaw)
 	if config.dependencies and config.dependencies[name] then
 		config.dependencies[name].version = best
 	elseif config.devDependencies and config.devDependencies[name] then
@@ -89,6 +93,7 @@ local function updateDependencies(package, dependencies)
 		else
 			updated, message = false, "skipped (path dependency)"
 		end
+
 		results[name] = { updated = updated, message = message }
 	end
 

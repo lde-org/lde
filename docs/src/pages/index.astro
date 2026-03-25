@@ -141,7 +141,7 @@ import { GITHUB_RELEASES_URL } from "../data/info";
                     </p>
 
                     <div class="hidden lg:block">
-                        <InstallTabs client:load />
+                        <InstallTabs client:idle />
                     </div>
 
                     <a
@@ -167,6 +167,7 @@ import { GITHUB_RELEASES_URL } from "../data/info";
                         src="/lpm-small.svg"
                         alt="lpm logo"
                         class="size-96 -mt-12 relative"
+                        fetchpriority="high"
                     />
                 </div>
             </div>

@@ -1,14 +1,14 @@
 local global = {}
 
 local fs = require("fs")
+local git = require("git")
 local json = require("json")
 local path = require("path")
-local process = require("process")
 local semver = require("semver")
 
 local REGISTRY_URL = "https://github.com/codebycruz/lpm-registry"
 
-global.currentVersion = "0.7.1"
+global.currentVersion = "0.7.2"
 
 ---@param s string
 local function sanitize(s)
@@ -43,12 +43,12 @@ function global.syncRegistry()
 
 	local registryDir = global.getRegistryDir()
 	if not fs.exists(registryDir) then
-		local ok, err = process.spawn("git", { "clone", REGISTRY_URL, registryDir })
+		local ok, err = git.clone(REGISTRY_URL, registryDir)
 		if not ok then
 			error("Failed to clone lpm registry: " .. (err or "unknown error"))
 		end
 	else
-		process.spawn("git", { "pull" }, { cwd = registryDir })
+		git.pull(registryDir)
 	end
 end
 
@@ -125,17 +125,7 @@ end
 ---@param commit string?
 function global.cloneDir(repoName, repoUrl, branch, commit)
 	local repoDir = global.getGitRepoDir(repoName, branch, commit)
-	local args = { "clone" }
-
-	if branch then
-		args[#args + 1] = "--branch"
-		args[#args + 1] = branch
-	end
-
-	args[#args + 1] = repoUrl
-	args[#args + 1] = repoDir
-
-	return process.spawn("git", args)
+	return git.clone(repoUrl, repoDir, branch, commit)
 end
 
 ---@param repoName string
@@ -148,13 +138,6 @@ function global.getOrInitGitRepo(repoName, repoUrl, branch, commit)
 		local ok, err = global.cloneDir(repoName, repoUrl, branch, commit)
 		if not ok then
 			error("Failed to clone git repository: " .. err)
-		end
-
-		if commit then
-			local checkoutOk, checkoutErr = process.spawn("git", { "checkout", commit }, { cwd = repoDir })
-			if not checkoutOk then
-				error("Failed to checkout commit " .. commit .. ": " .. checkoutErr)
-			end
 		end
 	end
 

@@ -29,7 +29,7 @@ test.it("fs.scan does not follow directory symlinks", function()
 
 	-- Should find file.lua exactly once, without looping
 	test.equal(#results, 1)
-	test.notEqual(string.find(results[1], "file.lua", 1, true), nil)
+	test.includes(results[1], "file.lua")
 end)
 
 test.it("fs.scan finds files recursively without symlinks", function()

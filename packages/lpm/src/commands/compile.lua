@@ -3,13 +3,13 @@ local fs = require("fs")
 local process = require("process")
 local path = require("path")
 
-local Package = require("lpm-core.package")
+local lpm = require("lpm-core")
 
 ---@param args clap.Args
 local function compile(args)
 	local outFile = args:option("outfile")
 
-	local pkg, err = Package.open()
+	local pkg, err = lpm.Package.open()
 	if not pkg then
 		ansi.printf("{red}%s", err)
 		return
@@ -29,7 +29,7 @@ local function compile(args)
 		error("Failed to move executable: " .. err)
 	end
 
-	if process.platform ~= "win32" then
+	if process.platform ~= "win32" then ---@cast fs fs.raw.posix
 		fs.chmod(outFile, tonumber("755", 8))
 	end
 

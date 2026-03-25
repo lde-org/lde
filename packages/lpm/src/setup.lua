@@ -2,7 +2,8 @@ local ansi = require("ansi")
 local fs = require("fs")
 local path = require("path")
 local process = require("process")
-local global = require("lpm-core.global")
+
+local lpm = require("lpm-core")
 
 ---@param lpmDir string
 ---@param toolsDir string
@@ -51,7 +52,7 @@ local function updatePath(lpmDir, toolsDir)
 			home .. "/.zprofile",
 			home .. "/.bashrc",
 			home .. "/.bash_profile",
-			home .. "/.profile",
+			home .. "/.profile"
 		}
 
 		local pathLine = 'export PATH="$HOME/.lpm:$HOME/.lpm/tools:$PATH"'
@@ -110,8 +111,8 @@ local function installLpx(lpmDir)
 end
 
 local function setup()
-	local lpmDir = global.getDir()
-	local toolsDir = global.getToolsDir()
+	local lpmDir = lpm.global.getDir()
+	local toolsDir = lpm.global.getToolsDir()
 
 	updatePath(lpmDir, toolsDir)
 	installLpx(lpmDir)

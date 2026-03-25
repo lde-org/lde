@@ -3,7 +3,7 @@ local ansi = require("ansi")
 local path = require("path")
 local env = require("env")
 
-local Package = require("lpm-core.package")
+local lpm = require("lpm-core")
 
 ---@param args clap.Args
 local function new(args)
@@ -21,7 +21,7 @@ local function new(args)
 	fs.mkdir(name)
 	ansi.printf("{green}Created directory: %s", name)
 
-	Package.init(path.join(env.cwd(), name))
+	lpm.Package.init(path.join(env.cwd(), name))
 end
 
 return new

@@ -1,8 +1,9 @@
 local ansi = require("ansi")
+local git = require("git")
 local json = require("json")
 local process = require("process")
 
-local Package = require("lpm-core.package")
+local lpm = require("lpm-core")
 
 local REGISTRY_REPO = "https://github.com/codebycruz/lpm-registry"
 
@@ -24,18 +25,17 @@ local function openBrowser(url)
 	end
 end
 
----@param args string[]
----@param cwd string
+---@param ok boolean
+---@param output string?
 ---@return string?
-local function gitOutput(args, cwd)
-	local ok, output = process.exec("git", args, { cwd = cwd })
+local function trimOutput(ok, output)
 	if not ok or not output then return nil end
-	return output:gsub("%s+$", "")
+	return (string.gsub(output, "%s+$", ""))
 end
 
 ---@param args clap.Args
 local function publish(args)
-	local pkg, err = Package.open()
+	local pkg, err = lpm.Package.open()
 	if not pkg then
 		ansi.printf("{red}%s", err)
 		return
@@ -44,19 +44,19 @@ local function publish(args)
 	local config = pkg:readConfig()
 	local pkgDir = pkg:getDir()
 
-	local gitUrl = gitOutput({ "remote", "get-url", "origin" }, pkgDir)
+	local gitUrl = trimOutput(git.remoteGetUrl("origin", pkgDir))
 	if not gitUrl then
 		ansi.printf("{red}Could not get git remote URL. Is this a git repo with an 'origin' remote?")
 		return
 	end
 
-	local commit = gitOutput({ "rev-parse", "HEAD" }, pkgDir)
+	local commit = trimOutput(git.getCommitHash(pkgDir))
 	if not commit then
 		ansi.printf("{red}Could not get current commit. Does this repo have any commits?")
 		return
 	end
 
-	local branch = gitOutput({ "rev-parse", "--abbrev-ref", "HEAD" }, pkgDir) or "master"
+	local branch = trimOutput(git.getCurrentBranch(pkgDir)) or "master"
 
 	local versions = {}
 	json.addField(versions, config.version, commit)

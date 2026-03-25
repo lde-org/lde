@@ -7,14 +7,15 @@ local path = require("path")
 local fs = require("fs")
 local env = require("env")
 
-local global = require("lpm-core.global")
+local lpm = require("lpm-core")
 
 local releasesUrl = "https://api.github.com/repos/codebycruz/lpm/releases"
 
+local arch = jit.arch == "arm64" and "aarch64" or "x86-64"
 local artifactNames = {
-	win32 = "lpm-windows-x86-64.exe",
-	linux = "lpm-linux-x86-64",
-	darwin = "lpm-macos-x86-64",
+	win32 = "lpm-windows-" .. arch .. ".exe",
+	linux = "lpm-linux-" .. arch,
+	darwin = "lpm-macos-" .. arch
 }
 
 ---@param args clap.Args
@@ -57,7 +58,7 @@ local function upgrade(args)
 			return
 		end
 
-		local runningVersion = global.currentVersion
+		local runningVersion = lpm.global.currentVersion
 		if not shouldForce and not desiredVersion and semver.compare(latestVersion, runningVersion) <= 0 then
 			ansi.printf("{green}You are already running the latest version (%s)", runningVersion)
 			return
@@ -126,7 +127,7 @@ local function upgrade(args)
 		return
 	end
 
-	if process.platform ~= "win32" then
+	if process.platform ~= "win32" then ---@cast fs fs.raw.posix
 		fs.chmod(binLocation, tonumber("755", 8))
 	end
 

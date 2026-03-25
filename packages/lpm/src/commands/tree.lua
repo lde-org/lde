@@ -1,6 +1,6 @@
 local ansi = require("ansi")
 
-local Package = require("lpm-core.package")
+local lpm = require("lpm-core")
 
 ---@type ansi.Color[]
 local depthColors = {
@@ -9,8 +9,8 @@ local depthColors = {
 	"cyan"
 }
 
----@param args clap.Args
-local function tree(args)
+---@param _args clap.Args
+local function tree(_args)
 	---@param pkg lpm.Package
 	---@param cfg lpm.Config.Dependency?
 	---@param depth number?
@@ -43,7 +43,7 @@ local function tree(args)
 		end)
 
 		for _, dep in ipairs(deps) do
-			local pkg, err = Package.open(pkg:getDependencyPath(dep.name, dep.info))
+			local pkg, err = lpm.Package.open(pkg:getDependencyPath(dep.name, dep.info))
 			if not pkg then
 				ansi.printf("%s  {red}Failed to open package: %s", indent, err)
 				goto skip
@@ -54,7 +54,7 @@ local function tree(args)
 		end
 	end
 
-	local pkg, err = Package.open()
+	local pkg, err = lpm.Package.open()
 	if not pkg then
 		ansi.printf("{red}%s", err)
 		return

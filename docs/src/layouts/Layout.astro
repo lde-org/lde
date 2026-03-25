@@ -14,9 +14,14 @@ interface Props {
 const DEFAULT_DESCRIPTION =
 	"Lpm is an open-source project providing easy accessibility to a Lua runtime alongside intuitive package management for dependencies.";
 
-const { title, description = DEFAULT_DESCRIPTION, hideFooter = false } = Astro.props;
+const {
+	title,
+	description = DEFAULT_DESCRIPTION,
+	hideFooter = false,
+} = Astro.props;
 const pageTitle = title ? `${title} - lpm` : "lpm";
-const ogImage = `${SITE_URL}/lpm-small.svg`;
+const ogSlug = Astro.url.pathname.replace(/^\/|\/$/g, "") || "index";
+const ogImage = `${SITE_URL}/og/${ogSlug}.png`;
 ---
 
 <html lang="en" class="overflow-y-scroll">
@@ -49,7 +54,7 @@ const ogImage = `${SITE_URL}/lpm-small.svg`;
 		<meta property="og:url" content={SITE_URL + Astro.url.pathname} />
 
 		<!-- Twitter Card -->
-		<meta name="twitter:card" content="summary" />
+		<meta name="twitter:card" content="summary_large_image" />
 		<meta name="twitter:title" content={pageTitle} />
 		<meta name="twitter:description" content={description} />
 		<meta name="twitter:image" content={ogImage} />

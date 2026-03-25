@@ -2,7 +2,7 @@ local ansi = require("ansi")
 local fs = require("fs")
 local path = require("path")
 
-local Package = require("lpm-core.package")
+local lpm = require("lpm-core")
 
 local stringEscapes = {
 	["\\"] = "\\\\",
@@ -13,7 +13,7 @@ local stringEscapes = {
 	["\a"] = "\\a",
 	["\b"] = "\\b",
 	["\f"] = "\\f",
-	["\v"] = "\\v",
+	["\v"] = "\\v"
 }
 
 ---@param s string
@@ -74,7 +74,7 @@ local function bundle(args)
 	local useBytecode = args:flag("bytecode")
 	local outFile = args:option("outfile")
 
-	local pkg, err = Package.open()
+	local pkg, err = lpm.Package.open()
 	if not pkg then
 		ansi.printf("{red}%s", err)
 		return
@@ -92,7 +92,9 @@ local function bundle(args)
 
 	bundleDir(pkg:getName(), path.join(modulesDir, pkg:getName()), files)
 
-	for depName in pairs(pkg:getDependencies()) do
+	local lockfile = pkg:readLockfile()
+	local deps = lockfile and lockfile:getDependencies() or pkg:getDependencies()
+	for depName in pairs(deps) do
 		bundleDir(depName, path.join(modulesDir, depName), files)
 	end
 

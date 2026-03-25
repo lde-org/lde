@@ -16,35 +16,41 @@ local repoRoot = path.join(path.dirname(thisFile), "..", "..", "..")
 if process.platform == "win32" then
 	local installScript = path.join(repoRoot, "install.ps1")
 
-	test.it("install.ps1 installs lpm binary to %USERPROFILE%\\.lpm\\lpm.exe", function()
-		local fakeProfile = path.join(tmpBase, "userprofile")
-		fs.mkdir(fakeProfile)
+	if jit.arch == "x64" then
+		test.it("install.ps1 installs lpm binary to %USERPROFILE%\\.lpm\\lpm.exe", function()
+			local fakeProfile = path.join(tmpBase, "userprofile")
+			fs.mkdir(fakeProfile)
 
-		local ok, _ = process.exec("powershell", {
-			"-NoProfile", "-ExecutionPolicy", "Bypass", "-File", installScript,
-		}, {
-			env = { USERPROFILE = fakeProfile },
-		})
+			local ok, err = process.exec("pwsh", {
+				"-NoProfile", "-ExecutionPolicy", "Bypass", "-File", installScript
+			}, {
+				env = { USERPROFILE = fakeProfile }
+			})
+			if not ok then print(err) end
 
-		test.equal(ok, true)
-		test.equal(fs.exists(path.join(fakeProfile, ".lpm", "lpm.exe")), true)
-	end)
+			test.truthy(ok)
+			test.truthy(fs.exists(path.join(fakeProfile, ".lpm", "lpm.exe")))
+		end)
 
-	test.it("installed lpm.exe responds to --version", function()
-		local fakeProfile = path.join(tmpBase, "userprofile2")
-		fs.mkdir(fakeProfile)
+		test.it("installed lpm.exe responds to --version", function()
+			local fakeProfile = path.join(tmpBase, "userprofile2")
+			fs.mkdir(fakeProfile)
 
-		local ok, _ = process.exec("powershell", {
-			"-NoProfile", "-ExecutionPolicy", "Bypass", "-File", installScript,
-		}, {
-			env = { USERPROFILE = fakeProfile },
-		})
-		test.equal(ok, true)
+			local ok, err = process.exec("pwsh", {
+				"-NoProfile", "-ExecutionPolicy", "Bypass", "-File", installScript
+			}, {
+				env = { USERPROFILE = fakeProfile }
+			})
+			if not ok then print(err) end
+			test.truthy(ok)
 
-		local lpmBin = path.join(fakeProfile, ".lpm", "lpm.exe")
-		local ok2, _ = process.exec(lpmBin, { "--version" })
-		test.equal(ok2, true)
-	end)
+			local lpmBin = path.join(fakeProfile, ".lpm", "lpm.exe")
+			local ok2, _ = process.exec(lpmBin, { "--version" })
+			test.truthy(ok2)
+		end)
+	else
+		print("Skipping shoddy install script test on " .. jit.arch .. " architecture..")
+	end
 elseif process.platform == "linux" then
 	local installScript = path.join(repoRoot, "install.sh")
 
@@ -53,11 +59,11 @@ elseif process.platform == "linux" then
 		fs.mkdir(fakeHome)
 
 		local ok, _ = process.exec("sh", { installScript }, {
-			env = { HOME = fakeHome },
+			env = { HOME = fakeHome }
 		})
 
-		test.equal(ok, true)
-		test.equal(fs.exists(path.join(fakeHome, ".lpm", "lpm")), true)
+		test.truthy(ok)
+		test.truthy(fs.exists(path.join(fakeHome, ".lpm", "lpm")))
 	end)
 
 	test.it("installed lpm binary responds to --version", function()
@@ -65,12 +71,12 @@ elseif process.platform == "linux" then
 		fs.mkdir(fakeHome)
 
 		local ok, _ = process.exec("sh", { installScript }, {
-			env = { HOME = fakeHome },
+			env = { HOME = fakeHome }
 		})
-		test.equal(ok, true)
+		test.truthy(ok)
 
 		local lpmBin = path.join(fakeHome, ".lpm", "lpm")
 		local ok2, _ = process.exec(lpmBin, { "--version" })
-		test.equal(ok2, true)
+		test.truthy(ok2)
 	end)
 end

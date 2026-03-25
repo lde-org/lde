@@ -1,18 +1,11 @@
-local Package = require("lpm-core.package")
+local env = require("env")
+local fs = require("fs")
+
+local lpm = require("lpm-core")
 
 ---@param args clap.Args
 local function run(args)
-	local pkg, err = Package.open()
-	if not pkg then
-		error("Failed to open package: " .. err)
-	end
-
-	pkg:build()
-
-	pkg:installDependencies()
-	if not args:flag("production") then
-		pkg:installDevDependencies()
-	end
+	local pkg, pkgErr = lpm.Package.open()
 
 	local scriptArgs = {}
 	local name = nil ---@type string?
@@ -26,6 +19,31 @@ local function run(args)
 		scriptArgs = args:drain(dashPos)
 	else
 		name = args:pop()
+	end
+
+	if not pkg then
+		if name and fs.exists(name) then
+			local ok, err = lpm.runtime.executeFile(name, {
+				args = scriptArgs,
+				cwd = env.cwd(),
+				packagePath = "",
+				packageCPath = ""
+			})
+			if not ok then
+				error("Failed to run script: " .. (err or "Script exited with a non-zero exit code"))
+			end
+
+			return
+		end
+
+		error("Failed to open package: " .. pkgErr)
+	end
+
+	pkg:build()
+
+	pkg:installDependencies()
+	if not args:flag("production") then
+		pkg:installDevDependencies()
 	end
 
 	local ok, err

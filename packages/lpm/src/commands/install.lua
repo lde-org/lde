@@ -1,11 +1,11 @@
 local ansi = require("ansi")
 local env = require("env")
 local fs = require("fs")
+local git = require("git")
 local path = require("path")
 local process = require("process")
-local global = require("lpm-core.global")
 
-local Package = require("lpm-core.package")
+local lpm = require("lpm-core")
 
 --- Parses a GitHub /tree/<branch> URL into a clone URL and branch.
 ---@param url string
@@ -38,14 +38,9 @@ local function getOrCloneRepo(repoName, cloneUrl, branch)
 		safeName = repoName .. "-" .. branch
 	end
 
-	local repoDir = global.getGitRepoDir(safeName)
+	local repoDir = lpm.global.getGitRepoDir(safeName)
 	if not fs.exists(repoDir) then
-		local gitArgs = { "clone", cloneUrl, repoDir }
-		if branch then
-			gitArgs = { "clone", "--branch", branch, cloneUrl, repoDir }
-		end
-
-		local ok, err = process.spawn("git", gitArgs)
+		local ok, err = git.clone(cloneUrl, repoDir, branch)
 		if not ok then
 			error("Failed to clone git repository: " .. (err or "unknown error"))
 		end
@@ -62,7 +57,7 @@ end
 local function findNamedPackageIn(dir, name)
 	for _, config in ipairs(fs.scan(dir, "**" .. path.separator .. "lpm.json")) do
 		local parentDir = path.join(dir, path.dirname(config))
-		local pkg = Package.open(parentDir)
+		local pkg = lpm.Package.open(parentDir)
 		if pkg and pkg:getName() == name then
 			return pkg, nil
 		end
@@ -76,7 +71,7 @@ end
 ---@param packageDir string  absolute path to the package root (where lpm.json lives)
 ---@param packageName string the lpm package name
 local function writeWrapper(toolName, packageDir, packageName)
-	local toolsDir = global.getToolsDir()
+	local toolsDir = lpm.global.getToolsDir()
 
 	if process.platform == "win32" then
 		local wrapperPath = path.join(toolsDir, toolName .. ".cmd")
@@ -116,7 +111,7 @@ local function install(args)
 		if packageName then
 			pkg, err = findNamedPackageIn(repoDir, packageName)
 		else
-			pkg, err = Package.open(repoDir)
+			pkg, err = lpm.Package.open(repoDir)
 		end
 
 		if not pkg then error(err) end
@@ -125,7 +120,7 @@ local function install(args)
 		-- lpm install --path <dir>  (no package-name: the path IS the package)
 		local resolved = path.isAbsolute(localPath) and localPath or path.resolve(env.cwd(), localPath)
 
-		local pkg, err = Package.open(resolved)
+		local pkg, err = lpm.Package.open(resolved)
 		if not pkg then error(err) end
 		writeWrapper(pkg:getName(), pkg.dir, pkg:getName())
 	else
@@ -135,20 +130,20 @@ local function install(args)
 			local packageName, versionStr = name:match("^([^@]+)@(.+)$")
 			if not packageName then packageName = name end
 
-			global.syncRegistry()
-			local portfile, err = global.lookupRegistryPackage(packageName)
+			lpm.global.syncRegistry()
+			local portfile, err = lpm.global.lookupRegistryPackage(packageName)
 			if not portfile then error(err) end
 
-			local _, commit = global.resolveRegistryVersion(portfile, versionStr or nil)
-			local repoDir = global.getOrInitGitRepo(packageName, portfile.git, portfile.branch, commit)
+			local _, commit = lpm.global.resolveRegistryVersion(portfile, versionStr or nil)
+			local repoDir = lpm.global.getOrInitGitRepo(packageName, portfile.git, portfile.branch, commit)
 
 			local pkg
-			pkg, err = Package.open(repoDir)
+			pkg, err = lpm.Package.open(repoDir)
 			if not pkg then error(err) end
 			writeWrapper(pkg:getName(), pkg.dir, pkg:getName())
 		else
 			-- No name, no --git, no --path: install project dependencies
-			local pkg, err = Package.open()
+			local pkg, err = lpm.Package.open()
 			if not pkg then
 				ansi.printf("{red}%s", err)
 				return

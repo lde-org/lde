@@ -86,7 +86,7 @@ local CEscapes = {
 	["\t"] = "\\t",
 	["\v"] = "\\v",
 	['"'] = '\\"',
-	["\\"] = "\\\\",
+	["\\"] = "\\\\"
 }
 
 ---Compute a simple 32-bit FNV-1a hash of a string, returned as an 8-char hex string.
@@ -278,7 +278,7 @@ int main(int argc, char** argv) {
 		"-I" .. includePath,
 		"-xc", "-",
 		"-o", outPath,
-		"-xnone", path.join(libPath, "libluajit.a"),
+		"-xnone", path.join(libPath, "libluajit.a")
 	}
 
 	if process.platform == "linux" then
@@ -287,7 +287,8 @@ int main(int argc, char** argv) {
 		args[#args + 1] = "-Wl,--export-dynamic" -- expose lua symbols for lua dependencies
 	end
 
-	local success, output = process.exec("gcc", args, { stdin = code })
+	local compiler = env.var("SEA_CC") or "gcc"
+	local success, output = process.exec(compiler, args, { stdin = code })
 	if not success or string.find(output, "is not recognized as an internal", 1, true) then
 		error("Compilation failed: " .. output)
 	end

@@ -41,7 +41,7 @@ if os.getenv("BOOTSTRAP") then
 	end
 
 	local pathPackages = {
-		"ansi", "clap", "fs", "http", "env", "path", "json",
+		"ansi", "clap", "fs", "http", "env", "path", "json", "git",
 		"process", "sea", "semver", "util", "lpm-core", "lpm-test"
 	}
 
@@ -77,16 +77,23 @@ local ansi = require("ansi")
 local clap = require("clap")
 local env = require("env")
 local fs = require("fs")
-local process = require("process")
 
-local global = require("lpm-core.global")
-local Package = require("lpm-core.package")
-global.init()
+local lpm = require("lpm-core")
+
+-- Enable UTF-8 console output on Windows
+if jit.os == "Windows" then
+	local ok, win32 = pcall(require, "winapi")
+	if ok then
+		win32.kernel32.setConsoleOutputCP(win32.kernel32.ConsoleCP.UTF8)
+	end
+end
+
+lpm.global.init()
 
 local args = clap.parse({ ... })
 
 if args:flag("version") and args:count() == 0 then
-	print(global.currentVersion)
+	print(lpm.global.currentVersion)
 	return
 end
 
@@ -120,29 +127,37 @@ commands.uninstall = require("lpm.commands.uninstall")
 commands.publish = require("lpm.commands.publish")
 
 local ok, err = xpcall(function()
-	if args:count() == 0 then
+	local commandName = args:pop()
+	if not commandName then
 		commands.help(args)
+		return
+	end
+
+	local commandHandler = commands[commandName]
+
+	if commandHandler then
+		commandHandler(args)
 	else
-		local commandName = args:pop()
-		local commandHandler = commands[commandName]
+		-- Fall back to package scripts, then to a loose file if it exists
+		local pkg = lpm.Package.open()
+		local scripts = pkg and pkg:readConfig().scripts
 
-		if commandHandler then
-			commandHandler(args)
-		else
-			-- Fall back to package scripts before erroring
-			local pkg = Package.open()
-			local scripts = pkg and pkg:readConfig().scripts
+		if scripts and scripts[commandName] then
+			---@cast pkg -nil
 
-			if scripts and scripts[commandName] then
-				pkg:build()
-				pkg:installDependencies()
-				local ok, err = pkg:runScript(commandName)
-				if not ok then
-					error("Script '" .. commandName .. "' failed: " .. err)
-				end
-			else
-				ansi.printf("{red}Unknown command: %s", tostring(commandName))
+			pkg:build()
+			pkg:installDependencies()
+
+			local ok, err = pkg:runScript(commandName)
+			if not ok then
+				error("Script '" .. commandName .. "' failed: " .. err)
 			end
+		elseif fs.exists(commandName) then
+			-- TODO: Replace this hacky behavior
+			table.insert(args.raw, 1, commandName)
+			commands.run(args)
+		else
+			ansi.printf("{red}Unknown command: %s", tostring(commandName))
 		end
 	end
 end, function(err)

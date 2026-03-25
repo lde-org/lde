@@ -3,7 +3,7 @@ description: "Install lpm package manager"
 
 inputs:
   version:
-    description: "Version to install (e.g., '0.7.1', 'latest', or 'nightly')"
+    description: "Version to install (e.g., '0.7.2', 'latest', or 'nightly')"
     required: false
     default: "latest"
 
@@ -27,8 +27,13 @@ runs:
       shell: pwsh
       run: |
         $version = "${{ inputs.version }}"
-        $args = if ($version -eq "nightly") { @("--nightly") }
-                elseif ($version -eq "latest") { @() }
-                else { @("--version", $version) }
-        & "${{ github.action_path }}/install.ps1" @args
+
+        if ($version -eq "nightly") {
+            & "${{ github.action_path }}/install.ps1" "--nightly"
+        } elseif ($version -eq "latest") {
+            & "${{ github.action_path }}/install.ps1"
+        } else {
+            & "${{ github.action_path }}/install.ps1" "--version" $version
+        }
+
         echo "$env:USERPROFILE\.lpm" >> $env:GITHUB_PATH

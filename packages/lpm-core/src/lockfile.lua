@@ -1,15 +1,16 @@
 local fs = require("fs")
 local json = require("json")
 
----@class lpm.Lockfile.GitDependency
+---@class lpm.Lockfile.BaseDependency
+---@field name string?
+
+---@class lpm.Lockfile.GitDependency: lpm.Lockfile.BaseDependency
 ---@field git string
 ---@field commit string # Always resolved to a specific commit hash
 ---@field branch string?
----@field package string?
 
----@class lpm.Lockfile.PathDependency
+---@class lpm.Lockfile.PathDependency: lpm.Lockfile.BaseDependency
 ---@field path string
----@field package string?
 
 ---@alias lpm.Lockfile.Dependency
 --- | lpm.Lockfile.GitDependency
@@ -43,8 +44,8 @@ function Lockfile.new(p, dependencies)
 		path = p,
 		raw = {
 			version = "1",
-			dependencies = dependencies,
-		},
+			dependencies = dependencies
+		}
 	}, Lockfile)
 end
 

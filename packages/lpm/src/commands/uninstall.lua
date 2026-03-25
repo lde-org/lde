@@ -2,7 +2,8 @@ local ansi = require("ansi")
 local fs = require("fs")
 local path = require("path")
 local process = require("process")
-local global = require("lpm-core.global")
+
+local lpm = require("lpm-core")
 
 ---@param args clap.Args
 local function toolUninstall(args)
@@ -12,18 +13,18 @@ local function toolUninstall(args)
 		return
 	end
 
-	local toolsDir = global.getToolsDir()
+	local toolsDir = lpm.global.getToolsDir()
 
 	-- Try the platform-specific wrapper path first, then the bare name
 	local candidates
 	if process.platform == "win32" then
 		candidates = {
 			path.join(toolsDir, toolName .. ".cmd"),
-			path.join(toolsDir, toolName),
+			path.join(toolsDir, toolName)
 		}
 	else
 		candidates = {
-			path.join(toolsDir, toolName),
+			path.join(toolsDir, toolName)
 		}
 	end
 

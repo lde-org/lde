@@ -85,7 +85,7 @@ local INVALID_FILE_ATTRIBUTES = 0xFFFFFFFF
 local FILE_ATTRIBUTE_DIRECTORY = 0x10
 local FILE_ATTRIBUTE_REPARSE_POINT = 0x400
 
----@class fs.raw.windows
+---@class fs.raw.windows: fs.raw
 local fs = {}
 
 ---@param p string
@@ -134,7 +134,7 @@ function fs.readdir(p)
 
 				return {
 					name = name,
-					type = entryType,
+					type = entryType
 				}
 			end
 		end
@@ -383,7 +383,7 @@ local function rawToCrossStat(s, type)
 		size = fileSize(s),
 		accessTime = filetimeToUnix(s.ftLastAccessTime),
 		modifyTime = filetimeToUnix(s.ftLastWriteTime),
-		type = type,
+		type = type
 	}
 end
 
