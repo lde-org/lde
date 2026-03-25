@@ -7,6 +7,10 @@ $nightly = $args -contains "--nightly"
 $versionIndex = [array]::IndexOf($args, "--version")
 $version = if ($versionIndex -ge 0) { $args[$versionIndex + 1] } else { $null }
 
+Write-Host "args: $args"
+Write-Host "nightly: $nightly"
+Write-Host "version: $version"
+
 if ($nightly) {
     $tag = "nightly"
 } elseif ($version) {
