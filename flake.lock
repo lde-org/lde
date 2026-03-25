@@ -1,5 +1,26 @@
 {
   "nodes": {
+    "lpm": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1774437497,
+        "narHash": "sha256-yc28aNg/uK7SCyfA9MpMKBRaRBxwVNZlLVjt0BG5LPo=",
+        "owner": "Silzinc",
+        "repo": "lpm-nix",
+        "rev": "05bc422ea0d3e64ccffaa7652cc3483352fa8f18",
+        "type": "github"
+      },
+      "original": {
+        "owner": "Silzinc",
+        "ref": "nightly",
+        "repo": "lpm-nix",
+        "type": "github"
+      }
+    },
     "nixpkgs": {
       "locked": {
         "lastModified": 1773814637,
@@ -18,6 +39,7 @@
     },
     "root": {
       "inputs": {
+        "lpm": "lpm",
         "nixpkgs": "nixpkgs"
       }
     }
