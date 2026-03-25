@@ -114,10 +114,15 @@ function Package.openRockspec(dir, rockspecPath)
 
 	-- Collect pure-Lua module_name -> src_path from build.modules and build.install.lua
 	local modules = {}
+	local nativeModules = {} -- modname -> src_path (.c)
 	if spec.build then
 		for modname, src in pairs(spec.build.modules or {}) do
-			if type(src) == "string" and src:match("%.lua$") then
-				modules[modname] = src
+			if type(src) == "string" then
+				if src:match("%.lua$") then
+					modules[modname] = src
+				elseif src:match("%.c$") then
+					nativeModules[modname] = src
+				end
 			end
 		end
 		for modname, src in pairs((spec.build.install or {}).lua or {}) do
@@ -139,6 +144,26 @@ function Package.openRockspec(dir, rockspecPath)
 				fs.mkdir(destDir)
 			end
 			fs.copy(srcAbs, destAbs)
+		end
+
+		for modname, src in pairs(nativeModules) do
+			local srcAbs = path.join(dir, src)
+			local ext = process.platform == "darwin" and "dylib" or "so"
+			local destRel = modname:gsub("%.", path.separator) .. "." .. ext
+			local destAbs = path.join(modulesDir, destRel)
+			local destDir = path.dirname(destAbs)
+			if not fs.isdir(destDir) then
+				fs.mkdir(destDir)
+			end
+
+			local ok, err = process.exec("gcc", {
+				"-shared", "-fPIC",
+				srcAbs,
+				"-o", destAbs,
+			})
+			if not ok then
+				return nil, "Failed to compile native module '" .. modname .. "': " .. (err or "")
+			end
 		end
 
 		local lines = {}
