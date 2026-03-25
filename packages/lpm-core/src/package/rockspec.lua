@@ -59,10 +59,18 @@ local function openRockspec(dir, rockspecPath)
 	end
 
 	local entryModule = spec.package and spec.package:lower()
+	local binScripts = (spec.build and spec.build.install and spec.build.install.bin) or {}
+	-- Pick the first bin entry as the package entrypoint
+	local binEntry, binSrc
+	for k, v in pairs(binScripts) do
+		binEntry, binSrc = k, v
+		break
+	end
 
 	pkg.buildfn = function(_, outputDir)
 		local modulesDir = path.dirname(outputDir)
 
+		local resolved = {}
 		for modname, src in pairs(modules) do
 			local srcAbs = path.join(dir, src)
 			local destRel = modname:gsub("%.", path.separator) .. ".lua"
@@ -73,7 +81,7 @@ local function openRockspec(dir, rockspecPath)
 			local destDir = path.dirname(destAbs)
 			if not fs.isdir(destDir) then fs.mkdir(destDir) end
 			fs.copy(srcAbs, destAbs)
-			modules[modname] = { destRel = destRel, destAbs = destAbs }
+			resolved[modname] = { destRel = destRel, destAbs = destAbs }
 		end
 
 		for modname, src in pairs(nativeModules) do
@@ -87,7 +95,7 @@ local function openRockspec(dir, rockspecPath)
 			local ok, err = process.exec("gcc", {
 				"-shared", "-fPIC",
 				"-I" .. path.join(sea.getLuajitPath(), "include"),
-				srcAbs, "-o", destAbs,
+				srcAbs, "-o", destAbs
 			})
 			if not ok then
 				return nil, "Failed to compile native module '" .. modname .. "': " .. (err or "")
@@ -95,16 +103,16 @@ local function openRockspec(dir, rockspecPath)
 		end
 
 		local lines = {
-			"local _dir = debug.getinfo(1,'S').source:sub(2):match('^(.*/)') or './'",
+			"local _dir = debug.getinfo(1,'S').source:sub(2):match('^(.*/)') or './'"
 		}
-		for modname, info in pairs(modules) do
+		for modname, info in pairs(resolved) do
 			table.insert(lines, string.format(
 				"package.preload[%q] = package.preload[%q] or function() return dofile(_dir .. %q) end",
 				modname, modname, "../" .. info.destRel
 			))
 		end
 		if entryModule then
-			local info = modules[entryModule] or modules[entryModule .. ".init"]
+			local info = resolved[entryModule] or resolved[entryModule .. ".init"]
 			if info then
 				table.insert(lines, string.format("return dofile(_dir .. %q)", "../" .. info.destRel))
 			elseif nativeModules[entryModule] then
@@ -118,6 +126,13 @@ local function openRockspec(dir, rockspecPath)
 		end
 
 		fs.write(path.join(outputDir, "init.lua"), table.concat(lines, "\n") .. "\n")
+
+		-- Copy bin scripts into the output dir
+		for binName, binRelSrc in pairs(binScripts) do
+			local srcAbs = path.join(dir, binRelSrc)
+			fs.copy(srcAbs, path.join(outputDir, binName))
+		end
+
 		return true
 	end
 
@@ -129,7 +144,7 @@ local function openRockspec(dir, rockspecPath)
 				deps[name] = { luarocks = name, version = rest ~= "" and rest or nil }
 			end
 		end
-		return Config.new({ name = spec.package, version = spec.version, dependencies = deps })
+		return Config.new({ name = spec.package, version = spec.version, bin = binEntry, dependencies = deps })
 	end
 
 	return pkg, nil

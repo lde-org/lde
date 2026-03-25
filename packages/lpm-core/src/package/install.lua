@@ -76,7 +76,7 @@ local function dependencyToPackage(alias, depInfo, relativeTo)
 			resolvedCommit = resolvedCommit and resolvedCommit:gsub("%s+$", "") or depInfo.commit
 
 			---@type lpm.Lockfile.GitDependency
-			local lockEntry = { git = spec.source.url, commit = resolvedCommit, name = depInfo.name }
+			local lockEntry = { git = sourceUrl, commit = resolvedCommit, name = depInfo.name }
 
 			local pkg = Package.openRockspec(repoDir)
 			if pkg then return pkg, lockEntry end
