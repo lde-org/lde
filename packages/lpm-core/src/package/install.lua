@@ -1,6 +1,9 @@
 local path = require("path")
 local fs = require("fs")
+local path = require("path")
 local git = require("git")
+local luarocks = require("luarocks")
+local rocked = require("rocked")
 
 local global = require("lpm-core.global")
 local Package = require("lpm-core.package")
@@ -63,6 +66,33 @@ local function dependencyToPackage(alias, depInfo, relativeTo)
 		end
 
 		error("No lpm.json with name '" .. packageName .. "' found in registry package '" .. alias .. "'")
+	elseif depInfo.luarocks then
+		local url, err = luarocks.getRockspecUrl(depInfo.luarocks, depInfo.version)
+		if not url then
+			error("Failed to resolve luarocks dep '" .. alias .. "': " .. (err or ""))
+		end
+
+		local content, fetchErr = require("http").get(url)
+		if not content then
+			error("Failed to fetch rockspec for '" .. alias .. "': " .. (fetchErr or ""))
+		end
+
+		local ok, spec = rocked.parse(content)
+		if not ok then
+			error("Failed to parse rockspec for '" .. alias .. "': " .. tostring(spec))
+		end ---@cast spec rocked.raw.Output
+
+		local repoDir = global.getOrInitGitRepo(packageName, spec.source.url, depInfo.branch, depInfo.commit)
+		local resolvedCommit = select(2, git.getCommitHash(repoDir))
+		resolvedCommit = resolvedCommit and resolvedCommit:gsub("%s+$", "") or depInfo.commit
+
+		---@type lpm.Lockfile.GitDependency
+		local lockEntry = { git = spec.source.url, commit = resolvedCommit, name = depInfo.name }
+
+		local pkg = Package.openRockspec(repoDir)
+		if pkg then return pkg, lockEntry end
+
+		error("Failed to open rockspec package for '" .. alias .. "'")
 	else
 		error("Unsupported dependency type for: " .. alias)
 	end

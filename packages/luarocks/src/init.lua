@@ -71,24 +71,81 @@ function luarocks.getRockspecUrls(name)
 	return urls
 end
 
+---@param v string
+---@return number[]
+local function parseVer(v)
+	local parts = {}
+	for n in (v:match("^([^%-]+)") or v):gmatch("%d+") do
+		parts[#parts + 1] = tonumber(n)
+	end
+	return parts
+end
+
+---@param a number[]
+---@param b number[]
+---@return number
+local function cmpVer(a, b)
+	for i = 1, math.max(#a, #b) do
+		local d = (a[i] or 0) - (b[i] or 0)
+		if d ~= 0 then return d end
+	end
+	return 0
+end
+
+---@param ver string
+---@param op string
+---@param constraint string
+---@return boolean
+local function satisfies(ver, op, constraint)
+	local c = cmpVer(parseVer(ver), parseVer(constraint))
+	if op == ">=" then return c >= 0
+	elseif op == ">" then return c > 0
+	elseif op == "<=" then return c <= 0
+	elseif op == "<" then return c < 0
+	elseif op == "==" or op == "=" then return c == 0
+	elseif op == "~=" then return c ~= 0
+	end
+	return false
+end
+
 ---@param name string
----@param version string? # e.g. "1.0.0-1"; if nil, picks latest
+---@param constraint string? # e.g. ">= 1.0" or exact "1.0.0-1"; if nil, picks latest
 ---@return string? rockspecUrl
 ---@return string? err
-function luarocks.getRockspecUrl(name, version)
+function luarocks.getRockspecUrl(name, constraint)
 	local urls, err = luarocks.getRockspecUrls(name)
 	if not urls then return nil, err end
 
-	if version then
-		return urls[version] or nil, urls[version] and nil or "Version '" .. version .. "' not found for package: " .. name
-	end
-
 	local sorted = {}
 	for v in pairs(urls) do sorted[#sorted + 1] = v end
-	table.sort(sorted, function(a, b) return a > b end)
+	table.sort(sorted, function(a, b) return cmpVer(parseVer(a), parseVer(b)) > 0 end)
 
-	local url = urls[sorted[1]]
-	return url or nil, url and nil or "No rockspec entry found for: " .. name
+	if not constraint or constraint == "" then
+		local url = urls[sorted[1]]
+		return url or nil, url and nil or "No rockspec entry found for: " .. name
+	end
+
+	-- Parse all constraints (e.g. ">= 1.0, < 2.0")
+	local constraints = {}
+	for op, ver in constraint:gmatch("([><=~!]+)%s*([%d%.%-]+)") do
+		constraints[#constraints + 1] = { op = op, ver = ver }
+	end
+
+	-- Exact version match if no operators found
+	if #constraints == 0 then
+		local url = urls[constraint]
+		return url or nil, url and nil or "Version '" .. constraint .. "' not found for: " .. name
+	end
+
+	for _, v in ipairs(sorted) do
+		local ok = true
+		for _, c in ipairs(constraints) do
+			if not satisfies(v, c.op, c.ver) then ok = false; break end
+		end
+		if ok then return urls[v] end
+	end
+
+	return nil, "No version of '" .. name .. "' satisfies: " .. constraint
 end
 
 ---@param name string

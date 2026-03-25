@@ -33,9 +33,14 @@ end
 ---@class lpm.Config.RegistryDependency: lpm.Config.BaseDependency
 ---@field version string # Pinned version from the lpm registry
 
+---@class lpm.Config.LuarocksDependency: lpm.Config.BaseDependency
+---@field luarocks string # Package name on luarocks.org
+---@field version string? # Optional version constraint e.g. ">= 1.0"
+
 ---@alias lpm.Config.Dependency
 --- | lpm.Config.GitDependency
 --- | lpm.Config.PathDependency
 --- | lpm.Config.RegistryDependency
+--- | lpm.Config.LuarocksDependency
 
 return Config
