@@ -30,4 +30,4 @@ jobs:
           version: nightly
 
       - name: Run tests
-        run: lpm test
+        run: lpm run -- test
