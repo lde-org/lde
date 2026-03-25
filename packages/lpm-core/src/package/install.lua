@@ -26,7 +26,7 @@ local function dependencyToPackage(alias, depInfo, relativeTo)
 		end
 
 		---@type lpm.Lockfile.GitDependency
-		local lockEntry = { git = depInfo.git, commit = resolvedCommit, branch = depInfo.branch, name = depInfo.name }
+		local lockEntry = { git = depInfo.git, commit = resolvedCommit, branch = depInfo.branch, name = depInfo.name, rockspec = depInfo.rockspec }
 
 		local pkg = Package.open(repoDir, depInfo.rockspec)
 		if pkg and pkg:getName() == packageName then return pkg, lockEntry end
@@ -42,7 +42,7 @@ local function dependencyToPackage(alias, depInfo, relativeTo)
 		if not localPackage then
 			error("Failed to load local dependency package for: " .. alias .. "\nError: " .. err)
 		end
-		return localPackage, { path = depInfo.path, name = depInfo.name }
+		return localPackage, { path = depInfo.path, name = depInfo.name, rockspec = depInfo.rockspec }
 	elseif depInfo.archive then
 		local archiveDir = global.getOrInitArchive(depInfo.archive)
 		local pkg, err = Package.open(archiveDir, depInfo.rockspec)
@@ -50,7 +50,7 @@ local function dependencyToPackage(alias, depInfo, relativeTo)
 			error("Failed to load archive dependency '" .. alias .. "': " .. (err or ""))
 		end
 		---@type lpm.Lockfile.ArchiveDependency
-		local lockEntry = { archive = depInfo.archive, name = depInfo.name }
+		local lockEntry = { archive = depInfo.archive, name = depInfo.name, rockspec = depInfo.rockspec }
 		return pkg, lockEntry
 	elseif depInfo.luarocks then -- luarocks registry
 		local url, err = luarocks.getRockspecUrl(depInfo.luarocks, depInfo.version)
@@ -68,6 +68,7 @@ local function dependencyToPackage(alias, depInfo, relativeTo)
 			error("Failed to parse rockspec for '" .. alias .. "': " .. tostring(spec))
 		end ---@cast spec rocked.raw.Output
 
+		local rockspecUrl = url
 		local sourceUrl = spec.source.url
 		if sourceUrl:match("^git") then
 			sourceUrl = sourceUrl:gsub("^git%+", "")
@@ -76,9 +77,9 @@ local function dependencyToPackage(alias, depInfo, relativeTo)
 			resolvedCommit = resolvedCommit and resolvedCommit:gsub("%s+$", "") or depInfo.commit
 
 			---@type lpm.Lockfile.GitDependency
-			local lockEntry = { git = sourceUrl, commit = resolvedCommit, name = depInfo.name }
+			local lockEntry = { git = sourceUrl, commit = resolvedCommit, name = depInfo.name, rockspec = rockspecUrl }
 
-			local pkg = Package.openRockspec(repoDir)
+			local pkg = Package.openRockspec(repoDir, rockspecUrl)
 			if pkg then return pkg, lockEntry end
 
 			error("Failed to open rockspec package for '" .. alias .. "'")
@@ -86,9 +87,9 @@ local function dependencyToPackage(alias, depInfo, relativeTo)
 			local archiveDir = global.getOrInitArchive(sourceUrl)
 
 			---@type lpm.Lockfile.ArchiveDependency
-			local lockEntry = { archive = sourceUrl, name = depInfo.name }
+			local lockEntry = { archive = sourceUrl, name = depInfo.name, rockspec = rockspecUrl }
 
-			local pkg = Package.openRockspec(archiveDir)
+			local pkg = Package.openRockspec(archiveDir, rockspecUrl)
 			if pkg then return pkg, lockEntry end
 
 			error("Failed to open rockspec package for '" .. alias .. "'")

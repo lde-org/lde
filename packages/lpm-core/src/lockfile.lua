@@ -3,6 +3,7 @@ local json = require("json")
 
 ---@class lpm.Lockfile.BaseDependency
 ---@field name string?
+---@field rockspec string? # URL or relative path to the rockspec file
 
 ---@class lpm.Lockfile.GitDependency: lpm.Lockfile.BaseDependency
 ---@field git string
