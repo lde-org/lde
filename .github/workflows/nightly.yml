@@ -67,6 +67,9 @@ jobs:
         with:
           version: nightly
 
+      - name: Run tests
+        run: lpm test
+
       - name: Build lpm
         env:
           SEA_CC: ${{ matrix.sea_cc }}
