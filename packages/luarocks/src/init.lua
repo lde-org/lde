@@ -98,12 +98,18 @@ end
 ---@return boolean
 local function satisfies(ver, op, constraint)
 	local c = cmpVer(parseVer(ver), parseVer(constraint))
-	if op == ">=" then return c >= 0
-	elseif op == ">" then return c > 0
-	elseif op == "<=" then return c <= 0
-	elseif op == "<" then return c < 0
-	elseif op == "==" or op == "=" then return c == 0
-	elseif op == "~=" then return c ~= 0
+	if op == ">=" then
+		return c >= 0
+	elseif op == ">" then
+		return c > 0
+	elseif op == "<=" then
+		return c <= 0
+	elseif op == "<" then
+		return c < 0
+	elseif op == "==" or op == "=" then
+		return c == 0
+	elseif op == "~=" then
+		return c ~= 0
 	end
 	return false
 end
@@ -140,9 +146,15 @@ function luarocks.getRockspecUrl(name, constraint)
 	for _, v in ipairs(sorted) do
 		local ok = true
 		for _, c in ipairs(constraints) do
-			if not satisfies(v, c.op, c.ver) then ok = false; break end
+			if not satisfies(v, c.op, c.ver) then
+				ok = false
+				break
+			end
 		end
-		if ok then return urls[v] end
+
+		if ok then
+			return urls[v]
+		end
 	end
 
 	return nil, "No version of '" .. name .. "' satisfies: " .. constraint
