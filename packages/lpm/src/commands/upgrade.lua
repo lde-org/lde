@@ -11,10 +11,11 @@ local lpm = require("lpm-core")
 
 local releasesUrl = "https://api.github.com/repos/codebycruz/lpm/releases"
 
+local arch = jit.arch == "arm64" and "aarch64" or "x86-64"
 local artifactNames = {
-	win32 = "lpm-windows-x86-64.exe",
-	linux = "lpm-linux-x86-64",
-	darwin = "lpm-macos-x86-64"
+	win32 = "lpm-windows-" .. arch .. ".exe",
+	linux = "lpm-linux-" .. arch,
+	darwin = "lpm-macos-" .. arch
 }
 
 ---@param args clap.Args
