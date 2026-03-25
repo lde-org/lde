@@ -1,6 +1,9 @@
 local path = require("path")
 local fs = require("fs")
+local path = require("path")
 local git = require("git")
+local luarocks = require("luarocks")
+local rocked = require("rocked")
 
 local global = require("lpm-core.global")
 local Package = require("lpm-core.package")
@@ -40,7 +43,41 @@ local function dependencyToPackage(alias, depInfo, relativeTo)
 			error("Failed to load local dependency package for: " .. alias .. "\nError: " .. err)
 		end
 		return localPackage, { path = depInfo.path, name = depInfo.name }
-	elseif depInfo.version then
+	elseif depInfo.luarocks then -- luarocks registry
+		local url, err = luarocks.getRockspecUrl(depInfo.luarocks, depInfo.version)
+		if not url then
+			error("Failed to resolve luarocks dep '" .. alias .. "': " .. (err or ""))
+		end
+
+		local content, fetchErr = require("http").get(url)
+		if not content then
+			error("Failed to fetch rockspec for '" .. alias .. "': " .. (fetchErr or ""))
+		end
+
+		local ok, spec = rocked.parse(content)
+		if not ok then
+			error("Failed to parse rockspec for '" .. alias .. "': " .. tostring(spec))
+		end ---@cast spec rocked.raw.Output
+
+		local sourceUrl = spec.source.url
+		if not sourceUrl:match("^git") then
+			error("Unsupported source for luarocks dep '" ..
+				alias .. "': only git sources are supported, got: " .. sourceUrl)
+		end
+
+		sourceUrl = sourceUrl:gsub("^git%+", "")
+		local repoDir = global.getOrInitGitRepo(packageName, sourceUrl, depInfo.branch, depInfo.commit)
+		local resolvedCommit = select(2, git.getCommitHash(repoDir))
+		resolvedCommit = resolvedCommit and resolvedCommit:gsub("%s+$", "") or depInfo.commit
+
+		---@type lpm.Lockfile.GitDependency
+		local lockEntry = { git = spec.source.url, commit = resolvedCommit, name = depInfo.name }
+
+		local pkg = Package.openRockspec(repoDir)
+		if pkg then return pkg, lockEntry end
+
+		error("Failed to open rockspec package for '" .. alias .. "'")
+	elseif depInfo.version then -- lpm registry
 		global.syncRegistry()
 
 		local portfile, registryErr = global.lookupRegistryPackage(packageName)

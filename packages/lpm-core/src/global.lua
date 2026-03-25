@@ -59,7 +59,7 @@ function global.lookupRegistryPackage(name)
 	local portfilePath = path.join(global.getRegistryDir(), "packages", name .. ".json")
 	local content = fs.read(portfilePath)
 	if not content then
-		return nil, "Package '" .. name .. "' not found in registry"
+		return nil, "Package '" .. name .. "' not found in lpm registry"
 	end
 	return json.decode(content), nil
 end
@@ -78,7 +78,7 @@ function global.resolveRegistryVersion(portfile, version)
 	if version then
 		local commit = versions[version]
 		if not commit then
-			error("Version '" .. version .. "' of '" .. portfile.name .. "' not found in registry")
+			error("Version '" .. version .. "' of '" .. portfile.name .. "' not found in lpm registry")
 		end
 		return version, commit
 	end

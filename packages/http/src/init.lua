@@ -11,7 +11,7 @@ function http.get(url)
 		return nil, "Invalid URL"
 	end
 
-	local ok, out = process.exec("curl", { "-sL", url })
+	local ok, out = process.exec("curl", { "-sL", url }, { maxOutputChunks = math.huge })
 	if not ok then
 		return nil, out or "Request failed"
 	end

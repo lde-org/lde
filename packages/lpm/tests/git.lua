@@ -169,6 +169,14 @@ test.it("rockspec git dep: luafilesystem native C module works", function()
 	pkg:installDependencies()
 	pkg:build()
 
+	local lockfile = pkg:readLockfile()
+	test.truthy(lockfile)
+	local entry = lockfile:getDependency("luafilesystem")
+	test.truthy(entry)
+	test.truthy(entry.git)
+	test.truthy(entry.commit)
+	test.truthy(entry.commit:match("^%x+$"))
+
 	local ok, err = pkg:runFile()
 	if not ok then print(err) end
 	test.truthy(ok)

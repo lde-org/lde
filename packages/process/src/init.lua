@@ -35,6 +35,7 @@ end
 ---@field stdin string?
 ---@field stdout process.Stdio? # Defaults to "pipe"
 ---@field stderr process.Stdio? # Defaults to "pipe"
+---@field maxOutputChunks number? # Max 4096-byte chunks to read from stdout (default 10)
 
 ---@class process.SpawnOptions: process.CommandOptions
 
@@ -148,7 +149,7 @@ local function executeCommand(name, args, options)
 	local output ---@type string?
 	if tmpOutputFile then
 		if ranSuccessfully then
-			output = readChunked(tmpOutputFile, 4096, 10)
+			output = readChunked(tmpOutputFile, 4096, (options and options.maxOutputChunks) or 10)
 			if not output then
 				catastrophicFailure = "Failed to read stdout"
 			end

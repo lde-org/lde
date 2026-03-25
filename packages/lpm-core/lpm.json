@@ -16,6 +16,7 @@
 		"semver": { "path": "../semver" },
 		"lpm-test": { "path": "../lpm-test" },
 		"git": { "path": "../git" },
-		"rocked": { "path": "../rocked" }
+		"rocked": { "path": "../rocked" },
+		"luarocks": { "path": "../luarocks" }
 	}
 }
