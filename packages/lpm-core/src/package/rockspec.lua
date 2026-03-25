@@ -102,33 +102,21 @@ local function openRockspec(dir, rockspecPath)
 	pkg.buildfn = function(_, outputDir)
 		local modulesDir = path.dirname(outputDir)
 
-		-- Pre-compute which top-level names have submodules (e.g. "cliargs" from "cliargs.core")
-		local hasSubmodules = {}
-		for modname in pairs(modules) do
-			local top = modname:match("^([^%.]+)%.")
-			if top then hasSubmodules[top] = true end
-		end
-
 		local resolved = {}
 		for modname, src in pairs(modules) do
 			local srcAbs = path.join(dir, src)
 			local destRel = modname:gsub("%.", path.separator) .. ".lua"
 			local destAbs = path.join(modulesDir, destRel)
 
-			-- If this is a flat top-level module (e.g. "cliargs") but submodules exist
-			-- under the same name (e.g. "cliargs.core"), redirect into the subdir as __init.lua
-			-- Also redirect if the flat file would shadow the outputDir itself (e.g. say -> target/say.lua vs target/say/)
-			if (not modname:find("%.") and hasSubmodules[modname]) or destAbs == outputDir .. ".lua" then
-				destRel = modname .. path.separator .. "__init.lua"
-				destAbs = path.join(modulesDir, destRel)
-			elseif path.join(modulesDir, destRel) == path.join(outputDir, "init.lua") then
-				destRel = modname:gsub("%.", path.separator):gsub("init$", "__init") .. ".lua"
+			-- Redirect any module that would collide with outputDir or its init.lua
+			if destAbs == outputDir .. ".lua" or destAbs == path.join(outputDir, "init.lua") then
+				local base = modname:gsub("%.", path.separator)
+				destRel = base:match("(.+)/") and base:match("(.+)/") .. "/__init.lua" or base .. "/__init.lua"
 				destAbs = path.join(modulesDir, destRel)
 			end
 
 			local destDir = path.dirname(destAbs)
 			if not fs.isdir(destDir) then fs.mkdir(destDir) end
-
 			fs.copy(srcAbs, destAbs)
 			resolved[modname] = { destRel = destRel, destAbs = destAbs }
 		end
@@ -181,35 +169,8 @@ local function openRockspec(dir, rockspecPath)
 
 		fs.write(path.join(outputDir, "init.lua"), table.concat(lines, "\n") .. "\n")
 
-		-- For any module redirected to __init.lua, write a loader init.lua with preloads for that namespace
-		for nsModname, nsInfo in pairs(resolved) do
-			if nsInfo.destRel:match("__init%.lua$") then
-				local nsDir = path.dirname(nsInfo.destAbs)
-				if nsDir == outputDir then goto continue_ns end
-				local nsInit = path.join(nsDir, "init.lua")
-				if not fs.exists(nsInit) then
-					local nsLines = {
-						"local _dir = debug.getinfo(1,'S').source:sub(2):match('^(.*/)') or './'"
-					}
-					for modname, info in pairs(resolved) do
-						if modname ~= nsModname then
-							table.insert(nsLines, string.format(
-								"package.preload[%q] = package.preload[%q] or function() return dofile(_dir .. %q) end",
-								modname, modname, path.relative(nsDir, info.destAbs)
-							))
-						end
-					end
-					table.insert(nsLines, "return dofile(_dir .. '__init.lua')\n")
-					fs.write(nsInit, table.concat(nsLines, "\n") .. "\n")
-				end
-				::continue_ns::
-			end
-		end
-
-		-- Copy bin scripts into the output dir
 		for binName, binRelSrc in pairs(binScripts) do
-			local srcAbs = path.join(dir, binRelSrc)
-			fs.copy(srcAbs, path.join(outputDir, binName))
+			fs.copy(path.join(dir, binRelSrc), path.join(outputDir, binName))
 		end
 
 		return true
