@@ -42,6 +42,20 @@ function Package:getConfigPath() return configPathAtDir(self.dir) end
 
 function Package:getLockfilePath() return path.join(self.dir, "lpm-lock.json") end
 
+function Package:hasBuildScript() return fs.exists(self:getBuildScriptPath()) end
+
+---@param outputDir string
+---@return boolean? ok
+---@return string? err
+function Package:runBuildScript(outputDir)
+	local buildScriptPath = self:getBuildScriptPath()
+	if not fs.exists(buildScriptPath) then
+		return nil, "No build script found: " .. buildScriptPath
+	end
+
+	return self:runFile(buildScriptPath, nil, { LPM_OUTPUT_DIR = outputDir })
+end
+
 ---@param dir string?
 ---@return lpm.Package?, string?
 function Package.open(dir)
