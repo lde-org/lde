@@ -20,11 +20,12 @@ if process.platform == "win32" then
 		local fakeProfile = path.join(tmpBase, "userprofile")
 		fs.mkdir(fakeProfile)
 
-		local ok, _ = process.exec("pwsh", {
+		local ok, err = process.exec("pwsh", {
 			"-NoProfile", "-ExecutionPolicy", "Bypass", "-File", installScript
 		}, {
 			env = { USERPROFILE = fakeProfile }
 		})
+		if not ok then print(err) end
 
 		test.truthy(ok)
 		test.truthy(fs.exists(path.join(fakeProfile, ".lpm", "lpm.exe")))
@@ -34,11 +35,12 @@ if process.platform == "win32" then
 		local fakeProfile = path.join(tmpBase, "userprofile2")
 		fs.mkdir(fakeProfile)
 
-		local ok, _ = process.exec("pwsh", {
+		local ok, err = process.exec("pwsh", {
 			"-NoProfile", "-ExecutionPolicy", "Bypass", "-File", installScript
 		}, {
 			env = { USERPROFILE = fakeProfile }
 		})
+		if not ok then print(err) end
 		test.truthy(ok)
 
 		local lpmBin = path.join(fakeProfile, ".lpm", "lpm.exe")
