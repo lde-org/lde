@@ -79,6 +79,24 @@
 							}
 						},
 						"additionalProperties": false
+					},
+					{
+						"required": ["archive"],
+						"properties": {
+							"archive": {
+								"type": "string",
+								"description": "URL to an archive (.zip, .tar.gz, .tar.bz2, etc.)"
+							},
+							"package": {
+								"type": "string",
+								"description": "Actual package name in the archive, when aliasing (key is the require name)"
+							},
+							"rockspec": {
+								"type": "string",
+								"description": "Path to the rockspec file relative to the dependency directory"
+							}
+						},
+						"additionalProperties": false
 					}
 				]
 			}

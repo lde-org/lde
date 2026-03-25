@@ -37,10 +37,14 @@ end
 ---@field luarocks string # Package name on luarocks.org
 ---@field version string? # Optional version constraint e.g. ">= 1.0"
 
+---@class lpm.Config.ArchiveDependency: lpm.Config.BaseDependency
+---@field archive string # URL to a .zip, .tar.gz, .tar.bz2, etc.
+
 ---@alias lpm.Config.Dependency
 --- | lpm.Config.GitDependency
 --- | lpm.Config.PathDependency
 --- | lpm.Config.RegistryDependency
 --- | lpm.Config.LuarocksDependency
+--- | lpm.Config.ArchiveDependency
 
 return Config

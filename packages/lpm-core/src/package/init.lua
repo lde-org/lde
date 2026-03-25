@@ -165,6 +165,8 @@ function Package:getDependencyPath(dir, info, relativeTo)
 		return global.getGitRepoDir(dir, info.branch, info.commit)
 	elseif info.path then
 		return path.normalize(path.join(relativeTo, info.path))
+	elseif info.archive then
+		return global.getOrInitArchive(info.archive)
 	end
 end
 

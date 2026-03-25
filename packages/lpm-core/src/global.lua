@@ -4,6 +4,7 @@ local fs = require("fs")
 local git = require("git")
 local json = require("json")
 local path = require("path")
+local process = require("process")
 local semver = require("semver")
 
 local REGISTRY_URL = "https://github.com/codebycruz/lpm-registry"
@@ -22,6 +23,10 @@ end
 
 function global.getGitCacheDir()
 	return path.join(global.getDir(), "git")
+end
+
+function global.getTarCacheDir()
+	return path.join(global.getDir(), "tar")
 end
 
 function global.getToolsDir()
@@ -144,6 +149,29 @@ function global.getOrInitGitRepo(repoName, repoUrl, branch, commit)
 	return repoDir
 end
 
+--- Downloads and extracts an archive URL (.zip, .tar.gz, .tar.bz2, etc.) into the cache.
+--- Uses `tar -xf` which auto-detects format on all platforms (bsdtar on Windows 10+).
+---@param url string
+---@return string dir
+function global.getOrInitArchive(url)
+	local key = sanitize(url)
+	local archiveDir = path.join(global.getTarCacheDir(), key)
+	if not fs.exists(archiveDir) then
+		fs.mkdir(archiveDir)
+		local archiveFile = archiveDir .. ".archive"
+		local ok, err = process.exec("curl", { "-sL", "-o", archiveFile, url })
+		if not ok then
+			error("Failed to download archive '" .. url .. "': " .. (err or ""))
+		end
+		local ok2, err2 = process.exec("tar", { "-xf", archiveFile, "-C", archiveDir, "--strip-components=1" })
+		if not ok2 then
+			error("Failed to extract archive '" .. url .. "': " .. (err2 or ""))
+		end
+		os.remove(archiveFile)
+	end
+	return archiveDir
+end
+
 function global.init()
 	local dir = global.getDir()
 	if not fs.exists(dir) then
@@ -153,6 +181,11 @@ function global.init()
 	local gitCacheDir = global.getGitCacheDir()
 	if not fs.exists(gitCacheDir) then
 		fs.mkdir(gitCacheDir)
+	end
+
+	local tarCacheDir = global.getTarCacheDir()
+	if not fs.exists(tarCacheDir) then
+		fs.mkdir(tarCacheDir)
 	end
 
 	local toolsDir = global.getToolsDir()
