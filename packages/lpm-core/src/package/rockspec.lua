@@ -86,12 +86,21 @@ local function openRockspec(dir, rockspecPath)
 		for modname, src in pairs(modules) do
 			local srcAbs = path.join(dir, src)
 			local destRel = modname:gsub("%.", path.separator) .. ".lua"
-			if path.join(modulesDir, destRel) == path.join(outputDir, "init.lua") then
-				destRel = modname:gsub("%.", path.separator):gsub("init$", "__init") .. ".lua"
-			end
 			local destAbs = path.join(modulesDir, destRel)
+
+			-- If this file would land at target/foo.lua but target/foo/ (outputDir) also exists,
+			-- redirect it inside the package dir as __init.lua
+			if destAbs == outputDir .. ".lua" then
+				destRel = modname:gsub("%.", path.separator) .. path.separator .. "__init.lua"
+				destAbs = path.join(modulesDir, destRel)
+			elseif path.join(modulesDir, destRel) == path.join(outputDir, "init.lua") then
+				destRel = modname:gsub("%.", path.separator):gsub("init$", "__init") .. ".lua"
+				destAbs = path.join(modulesDir, destRel)
+			end
+
 			local destDir = path.dirname(destAbs)
 			if not fs.isdir(destDir) then fs.mkdir(destDir) end
+
 			fs.copy(srcAbs, destAbs)
 			resolved[modname] = { destRel = destRel, destAbs = destAbs }
 		end

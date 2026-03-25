@@ -134,7 +134,7 @@ test.it("rockspec git dep: middleclass can be required after install", function(
 	pkg:installDependencies()
 	pkg:build()
 
-	test.truthy(fs.exists(path.join(dir, "target", "middleclass.lua")))
+	test.truthy(fs.exists(path.join(dir, "target", "middleclass/init.lua")))
 
 	local ok, err = pkg:runFile()
 	if not ok then print(err) end
