@@ -82,8 +82,10 @@ local lpm = require("lpm-core")
 
 -- Enable UTF-8 console output on Windows
 if jit.os == "Windows" then
-	local win32 = require("winapi")
-	win32.kernel32.setConsoleOutputCP(win32.kernel32.ConsoleCP.UTF8)
+	local ok, win32 = pcall(require, "winapi")
+	if ok then
+		win32.kernel32.setConsoleOutputCP(win32.kernel32.ConsoleCP.UTF8)
+	end
 end
 
 lpm.global.init()
