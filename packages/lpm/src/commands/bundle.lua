@@ -92,7 +92,9 @@ local function bundle(args)
 
 	bundleDir(pkg:getName(), path.join(modulesDir, pkg:getName()), files)
 
-	for depName in pairs(pkg:getDependencies()) do
+	local lockfile = pkg:readLockfile()
+	local deps = lockfile and lockfile:getDependencies() or pkg:getDependencies()
+	for depName in pairs(deps) do
 		bundleDir(depName, path.join(modulesDir, depName), files)
 	end
 
