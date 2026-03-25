@@ -1,6 +1,6 @@
-local path = require("path")
 local fs = require("fs")
 local path = require("path")
+local http = require("http")
 local git = require("git")
 local luarocks = require("luarocks")
 local rocked = require("rocked")
@@ -43,13 +43,22 @@ local function dependencyToPackage(alias, depInfo, relativeTo)
 			error("Failed to load local dependency package for: " .. alias .. "\nError: " .. err)
 		end
 		return localPackage, { path = depInfo.path, name = depInfo.name }
+	elseif depInfo.archive then
+		local archiveDir = global.getOrInitArchive(depInfo.archive)
+		local pkg, err = Package.open(archiveDir, depInfo.rockspec)
+		if not pkg then
+			error("Failed to load archive dependency '" .. alias .. "': " .. (err or ""))
+		end
+		---@type lpm.Lockfile.ArchiveDependency
+		local lockEntry = { archive = depInfo.archive, name = depInfo.name }
+		return pkg, lockEntry
 	elseif depInfo.luarocks then -- luarocks registry
 		local url, err = luarocks.getRockspecUrl(depInfo.luarocks, depInfo.version)
 		if not url then
 			error("Failed to resolve luarocks dep '" .. alias .. "': " .. (err or ""))
 		end
 
-		local content, fetchErr = require("http").get(url)
+		local content, fetchErr = http.get(url)
 		if not content then
 			error("Failed to fetch rockspec for '" .. alias .. "': " .. (fetchErr or ""))
 		end
@@ -60,23 +69,32 @@ local function dependencyToPackage(alias, depInfo, relativeTo)
 		end ---@cast spec rocked.raw.Output
 
 		local sourceUrl = spec.source.url
-		if not sourceUrl:match("^git") then
-			error("Unsupported source for luarocks dep '" ..
-				alias .. "': only git sources are supported, got: " .. sourceUrl)
+		if sourceUrl:match("^git") then
+			sourceUrl = sourceUrl:gsub("^git%+", "")
+			local repoDir = global.getOrInitGitRepo(packageName, sourceUrl, depInfo.branch, depInfo.commit)
+			local resolvedCommit = select(2, git.getCommitHash(repoDir))
+			resolvedCommit = resolvedCommit and resolvedCommit:gsub("%s+$", "") or depInfo.commit
+
+			---@type lpm.Lockfile.GitDependency
+			local lockEntry = { git = spec.source.url, commit = resolvedCommit, name = depInfo.name }
+
+			local pkg = Package.openRockspec(repoDir)
+			if pkg then return pkg, lockEntry end
+
+			error("Failed to open rockspec package for '" .. alias .. "'")
+		elseif sourceUrl:match("^https?://") then
+			local archiveDir = global.getOrInitArchive(sourceUrl)
+
+			---@type lpm.Lockfile.ArchiveDependency
+			local lockEntry = { archive = sourceUrl, name = depInfo.name }
+
+			local pkg = Package.openRockspec(archiveDir)
+			if pkg then return pkg, lockEntry end
+
+			error("Failed to open rockspec package for '" .. alias .. "'")
+		else
+			error("Unsupported source for luarocks dep '" .. alias .. "': " .. sourceUrl)
 		end
-
-		sourceUrl = sourceUrl:gsub("^git%+", "")
-		local repoDir = global.getOrInitGitRepo(packageName, sourceUrl, depInfo.branch, depInfo.commit)
-		local resolvedCommit = select(2, git.getCommitHash(repoDir))
-		resolvedCommit = resolvedCommit and resolvedCommit:gsub("%s+$", "") or depInfo.commit
-
-		---@type lpm.Lockfile.GitDependency
-		local lockEntry = { git = spec.source.url, commit = resolvedCommit, name = depInfo.name }
-
-		local pkg = Package.openRockspec(repoDir)
-		if pkg then return pkg, lockEntry end
-
-		error("Failed to open rockspec package for '" .. alias .. "'")
 	elseif depInfo.version then -- lpm registry
 		global.syncRegistry()
 
@@ -113,6 +131,8 @@ local function sourceKey(entry)
 		return "git:" .. entry.git .. "@" .. (entry.commit or "")
 	elseif entry.path then
 		return "path:" .. entry.path
+	elseif entry.archive then
+		return "archive:" .. entry.archive
 	end
 	return "unknown"
 end

@@ -12,9 +12,13 @@ local json = require("json")
 ---@class lpm.Lockfile.PathDependency: lpm.Lockfile.BaseDependency
 ---@field path string
 
+---@class lpm.Lockfile.ArchiveDependency: lpm.Lockfile.BaseDependency
+---@field archive string # URL to the archive
+
 ---@alias lpm.Lockfile.Dependency
 --- | lpm.Lockfile.GitDependency
 --- | lpm.Lockfile.PathDependency
+--- | lpm.Lockfile.ArchiveDependency
 
 ---@class lpm.Lockfile.Raw
 ---@field version "1"

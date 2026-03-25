@@ -471,3 +471,26 @@ test.it("transitive dep: util is resolvable as a dependency of lpm-core", functi
 	test.truthy(util)
 	test.truthy(util.dedent)
 end)
+
+test.it("archive dep: installs a .tar.gz dependency from a URL", function()
+	fs.mkdir(tmpBase)
+	local appDir = path.join(tmpBase, "archive-dep-app")
+	fs.mkdir(appDir)
+	fs.mkdir(path.join(appDir, "src"))
+	fs.write(path.join(appDir, "src", "init.lua"), "return {}")
+	fs.write(path.join(appDir, "lpm.json"), json.encode({
+		name = "archive-dep-app",
+		version = "0.1.0",
+		dependencies = {
+			["lua-term"] = {
+				archive = "https://github.com/hoelzro/lua-term/archive/0.08.tar.gz",
+				rockspec = "lua-term-0.8-1.rockspec"
+			}
+		}
+	}))
+
+	local app = lpm.Package.open(appDir)
+	app:installDependencies()
+
+	test.truthy(fs.isdir(path.join(appDir, "target", "term")))
+end)
