@@ -14,7 +14,7 @@ local process = require("process")
 ---@field dir string
 ---@field cachedConfig lpm.Config?
 ---@field cachedConfigMtime number?
----@field buildfn (fun(outputDir: string): boolean, string?)?
+---@field buildfn (fun(pkg: lpm.Package, outputDir: string): boolean, string?)?
 local Package = {}
 Package.__index = Package
 
@@ -123,7 +123,7 @@ function Package.openRockspec(dir)
 
 	local entryModule = spec.package and spec.package:lower()
 
-	pkg.buildfn = function(outputDir)
+	pkg.buildfn = function(_, outputDir)
 		local modulesDir = path.dirname(outputDir)
 
 		for modname, src in pairs(modules) do
