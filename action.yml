@@ -27,8 +27,13 @@ runs:
       shell: pwsh
       run: |
         $version = "${{ inputs.version }}"
-        $scriptArgs = if ($version -eq "nightly") { @("--nightly") }
-                      elseif ($version -eq "latest") { @() }
-                      else { @("--version", $version) }
-        & "${{ github.action_path }}/install.ps1" @scriptArgs
+
+        if ($version -eq "nightly") {
+            & "${{ github.action_path }}/install.ps1" "--nightly"
+        } elseif ($version -eq "latest") {
+            & "${{ github.action_path }}/install.ps1"
+        } else {
+            & "${{ github.action_path }}/install.ps1" "--version" $version
+        }
+
         echo "$env:USERPROFILE\.lpm" >> $env:GITHUB_PATH
