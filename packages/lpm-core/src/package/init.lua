@@ -92,6 +92,8 @@ function Package.openRockspec(dir, rockspecPath)
 				break
 			end
 		end
+	elseif not path.isAbsolute(rockspecPath) then
+		rockspecPath = path.join(dir, rockspecPath)
 	end
 
 	if not rockspecPath then
