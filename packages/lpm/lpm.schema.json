@@ -18,6 +18,10 @@
 							"package": {
 								"type": "string",
 								"description": "Actual package name at the path, when aliasing (key is the require name)"
+							},
+							"rockspec": {
+								"type": "string",
+								"description": "Path to the rockspec file relative to the dependency directory"
 							}
 						},
 						"additionalProperties": false
@@ -40,6 +44,10 @@
 							"package": {
 								"type": "string",
 								"description": "Actual package name in the repository, when aliasing (key is the require name)"
+							},
+							"rockspec": {
+								"type": "string",
+								"description": "Path to the rockspec file relative to the dependency directory"
 							}
 						},
 						"additionalProperties": false

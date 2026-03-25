@@ -183,3 +183,133 @@ test.it("Package tostring includes the directory", function()
 	local s = tostring(pkg)
 	test.equal(s, "Package(" .. dir .. ")")
 end)
+
+--
+-- Rockspec dependency
+--
+
+test.it("rockspec dep: can require(packagename) from a consumer package", function()
+	fs.mkdir(tmpBase)
+
+	-- Create a fake rockspec package with files scattered in odd locations
+	local rockDir = path.join(tmpBase, "rock-dep")
+	fs.mkdir(rockDir)
+	fs.mkdir(path.join(rockDir, "src"))
+	fs.mkdir(path.join(rockDir, "src", "internal"))
+	fs.write(path.join(rockDir, "src", "core.lua"), 'return { value = 42 }')
+	fs.write(path.join(rockDir, "src", "internal", "util.lua"), 'return {}')
+	fs.write(path.join(rockDir, "rock-dep-1.0.0-1.rockspec"), [[
+		package = "rock-dep"
+		version = "1.0.0-1"
+		source = { url = "git://example.com/rock-dep" }
+		build = {
+			type = "builtin",
+			modules = {
+				["rock-dep"] = "src/core.lua",
+				["rock-dep.util"] = "src/internal/util.lua",
+			}
+		}
+	]])
+
+	-- Consumer lpm package that depends on the rockspec package via path
+	local appDir = path.join(tmpBase, "rock-consumer")
+	fs.mkdir(appDir)
+	fs.mkdir(path.join(appDir, "src"))
+	fs.write(path.join(appDir, "src", "init.lua"), [[
+		local dep = require("rock-dep")
+		assert(dep.value == 42, "expected value 42, got " .. tostring(dep.value))
+	]])
+	fs.write(path.join(appDir, "lpm.json"), json.encode({
+		name = "rock-consumer",
+		version = "0.1.0",
+		dependencies = {
+			["rock-dep"] = { path = "../rock-dep" }
+		}
+	}))
+
+	local app = lpm.Package.open(appDir)
+	app:installDependencies()
+	app:build()
+
+	-- buildfn should have copied modules to target/ at their require-able paths
+	test.truthy(fs.exists(path.join(appDir, "target", "rock-dep.lua")))
+	test.truthy(fs.exists(path.join(appDir, "target", "rock-dep", "util.lua")))
+	-- init.lua should have been generated in the package target dir
+	test.truthy(fs.exists(path.join(appDir, "target", "rock-dep", "init.lua")))
+
+	local ok, err = app:runFile()
+	if not ok then print(err) end
+	test.truthy(ok)
+end)
+
+test.it("rockspec native C module: can require and call a C function returning 52", function()
+	-- TODO: Re-enable on MacOS when nightly exports LuaJIT symbols.
+	if jit.os == "Windows" or jit.os == "OSX" then return end
+	fs.mkdir(tmpBase)
+
+	local rockDir = path.join(tmpBase, "native-rock")
+	fs.mkdir(rockDir)
+	fs.mkdir(path.join(rockDir, "csrc"))
+
+	-- Minimal C module using raw Lua ABI, no headers needed
+	fs.write(path.join(rockDir, "csrc", "answer.c"), [[
+#include <stddef.h>
+
+typedef struct lua_State lua_State;
+typedef int (*lua_CFunction)(lua_State *L);
+
+extern void lua_pushinteger(lua_State *L, ptrdiff_t n);
+extern void lua_createtable(lua_State *L, int narr, int nrec);
+extern void lua_setfield(lua_State *L, int idx, const char *k);
+extern void lua_pushcclosure(lua_State *L, lua_CFunction fn, int n);
+
+static int answer(lua_State *L) {
+	lua_pushinteger(L, 52);
+	return 1;
+}
+
+int luaopen_answer(lua_State *L) {
+	lua_createtable(L, 0, 1);
+	lua_pushcclosure(L, answer, 0);
+	lua_setfield(L, -2, "answer");
+	return 1;
+}
+]])
+
+	fs.write(path.join(rockDir, "native-rock-1.0.0-1.rockspec"), [[
+		package = "native-rock"
+		version = "1.0.0-1"
+		source = { url = "git://example.com/native-rock" }
+		build = {
+			type = "builtin",
+			modules = {
+				answer = "csrc/answer.c",
+			}
+		}
+	]])
+
+	local appDir = path.join(tmpBase, "native-consumer")
+	fs.mkdir(appDir)
+	fs.mkdir(path.join(appDir, "src"))
+	fs.write(path.join(appDir, "src", "init.lua"), [[
+		local m = require("answer")
+		assert(m.answer() == 52, "expected 52, got " .. tostring(m.answer()))
+	]])
+	fs.write(path.join(appDir, "lpm.json"), json.encode({
+		name = "native-consumer",
+		version = "0.1.0",
+		dependencies = {
+			["native-rock"] = { path = "../native-rock" }
+		}
+	}))
+
+	local app = lpm.Package.open(appDir)
+	app:installDependencies()
+	app:build()
+
+	test.truthy(fs.exists(path.join(appDir, "target", "answer.so")))
+
+	local ok, err = app:runFile()
+	if not ok then print(err) end
+	test.truthy(ok)
+end)

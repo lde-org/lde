@@ -20,11 +20,8 @@ local function buildPackage(package, destinationPath)
 		fs.mkdir(target)
 	end
 
-	local buildScriptPath = package:getBuildScriptPath()
-	if fs.exists(buildScriptPath) then
-		fs.copy(package:getSrcDir(), destinationPath)
-
-		local ok, err = package:runFile(buildScriptPath, nil, { LPM_OUTPUT_DIR = destinationPath })
+	if package:hasBuildScript() then
+		local ok, err = package:runBuildScript(destinationPath)
 		if not ok then
 			error("Build script failed for package '" .. package:getName() .. "': " .. err)
 		end

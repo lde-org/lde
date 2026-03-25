@@ -77,6 +77,8 @@ end
 
 
 
+sea.getLuajitPath = getLuajitPath
+
 local CEscapes = {
 	["\a"] = "\\a",
 	["\b"] = "\\b",
@@ -285,6 +287,8 @@ int main(int argc, char** argv) {
 		args[#args + 1] = "-lm"
 		args[#args + 1] = "-ldl"
 		args[#args + 1] = "-Wl,--export-dynamic" -- expose lua symbols for lua dependencies
+	elseif process.platform == "darwin" then
+		args[#args + 1] = "-Wl,-export_dynamic" -- expose lua symbols for lua dependencies
 	end
 
 	local compiler = env.var("SEA_CC") or "gcc"

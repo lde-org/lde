@@ -25,7 +25,7 @@ local function dependencyToPackage(alias, depInfo, relativeTo)
 		---@type lpm.Lockfile.GitDependency
 		local lockEntry = { git = depInfo.git, commit = resolvedCommit, branch = depInfo.branch, name = depInfo.name }
 
-		local pkg = Package.open(repoDir)
+		local pkg = Package.open(repoDir, depInfo.rockspec)
 		if pkg and pkg:getName() == packageName then return pkg, lockEntry end
 
 		for _, config in ipairs(fs.scan(repoDir, "**" .. path.separator .. "lpm.json")) do
@@ -35,7 +35,7 @@ local function dependencyToPackage(alias, depInfo, relativeTo)
 
 		error("No lpm.json with name '" .. packageName .. "' found in git repository")
 	elseif depInfo.path then
-		local localPackage, err = Package.open(path.resolve(relativeTo, path.normalize(depInfo.path)))
+		local localPackage, err = Package.open(path.resolve(relativeTo, path.normalize(depInfo.path)), depInfo.rockspec)
 		if not localPackage then
 			error("Failed to load local dependency package for: " .. alias .. "\nError: " .. err)
 		end
@@ -54,7 +54,7 @@ local function dependencyToPackage(alias, depInfo, relativeTo)
 		---@type lpm.Lockfile.GitDependency
 		local lockEntry = { git = portfile.git, commit = commit, branch = portfile.branch, name = depInfo.name }
 
-		local pkg = Package.open(repoDir)
+		local pkg = Package.open(repoDir, depInfo.rockspec)
 		if pkg and pkg:getName() == packageName then return pkg, lockEntry end
 
 		for _, config in ipairs(fs.scan(repoDir, "**" .. path.separator .. "lpm.json")) do

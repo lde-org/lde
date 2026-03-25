@@ -1,5 +1,7 @@
 local Config = require("lpm-core.config")
 local Lockfile = require("lpm-core.lockfile")
+local rocked = require("rocked")
+local sea = require("sea")
 
 local global = require("lpm-core.global")
 
@@ -13,6 +15,7 @@ local process = require("process")
 ---@field dir string
 ---@field cachedConfig lpm.Config?
 ---@field cachedConfigMtime number?
+---@field buildfn (fun(pkg: lpm.Package, outputDir: string): boolean, string?)?
 local Package = {}
 Package.__index = Package
 
@@ -42,9 +45,33 @@ function Package:getConfigPath() return configPathAtDir(self.dir) end
 
 function Package:getLockfilePath() return path.join(self.dir, "lpm-lock.json") end
 
+---@param pkg lpm.Package
+---@param outputDir string
+local function defaultBuildFn(pkg, outputDir)
+	fs.copy(pkg:getSrcDir(), outputDir)
+
+	local buildScriptPath = pkg:getBuildScriptPath()
+	if not fs.exists(buildScriptPath) then
+		return nil, "No build script found: " .. buildScriptPath
+	end
+
+	return pkg:runFile(buildScriptPath, nil, { LPM_OUTPUT_DIR = outputDir })
+end
+
+function Package:hasBuildScript()
+	return self.buildfn ~= nil or fs.exists(self:getBuildScriptPath())
+end
+
+---@param outputDir string
+---@return boolean? ok
+---@return string? err
+function Package:runBuildScript(outputDir)
+	return (self.buildfn or defaultBuildFn)(self, outputDir)
+end
+
 ---@param dir string?
 ---@return lpm.Package?, string?
-function Package.open(dir)
+function Package.openLPM(dir)
 	dir = dir or env.cwd()
 
 	local configPath = configPathAtDir(dir)
@@ -53,6 +80,147 @@ function Package.open(dir)
 	end
 
 	return setmetatable({ dir = dir }, Package), nil
+end
+
+---@param dir string?
+---@param rockspecPath string? # Path to the rockspec file; if nil, scanned from dir
+---@return lpm.Package?, string?
+function Package.openRockspec(dir, rockspecPath)
+	dir = dir or env.cwd()
+
+	if not rockspecPath then
+		if fs.isdir(dir) then
+			for _, entry in ipairs(fs.scan(dir, "**.rockspec")) do
+				rockspecPath = path.join(dir, entry)
+				break
+			end
+		end
+	elseif not path.isAbsolute(rockspecPath) then
+		rockspecPath = path.join(dir, rockspecPath)
+	end
+
+	if not rockspecPath then
+		return nil, "No rockspec found in directory: " .. dir
+	end
+
+	local content = fs.read(rockspecPath)
+	if not content then
+		return nil, "Could not read rockspec: " .. rockspecPath
+	end
+
+	local ok, spec = rocked.parse(content)
+	if not ok then
+		return nil, "Failed to parse rockspec: " .. (spec or rockspecPath)
+	end ---@cast spec rocked.raw.Output
+
+	local pkg = setmetatable({ dir = dir }, Package)
+
+	-- Collect pure-Lua module_name -> src_path from build.modules and build.install.lua
+	local modules = {}
+	local nativeModules = {} -- modname -> src_path (.c)
+	if spec.build then
+		for modname, src in pairs(spec.build.modules or {}) do
+			if type(src) == "string" then
+				if src:match("%.lua$") then
+					modules[modname] = src
+				elseif src:match("%.c$") then
+					nativeModules[modname] = src
+				end
+			end
+		end
+		for modname, src in pairs((spec.build.install or {}).lua or {}) do
+			modules[modname] = src
+		end
+	end
+
+	local entryModule = spec.package and spec.package:lower()
+
+	pkg.buildfn = function(_, outputDir)
+		local modulesDir = path.dirname(outputDir)
+
+		for modname, src in pairs(modules) do
+			local srcAbs = path.join(dir, src)
+			local destRel = modname:gsub("%.", path.separator) .. ".lua"
+			-- Mangle if this would collide with the generated init.lua
+			if path.join(modulesDir, destRel) == path.join(outputDir, "init.lua") then
+				destRel = modname:gsub("%.", path.separator):gsub("init$", "__init") .. ".lua"
+			end
+			local destAbs = path.join(modulesDir, destRel)
+			local destDir = path.dirname(destAbs)
+			if not fs.isdir(destDir) then
+				fs.mkdir(destDir)
+			end
+			fs.copy(srcAbs, destAbs)
+			modules[modname] = { destRel = destRel, destAbs = destAbs }
+		end
+
+		for modname, src in pairs(nativeModules) do
+			local srcAbs = path.join(dir, src)
+			local ext = process.platform == "darwin" and "dylib" or "so"
+			local destRel = modname:gsub("%.", path.separator) .. "." .. ext
+			local destAbs = path.join(modulesDir, destRel)
+			local destDir = path.dirname(destAbs)
+			if not fs.isdir(destDir) then
+				fs.mkdir(destDir)
+			end
+
+			local ok, err = process.exec("gcc", {
+				"-shared", "-fPIC",
+				"-I" .. path.join(sea.getLuajitPath(), "include"),
+				srcAbs,
+				"-o", destAbs,
+			})
+			if not ok then
+				return nil, "Failed to compile native module '" .. modname .. "': " .. (err or "")
+			end
+		end
+
+		local lines = {
+			"local _dir = debug.getinfo(1,'S').source:sub(2):match('^(.*/)') or './'",
+		}
+		for modname, info in pairs(modules) do
+			table.insert(lines, string.format(
+				"package.preload[%q] = package.preload[%q] or function() return dofile(_dir .. %q) end",
+				modname, modname, "../" .. info.destRel
+			))
+		end
+		if entryModule then
+			local info = modules[entryModule] or modules[entryModule .. ".init"]
+			if info then
+				table.insert(lines, string.format("return dofile(_dir .. %q)", "../" .. info.destRel))
+			elseif nativeModules[entryModule] then
+				local ext = process.platform == "darwin" and "dylib" or "so"
+				table.insert(lines, string.format(
+					"return package.loadlib(_dir .. %q, %q)()",
+					"../" .. entryModule:gsub("%.", path.separator) .. "." .. ext,
+					"luaopen_" .. entryModule:gsub("%.", "_")
+				))
+			end
+		end
+
+		fs.write(path.join(outputDir, "init.lua"), table.concat(lines, "\n") .. "\n")
+
+		return true
+	end
+
+	pkg.readConfig = function()
+		return Config.new({ name = spec.package, version = spec.version })
+	end
+
+	return pkg, nil
+end
+
+---@param dir string?
+---@param rockspec string? # Path to rockspec, forwarded to openRockspec if no lpm.json
+---@return lpm.Package?, string?
+function Package.open(dir, rockspec)
+	dir = dir or env.cwd()
+
+	if fs.exists(configPathAtDir(dir)) then
+		return Package.openLPM(dir)
+	end
+
+	return Package.openRockspec(dir, rockspec)
 end
 
 ---@return lpm.Config

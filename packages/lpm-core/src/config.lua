@@ -20,6 +20,7 @@ end
 
 ---@class lpm.Config.BaseDependency
 ---@field name string? # The actual package name in the registry, when aliasing
+---@field rockspec string? # Path to the rockspec file, relative to the dependency directory
 
 ---@class lpm.Config.GitDependency: lpm.Config.BaseDependency
 ---@field git string

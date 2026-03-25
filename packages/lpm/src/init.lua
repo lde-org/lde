@@ -42,7 +42,7 @@ if os.getenv("BOOTSTRAP") then
 
 	local pathPackages = {
 		"ansi", "clap", "fs", "http", "env", "path", "json", "git",
-		"process", "sea", "semver", "util", "lpm-core", "lpm-test"
+		"process", "sea", "semver", "util", "lpm-core", "lpm-test", "rocked"
 	}
 
 	for _, pkg in ipairs(pathPackages) do
