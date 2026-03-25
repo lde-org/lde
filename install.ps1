@@ -15,7 +15,7 @@ if ($nightly) {
     $tag = (Invoke-RestMethod "https://api.github.com/repos/$repo/releases/latest").tag_name
 }
 
-$arch = if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "aarch64" } else { "x86-64" }
+$arch = if ($env:RUNNER_ARCH -eq "ARM64") { "aarch64" } else { "x86-64" }
 
 New-Item -ItemType Directory $dir -Force | Out-Null
 Invoke-WebRequest "https://github.com/$repo/releases/download/$tag/lpm-windows-$arch.exe" -OutFile $bin
