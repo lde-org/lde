@@ -49,12 +49,24 @@ local function openRockspec(dir, rockspecPath)
 				if src:match("%.lua$") then
 					modules[modname] = src
 				elseif src:match("%.c$") then
-					nativeModules[modname] = src
+					nativeModules[modname] = { sources = { src } }
 				end
+			elseif type(src) == "table" and src.sources then
+				nativeModules[modname] = src
 			end
 		end
 		for modname, src in pairs((spec.build.install or {}).lua or {}) do
 			modules[modname] = src
+		end
+		-- Merge platform-specific modules
+		local platKey = process.platform == "darwin" and "macosx" or process.platform
+		local platBuild = spec.build.platforms and spec.build.platforms[platKey]
+		for modname, src in pairs(platBuild and platBuild.modules or {}) do
+			if type(src) == "string" then
+				nativeModules[modname] = { sources = { src } }
+			elseif type(src) == "table" and src.sources then
+				nativeModules[modname] = src
+			end
 		end
 	end
 
@@ -85,17 +97,21 @@ local function openRockspec(dir, rockspecPath)
 		end
 
 		for modname, src in pairs(nativeModules) do
-			local srcAbs = path.join(dir, src)
 			local ext = process.platform == "darwin" and "dylib" or "so"
 			local destRel = modname:gsub("%.", path.separator) .. "." .. ext
 			local destAbs = path.join(modulesDir, destRel)
 			local destDir = path.dirname(destAbs)
 			if not fs.isdir(destDir) then fs.mkdir(destDir) end
 
+			local srcFiles = {}
+			for _, s in ipairs(src.sources) do
+				srcFiles[#srcFiles + 1] = path.join(dir, s)
+			end
+
 			local ok, err = process.exec("gcc", {
 				"-shared", "-fPIC",
 				"-I" .. path.join(sea.getLuajitPath(), "include"),
-				srcAbs, "-o", destAbs
+				unpack(srcFiles), "-o", destAbs
 			})
 			if not ok then
 				return nil, "Failed to compile native module '" .. modname .. "': " .. (err or "")
