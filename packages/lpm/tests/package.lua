@@ -183,3 +183,61 @@ test.it("Package tostring includes the directory", function()
 	local s = tostring(pkg)
 	test.equal(s, "Package(" .. dir .. ")")
 end)
+
+--
+-- Rockspec dependency
+--
+
+test.it("rockspec dep: can require(packagename) from a consumer package", function()
+	fs.mkdir(tmpBase)
+
+	-- Create a fake rockspec package with files scattered in odd locations
+	local rockDir = path.join(tmpBase, "rock-dep")
+	fs.mkdir(rockDir)
+	fs.mkdir(path.join(rockDir, "src"))
+	fs.mkdir(path.join(rockDir, "src", "internal"))
+	fs.write(path.join(rockDir, "src", "core.lua"), 'return { value = 42 }')
+	fs.write(path.join(rockDir, "src", "internal", "util.lua"), 'return {}')
+	fs.write(path.join(rockDir, "rock-dep-1.0.0-1.rockspec"), [[
+		package = "rock-dep"
+		version = "1.0.0-1"
+		source = { url = "git://example.com/rock-dep" }
+		build = {
+			type = "builtin",
+			modules = {
+				["rock-dep"] = "src/core.lua",
+				["rock-dep.util"] = "src/internal/util.lua",
+			}
+		}
+	]])
+
+	-- Consumer lpm package that depends on the rockspec package via path
+	local appDir = path.join(tmpBase, "rock-consumer")
+	fs.mkdir(appDir)
+	fs.mkdir(path.join(appDir, "src"))
+	fs.write(path.join(appDir, "src", "init.lua"), [[
+		local dep = require("rock-dep")
+		assert(dep.value == 42, "expected value 42, got " .. tostring(dep.value))
+	]])
+	fs.write(path.join(appDir, "lpm.json"), json.encode({
+		name = "rock-consumer",
+		version = "0.1.0",
+		dependencies = {
+			["rock-dep"] = { path = "../rock-dep" }
+		}
+	}))
+
+	local app = lpm.Package.open(appDir)
+	app:installDependencies()
+	app:build()
+
+	-- buildfn should have copied modules to target/ at their require-able paths
+	test.truthy(fs.exists(path.join(appDir, "target", "rock-dep.lua")))
+	test.truthy(fs.exists(path.join(appDir, "target", "rock-dep", "util.lua")))
+	-- init.lua should have been generated in the package target dir
+	test.truthy(fs.exists(path.join(appDir, "target", "rock-dep", "init.lua")))
+
+	local ok, err = app:runFile()
+	if not ok then print(err) end
+	test.truthy(ok)
+end)
