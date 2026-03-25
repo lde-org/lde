@@ -87,6 +87,7 @@ local function dependencyToPackage(alias, depInfo, relativeTo)
 			error("Unsupported source for luarocks dep '" .. alias .. "': only git sources are supported, got: " .. sourceUrl)
 		end
 
+		sourceUrl = sourceUrl:gsub("^git%+", "")
 		local repoDir = global.getOrInitGitRepo(packageName, sourceUrl, depInfo.branch, depInfo.commit)
 		local resolvedCommit = select(2, git.getCommitHash(repoDir))
 		resolvedCommit = resolvedCommit and resolvedCommit:gsub("%s+$", "") or depInfo.commit
