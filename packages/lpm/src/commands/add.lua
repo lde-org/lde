@@ -1,6 +1,7 @@
 local json = require("json")
 local ansi = require("ansi")
 local fs = require("fs")
+local luarocks = require("luarocks")
 
 local lpm = require("lpm-core")
 
@@ -73,6 +74,18 @@ local function add(args)
 		local commit = args:option("commit")
 
 		dep = { git = depValue, branch = branch, commit = commit }
+	elseif name:match("^rocks:") then
+		local rocksName = name:match("^rocks:(.+)$")
+		name = rocksName
+
+		local url, err = luarocks.getRockspecUrl(rocksName, registryVersion)
+		if not url then
+			ansi.printf("{red}%s", err)
+			return
+		end
+
+		dep = { luarocks = rocksName, version = registryVersion or nil }
+		ansi.printf("{green}Added luarocks dependency: %s{reset}", rocksName)
 	else
 		-- Registry dependency
 		lpm.global.syncRegistry()
