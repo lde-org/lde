@@ -48,6 +48,8 @@ function Package:getLockfilePath() return path.join(self.dir, "lpm-lock.json") e
 ---@param pkg lpm.Package
 ---@param outputDir string
 local function defaultBuildFn(pkg, outputDir)
+	fs.copy(pkg:getSrcDir(), outputDir)
+
 	local buildScriptPath = pkg:getBuildScriptPath()
 	if not fs.exists(buildScriptPath) then
 		return nil, "No build script found: " .. buildScriptPath

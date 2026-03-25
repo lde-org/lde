@@ -21,8 +21,6 @@ local function buildPackage(package, destinationPath)
 	end
 
 	if package:hasBuildScript() then
-		fs.copy(package:getSrcDir(), destinationPath)
-
 		local ok, err = package:runBuildScript(destinationPath)
 		if not ok then
 			error("Build script failed for package '" .. package:getName() .. "': " .. err)
