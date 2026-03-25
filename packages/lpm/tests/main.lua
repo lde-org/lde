@@ -360,3 +360,106 @@ test.it("end-to-end: package with dependency can install and build", function()
 	test.truthy(fs.exists(path.join(appDir, "target", "e2e-lib", "init.lua")))
 	test.truthy(fs.exists(path.join(appDir, "target", "e2e-app")))
 end)
+
+test.it("installDependencies: errors when two deps share a name but have different sources", function()
+	fs.mkdir(tmpBase)
+
+	-- Two physically different packages both named "shared-lib"
+	local libDirA = path.join(tmpBase, "conflict-lib-a")
+	local libDirB = path.join(tmpBase, "conflict-lib-b")
+	for _, dir in ipairs({ libDirA, libDirB }) do
+		fs.mkdir(dir)
+		fs.mkdir(path.join(dir, "src"))
+		fs.write(path.join(dir, "src", "init.lua"), "return {}")
+		fs.write(path.join(dir, "lpm.json"), json.encode({
+			name = "shared-lib",
+			version = "0.1.0",
+			dependencies = {}
+		}))
+	end
+
+	-- Middle package depends on lib-a's "shared-lib"
+	local middleDir = path.join(tmpBase, "conflict-middle")
+	fs.mkdir(middleDir)
+	fs.mkdir(path.join(middleDir, "src"))
+	fs.write(path.join(middleDir, "src", "init.lua"), "return {}")
+	fs.write(path.join(middleDir, "lpm.json"), json.encode({
+		name = "conflict-middle",
+		version = "0.1.0",
+		dependencies = {
+			["shared-lib"] = { path = "../conflict-lib-a" }
+		}
+	}))
+
+	-- Root depends on middle (which pulls in lib-a) AND directly on lib-b under the same name
+	local rootDir = path.join(tmpBase, "conflict-root")
+	fs.mkdir(rootDir)
+	fs.mkdir(path.join(rootDir, "src"))
+	fs.write(path.join(rootDir, "src", "init.lua"), "return {}")
+	fs.write(path.join(rootDir, "lpm.json"), json.encode({
+		name = "conflict-root",
+		version = "0.1.0",
+		dependencies = {
+			["conflict-middle"] = { path = "../conflict-middle" },
+			["shared-lib"]      = { path = "../conflict-lib-b" }
+		}
+	}))
+
+	local root = lpm.Package.open(rootDir)
+	local ok, err = pcall(function() root:installDependencies() end)
+	test.falsy(ok)
+	test.includes(err, "shared-lib")
+end)
+
+test.it("installDependencies: writes a single flat lockfile containing all transitive deps", function()
+	fs.mkdir(tmpBase)
+
+	-- Deep dep (no dependencies)
+	local deepDir = path.join(tmpBase, "flat-lock-deep")
+	fs.mkdir(deepDir)
+	fs.mkdir(path.join(deepDir, "src"))
+	fs.write(path.join(deepDir, "src", "init.lua"), "return {}")
+	fs.write(path.join(deepDir, "lpm.json"), json.encode({
+		name = "flat-lock-deep",
+		version = "0.1.0",
+		dependencies = {}
+	}))
+
+	-- Middle dep depends on deep
+	local middleDir = path.join(tmpBase, "flat-lock-middle")
+	fs.mkdir(middleDir)
+	fs.mkdir(path.join(middleDir, "src"))
+	fs.write(path.join(middleDir, "src", "init.lua"), "return {}")
+	fs.write(path.join(middleDir, "lpm.json"), json.encode({
+		name = "flat-lock-middle",
+		version = "0.1.0",
+		dependencies = {
+			["flat-lock-deep"] = { path = "../flat-lock-deep" }
+		}
+	}))
+
+	-- Root depends only on middle
+	local rootDir = path.join(tmpBase, "flat-lock-root")
+	fs.mkdir(rootDir)
+	fs.mkdir(path.join(rootDir, "src"))
+	fs.write(path.join(rootDir, "src", "init.lua"), "return {}")
+	fs.write(path.join(rootDir, "lpm.json"), json.encode({
+		name = "flat-lock-root",
+		version = "0.1.0",
+		dependencies = {
+			["flat-lock-middle"] = { path = "../flat-lock-middle" }
+		}
+	}))
+
+	local root = lpm.Package.open(rootDir)
+	root:installDependencies()
+
+	-- Root lockfile must contain both middle AND deep
+	local lockfile = root:readLockfile()
+	test.truthy(lockfile)
+	test.truthy(lockfile:getDependency("flat-lock-middle"))
+	test.truthy(lockfile:getDependency("flat-lock-deep"))
+
+	-- No lockfile should have been written inside the middle dep
+	test.falsy(lpm.Lockfile.open(path.join(middleDir, "lpm-lock.json")))
+end)
