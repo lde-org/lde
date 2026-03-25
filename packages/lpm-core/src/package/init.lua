@@ -67,8 +67,24 @@ function Package:runBuildScript(outputDir)
 	return (self.buildfn or defaultBuildFn)(self, outputDir)
 end
 
+---@param dir string?
+---@return lpm.Package?, string?
+function Package.openLPM(dir)
+	dir = dir or env.cwd()
+
+	local configPath = configPathAtDir(dir)
+	if not fs.exists(configPath) then
+		return nil, "No lpm.json found in directory: " .. dir
+	end
+
+	return setmetatable({ dir = dir }, Package), nil
+end
+
 Package.openRockspec = require("lpm-core.package.rockspec")
 
+---@param dir string?
+---@param rockspec string? # Path to rockspec, forwarded to openRockspec if no lpm.json
+---@return lpm.Package?, string?
 function Package.open(dir, rockspec)
 	dir = dir or env.cwd()
 
