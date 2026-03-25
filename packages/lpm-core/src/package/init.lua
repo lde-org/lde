@@ -86,7 +86,7 @@ function Package.openRockspec(dir)
 
 	local rockspecPath
 	if fs.isdir(dir) then
-		for _, entry in ipairs(fs.scan(dir, "*.rockspec")) do
+		for _, entry in ipairs(fs.scan(dir, "**.rockspec")) do
 			rockspecPath = path.join(dir, entry)
 			break
 		end
