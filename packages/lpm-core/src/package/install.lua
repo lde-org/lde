@@ -69,23 +69,32 @@ local function dependencyToPackage(alias, depInfo, relativeTo)
 		end ---@cast spec rocked.raw.Output
 
 		local sourceUrl = spec.source.url
-		if not sourceUrl:match("^git") then
-			error("Unsupported source for luarocks dep '" ..
-				alias .. "': only git sources are supported, got: " .. sourceUrl)
+		if sourceUrl:match("^git") then
+			sourceUrl = sourceUrl:gsub("^git%+", "")
+			local repoDir = global.getOrInitGitRepo(packageName, sourceUrl, depInfo.branch, depInfo.commit)
+			local resolvedCommit = select(2, git.getCommitHash(repoDir))
+			resolvedCommit = resolvedCommit and resolvedCommit:gsub("%s+$", "") or depInfo.commit
+
+			---@type lpm.Lockfile.GitDependency
+			local lockEntry = { git = spec.source.url, commit = resolvedCommit, name = depInfo.name }
+
+			local pkg = Package.openRockspec(repoDir)
+			if pkg then return pkg, lockEntry end
+
+			error("Failed to open rockspec package for '" .. alias .. "'")
+		elseif sourceUrl:match("^https?://") then
+			local archiveDir = global.getOrInitArchive(sourceUrl)
+
+			---@type lpm.Lockfile.ArchiveDependency
+			local lockEntry = { archive = sourceUrl, name = depInfo.name }
+
+			local pkg = Package.openRockspec(archiveDir)
+			if pkg then return pkg, lockEntry end
+
+			error("Failed to open rockspec package for '" .. alias .. "'")
+		else
+			error("Unsupported source for luarocks dep '" .. alias .. "': " .. sourceUrl)
 		end
-
-		sourceUrl = sourceUrl:gsub("^git%+", "")
-		local repoDir = global.getOrInitGitRepo(packageName, sourceUrl, depInfo.branch, depInfo.commit)
-		local resolvedCommit = select(2, git.getCommitHash(repoDir))
-		resolvedCommit = resolvedCommit and resolvedCommit:gsub("%s+$", "") or depInfo.commit
-
-		---@type lpm.Lockfile.GitDependency
-		local lockEntry = { git = spec.source.url, commit = resolvedCommit, name = depInfo.name }
-
-		local pkg = Package.openRockspec(repoDir)
-		if pkg then return pkg, lockEntry end
-
-		error("Failed to open rockspec package for '" .. alias .. "'")
 	elseif depInfo.version then -- lpm registry
 		global.syncRegistry()
 
