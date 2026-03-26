@@ -15,7 +15,7 @@ local util = require("util")
 
 local REGISTRY_URL = "https://github.com/codebycruz/lpm-registry"
 
-global.currentVersion = "0.7.2"
+global.currentVersion = "0.8.0"
 
 ---@param s string
 local function sanitize(s)
