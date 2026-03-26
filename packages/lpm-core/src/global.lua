@@ -165,25 +165,24 @@ function global.getOrInitArchive(url)
 		end
 		local ok2, err2
 		if url:match("%.zip$") and process.platform == "linux" then
-			ok2, err2 = process.exec("unzip", { "-q", archiveFile, "-d", archiveDir })
+			local tmpDir = archiveDir .. "_tmp"
+			ok2, err2 = process.exec("unzip", { "-q", archiveFile, "-d", tmpDir })
 			if ok2 then
-				local entries = fs.readdir(archiveDir)
+				local entries = fs.readdir(tmpDir)
 				local first = entries and entries()
-				if first and first.type == "dir" then
-					local inner = path.join(archiveDir, first.name)
-					local moved = archiveDir .. "_inner"
-					os.rename(inner, moved)
-					fs.rmdir(archiveDir)
-					os.rename(moved, archiveDir)
-				end
+				local inner = (first and first.type == "dir") and path.join(tmpDir, first.name) or tmpDir
+				fs.move(inner, archiveDir)
+				fs.rmdir(tmpDir)
 			end
 		else
 			ok2, err2 = process.exec("tar", { "-xf", archiveFile, "-C", archiveDir, "--strip-components=1" })
 		end
 		if not ok2 then
+			fs.rmdir(archiveDir)
+			fs.delete(archiveFile)
 			error("Failed to extract archive '" .. url .. "': " .. (err2 or ""))
 		end
-		os.remove(archiveFile)
+		fs.delete(archiveFile)
 	end
 	return archiveDir
 end
