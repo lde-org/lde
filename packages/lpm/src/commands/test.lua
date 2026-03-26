@@ -63,12 +63,13 @@ end
 ---@param failures number
 ---@param passed number
 ---@param total number
-local function printSummary(failures, passed, total)
+---@param skipped number
+local function printSummary(failures, passed, total, skipped)
+	local skipStr = skipped > 0 and ansi.format(", {yellow}%d skipped", skipped) or ""
 	if failures > 0 then
-		ansi.printf("{white}Tests:  {red}%d failed{white}, {green}%d passed{white}, {cyan}%d total", failures, passed,
-			total)
+		ansi.printf("{white}Tests:  {red}%d failed{white}, {green}%d passed{white}, {cyan}%d total" .. skipStr, failures, passed, total)
 	else
-		ansi.printf("{white}Tests:  {green}%d passed{white}, {cyan}%d total", passed, total)
+		ansi.printf("{white}Tests:  {green}%d passed{white}, {cyan}%d total" .. skipStr, passed, total)
 	end
 end
 
@@ -84,6 +85,7 @@ local function test(_args)
 		local hadFailures = false
 		local totalPassed = 0
 		local totalFailures = 0
+		local totalSkipped = 0
 
 		-- Collect results first so we can print the header with totals
 		local allResults = {}
@@ -96,6 +98,7 @@ local function test(_args)
 					allResults[#allResults + 1] = results
 					totalPassed = totalPassed + (results.total - results.failures)
 					totalFailures = totalFailures + results.failures
+					totalSkipped = totalSkipped + (results.skipped or 0)
 				end
 			end
 		end
@@ -115,7 +118,7 @@ local function test(_args)
 			end
 		end
 
-		printSummary(totalFailures, totalPassed, totalTests)
+		printSummary(totalFailures, totalPassed, totalTests, totalSkipped)
 
 		if hadFailures then
 			os.exit(1)
@@ -126,7 +129,7 @@ local function test(_args)
 
 	local results = package:runTests()
 	printResults(results)
-	printSummary(results.failures, results.total - results.failures, results.total)
+	printSummary(results.failures, results.total - results.failures, results.total, results.skipped or 0)
 	if results.failures > 0 then
 		os.exit(1)
 	end

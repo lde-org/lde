@@ -13,6 +13,7 @@ local runtime = require("lpm-core.runtime")
 ---@field files lpm.TestFileResult[]
 ---@field total number
 ---@field failures number
+---@field skipped number
 ---@field error string?
 
 local function getLuaPathsForPackage(package)
@@ -57,6 +58,7 @@ local function runTests(package)
 	local files = {}
 	local totalTests = 0
 	local totalFailures = 0
+	local totalSkipped = 0
 
 	local testFiles = fs.scan(testDir, "**" .. path.separator .. "*.lua")
 	for _, relativePath in ipairs(testFiles) do
@@ -81,14 +83,18 @@ local function runTests(package)
 		else
 			local results = testObj.run()
 			local failCount = 0
+			local skipCount = 0
 			for _, r in ipairs(results) do
-				if not r.ok then
+				if r.skipped then
+					skipCount = skipCount + 1
+				elseif not r.ok then
 					failCount = failCount + 1
 				end
 			end
 
-			totalTests = totalTests + #results
+			totalTests = totalTests + #results - skipCount
 			totalFailures = totalFailures + failCount
+			totalSkipped = totalSkipped + skipCount
 
 			files[#files + 1] = {
 				file = relativePath,
@@ -101,7 +107,8 @@ local function runTests(package)
 		package = package,
 		files = files,
 		total = totalTests,
-		failures = totalFailures
+		failures = totalFailures,
+		skipped = totalSkipped
 	}
 end
 
