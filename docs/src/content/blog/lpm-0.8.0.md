@@ -34,6 +34,8 @@ lpm install rocks:busted
 busted
 ```
 
+![vid](/blog-assets/0.8.0/busted.gif)
+
 If a package has a rockspec in a git repo, you can point to it manually with the `rockspec` field:
 
 ```json
@@ -74,6 +76,8 @@ Running `lpm repl` drops you into an interactive Lua session with your project's
 ```sh
 lpm repl
 ```
+
+![vid](/blog-assets/0.8.0/repl.gif)
 
 ## New `lpm-test` utilities
 
