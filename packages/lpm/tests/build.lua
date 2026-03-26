@@ -373,3 +373,36 @@ build = {
 	-- mypkg.sub.leaf -> src/sub/leaf.lua => mypkg/sub/leaf.lua
 	test.truthy(fs.exists(path.join(modulesDir, "mypkg", "sub", "leaf.lua")))
 end)
+
+test.it("rockspec buildfn: module key ending in .init installs as dir/init.lua (luasystem pattern)", function()
+	local rockspecContent = [[
+package = "mysystem"
+version = "1.0-1"
+source = { url = "https://example.com" }
+build = {
+  type = "builtin",
+  modules = {
+    ["system.init"] = "system/init.lua",
+  }
+}
+]]
+
+	local dir = path.join(tmpBase, "rockspec-dotinit-regression")
+	fs.mkdir(dir)
+	fs.mkdir(path.join(dir, "system"))
+	fs.write(path.join(dir, "mysystem-1.0-1.rockspec"), rockspecContent)
+	fs.write(path.join(dir, "system", "init.lua"), 'return "system"')
+
+	local pkg = lpm.Package.openRockspec(dir)
+	test.truthy(pkg)
+
+	local outputDir = path.join(dir, "target", "mysystem")
+	local ok, err = pkg:runBuildScript(outputDir)
+	test.truthy(ok, err)
+
+	local modulesDir = path.join(dir, "target")
+	-- system.init -> system/init.lua => should be at target/system/init.lua
+	test.truthy(fs.exists(path.join(modulesDir, "system", "init.lua")))
+	-- must NOT be at target/system/init/init.lua
+	test.equal(fs.exists(path.join(modulesDir, "system", "init", "init.lua")), false)
+end)

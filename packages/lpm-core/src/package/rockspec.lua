@@ -120,10 +120,17 @@ local function openRockspec(dir, rockspecPath)
 
 		for modname, src in pairs(modules) do
 			local modPath = modname:gsub("%.", path.separator)
-			-- If source is an init.lua, install as a directory init rather than a flat file
+			local srcBase = path.basename(src)
 			local destAbs
-			if src:match("[/\\]init%.lua$") then
-				destAbs = path.join(modulesDir, modPath, "init.lua")
+			if srcBase == "init.lua" then
+				-- source is an init.lua: install as modPath/init.lua
+				-- but if modname ends in .init (e.g. "system.init"), strip that segment
+				local dirPath = modname:match("^(.+)%.init$")
+				if dirPath then
+					destAbs = path.join(modulesDir, dirPath:gsub("%.", path.separator), "init.lua")
+				else
+					destAbs = path.join(modulesDir, modPath, "init.lua")
+				end
 			else
 				destAbs = path.join(modulesDir, modPath .. ".lua")
 			end
