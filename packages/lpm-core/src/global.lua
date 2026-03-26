@@ -256,16 +256,17 @@ end
 ---@param packageName string
 function global.writeWrapper(toolName, packageDir, packageName)
 	local toolsDir = global.getToolsDir()
+	local invocation = packageDir
+		and ("lpm x --path '" .. packageDir .. "' " .. packageName)
+		or ("lpm x " .. packageName)
 
 	if process.platform == "win32" then
 		local wrapperPath = path.join(toolsDir, toolName .. ".cmd")
+		local winInvocation = packageDir
+			and ('lpm x --path \\"' .. packageDir .. '\\" ' .. packageName)
+			or ("lpm x " .. packageName)
 
-		local content = util.dedent([[
-			@echo off
-			lpm x --path \"" .. packageDir .. "\" " .. packageName .. " %*
-		]])
-
-		if not fs.write(wrapperPath, content) then
+		if not fs.write(wrapperPath, "@echo off\n" .. winInvocation .. " %*\n") then
 			error("Failed to write wrapper script: " .. wrapperPath)
 		end
 
@@ -273,12 +274,7 @@ function global.writeWrapper(toolName, packageDir, packageName)
 	else
 		local wrapperPath = path.join(toolsDir, toolName)
 
-		local content = util.dedent([[
-			#!/bin/sh
-			exec lpm x --path '" .. packageDir .. "' " .. packageName .. " "$@"
-		]])
-
-		if not fs.write(wrapperPath, content) then
+		if not fs.write(wrapperPath, "#!/bin/sh\nexec " .. invocation .. ' "$@"\n') then
 			error("Failed to write wrapper script: " .. wrapperPath)
 		end
 

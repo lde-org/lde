@@ -22,10 +22,15 @@ local function install(args)
 		return
 	end
 
+	local name = args:peek()
 	local pkg, err = resolvePackage(args)
 	if not pkg then error(err) end
 
-	lpm.global.writeWrapper(pkg:getName(), pkg.dir, pkg:getName())
+	if name and name:match("^rocks:") then
+		lpm.global.writeWrapper(pkg:getName(), nil, name)
+	else
+		lpm.global.writeWrapper(pkg:getName(), pkg.dir, pkg:getName())
+	end
 end
 
 return install
