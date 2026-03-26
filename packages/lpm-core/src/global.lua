@@ -6,6 +6,9 @@ local json = require("json")
 local path = require("path")
 local process = require("process")
 local semver = require("semver")
+local lpm = require("lpm-core")
+local ansi = require("ansi")
+local util = require("util")
 
 local REGISTRY_URL = "https://github.com/codebycruz/lpm-registry"
 
@@ -189,6 +192,100 @@ function global.getOrInitArchive(url)
 		fs.delete(archiveFile)
 	end
 	return archiveDir
+end
+
+--- Parses a GitHub /tree/<branch> URL into a clone URL and branch.
+---@param url string
+---@return string cloneUrl
+---@return string? branch
+function global.parseGitUrl(url)
+	local base, branch = url:match("^(https://github%.com/[^/]+/[^/]+)/tree/(.+)$")
+	if base and branch then
+		return base .. ".git", branch
+	end
+	return url, nil
+end
+
+--- Derives a cache-friendly repo name from a git URL.
+---@param url string
+---@return string
+function global.repoNameFromUrl(url)
+	return url:match("([^/]+)%.git$") or url:match("([^/]+)$")
+end
+
+--- Clones or retrieves a cached git repo directory (simple name+branch key, no commit).
+---@param repoName string
+---@param cloneUrl string
+---@param branch string?
+---@return string repoDir
+function global.getOrCloneRepo(repoName, cloneUrl, branch)
+	local safeName = branch and (repoName .. "-" .. branch) or repoName
+	local repoDir = global.getGitRepoDir(safeName)
+	if not fs.exists(repoDir) then
+		local ok, err = git.clone(cloneUrl, repoDir, branch)
+		if not ok then
+			error("Failed to clone git repository: " .. (err or "unknown error"))
+		end
+	end
+	return repoDir
+end
+
+--- Finds a named package inside a directory by scanning for lpm.json files.
+---@param dir string
+---@param name string
+---@return table? pkg  (lpm.Package)
+---@return string? err
+function global.findNamedPackageIn(dir, name)
+	for _, config in ipairs(fs.scan(dir, "**" .. path.separator .. "lpm.json")) do
+		local parentDir = path.join(dir, path.dirname(config))
+		local pkg = lpm.Package.open(parentDir)
+		if pkg and pkg:getName() == name then
+			return pkg, nil
+		end
+	end
+
+	return nil, "No package named '" .. name .. "' found in: " .. dir
+end
+
+--- Writes the platform-appropriate wrapper script into ~/.lpm/tools/.
+---@param toolName string
+---@param packageDir string
+---@param packageName string
+function global.writeWrapper(toolName, packageDir, packageName)
+	local toolsDir = global.getToolsDir()
+
+	if process.platform == "win32" then
+		local wrapperPath = path.join(toolsDir, toolName .. ".cmd")
+
+		local content = util.dedent([[
+			@echo off
+			lpm x --path \"" .. packageDir .. "\" " .. packageName .. " %*
+		]])
+
+		if not fs.write(wrapperPath, content) then
+			error("Failed to write wrapper script: " .. wrapperPath)
+		end
+
+		ansi.printf("{green}Installed tool '%s' -> %s", toolName, wrapperPath)
+	else
+		local wrapperPath = path.join(toolsDir, toolName)
+
+		local content = util.dedent([[
+			#!/bin/sh
+			exec lpm x --path '" .. packageDir .. "' " .. packageName .. " "$@"
+		]])
+
+		if not fs.write(wrapperPath, content) then
+			error("Failed to write wrapper script: " .. wrapperPath)
+		end
+
+		local ok, err = process.spawn("chmod", { "+x", wrapperPath })
+		if not ok then
+			error("Failed to make wrapper executable: " .. (err or "unknown error"))
+		end
+
+		ansi.printf("{green}Installed tool '%s' -> %s", toolName, wrapperPath)
+	end
 end
 
 function global.init()

@@ -1,74 +1,10 @@
 local ansi = require("ansi")
 local env = require("env")
-local fs = require("fs")
-local git = require("git")
 local http = require("http")
 local luarocks = require("luarocks")
-local path = require("path")
 local rocked = require("rocked")
 
 local lpm = require("lpm-core")
-
---- Parses a GitHub /tree/<branch> URL into a clone URL and branch.
---- e.g. "https://github.com/user/repo/tree/my-branch" -> "https://github.com/user/repo.git", "my-branch"
---- Regular git URLs are returned as-is with no branch.
----@param url string
----@return string cloneUrl
----@return string? branch
-local function parseGitUrl(url)
-	local base, branch = url:match("^(https://github%.com/[^/]+/[^/]+)/tree/(.+)$")
-	if base and branch then
-		return base .. ".git", branch
-	end
-
-	return url, nil
-end
-
---- Derives a cache-friendly repo name from a git URL.
----@param url string
----@return string
-local function repoNameFromUrl(url)
-	return url:match("([^/]+)%.git$") or url:match("([^/]+)$")
-end
-
---- Clones or retrieves a cached git repo directory, with optional branch support.
----@param repoName string
----@param cloneUrl string
----@param branch string?
----@return string repoDir
-local function getOrCloneRepo(repoName, cloneUrl, branch)
-	local safeName = repoName
-	if branch then
-		safeName = repoName .. "-" .. branch
-	end
-
-	local repoDir = lpm.global.getGitRepoDir(safeName)
-	if not fs.exists(repoDir) then
-		local ok, err = git.clone(cloneUrl, repoDir, branch)
-		if not ok then
-			error("Failed to clone git repository: " .. (err or "unknown error"))
-		end
-	end
-
-	return repoDir
-end
-
---- Finds a named package inside a repo by scanning for lpm.json files.
----@param dir string
----@param name string
----@return lpm.Package?
----@return string?
-local function findNamedPackageIn(dir, name)
-	for _, config in ipairs(fs.scan(dir, "**" .. path.separator .. "lpm.json")) do
-		local parentDir = path.join(dir, path.dirname(config))
-		local pkg = lpm.Package.open(parentDir)
-		if pkg and pkg:getName() == name then
-			return pkg, nil
-		end
-	end
-
-	return nil, "No package named '" .. name .. "' found in: " .. dir
-end
 
 ---@param pkg lpm.Package
 ---@param scriptArgs string[]
@@ -90,45 +26,34 @@ local function x(args)
 	local userCwd = env.cwd()
 
 	if gitUrl then
-		local cloneUrl, branch = parseGitUrl(gitUrl)
-		local repoName = repoNameFromUrl(cloneUrl)
-		local repoDir = getOrCloneRepo(repoName, cloneUrl, branch)
+		local cloneUrl, branch = lpm.global.parseGitUrl(gitUrl)
+		local repoName = lpm.global.repoNameFromUrl(cloneUrl)
+		local repoDir = lpm.global.getOrCloneRepo(repoName, cloneUrl, branch)
 
-		-- Optional package name as first positional arg
 		local packageName = args:pop()
-
 		local pkg, err
 		if packageName then
-			pkg, err = findNamedPackageIn(repoDir, packageName)
+			pkg, err = lpm.global.findNamedPackageIn(repoDir, packageName)
 		else
 			pkg, err = lpm.Package.open(repoDir)
 		end
 
-		if not pkg then
-			error(err)
-		end
-
-		local scriptArgs = args:drain() or {}
-		executePackage(pkg, scriptArgs, userCwd)
+		if not pkg then error(err) end
+		executePackage(pkg, args:drain() or {}, userCwd)
 	elseif localPath then
+		local path = require("path")
 		local resolved = path.isAbsolute(localPath) and localPath or path.resolve(userCwd, localPath)
 
-		-- Optional package name as first positional arg
 		local packageName = args:pop()
-
 		local pkg, err
 		if packageName then
-			pkg, err = findNamedPackageIn(resolved, packageName)
+			pkg, err = lpm.global.findNamedPackageIn(resolved, packageName)
 		else
 			pkg, err = lpm.Package.open(resolved)
 		end
 
-		if not pkg then
-			error(err)
-		end
-
-		local scriptArgs = args:drain() or {}
-		executePackage(pkg, scriptArgs, userCwd)
+		if not pkg then error(err) end
+		executePackage(pkg, args:drain() or {}, userCwd)
 	else
 		local name = args:pop()
 		if not name then
@@ -166,34 +91,25 @@ local function x(args)
 			end
 
 			if not pkg then error(pkgErr) end
-
-			local scriptArgs = args:drain() or {}
-			executePackage(pkg, scriptArgs, userCwd)
+			executePackage(pkg, args:drain() or {}, userCwd)
 			return
 		end
 
 		local packageName, versionStr = name:match("^([^@]+)@(.+)$")
-		if not packageName then
-			packageName = name
-		end
+		if not packageName then packageName = name end
 
 		lpm.global.syncRegistry()
 		local portfile, err = lpm.global.lookupRegistryPackage(packageName)
-		if not portfile then
-			error(err)
-		end
+		if not portfile then error(err) end
 
 		local _, commit = lpm.global.resolveRegistryVersion(portfile, versionStr or nil)
 		local repoDir = lpm.global.getOrInitGitRepo(packageName, portfile.git, portfile.branch, commit)
 
 		local pkg
 		pkg, err = lpm.Package.open(repoDir)
-		if not pkg then
-			error(err)
-		end
+		if not pkg then error(err) end
 
-		local scriptArgs = args:drain() or {}
-		executePackage(pkg, scriptArgs, userCwd)
+		executePackage(pkg, args:drain() or {}, userCwd)
 	end
 end
 

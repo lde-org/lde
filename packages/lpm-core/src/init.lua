@@ -1,5 +1,7 @@
 local lpm = {}
 
+package.loaded[(...)] = lpm
+
 lpm.Package = require("lpm-core.package")
 lpm.Lockfile = require("lpm-core.lockfile")
 lpm.Config = require("lpm-core.config")
