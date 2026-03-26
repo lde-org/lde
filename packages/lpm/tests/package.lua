@@ -9,6 +9,9 @@ local json = require("json")
 
 local tmpBase = path.join(env.tmpdir(), "lpm-package-tests")
 
+-- Clean up from any previous test run
+fs.rmdir(tmpBase)
+
 --- Creates a minimal package directory with lpm.json inside a test callback.
 local function makePackageDir(name, config)
 	fs.mkdir(tmpBase)
