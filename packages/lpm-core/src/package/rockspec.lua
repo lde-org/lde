@@ -1,14 +1,13 @@
-local Package = require("lpm-core.package")
-local Config = require("lpm-core.config")
-local global = require("lpm-core.global")
 local rocked = require("rocked")
 local sea = require("sea")
+local lpm = require("lpm-core")
 
 local fs = require("fs")
 local env = require("env")
 local http = require("http")
 local path = require("path")
 local process = require("process")
+local util = require("util")
 
 ---@param dir string?
 ---@param rockspecPath string? # Path to the rockspec file; if nil, scanned from dir
@@ -32,12 +31,13 @@ local function openRockspec(dir, rockspecPath)
 		if not rockspecPath then
 			return nil, "No rockspec found in directory: " .. dir
 		end
+
 		content = fs.read(rockspecPath)
 		if not content then
 			return nil, "Could not read rockspec: " .. rockspecPath
 		end
 	elseif rockspecPath:match("^https?://") then -- Looks like a URL
-		local cacheFile = path.join(global.getRockspecCacheDir(), (rockspecPath:gsub("[^%w]", "_")))
+		local cacheFile = path.join(lpm.global.getRockspecCacheDir(), (rockspecPath:gsub("[^%w]", "_")))
 		if fs.exists(cacheFile) then
 			content = fs.read(cacheFile)
 		else
@@ -46,6 +46,7 @@ local function openRockspec(dir, rockspecPath)
 			if not content then
 				return nil, "Could not fetch rockspec: " .. rockspecPath .. ": " .. (err or "")
 			end
+
 			fs.write(cacheFile, content)
 		end
 	else -- Looks like a path
@@ -56,14 +57,14 @@ local function openRockspec(dir, rockspecPath)
 		if not content then
 			return nil, "Could not read rockspec: " .. rockspecPath
 		end
-	end
+	end ---@cast content -nil
 
 	local ok, spec = rocked.parse(content)
 	if not ok then
 		return nil, "Failed to parse rockspec: " .. (spec or rockspecPath)
 	end ---@cast spec rocked.raw.Output
 
-	local pkg = setmetatable({ dir = dir }, Package)
+	local pkg = setmetatable({ dir = dir }, lpm.Package)
 
 	local modules = {}
 	local nativeModules = {}
@@ -79,6 +80,7 @@ local function openRockspec(dir, rockspecPath)
 				nativeModules[modname] = src
 			end
 		end
+
 		-- Merge platform-specific modules
 		local platKey = process.platform == "darwin" and "macosx" or process.platform
 		local platBuild = spec.build.platforms and spec.build.platforms[platKey]
@@ -98,15 +100,7 @@ local function openRockspec(dir, rockspecPath)
 		break
 	end
 
-	-- Simple hash of rockspec content used as a build stamp
-	local function rockspecHash(s)
-		local h = 5381
-		for i = 1, #s do
-			h = (h * 33 + string.byte(s, i)) % 0x80000000
-		end
-		return tostring(h)
-	end
-	local buildStamp = rockspecHash(content)
+	local buildStamp = util.fnv1a(content)
 
 	pkg.buildfn = function(_, outputDir)
 		if not fs.isdir(outputDir) then fs.mkdir(outputDir) end
@@ -164,7 +158,8 @@ local function openRockspec(dir, rockspecPath)
 				deps[name] = { luarocks = name, version = rest ~= "" and rest or nil }
 			end
 		end
-		return Config.new({ name = spec.package, version = spec.version, bin = binEntry, dependencies = deps })
+
+		return lpm.Config.new({ name = spec.package, version = spec.version, bin = binEntry, dependencies = deps })
 	end
 
 	return pkg, nil
