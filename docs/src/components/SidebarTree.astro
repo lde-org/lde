@@ -21,74 +21,49 @@ function isActive(href?: string): boolean {
 }
 ---
 
-<nav class="w-56 shrink-0 text-sm">
-	<ul class="flex flex-col gap-1">
+<nav class="w-60 shrink-0 text-sm py-2">
+	<ul class="flex flex-col gap-0.5">
 		{
-			items.map((item) => (
-				<li>
+			items.map((item, i) => (
+				<li class:list={[i > 0 && "mt-4"]}>
 					{item.href ? (
 						<a
 							href={item.href}
 							class:list={[
-								"block px-3 py-1.5 rounded-xl transition",
+								"flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors",
 								isActive(item.href)
-									? "bg-blue-500 text-white font-semibold rounded-xl"
-									: "hover:bg-gray-100 dark:hover:bg-gray-800 opacity-70 hover:opacity-100",
+									? "bg-blue-500/10 text-blue-600 dark:text-blue-400 font-medium"
+									: "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800/60",
 							]}
 						>
 							{item.label}
 						</a>
 					) : (
-						<span class="flex items-center gap-2 px-3 py-1.5 font-semibold">
-							{item.icon && <Icon name={item.icon} class="size-4 shrink-0 opacity-60" />}
-							{item.label}
-						</span>
+						<div class="flex items-center gap-2 px-3 py-1 mb-1">
+							{item.icon && <Icon name={item.icon} class="size-3.5 shrink-0 text-gray-400 dark:text-gray-500" />}
+							<span class="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">{item.label}</span>
+						</div>
 					)}
 					{item.children && (
-						<ul class="flex flex-col gap-1 ml-3 mt-1 pl-3 border-l border-gray-300 dark:border-gray-700">
+						<ul class="flex flex-col gap-0.5">
 							{item.children.map((child) => (
 								<li>
 									{child.href ? (
 										<a
 											href={child.href}
 											class:list={[
-												"block px-3 py-1.5 rounded-xl transition",
+												"flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors",
 												isActive(child.href)
-													? "bg-blue-500 text-white font-semibold rounded-xl"
-													: "hover:bg-gray-100 dark:hover:bg-gray-800 opacity-70 hover:opacity-100",
+													? "bg-blue-500/10 text-blue-600 dark:text-blue-400 font-medium"
+													: "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800/60",
 											]}
 										>
 											{child.label}
 										</a>
 									) : (
-										<span class="block px-3 py-1.5 font-semibold">
+										<span class="block px-3 py-1.5 font-semibold text-gray-700 dark:text-gray-300">
 											{child.label}
 										</span>
-									)}
-									{child.children && (
-										<ul class="flex flex-col gap-1 ml-3 mt-1 pl-3 border-l border-gray-300 dark:border-gray-700">
-											{child.children.map(
-												(grandchild) => (
-													<li>
-														<a
-															href={
-																grandchild.href
-															}
-															class:list={[
-																"block px-3 py-1.5 rounded-xl transition",
-																isActive(
-																	grandchild.href,
-																)
-																	? "bg-blue-500 text-white font-semibold rounded-xl"
-																	: "hover:bg-gray-100 dark:hover:bg-gray-800 opacity-70 hover:opacity-100",
-															]}
-														>
-															{grandchild.label}
-														</a>
-													</li>
-												),
-											)}
-										</ul>
 									)}
 								</li>
 							))}
