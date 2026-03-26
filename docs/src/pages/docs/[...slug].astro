@@ -90,6 +90,16 @@ const sidebarItems: TreeItem[] = [...sections.entries()]
 			<div class="shrink-0 h-8"></div>
 		</div>
 		<main class="flex-1 min-w-0 p-4 md:p-8 markdown lg:max-w-3xl">
+			<!-- Mobile nav -->
+			<details class="lg:hidden not-prose mb-6 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
+				<summary class="flex items-center justify-between px-4 py-3 cursor-pointer text-sm font-medium select-none bg-gray-50 dark:bg-gray-900 list-none [&::-webkit-details-marker]:hidden">
+					<span class="font-semibold">Browse docs</span>
+					<Icon name="lucide:chevron-down" class="size-4 shrink-0 opacity-50 transition-transform [[open]_&]:rotate-180" />
+				</summary>
+				<div class="px-3 py-3 bg-white dark:bg-gray-950">
+					<SidebarTree items={sidebarItems} />
+				</div>
+			</details>
 			<Content />
 			<div class="mt-12 pt-6 border-t border-black/10 dark:border-white/10 not-prose flex items-center justify-between flex-wrap gap-4">
 				<a
