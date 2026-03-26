@@ -102,6 +102,12 @@ local function openRockspec(dir, rockspecPath)
 
 	local buildStamp = util.fnv1a(content)
 
+	local function mkdirp(p)
+		if fs.isdir(p) then return end
+		mkdirp(path.dirname(p))
+		fs.mkdir(p)
+	end
+
 	pkg.buildfn = function(_, outputDir)
 		if not fs.isdir(outputDir) then fs.mkdir(outputDir) end
 
@@ -113,9 +119,16 @@ local function openRockspec(dir, rockspecPath)
 		local modulesDir = path.dirname(outputDir)
 
 		for modname, src in pairs(modules) do
-			local destAbs = path.join(modulesDir, modname:gsub("%.", path.separator) .. ".lua")
+			local modPath = modname:gsub("%.", path.separator)
+			-- If source is an init.lua, install as a directory init rather than a flat file
+			local destAbs
+			if src:match("[/\\]init%.lua$") then
+				destAbs = path.join(modulesDir, modPath, "init.lua")
+			else
+				destAbs = path.join(modulesDir, modPath .. ".lua")
+			end
 			local destDir = path.dirname(destAbs)
-			if not fs.isdir(destDir) then fs.mkdir(destDir) end
+			if not fs.isdir(destDir) then mkdirp(destDir) end
 			fs.copy(path.join(dir, src), destAbs)
 		end
 
@@ -123,7 +136,7 @@ local function openRockspec(dir, rockspecPath)
 			local ext = process.platform == "darwin" and "dylib" or "so"
 			local destAbs = path.join(modulesDir, modname:gsub("%.", path.separator) .. "." .. ext)
 			local destDir = path.dirname(destAbs)
-			if not fs.isdir(destDir) then fs.mkdir(destDir) end
+			if not fs.isdir(destDir) then mkdirp(destDir) end
 
 			local srcFiles = {}
 			for _, s in ipairs(src.sources) do

@@ -327,3 +327,49 @@ test.it("installDependencies installs transitive dependencies", function()
 	test.truthy(fs.exists(path.join(rootDir, "target", "mid-dep")))
 	test.truthy(fs.exists(path.join(rootDir, "target", "leaf-dep")))
 end)
+
+--
+-- Rockspec buildfn: init.lua module mapping regression
+--
+
+test.it("rockspec buildfn installs init.lua modules as dir/init.lua not dir.lua", function()
+	-- Minimal rockspec with a module that maps to an init.lua (like luacheck.vendor.sha1)
+	local rockspecContent = [[
+package = "mypkg"
+version = "1.0-1"
+source = { url = "https://example.com" }
+build = {
+  type = "builtin",
+  modules = {
+    ["mypkg"] = "src/init.lua",
+    ["mypkg.sub"] = "src/sub/init.lua",
+    ["mypkg.sub.leaf"] = "src/sub/leaf.lua",
+  }
+}
+]]
+
+	local dir = path.join(tmpBase, "rockspec-init-regression")
+	fs.mkdir(dir)
+	fs.mkdir(path.join(dir, "src"))
+	fs.mkdir(path.join(dir, "src", "sub"))
+	fs.write(path.join(dir, "mypkg-1.0-1.rockspec"), rockspecContent)
+	fs.write(path.join(dir, "src", "init.lua"), 'return "mypkg"')
+	fs.write(path.join(dir, "src", "sub", "init.lua"), 'return "sub"')
+	fs.write(path.join(dir, "src", "sub", "leaf.lua"), 'return "leaf"')
+
+	local pkg = lpm.Package.openRockspec(dir)
+	test.truthy(pkg)
+
+	local outputDir = path.join(dir, "target", "mypkg")
+	local ok2, err = pkg:runBuildScript(outputDir)
+	test.truthy(ok2, err)
+
+	local modulesDir = path.join(dir, "target")
+	-- mypkg -> src/init.lua => should be mypkg/init.lua, NOT mypkg.lua
+	test.truthy(fs.exists(path.join(modulesDir, "mypkg", "init.lua")))
+	test.equal(fs.exists(path.join(modulesDir, "mypkg.lua")), false)
+	-- mypkg.sub -> src/sub/init.lua => mypkg/sub/init.lua
+	test.truthy(fs.exists(path.join(modulesDir, "mypkg", "sub", "init.lua")))
+	-- mypkg.sub.leaf -> src/sub/leaf.lua => mypkg/sub/leaf.lua
+	test.truthy(fs.exists(path.join(modulesDir, "mypkg", "sub", "leaf.lua")))
+end)
