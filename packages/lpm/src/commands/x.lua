@@ -2,7 +2,7 @@ local ansi = require("ansi")
 local env = require("env")
 
 local lpm = require("lpm-core")
-local resolvePackage = require("lpm.commands.resolve-package")
+local resolvePackage = require("lpm.util.resolve")
 
 ---@param pkg lpm.Package
 ---@param scriptArgs string[]
