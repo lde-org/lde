@@ -1,8 +1,6 @@
 local env = require("env")
-local http = require("http")
 local luarocks = require("luarocks")
 local path = require("path")
-local rocked = require("rocked")
 
 local lpm = require("lpm-core")
 
@@ -16,24 +14,8 @@ local function resolveRocks(name)
 	local url, err = luarocks.getRockspecUrl(rocksName, versionStr)
 	if not url then return nil, err end
 
-	local content, fetchErr = http.get(url)
-	if not content then return nil, "Failed to fetch rockspec: " .. (fetchErr or "") end
-
-	local ok, spec = rocked.parse(content)
-	if not ok then return nil, "Failed to parse rockspec: " .. tostring(spec) end
-	---@cast spec rocked.raw.Output
-
-	local sourceUrl = spec.source.url
-	if sourceUrl:match("^git") then
-		sourceUrl = sourceUrl:gsub("^git%+", "")
-		local repoDir = lpm.global.getOrInitGitRepo(rocksName, sourceUrl)
-		return lpm.Package.openRockspec(repoDir)
-	elseif sourceUrl:match("^https?://") then
-		local archiveDir = lpm.global.getOrInitArchive(sourceUrl)
-		return lpm.Package.openRockspec(archiveDir)
-	else
-		return nil, "Unsupported source for luarocks package '" .. rocksName .. "': " .. sourceUrl
-	end
+	local pkg, _, pkgErr = lpm.global.openRockspecUrl(rocksName, url)
+	return pkg, pkgErr
 end
 
 --- Resolves --git, --path, or a registry/rocks: name to a Package.

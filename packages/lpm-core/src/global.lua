@@ -2,9 +2,12 @@ local global = {}
 
 local fs = require("fs")
 local git = require("git")
+local http = require("http")
 local json = require("json")
+local luarocks = require("luarocks")
 local path = require("path")
 local process = require("process")
+local rocked = require("rocked")
 local semver = require("semver")
 local lpm = require("lpm-core")
 local ansi = require("ansi")
@@ -286,6 +289,54 @@ function global.writeWrapper(toolName, packageDir, packageName)
 
 		ansi.printf("{green}Installed tool '%s' -> %s", toolName, wrapperPath)
 	end
+end
+
+--- Fetches a rockspec URL, parses it, and opens the package from its source.
+---@param name string # Used for error messages and git cache key
+---@param url string # Rockspec URL
+---@param branch string?
+---@param commit string?
+---@return lpm.Package?, lpm.Lockfile.Dependency?, string?
+function global.openRockspecUrl(name, url, branch, commit)
+	local content, fetchErr = http.get(url)
+	if not content then
+		return nil, nil, "Failed to fetch rockspec: " .. (fetchErr or "")
+	end
+
+	local ok, spec = rocked.parse(content)
+	if not ok then
+		return nil, nil, "Failed to parse rockspec: " .. tostring(spec)
+	end ---@cast spec rocked.raw.Output
+
+	local sourceUrl = spec.source.url
+	if sourceUrl:match("^git") then
+		sourceUrl = sourceUrl:gsub("^git%+", "")
+		local repoDir = global.getOrInitGitRepo(name, sourceUrl, branch, commit)
+		local resolvedCommit = select(2, git.getCommitHash(repoDir))
+		resolvedCommit = resolvedCommit and resolvedCommit:gsub("%s+$", "") or commit
+		local pkg, err = lpm.Package.openRockspec(repoDir, url)
+		---@type lpm.Lockfile.GitDependency
+		local lockEntry = { git = sourceUrl, commit = resolvedCommit }
+		return pkg, lockEntry, err
+	elseif sourceUrl:match("^https?://") then
+		local archiveDir = global.getOrInitArchive(sourceUrl)
+		local pkg, err = lpm.Package.openRockspec(archiveDir, url)
+		---@type lpm.Lockfile.ArchiveDependency
+		local lockEntry = { archive = sourceUrl, rockspec = url }
+		return pkg, lockEntry, err
+	else
+		return nil, nil, "Unsupported source for '" .. name .. "': " .. sourceUrl
+	end
+end
+
+--- Resolves a luarocks package name/version to a Package via the luarocks registry.
+---@param name string
+---@param version string?
+---@return lpm.Package?, lpm.Lockfile.Dependency?, string?
+function global.openLuarocksPackage(name, version)
+	local url, err = luarocks.getRockspecUrl(name, version)
+	if not url then return nil, nil, err end
+	return global.openRockspecUrl(name, url)
 end
 
 function global.init()

@@ -1,9 +1,6 @@
 local fs = require("fs")
 local path = require("path")
-local http = require("http")
 local git = require("git")
-local luarocks = require("luarocks")
-local rocked = require("rocked")
 local util = require("util")
 
 local global = require("lpm-core.global")
@@ -68,53 +65,12 @@ local function dependencyToPackage(alias, depInfo, relativeTo)
 		local lockEntry = { archive = depInfo.archive, name = depInfo.name, rockspec = depInfo.rockspec }
 		return pkg, lockEntry
 	elseif depInfo.luarocks then -- luarocks registry
-		local url, err = luarocks.getRockspecUrl(depInfo.luarocks, depInfo.version)
-		if not url then
+		local pkg, lockEntry, err = global.openLuarocksPackage(depInfo.luarocks, depInfo.version)
+		if not pkg then
 			error("Failed to resolve luarocks dep '" .. alias .. "': " .. (err or ""))
 		end
-
-		local content, fetchErr = http.get(url)
-		if not content then
-			error("Failed to fetch rockspec for '" .. alias .. "': " .. (fetchErr or ""))
-		end
-
-		local ok, spec = rocked.parse(content)
-		if not ok then
-			error("Failed to parse rockspec for '" .. alias .. "': " .. tostring(spec))
-		end ---@cast spec rocked.raw.Output
-
-		local rockspecUrl = url
-		local sourceUrl = spec.source.url
-		if sourceUrl:match("^git") then
-			sourceUrl = sourceUrl:gsub("^git%+", "")
-			local repoDir = global.getOrInitGitRepo(packageName, sourceUrl, depInfo.branch, depInfo.commit)
-			local resolvedCommit = select(2, git.getCommitHash(repoDir))
-			resolvedCommit = resolvedCommit and resolvedCommit:gsub("%s+$", "") or depInfo.commit
-
-			---@type lpm.Lockfile.GitDependency
-			local lockEntry = { git = sourceUrl, commit = resolvedCommit, name = depInfo.name, rockspec = rockspecUrl }
-
-			local pkg = Package.openRockspec(repoDir, rockspecUrl)
-			if pkg then
-				return pkg, lockEntry
-			end
-
-			error("Failed to open rockspec package for '" .. alias .. "'")
-		elseif sourceUrl:match("^https?://") then
-			local archiveDir = global.getOrInitArchive(sourceUrl)
-
-			---@type lpm.Lockfile.ArchiveDependency
-			local lockEntry = { archive = sourceUrl, name = depInfo.name, rockspec = rockspecUrl }
-
-			local pkg = Package.openRockspec(archiveDir, rockspecUrl)
-			if pkg then
-				return pkg, lockEntry
-			end
-
-			error("Failed to open rockspec package for '" .. alias .. "'")
-		else
-			error("Unsupported source for luarocks dep '" .. alias .. "': " .. sourceUrl)
-		end
+		if lockEntry then lockEntry.name = depInfo.name end
+		return pkg, lockEntry
 	elseif depInfo.version then -- lpm registry
 		global.syncRegistry()
 
