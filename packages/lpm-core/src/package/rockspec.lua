@@ -1,5 +1,6 @@
 local Package = require("lpm-core.package")
 local Config = require("lpm-core.config")
+local global = require("lpm-core.global")
 local rocked = require("rocked")
 local sea = require("sea")
 
@@ -38,16 +39,21 @@ local function openRockspec(dir, rockspecPath)
 			return nil, "Could not read rockspec: " .. rockspecPath
 		end
 	elseif rockspecPath:match("^https?://") then -- Looks like a URL
-		local err
-		content, err = http.get(rockspecPath)
-		if not content then
-			return nil, "Could not fetch rockspec: " .. rockspecPath .. ": " .. (err or "")
+		local cacheFile = path.join(global.getRockspecCacheDir(), (rockspecPath:gsub("[^%w]", "_")))
+		if fs.exists(cacheFile) then
+			content = fs.read(cacheFile)
+		else
+			local err
+			content, err = http.get(rockspecPath)
+			if not content then
+				return nil, "Could not fetch rockspec: " .. rockspecPath .. ": " .. (err or "")
+			end
+			fs.write(cacheFile, content)
 		end
 	else -- Looks like a path
 		if not path.isAbsolute(rockspecPath) then
 			rockspecPath = path.join(dir, rockspecPath)
 		end
-
 		content = fs.read(rockspecPath)
 		if not content then
 			return nil, "Could not read rockspec: " .. rockspecPath
@@ -89,19 +95,32 @@ local function openRockspec(dir, rockspecPath)
 
 	local entryModule = spec.package and spec.package:lower()
 	local binScripts = (spec.build and spec.build.install and spec.build.install.bin) or {}
-	-- Pick the first bin entry as the package entrypoint
-	-- bin can be { "tl" } (array) or { tl = "path/to/tl" } (map)
 	local binEntry, binSrc
 	for k, v in pairs(binScripts) do
 		if type(k) == "number" then
-			binEntry, binSrc = v, v -- array style: name == path
+			binEntry, binSrc = v, v
 		else
 			binEntry, binSrc = k, v
 		end
 		break
 	end
 
+	-- Simple hash of rockspec content used as a build stamp
+	local function rockspecHash(s)
+		local h = 5381
+		for i = 1, #s do
+			h = (h * 33 + string.byte(s, i)) % 0x80000000
+		end
+		return tostring(h)
+	end
+	local buildStamp = rockspecHash(content)
+
 	pkg.buildfn = function(_, outputDir)
+		local stampFile = path.join(outputDir, ".lpm-built")
+		if fs.exists(stampFile) and fs.read(stampFile) == buildStamp then
+			return true
+		end
+
 		local modulesDir = path.dirname(outputDir)
 
 		local resolved = {}
@@ -176,6 +195,7 @@ local function openRockspec(dir, rockspecPath)
 			fs.copy(path.join(dir, binRelSrc), path.join(outputDir, binName))
 		end
 
+		fs.write(stampFile, buildStamp)
 		return true
 	end
 
