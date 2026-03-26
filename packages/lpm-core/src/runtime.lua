@@ -16,7 +16,8 @@ local builtinModules = {
 	jit = true,
 	ffi = true,
 	["jit.opt"] = true,
-	["jit.util"] = true
+	["jit.util"] = true,
+	["string.buffer"] = true
 }
 
 ---@class lpm.ExecuteOptions
