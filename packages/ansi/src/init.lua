@@ -60,4 +60,33 @@ function ansi.printf(f, ...)
 	print(ansi.format(f, ...))
 end
 
+-- ANSI escape helpers
+local ESC = "\27["
+
+function ansi.clearLine()
+	io.write(ESC .. "2K\r")
+	io.flush()
+end
+
+---@class ansi.Progress
+---@field done fun(self: ansi.Progress, msg: string?)
+---@field fail fun(self: ansi.Progress, msg: string?)
+
+---@param label string
+---@return ansi.Progress
+function ansi.progress(label)
+	io.write(colors.gray .. "  - " .. colors.reset .. label)
+	io.flush()
+	return {
+		done = function(_, msg)
+			io.write(ESC .. "2K\r" .. colors.green .. "  ✓ " .. colors.reset .. (msg or label) .. "\n")
+			io.flush()
+		end,
+		fail = function(_, msg)
+			io.write(ESC .. "2K\r" .. colors.red .. "  ✗ " .. colors.reset .. (msg or label) .. "\n")
+			io.flush()
+		end,
+	}
+end
+
 return ansi
