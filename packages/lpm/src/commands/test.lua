@@ -43,7 +43,9 @@ local function printResults(results, indent)
 			end
 
 			for _, r in ipairs(file.results) do
-				if r.ok then
+				if r.skipped then
+					ansi.printf(indent .. "   {yellow}- {gray}%s {yellow}(skipped)", r.name)
+				elseif r.ok then
 					ansi.printf(indent .. "   {green}\xE2\x9C\x93 {gray}%s", r.name)
 				else
 					ansi.printf(indent .. "   {red}\xE2\x9C\x97 %s", r.name)

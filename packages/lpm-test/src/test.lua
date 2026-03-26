@@ -1,9 +1,12 @@
 ---@alias lpm.test.Result
 --- | { name: string, ok: true }
 --- | { name: string, ok: false, error: string }
+--- | { name: string, ok: true, skipped: true }
 
 ---@class lpm.test
 ---@field it fun(name: string, fn: fun())
+---@field skip fun(name: string)
+---@field skipIf fun(condition: boolean): fun(name: string, fn: fun())
 ---@field run fun(): lpm.test.Result[]
 ---@field equal fun(a: any, b: any)
 ---@field notEqual fun(a: any, b: any)
@@ -116,13 +119,29 @@ function M.new()
 		table.insert(callbacks, { name = name, callback = fn })
 	end
 
+	function instance.skip(name)
+		table.insert(callbacks, { name = name, skipped = true })
+	end
+
+	function instance.skipIf(condition)
+		return function(name, fn)
+			table.insert(callbacks, condition
+				and { name = name, skipped = true }
+				or  { name = name, callback = fn })
+		end
+	end
+
 	function instance.run()
 		---@type lpm.test.Result[]
 		local results = {}
 
 		for _, callback in ipairs(callbacks) do
-			local ok, err = pcall(callback.callback)
-			table.insert(results, { name = callback.name, ok = ok, error = err })
+			if callback.skipped then
+				table.insert(results, { name = callback.name, ok = true, skipped = true })
+			else
+				local ok, err = pcall(callback.callback)
+				table.insert(results, { name = callback.name, ok = ok, error = err })
+			end
 		end
 
 		return results
