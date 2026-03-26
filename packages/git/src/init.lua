@@ -29,7 +29,12 @@ end
 ---@param cwd string?
 ---@param ref "HEAD" | string?
 function git.getCommitHash(cwd, ref)
-	return process.exec("git", { "rev-parse", ref or "HEAD" }, { cwd = cwd })
+	local ok, hash = process.exec("git", { "rev-parse", ref or "HEAD" }, { cwd = cwd })
+	if not ok then
+		return ok, hash
+	end ---@cast hash -nil
+
+	return ok, string.gsub(hash, "%s+$", "")
 end
 
 ---@param repoDir string?

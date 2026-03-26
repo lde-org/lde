@@ -14,7 +14,7 @@ local function resolveRocks(name)
 	local url, err = luarocks.getRockspecUrl(rocksName, versionStr)
 	if not url then return nil, err end
 
-	local pkg, _, pkgErr = lpm.global.openRockspecUrl(rocksName, url)
+	local pkg, _, pkgErr = lpm.util.openRockspecUrl(rocksName, url)
 	return pkg, pkgErr
 end
 
