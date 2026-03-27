@@ -160,7 +160,7 @@ end
 function global.getOrInitGitRepo(repoName, repoUrl, branch, commit)
 	local repoDir = global.getGitRepoDir(repoName, branch, commit)
 	if not fs.exists(repoDir) then
-		local p = lpm.verbose and ansi.progress("Cloning " .. repoName) or nil
+		local p = lpm.verbose and ansi.progress("Cloning " .. repoName .. " " .. ansi.format("{gray}(" .. repoUrl .. ")")) or nil
 		local ok, err = global.cloneDir(repoName, repoUrl, branch, commit)
 		if not ok then
 			if p then p:fail("Cloning " .. repoName) end
