@@ -124,6 +124,8 @@ local function openRockspec(dir, rockspecPath)
 		break
 	end
 
+	local buildType = spec.build and spec.build.type or "builtin"
+
 	local buildStamp = util.fnv1a(content)
 
 	local function mkdirp(p)
@@ -141,6 +143,34 @@ local function openRockspec(dir, rockspecPath)
 		end
 
 		local modulesDir = path.dirname(outputDir)
+
+		if buildType == "make" then
+			local luajitInclude = path.join(sea.getLuajitPath(), "include")
+			local makeVars = {
+				"LUA_INCDIR=" .. luajitInclude,
+				"INST_LIBDIR=" .. modulesDir,
+				"INST_LUADIR=" .. modulesDir,
+			}
+			local buildTarget = spec.build.build_target or ""
+			local installTarget = spec.build.install_target or "install"
+
+			local buildArgs = {}
+			for _, v in ipairs(makeVars) do buildArgs[#buildArgs + 1] = v end
+			if buildTarget ~= "" then buildArgs[#buildArgs + 1] = buildTarget end
+
+			local ok, err = process.exec("make", buildArgs, { cwd = dir })
+			if not ok then return nil, "make failed: " .. (err or "") end
+
+			local installArgs = {}
+			for _, v in ipairs(makeVars) do installArgs[#installArgs + 1] = v end
+			installArgs[#installArgs + 1] = installTarget
+
+			ok, err = process.exec("make", installArgs, { cwd = dir })
+			if not ok then return nil, "make install failed: " .. (err or "") end
+
+			fs.write(stampFile, buildStamp)
+			return true
+		end
 
 		for modname, src in pairs(modules) do
 			local modPath = modname:gsub("%.", path.separator)

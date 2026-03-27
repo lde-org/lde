@@ -43,7 +43,17 @@ local function getManifest()
 	return cachedManifest
 end
 
---- Fetches a rockspec URL, parses it, and opens the package from its source.
+--- Normalises various git URL formats to a plain https:// URL.
+---@param url string
+---@return string
+function util.normalizeGitUrl(url)
+	url = url:gsub("^git%+", "")       -- git+https:// -> https://
+	url = url:gsub("^git://", "https://") -- git:// -> https://
+	if not url:match("%.git$") then
+		url = url .. ".git"
+	end
+	return url
+end
 ---@param name string # Used for error messages and git cache key
 ---@param url string # Rockspec URL
 ---@param branch string?
@@ -66,7 +76,7 @@ function util.openRockspecUrl(name, url, branch, commit)
 	---@type string, lpm.Lockfile.Dependency
 	local dir, lockEntry
 	if sourceUrl:match("^git") then
-		sourceUrl = sourceUrl:gsub("^git%+", "")
+		sourceUrl = util.normalizeGitUrl(sourceUrl)
 		dir = lpm.global.getOrInitGitRepo(name, sourceUrl, branch or sourceTag, commit)
 		lockEntry = { git = sourceUrl, commit = select(2, git.getCommitHash(dir)) or commit, rockspec = url }
 	elseif sourceUrl:match("^https?://") then
