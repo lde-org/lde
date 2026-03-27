@@ -1,7 +1,7 @@
 -- NOTE: These tests require network access — they clone from GitHub.
-local test = require("lpm-test")
+local test = require("lde-test")
 
-local lpm = require("lpm-core")
+local lde = require("lde-core")
 
 local fs = require("fs")
 local env = require("env")
@@ -29,7 +29,7 @@ local function makeProjectWithGitDep(name, extraDepFields)
 		dep[k] = v
 	end
 
-	fs.write(path.join(dir, "lpm.json"), json.encode({
+	fs.write(path.join(dir, "lde.json"), json.encode({
 		name = name,
 		version = "0.1.0",
 		dependencies = { [FIXTURE_NAME] = dep }
@@ -44,7 +44,7 @@ end
 
 test.it("installDependencies installs a git dependency", function()
 	local dir = makeProjectWithGitDep("git-basic")
-	local pkg = lpm.Package.open(dir)
+	local pkg = lde.Package.open(dir)
 	pkg:installDependencies()
 
 	local fixturePath = path.join(dir, "target", FIXTURE_NAME, "init.lua")
@@ -54,7 +54,7 @@ end)
 
 test.it("installDependencies writes a resolved commit to the lockfile for git deps", function()
 	local dir = makeProjectWithGitDep("git-lockfile")
-	local pkg = lpm.Package.open(dir)
+	local pkg = lde.Package.open(dir)
 	pkg:installDependencies()
 
 	local lockRaw = fs.read(path.join(dir, "lpm-lock.json"))
@@ -70,7 +70,7 @@ end)
 
 test.it("installDependencies uses the lockfile commit to skip re-cloning", function()
 	local dir = makeProjectWithGitDep("git-reuse")
-	local pkg = lpm.Package.open(dir)
+	local pkg = lde.Package.open(dir)
 
 	-- First install — clones and writes lockfile
 	pkg:installDependencies()
@@ -87,16 +87,16 @@ test.it("installDependencies uses the lockfile commit to skip re-cloning", funct
 	test.equal(commit1, commit2)
 end)
 
-test.it("installDependencies respects a pinned commit in lpm.json", function()
+test.it("installDependencies respects a pinned commit in lde.json", function()
 	-- Get the current HEAD commit first via an unpinned install
 	local refDir = makeProjectWithGitDep("git-pin-ref")
-	lpm.Package.open(refDir):installDependencies()
+	lde.Package.open(refDir):installDependencies()
 	local refLock = json.decode(fs.read(path.join(refDir, "lpm-lock.json")))
 	local headCommit = refLock.dependencies[FIXTURE_NAME].commit
 
 	-- Now install a project that pins to that exact commit
 	local dir = makeProjectWithGitDep("git-pinned", { commit = headCommit })
-	local pkg = lpm.Package.open(dir)
+	local pkg = lde.Package.open(dir)
 	pkg:installDependencies()
 
 	local lock = json.decode(fs.read(path.join(dir, "lpm-lock.json")))
@@ -117,7 +117,7 @@ test.it("rockspec git dep: middleclass can be required after install", function(
 		local a = Animal("cat")
 		assert(a.name == "cat", "expected name 'cat', got " .. tostring(a.name))
 	]])
-	fs.write(path.join(dir, "lpm.json"), json.encode({
+	fs.write(path.join(dir, "lde.json"), json.encode({
 		name = "middleclass-consumer",
 		version = "0.1.0",
 		dependencies = {
@@ -129,7 +129,7 @@ test.it("rockspec git dep: middleclass can be required after install", function(
 		}
 	}))
 
-	local pkg = lpm.Package.open(dir)
+	local pkg = lde.Package.open(dir)
 	pkg:installDependencies()
 	pkg:build()
 
@@ -150,7 +150,7 @@ test.skipIf(jit.os == "Windows" or jit.os == "OSX")("rockspec git dep: luafilesy
 		assert(attr ~= nil, "lfs.attributes returned nil")
 		assert(attr.mode == "directory", "expected directory, got " .. tostring(attr.mode))
 	]])
-	fs.write(path.join(dir, "lpm.json"), json.encode({
+	fs.write(path.join(dir, "lde.json"), json.encode({
 		name = "lfs-consumer",
 		version = "0.1.0",
 		dependencies = {
@@ -161,7 +161,7 @@ test.skipIf(jit.os == "Windows" or jit.os == "OSX")("rockspec git dep: luafilesy
 		}
 	}))
 
-	local pkg = lpm.Package.open(dir)
+	local pkg = lde.Package.open(dir)
 	pkg:installDependencies()
 	pkg:build()
 

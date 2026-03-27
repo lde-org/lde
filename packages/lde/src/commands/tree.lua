@@ -1,6 +1,6 @@
 local ansi = require("ansi")
 
-local lpm = require("lpm-core")
+local lde = require("lde-core")
 
 ---@type ansi.Color[]
 local depthColors = {
@@ -11,8 +11,8 @@ local depthColors = {
 
 ---@param _args clap.Args
 local function tree(_args)
-	---@param pkg lpm.Package
-	---@param cfg lpm.Config.Dependency?
+	---@param pkg lde.Package
+	---@param cfg lde.Config.Dependency?
 	---@param depth number?
 	local function printTree(pkg, cfg, depth)
 		depth = depth or 0
@@ -33,7 +33,7 @@ local function tree(_args)
 			ansi.printf("%s%s", indent, name)
 		end
 
-		local deps = {} ---@type { name: string, info: lpm.Config.Dependency }[]
+		local deps = {} ---@type { name: string, info: lde.Config.Dependency }[]
 		for name, info in pairs(pkg:getDependencies()) do
 			deps[#deps + 1] = { name = name, info = info }
 		end
@@ -43,7 +43,7 @@ local function tree(_args)
 		end)
 
 		for _, dep in ipairs(deps) do
-			local pkg, err = lpm.Package.open(pkg:getDependencyPath(dep.name, dep.info))
+			local pkg, err = lde.Package.open(pkg:getDependencyPath(dep.name, dep.info))
 			if not pkg then
 				ansi.printf("%s  {red}Failed to open package: %s", indent, err)
 				goto skip
@@ -54,7 +54,7 @@ local function tree(_args)
 		end
 	end
 
-	local pkg, err = lpm.Package.open()
+	local pkg, err = lde.Package.open()
 	if not pkg then
 		ansi.printf("{red}%s", err)
 		return

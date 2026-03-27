@@ -20,7 +20,7 @@ local builtinModules = {
 	["string.buffer"] = true
 }
 
----@class lpm.ExecuteOptions
+---@class lde.ExecuteOptions
 ---@field env table<string, string>?
 ---@field args string[]?
 ---@field globals table<string, any>?
@@ -56,7 +56,7 @@ local function restore(t, saved)
 end
 
 ---@param compile fun(): function?, string?
----@param opts lpm.ExecuteOptions?
+---@param opts lde.ExecuteOptions?
 local function executeWith(compile, opts)
 	opts = opts or {}
 
@@ -139,13 +139,13 @@ local function executeWith(compile, opts)
 end
 
 ---@param scriptPath string
----@param opts lpm.ExecuteOptions?
+---@param opts lde.ExecuteOptions?
 local function executeFile(scriptPath, opts)
 	return executeWith(function() return loadfile(scriptPath, "t") end, opts)
 end
 
 ---@param code string
----@param opts lpm.ExecuteOptions?
+---@param opts lde.ExecuteOptions?
 local function executeString(code, opts)
 	return executeWith(function()
 		return loadstring("return " .. code, "-e") or loadstring(code, "-e")
@@ -154,5 +154,5 @@ end
 
 return {
 	executeFile = executeFile,
-	executeString = executeString,
+	executeString = executeString
 }

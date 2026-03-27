@@ -1,6 +1,6 @@
----@alias lpm.Config.Dependencies table<string, lpm.Config.Dependency>
+---@alias lde.Config.Dependencies table<string, lde.Config.Dependency>
 
----@class lpm.Config
+---@class lde.Config
 ---@field name string
 ---@field version string
 ---@field description string?
@@ -8,43 +8,43 @@
 ---@field bin string?
 ---@field engine string?
 ---@field scripts table<string, string>?
----@field dependencies lpm.Config.Dependencies?
----@field devDependencies lpm.Config.Dependencies?
+---@field dependencies lde.Config.Dependencies?
+---@field devDependencies lde.Config.Dependencies?
 local Config = {}
 Config.__index = Config
 
----@param conf lpm.Config
+---@param conf lde.Config
 function Config.new(conf)
-	return setmetatable(conf, Config) --[[@as lpm.Config]]
+	return setmetatable(conf, Config) --[[@as lde.Config]]
 end
 
----@class lpm.Config.BaseDependency
+---@class lde.Config.BaseDependency
 ---@field name string? # The actual package name in the registry, when aliasing
 ---@field rockspec string? # Path to the rockspec file, relative to the dependency directory
 
----@class lpm.Config.GitDependency: lpm.Config.BaseDependency
+---@class lde.Config.GitDependency: lde.Config.BaseDependency
 ---@field git string
 ---@field commit string?
 ---@field branch string?
 
----@class lpm.Config.PathDependency: lpm.Config.BaseDependency
+---@class lde.Config.PathDependency: lde.Config.BaseDependency
 ---@field path string
 
----@class lpm.Config.RegistryDependency: lpm.Config.BaseDependency
+---@class lde.Config.RegistryDependency: lde.Config.BaseDependency
 ---@field version string # Pinned version from the lpm registry
 
----@class lpm.Config.LuarocksDependency: lpm.Config.BaseDependency
+---@class lde.Config.LuarocksDependency: lde.Config.BaseDependency
 ---@field luarocks string # Package name on luarocks.org
 ---@field version string? # Optional version constraint e.g. ">= 1.0"
 
----@class lpm.Config.ArchiveDependency: lpm.Config.BaseDependency
+---@class lde.Config.ArchiveDependency: lde.Config.BaseDependency
 ---@field archive string # URL to a .zip, .tar.gz, .tar.bz2, etc.
 
----@alias lpm.Config.Dependency
---- | lpm.Config.GitDependency
---- | lpm.Config.PathDependency
---- | lpm.Config.RegistryDependency
---- | lpm.Config.LuarocksDependency
---- | lpm.Config.ArchiveDependency
+---@alias lde.Config.Dependency
+--- | lde.Config.GitDependency
+--- | lde.Config.PathDependency
+--- | lde.Config.RegistryDependency
+--- | lde.Config.LuarocksDependency
+--- | lde.Config.ArchiveDependency
 
 return Config

@@ -1,4 +1,4 @@
-local test = require("lpm-test")
+local test = require("lde-test")
 
 local fs = require("fs")
 local env = require("env")
@@ -15,9 +15,10 @@ local repoRoot = path.join(path.dirname(thisFile), "..", "..", "..")
 
 local installScript = process.platform == "win32"
 	and path.join(repoRoot, "install.ps1")
-	or  path.join(repoRoot, "install.sh")
+	or path.join(repoRoot, "install.sh")
 
-test.skipIf(process.platform ~= "win32" or jit.arch ~= "x64")("install.ps1 installs lpm binary to %USERPROFILE%\\.lpm\\lpm.exe", function()
+test.skipIf(process.platform ~= "win32" or jit.arch ~= "x64")(
+"install.ps1 installs lpm binary to %USERPROFILE%\\.lpm\\lpm.exe", function()
 	local fakeProfile = path.join(tmpBase, "userprofile")
 	fs.mkdir(fakeProfile)
 

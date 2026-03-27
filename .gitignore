@@ -1,9 +1,8 @@
 target
 .luarc.json
 !/.luarc.json
-/lpm*
-lpm
-!lpm/
-!lpm/*
-lpm-lock.json
-lpm.lock
+/lde*
+lde
+!lde/
+!lde/*
+lde.lock

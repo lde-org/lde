@@ -3,7 +3,7 @@ local path = require("path")
 local ansi = require("ansi")
 local env = require("env")
 
-local lpm = require("lpm-core")
+local lde = require("lde-core")
 
 ---@param packageDir string
 ---@param msg string
@@ -12,7 +12,7 @@ local function makeRelative(packageDir, msg)
 	return (string.gsub(msg, prefix, ""))
 end
 
----@param results lpm.TestResults
+---@param results lde.TestResults
 ---@param indent string?
 ---@return boolean hadFailures
 local function printResults(results, indent)
@@ -67,7 +67,8 @@ end
 local function printSummary(failures, passed, total, skipped)
 	local skipStr = skipped > 0 and ansi.format(", {yellow}%d skipped", skipped) or ""
 	if failures > 0 then
-		ansi.printf("{white}Tests:  {red}%d failed{white}, {green}%d passed{white}, {cyan}%d total" .. skipStr, failures, passed, total)
+		ansi.printf("{white}Tests:  {red}%d failed{white}, {green}%d passed{white}, {cyan}%d total" .. skipStr, failures,
+			passed, total)
 	else
 		ansi.printf("{white}Tests:  {green}%d passed{white}, {cyan}%d total" .. skipStr, passed, total)
 	end
@@ -75,7 +76,7 @@ end
 
 ---@param _args clap.Args
 local function test(_args)
-	local package = lpm.Package.open()
+	local package = lde.Package.open()
 
 	print()
 
@@ -89,9 +90,9 @@ local function test(_args)
 
 		-- Collect results first so we can print the header with totals
 		local allResults = {}
-		for _, relativePath in ipairs(fs.scan(cwd, "**" .. path.separator .. "lpm.json")) do
+		for _, relativePath in ipairs(fs.scan(cwd, "**" .. path.separator .. "lde.json")) do
 			local configPath = path.join(cwd, relativePath)
-			local pkg = lpm.Package.open(path.dirname(configPath))
+			local pkg = lde.Package.open(path.dirname(configPath))
 			if pkg then
 				local results = pkg:runTests()
 				if not results.error then

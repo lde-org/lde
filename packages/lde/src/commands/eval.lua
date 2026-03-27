@@ -1,17 +1,16 @@
 local ansi = require("ansi")
-local runtime = require("lpm-core.runtime")
-local lpm = require("lpm-core")
+local lde = require("lde-core")
 
 ---@param code string
 local function eval(code)
-	local pkg = lpm.Package.open()
+	local pkg = lde.Package.open()
 
 	local ok, result
 	if pkg then
 		pkg:installDependencies()
 		ok, result = pkg:runString(code)
 	else
-		ok, result = runtime.executeString(code)
+		ok, result = lde.runtime.executeString(code)
 	end
 
 	if not ok then

@@ -78,7 +78,7 @@ local clap = require("clap")
 local env = require("env")
 local fs = require("fs")
 
-local lpm = require("lpm-core")
+local lde = require("lde-core")
 
 -- Enable UTF-8 console output on Windows
 if jit.os == "Windows" then
@@ -88,52 +88,52 @@ if jit.os == "Windows" then
 	end
 end
 
-lpm.global.init()
-lpm.verbose = true
+lde.global.init()
+lde.verbose = true
 
 local args = clap.parse({ ... })
 
 if args:flag("version") and args:count() == 0 then
-	print(lpm.global.currentVersion)
+	print(lde.global.currentVersion)
 	return
 end
 
 local evalCode = args:short("e")
 if evalCode then
-	require("lpm.commands.eval")(evalCode)
+	require("lde.commands.eval")(evalCode)
 	return
 end
 
 if args:count() == 0 and args:flag("help") then
-	require("lpm.commands.help")(args)
+	require("lde.commands.help")(args)
 	return
 end
 
 if args:flag("update-path") or args:flag("setup") then
-	require("lpm.setup")()
+	require("lde.setup")()
 	return
 end
 
 local commands = {}
-commands.help = require("lpm.commands.help")
-commands.init = require("lpm.commands.initialize")
-commands.new = require("lpm.commands.new")
-commands.upgrade = require("lpm.commands.upgrade")
-commands.add = require("lpm.commands.add")
-commands.remove = require("lpm.commands.remove")
-commands.run = require("lpm.commands.run")
-commands.x = require("lpm.commands.x")
-commands.install = require("lpm.commands.install")
+commands.help = require("lde.commands.help")
+commands.init = require("lde.commands.initialize")
+commands.new = require("lde.commands.new")
+commands.upgrade = require("lde.commands.upgrade")
+commands.add = require("lde.commands.add")
+commands.remove = require("lde.commands.remove")
+commands.run = require("lde.commands.run")
+commands.x = require("lde.commands.x")
+commands.install = require("lde.commands.install")
 commands.i = commands.install
-commands.bundle = require("lpm.commands.bundle")
-commands.compile = require("lpm.commands.compile")
-commands.test = require("lpm.commands.test")
-commands.tree = require("lpm.commands.tree")
-commands.update = require("lpm.commands.update")
-commands.outdated = require("lpm.commands.outdated")
-commands.uninstall = require("lpm.commands.uninstall")
-commands.publish = require("lpm.commands.publish")
-commands.repl = require("lpm.commands.repl")
+commands.bundle = require("lde.commands.bundle")
+commands.compile = require("lde.commands.compile")
+commands.test = require("lde.commands.test")
+commands.tree = require("lde.commands.tree")
+commands.update = require("lde.commands.update")
+commands.outdated = require("lde.commands.outdated")
+commands.uninstall = require("lde.commands.uninstall")
+commands.publish = require("lde.commands.publish")
+commands.repl = require("lde.commands.repl")
 
 local ok, err = xpcall(function()
 	local commandName = args:pop()
@@ -148,7 +148,7 @@ local ok, err = xpcall(function()
 		commandHandler(args)
 	else
 		-- Fall back to package scripts, then to a loose file if it exists
-		local pkg = lpm.Package.open()
+		local pkg = lde.Package.open()
 		local scripts = pkg and pkg:readConfig().scripts
 
 		if scripts and scripts[commandName] then

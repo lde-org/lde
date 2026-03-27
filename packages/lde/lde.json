@@ -12,7 +12,7 @@
 		"env": { "path": "../env" },
 		"http": { "path": "../http" },
 		"semver": { "path": "../semver" },
-		"lpm-core": { "path": "../lpm-core" },
+		"lde-core": { "path": "../lde-core" },
 		"winapi": { "git": "https://github.com/codebycruz/winapi" },
 		"git": { "path": "../git" },
 		"luarocks": { "path": "../luarocks" }

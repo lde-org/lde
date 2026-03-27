@@ -1,6 +1,6 @@
 ---@meta
 
----@type lpm.test
-local t = require("lpm-test.test").new()
+---@type lde.test
+local t = require("lde-test.test").new()
 
 return t

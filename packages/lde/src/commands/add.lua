@@ -2,7 +2,7 @@ local json = require("json")
 local ansi = require("ansi")
 local fs = require("fs")
 
-local lpm = require("lpm-core")
+local lde = require("lde-core")
 
 ---@param args clap.Args
 local function add(args)
@@ -29,7 +29,7 @@ local function add(args)
 
 	local registryVersion = args:option("version") or versionFromName
 
-	local p, err = lpm.Package.open()
+	local p, err = lde.Package.open()
 	if not p then
 		ansi.printf("{red}%s", err)
 		return
@@ -43,10 +43,10 @@ local function add(args)
 		return
 	end
 
-	---@type lpm.Config
+	---@type lde.Config
 	local config = json.decode(configRaw)
 
-	local dependencyTable ---@type lpm.Config.Dependencies
+	local dependencyTable ---@type lde.Config.Dependencies
 	if isDevelopment then
 		if not config.devDependencies then
 			config.devDependencies = {}
@@ -77,7 +77,7 @@ local function add(args)
 		local rocksName = name:match("^rocks:(.+)$")
 		name = rocksName
 
-		local _, _, err = lpm.util.openLuarocksPackage(rocksName, registryVersion)
+		local _, _, err = lde.util.openLuarocksPackage(rocksName, registryVersion)
 		if err then
 			ansi.printf("{red}%s", err)
 			return
@@ -87,15 +87,15 @@ local function add(args)
 		ansi.printf("{green}Added luarocks dependency: %s{reset}", rocksName)
 	else
 		-- Registry dependency
-		lpm.global.syncRegistry()
+		lde.global.syncRegistry()
 
-		local portfile, err = lpm.global.lookupRegistryPackage(name)
+		local portfile, err = lde.global.lookupRegistryPackage(name)
 		if not portfile then
 			ansi.printf("{red}%s", err)
 			return
 		end
 
-		local resolvedVersion = lpm.global.resolveRegistryVersion(portfile, registryVersion or nil)
+		local resolvedVersion = lde.global.resolveRegistryVersion(portfile, registryVersion or nil)
 		dep = { version = resolvedVersion }
 		ansi.printf("{green}Added dependency: %s{reset} ({cyan}version: %s{reset})", name, resolvedVersion)
 	end

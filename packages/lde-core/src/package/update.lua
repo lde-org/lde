@@ -4,13 +4,13 @@ local git = require("git")
 local semver = require("semver")
 local luarocks = require("luarocks")
 
-local global = require("lpm-core.global")
-local util = require("lpm-core.util")
+local global = require("lde-core.global")
+local util = require("lde-core.util")
 
 --- Updates a single git dependency by pulling latest changes.
 --- Only applies to git dependencies without a pinned commit.
 ---@param name string
----@param depInfo lpm.Config.GitDependency
+---@param depInfo lde.Config.GitDependency
 ---@return boolean updated
 ---@return string message
 local function updateGitDependency(name, depInfo)
@@ -32,10 +32,10 @@ local function updateGitDependency(name, depInfo)
 end
 
 --- Updates a registry dependency to the latest compatible version (same major).
---- Writes the new version back to lpm.json if updated.
----@param package lpm.Package
+--- Writes the new version back to lde.json if updated.
+---@param package lde.Package
 ---@param name string
----@param depInfo lpm.Config.RegistryDependency
+---@param depInfo lde.Config.RegistryDependency
 ---@return boolean updated
 ---@return string message
 local function updateRegistryDependency(package, name, depInfo)
@@ -59,7 +59,7 @@ local function updateRegistryDependency(package, name, depInfo)
 		return false, "already up to date (" .. depInfo.version .. ")"
 	end
 
-	-- Write the updated version back to lpm.json
+	-- Write the updated version back to lde.json
 	local configPath = package:getConfigPath()
 	local configRaw = fs.read(configPath)
 	if not configRaw then
@@ -79,9 +79,9 @@ local function updateRegistryDependency(package, name, depInfo)
 end
 
 --- Updates a luarocks dependency to the latest version.
----@param package lpm.Package
+---@param package lde.Package
 ---@param name string
----@param depInfo lpm.Config.Dependency
+---@param depInfo lde.Config.Dependency
 ---@return boolean updated
 ---@return string message
 local function updateLuarocksDependency(package, name, depInfo)
@@ -114,8 +114,8 @@ local function updateLuarocksDependency(package, name, depInfo)
 end
 
 --- Updates all dependencies for a package.
----@param package lpm.Package
----@param dependencies table<string, lpm.Config.Dependency>?
+---@param package lde.Package
+---@param dependencies table<string, lde.Config.Dependency>?
 ---@return table<string, { updated: boolean, message: string }>
 local function updateDependencies(package, dependencies)
 	dependencies = dependencies or package:getDependencies()
@@ -123,9 +123,9 @@ local function updateDependencies(package, dependencies)
 	local results = {}
 	for name, depInfo in pairs(dependencies) do
 		local updated, message
-		if depInfo.version then ---@cast depInfo lpm.Config.RegistryDependency
+		if depInfo.version then ---@cast depInfo lde.Config.RegistryDependency
 			updated, message = updateRegistryDependency(package, name, depInfo)
-		elseif depInfo.git then ---@cast depInfo lpm.Config.GitDependency
+		elseif depInfo.git then ---@cast depInfo lde.Config.GitDependency
 			updated, message = updateGitDependency(name, depInfo)
 		elseif depInfo.luarocks then
 			updated, message = updateLuarocksDependency(package, name, depInfo)

@@ -1,6 +1,6 @@
-local test = require("lpm-test")
+local test = require("lde-test")
 
-local lpm = require("lpm-core")
+local lde = require("lde-core")
 
 local fs = require("fs")
 local env = require("env")
@@ -13,7 +13,7 @@ local tmpBase = path.join(env.tmpdir(), "lpm-lockfile-tests")
 fs.rmdir(tmpBase)
 
 test.it("Lockfile.new creates a lockfile with version and dependencies", function()
-	local lf = lpm.Lockfile.new(path.join(tmpBase, "test-lock.json"), {
+	local lf = lde.Lockfile.new(path.join(tmpBase, "test-lock.json"), {
 		foo = { path = "../foo" }
 	})
 
@@ -22,7 +22,7 @@ test.it("Lockfile.new creates a lockfile with version and dependencies", functio
 end)
 
 test.it("Lockfile.new with empty dependencies", function()
-	local lf = lpm.Lockfile.new(path.join(tmpBase, "empty-lock.json"), {})
+	local lf = lde.Lockfile.new(path.join(tmpBase, "empty-lock.json"), {})
 
 	test.equal(lf:getVersion(), "1")
 	local deps = lf:getDependencies()
@@ -36,7 +36,7 @@ test.it("Lockfile:save writes to disk and Lockfile.open reads it back", function
 
 	local lockPath = path.join(dir, "lpm-lock.json")
 
-	local lf = lpm.Lockfile.new(lockPath, {
+	local lf = lde.Lockfile.new(lockPath, {
 		alpha = { path = "../alpha" },
 		beta = { git = "https://example.com/beta.git", commit = "abc123", branch = "main" }
 	})
@@ -45,7 +45,7 @@ test.it("Lockfile:save writes to disk and Lockfile.open reads it back", function
 
 	test.truthy(fs.exists(lockPath))
 
-	local loaded = lpm.Lockfile.open(lockPath)
+	local loaded = lde.Lockfile.open(lockPath)
 	test.equal(loaded:getVersion(), "1")
 	test.match(loaded:getDependency("alpha"), { path = "../alpha" })
 	test.match(loaded:getDependency("beta"), {
@@ -56,12 +56,12 @@ test.it("Lockfile:save writes to disk and Lockfile.open reads it back", function
 end)
 
 test.it("Lockfile.open returns nil for a missing file", function()
-	local result = lpm.Lockfile.open(path.join(tmpBase, "does-not-exist.json"))
+	local result = lde.Lockfile.open(path.join(tmpBase, "does-not-exist.json"))
 	test.falsy(result)
 end)
 
 test.it("Lockfile:getDependency returns nil for unknown dependency", function()
-	local lf = lpm.Lockfile.new(path.join(tmpBase, "x.json"), {
+	local lf = lde.Lockfile.new(path.join(tmpBase, "x.json"), {
 		known = { path = "../known" }
 	})
 
@@ -75,7 +75,7 @@ test.it("Lockfile:save produces valid JSON", function()
 
 	local lockPath = path.join(dir, "lpm-lock.json")
 
-	local lf = lpm.Lockfile.new(lockPath, {
+	local lf = lde.Lockfile.new(lockPath, {
 		mylib = { path = "../mylib" }
 	})
 

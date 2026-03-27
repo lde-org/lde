@@ -9,7 +9,7 @@ local path = require("path")
 local process = require("process")
 local rocked = require("rocked")
 local semver = require("semver")
-local lpm = require("lpm-core")
+local lde = require("lde-core")
 local ansi = require("ansi")
 local util = require("util")
 
@@ -17,7 +17,7 @@ local REGISTRY_URL = "https://github.com/codebycruz/lpm-registry"
 
 global.currentVersion = "0.8.0"
 
----@class lpm.Portfile
+---@class lde.Portfile
 ---@field name string
 ---@field git string
 ---@field versions table<string, string> # version -> commit hash
@@ -78,7 +78,7 @@ function global.syncRegistry()
 end
 
 ---@param name string
----@return lpm.Portfile?
+---@return lde.Portfile?
 ---@return string? err
 function global.lookupRegistryPackage(name)
 	local portfilePath = path.join(global.getRegistryDir(), "packages", name .. ".json")
@@ -90,7 +90,7 @@ function global.lookupRegistryPackage(name)
 end
 
 --- Resolves a version string (or nil for latest) to a commit hash.
----@param portfile lpm.Portfile
+---@param portfile lde.Portfile
 ---@param version string? # nil means latest
 ---@return string version
 ---@return string commit
@@ -160,7 +160,8 @@ end
 function global.getOrInitGitRepo(repoName, repoUrl, branch, commit)
 	local repoDir = global.getGitRepoDir(repoName, branch, commit)
 	if not fs.exists(repoDir) then
-		local p = lpm.verbose and ansi.progress("Cloning " .. repoName .. " " .. ansi.format("{gray}(" .. repoUrl .. ")")) or nil
+		local p = lde.verbose and
+			ansi.progress("Cloning " .. repoName .. " " .. ansi.format("{gray}(" .. repoUrl .. ")")) or nil
 		local ok, err = global.cloneDir(repoName, repoUrl, branch, commit)
 		if not ok then
 			if p then p:fail("Cloning " .. repoName) end
@@ -181,7 +182,7 @@ function global.getOrInitArchive(url)
 	local archiveDir = path.join(global.getTarCacheDir(), key)
 	if not fs.exists(archiveDir) then
 		local label = "Downloading " .. (url:match("([^/]+)$") or url)
-		local p = lpm.verbose and ansi.progress(label) or nil
+		local p = lde.verbose and ansi.progress(label) or nil
 		fs.mkdir(archiveDir)
 		local archiveFile = archiveDir .. ".archive"
 		local ok, err = process.exec("curl", { "-sL", "-o", archiveFile, url })
@@ -251,15 +252,15 @@ function global.getOrCloneRepo(repoName, cloneUrl, branch)
 	return repoDir
 end
 
---- Finds a named package inside a directory by scanning for lpm.json files.
+--- Finds a named package inside a directory by scanning for lde.json files.
 ---@param dir string
 ---@param name string
----@return table? pkg  (lpm.Package)
+---@return lde.Package? pkg
 ---@return string? err
 function global.findNamedPackageIn(dir, name)
-	for _, config in ipairs(fs.scan(dir, "**" .. path.separator .. "lpm.json")) do
+	for _, config in ipairs(fs.scan(dir, "**" .. path.separator .. "lde.json")) do
 		local parentDir = path.join(dir, path.dirname(config))
-		local pkg = lpm.Package.open(parentDir)
+		local pkg = lde.Package.open(parentDir)
 		if pkg and pkg:getName() == name then
 			return pkg, nil
 		end

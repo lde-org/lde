@@ -1,13 +1,13 @@
----@alias lpm.test.Result
+---@alias lde.test.Result
 --- | { name: string, ok: true }
 --- | { name: string, ok: false, error: string }
 --- | { name: string, ok: true, skipped: true }
 
----@class lpm.test
+---@class lde.test
 ---@field it fun(name: string, fn: fun())
 ---@field skip fun(name: string, fn: fun()?)
 ---@field skipIf fun(condition: boolean): fun(name: string, fn: fun())
----@field run fun(): lpm.test.Result[]
+---@field run fun(): lde.test.Result[]
 ---@field equal fun(a: any, b: any)
 ---@field notEqual fun(a: any, b: any)
 ---@field truthy fun(value: any)
@@ -170,7 +170,7 @@ local function match(actual, expected)
 end
 
 --- Creates a fresh, independent test instance.
----@return lpm.test
+---@return lde.test
 function M.new()
 	local callbacks = {}
 
@@ -188,12 +188,12 @@ function M.new()
 		return function(name, fn)
 			table.insert(callbacks, condition
 				and { name = name, skipped = true }
-				or  { name = name, callback = fn })
+				or { name = name, callback = fn })
 		end
 	end
 
 	function instance.run()
-		---@type lpm.test.Result[]
+		---@type lde.test.Result[]
 		local results = {}
 
 		for _, callback in ipairs(callbacks) do

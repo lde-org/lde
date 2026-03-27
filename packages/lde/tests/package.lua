@@ -1,6 +1,6 @@
-local test = require("lpm-test")
+local test = require("lde-test")
 
-local lpm = require("lpm-core")
+local lde = require("lde-core")
 
 local fs = require("fs")
 local env = require("env")
@@ -12,7 +12,7 @@ local tmpBase = path.join(env.tmpdir(), "lpm-package-tests")
 -- Clean up from any previous test run
 fs.rmdir(tmpBase)
 
---- Creates a minimal package directory with lpm.json inside a test callback.
+--- Creates a minimal package directory with lde.json inside a test callback.
 local function makePackageDir(name, config)
 	fs.mkdir(tmpBase)
 	local dir = path.join(tmpBase, name)
@@ -24,7 +24,7 @@ local function makePackageDir(name, config)
 		dependencies = {}
 	}
 
-	fs.write(path.join(dir, "lpm.json"), json.encode(config))
+	fs.write(path.join(dir, "lde.json"), json.encode(config))
 	return dir
 end
 
@@ -32,25 +32,25 @@ end
 -- Package.open
 --
 
-test.it("Package.open succeeds for a directory with lpm.json", function()
+test.it("Package.open succeeds for a directory with lde.json", function()
 	local dir = makePackageDir("valid-pkg")
-	local pkg, err = lpm.Package.open(dir)
+	local pkg, err = lde.Package.open(dir)
 	test.truthy(pkg)
 	test.falsy(err)
 end)
 
-test.it("Package.open fails for a directory without lpm.json", function()
+test.it("Package.open fails for a directory without lde.json", function()
 	fs.mkdir(tmpBase)
 	local dir = path.join(tmpBase, "no-config")
 	fs.mkdir(dir)
 
-	local pkg, err = lpm.Package.open(dir)
+	local pkg, err = lde.Package.open(dir)
 	test.falsy(pkg)
 	test.truthy(err)
 end)
 
 test.it("Package.open fails for a nonexistent directory", function()
-	local pkg, err = lpm.Package.open(path.join(tmpBase, "does-not-exist"))
+	local pkg, err = lde.Package.open(path.join(tmpBase, "does-not-exist"))
 	test.falsy(pkg)
 	test.truthy(err)
 end)
@@ -61,36 +61,36 @@ end)
 
 test.it("Package:getDir returns the directory it was opened from", function()
 	local dir = makePackageDir("dir-pkg")
-	local pkg = lpm.Package.open(dir)
+	local pkg = lde.Package.open(dir)
 	test.equal(pkg:getDir(), dir)
 end)
 
-test.it("Package:getName reads the name from lpm.json", function()
+test.it("Package:getName reads the name from lde.json", function()
 	local dir = makePackageDir("named-pkg", {
 		name = "my-cool-lib",
 		version = "2.0.0",
 		dependencies = {}
 	})
 
-	local pkg = lpm.Package.open(dir)
+	local pkg = lde.Package.open(dir)
 	test.equal(pkg:getName(), "my-cool-lib")
 end)
 
 test.it("Package:getSrcDir returns <dir>/src", function()
 	local dir = makePackageDir("src-pkg")
-	local pkg = lpm.Package.open(dir)
+	local pkg = lde.Package.open(dir)
 	test.equal(pkg:getSrcDir(), path.join(dir, "src"))
 end)
 
 test.it("Package:getTestDir returns <dir>/tests", function()
 	local dir = makePackageDir("test-pkg")
-	local pkg = lpm.Package.open(dir)
+	local pkg = lde.Package.open(dir)
 	test.equal(pkg:getTestDir(), path.join(dir, "tests"))
 end)
 
 test.it("Package:getModulesDir returns <dir>/target", function()
 	local dir = makePackageDir("mod-pkg")
-	local pkg = lpm.Package.open(dir)
+	local pkg = lde.Package.open(dir)
 	test.equal(pkg:getModulesDir(), path.join(dir, "target"))
 end)
 
@@ -101,7 +101,7 @@ test.it("Package:getTargetDir returns <dir>/target/<name>", function()
 		dependencies = {}
 	})
 
-	local pkg = lpm.Package.open(dir)
+	local pkg = lde.Package.open(dir)
 	test.equal(pkg:getTargetDir(), path.join(dir, "target", "target-pkg"))
 end)
 
@@ -118,7 +118,7 @@ test.it("Package:readConfig returns the parsed config", function()
 		}
 	})
 
-	local pkg = lpm.Package.open(dir)
+	local pkg = lde.Package.open(dir)
 	local config = pkg:readConfig()
 	test.equal(config.name, "read-cfg")
 	test.equal(config.version, "3.5.0")
@@ -127,7 +127,7 @@ end)
 
 test.it("Package:readConfig caches and returns the same object", function()
 	local dir = makePackageDir("cache-cfg")
-	local pkg = lpm.Package.open(dir)
+	local pkg = lde.Package.open(dir)
 
 	local c1 = pkg:readConfig()
 	local c2 = pkg:readConfig()
@@ -148,7 +148,7 @@ test.it("Package:getDependencies returns dependencies from config", function()
 		}
 	})
 
-	local pkg = lpm.Package.open(dir)
+	local pkg = lde.Package.open(dir)
 	local deps = pkg:getDependencies()
 	test.equal(deps.a.path, "../a")
 	test.equal(deps.b.path, "../b")
@@ -156,7 +156,7 @@ end)
 
 test.it("Package:getDependencies returns empty table when none defined", function()
 	local dir = makePackageDir("no-deps")
-	local pkg = lpm.Package.open(dir)
+	local pkg = lde.Package.open(dir)
 	local deps = pkg:getDependencies()
 	test.equal(test.count(deps), 0)
 end)
@@ -171,7 +171,7 @@ test.it("Package:getDevDependencies returns devDependencies from config", functi
 		}
 	})
 
-	local pkg = lpm.Package.open(dir)
+	local pkg = lde.Package.open(dir)
 	local devDeps = pkg:getDevDependencies()
 	test.equal(devDeps.testutil.path, "../testutil")
 end)
@@ -182,7 +182,7 @@ end)
 
 test.it("Package tostring includes the directory", function()
 	local dir = makePackageDir("str-pkg")
-	local pkg = lpm.Package.open(dir)
+	local pkg = lde.Package.open(dir)
 	local s = tostring(pkg)
 	test.equal(s, "Package(" .. dir .. ")")
 end)
@@ -222,7 +222,7 @@ test.it("rockspec dep: can require(packagename) from a consumer package", functi
 		local dep = require("rock-dep")
 		assert(dep.value == 42, "expected value 42, got " .. tostring(dep.value))
 	]])
-	fs.write(path.join(appDir, "lpm.json"), json.encode({
+	fs.write(path.join(appDir, "lde.json"), json.encode({
 		name = "rock-consumer",
 		version = "0.1.0",
 		dependencies = {
@@ -230,7 +230,7 @@ test.it("rockspec dep: can require(packagename) from a consumer package", functi
 		}
 	}))
 
-	local app = lpm.Package.open(appDir)
+	local app = lde.Package.open(appDir)
 	app:installDependencies()
 	app:build()
 
@@ -244,15 +244,15 @@ test.it("rockspec dep: can require(packagename) from a consumer package", functi
 end)
 
 test.skipIf(jit.os == "Windows" or jit.os == "OSX")(
-"rockspec native C module: can require and call a C function returning 52", function()
-	fs.mkdir(tmpBase)
+	"rockspec native C module: can require and call a C function returning 52", function()
+		fs.mkdir(tmpBase)
 
-	local rockDir = path.join(tmpBase, "native-rock")
-	fs.mkdir(rockDir)
-	fs.mkdir(path.join(rockDir, "csrc"))
+		local rockDir = path.join(tmpBase, "native-rock")
+		fs.mkdir(rockDir)
+		fs.mkdir(path.join(rockDir, "csrc"))
 
-	-- Minimal C module using raw Lua ABI, no headers needed
-	fs.write(path.join(rockDir, "csrc", "answer.c"), [[
+		-- Minimal C module using raw Lua ABI, no headers needed
+		fs.write(path.join(rockDir, "csrc", "answer.c"), [[
 #include <stddef.h>
 
 typedef struct lua_State lua_State;
@@ -276,7 +276,7 @@ int luaopen_answer(lua_State *L) {
 }
 ]])
 
-	fs.write(path.join(rockDir, "native-rock-1.0.0-1.rockspec"), [[
+		fs.write(path.join(rockDir, "native-rock-1.0.0-1.rockspec"), [[
 		package = "native-rock"
 		version = "1.0.0-1"
 		source = { url = "git://example.com/native-rock" }
@@ -288,28 +288,28 @@ int luaopen_answer(lua_State *L) {
 		}
 	]])
 
-	local appDir = path.join(tmpBase, "native-consumer")
-	fs.mkdir(appDir)
-	fs.mkdir(path.join(appDir, "src"))
-	fs.write(path.join(appDir, "src", "init.lua"), [[
+		local appDir = path.join(tmpBase, "native-consumer")
+		fs.mkdir(appDir)
+		fs.mkdir(path.join(appDir, "src"))
+		fs.write(path.join(appDir, "src", "init.lua"), [[
 		local m = require("answer")
 		assert(m.answer() == 52, "expected 52, got " .. tostring(m.answer()))
 	]])
-	fs.write(path.join(appDir, "lpm.json"), json.encode({
-		name = "native-consumer",
-		version = "0.1.0",
-		dependencies = {
-			["native-rock"] = { path = "../native-rock" }
-		}
-	}))
+		fs.write(path.join(appDir, "lde.json"), json.encode({
+			name = "native-consumer",
+			version = "0.1.0",
+			dependencies = {
+				["native-rock"] = { path = "../native-rock" }
+			}
+		}))
 
-	local app = lpm.Package.open(appDir)
-	app:installDependencies()
-	app:build()
+		local app = lde.Package.open(appDir)
+		app:installDependencies()
+		app:build()
 
-	test.truthy(fs.exists(path.join(appDir, "target", "answer.so")))
+		test.truthy(fs.exists(path.join(appDir, "target", "answer.so")))
 
-	local ok, err = app:runFile()
-	if not ok then print(err) end
-	test.truthy(ok)
-end)
+		local ok, err = app:runFile()
+		if not ok then print(err) end
+		test.truthy(ok)
+	end)

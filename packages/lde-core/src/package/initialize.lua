@@ -4,7 +4,7 @@ local util = require("util")
 local ansi = require("ansi")
 local git = require("git")
 
-local Package = require("lpm-core.package")
+local Package = require("lde-core.package")
 
 local function hasGit()
 	return git.version() == true
@@ -17,12 +17,12 @@ local function isInsideGitRepo(dir)
 end
 
 --- Initializes a package at the given directory.
---- If the directory already contains an lpm.json, this will throw an error to avoid overwriting existing packages.
+--- If the directory already contains an lde.json, this will throw an error to avoid overwriting existing packages.
 ---@param dir string
 local function initPackage(dir)
-	local configPath = path.join(dir, "lpm.json")
+	local configPath = path.join(dir, "lde.json")
 	if fs.exists(configPath) then
-		error("Directory already contains lpm.json: " .. dir)
+		error("Directory already contains lde.json: " .. dir)
 	end
 
 	fs.write(configPath, util.dedent([[

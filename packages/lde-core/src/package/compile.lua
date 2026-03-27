@@ -7,7 +7,7 @@ local nativeExt = process.platform == "win32" and "dll"
 	or process.platform == "darwin" and "dylib"
 	or "so"
 
----@param package lpm.Package
+---@param package lde.Package
 local function compilePackage(package)
 	package:build()
 	package:installDependencies()

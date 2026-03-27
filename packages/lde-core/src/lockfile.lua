@@ -1,38 +1,38 @@
 local fs = require("fs")
 local json = require("json")
 
----@class lpm.Lockfile.BaseDependency
+---@class lde.Lockfile.BaseDependency
 ---@field name string?
 ---@field rockspec string? # URL or relative path to the rockspec file
 
----@class lpm.Lockfile.GitDependency: lpm.Lockfile.BaseDependency
+---@class lde.Lockfile.GitDependency: lde.Lockfile.BaseDependency
 ---@field git string
 ---@field commit string # Always resolved to a specific commit hash
 ---@field branch string?
 
----@class lpm.Lockfile.PathDependency: lpm.Lockfile.BaseDependency
+---@class lde.Lockfile.PathDependency: lde.Lockfile.BaseDependency
 ---@field path string
 
----@class lpm.Lockfile.ArchiveDependency: lpm.Lockfile.BaseDependency
+---@class lde.Lockfile.ArchiveDependency: lde.Lockfile.BaseDependency
 ---@field archive string # URL to the archive
 
----@alias lpm.Lockfile.Dependency
---- | lpm.Lockfile.GitDependency
---- | lpm.Lockfile.PathDependency
---- | lpm.Lockfile.ArchiveDependency
+---@alias lde.Lockfile.Dependency
+--- | lde.Lockfile.GitDependency
+--- | lde.Lockfile.PathDependency
+--- | lde.Lockfile.ArchiveDependency
 
----@class lpm.Lockfile.Raw
+---@class lde.Lockfile.Raw
 ---@field version "1"
----@field dependencies table<string, lpm.Lockfile.Dependency>
+---@field dependencies table<string, lde.Lockfile.Dependency>
 
----@class lpm.Lockfile
+---@class lde.Lockfile
 ---@field path string
----@field raw lpm.Lockfile.Raw
+---@field raw lde.Lockfile.Raw
 local Lockfile = {}
 Lockfile.__index = Lockfile
 
 ---@param p string
----@return lpm.Lockfile?
+---@return lde.Lockfile?
 function Lockfile.open(p)
 	local content = fs.read(p)
 	if not content then
@@ -43,7 +43,7 @@ function Lockfile.open(p)
 end
 
 ---@param p string
----@param dependencies table<string, lpm.Lockfile.Dependency>
+---@param dependencies table<string, lde.Lockfile.Dependency>
 function Lockfile.new(p, dependencies)
 	return setmetatable({
 		path = p,
@@ -72,7 +72,7 @@ function Lockfile:getDependencies()
 end
 
 ---@param name string
----@return lpm.Lockfile.Dependency?
+---@return lde.Lockfile.Dependency?
 function Lockfile:getDependency(name)
 	return self:getDependencies()[name]
 end

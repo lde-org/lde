@@ -6,7 +6,7 @@ local path = require("path")
 local git = require("git")
 local rocked = require("rocked")
 local ansi = require("ansi")
-local lpm = require("lpm-core")
+local lde = require("lde-core")
 local luarocks = require("luarocks")
 
 local MANIFEST_URL = "https://luarocks.org/manifest"
@@ -19,7 +19,7 @@ local cachedManifest
 local function getManifest()
 	if cachedManifest then return cachedManifest end
 
-	local cacheFile = path.join(lpm.global.getDir(), "luarocks-manifest.raw")
+	local cacheFile = path.join(lde.global.getDir(), "luarocks-manifest.raw")
 
 	local stat = fs.stat(cacheFile)
 	if stat and (os.time() - stat.modifyTime) < MANIFEST_TTL then
@@ -30,7 +30,7 @@ local function getManifest()
 		end
 	end
 
-	local p = lpm.verbose and ansi.progress("Fetching luarocks manifest") or nil
+	local p = lde.verbose and ansi.progress("Fetching luarocks manifest") or nil
 	local content, err = http.get(MANIFEST_URL)
 	if not content then
 		if p then p:fail() end
@@ -54,11 +54,12 @@ function util.normalizeGitUrl(url)
 	end
 	return url
 end
+
 ---@param name string # Used for error messages and git cache key
 ---@param url string # Rockspec URL
 ---@param branch string?
 ---@param commit string?
----@return lpm.Package?, lpm.Lockfile.Dependency?, string?
+---@return lde.Package?, lde.Lockfile.Dependency?, string?
 function util.openRockspecUrl(name, url, branch, commit)
 	local content, fetchErr = http.get(url)
 	if not content then
@@ -73,27 +74,27 @@ function util.openRockspecUrl(name, url, branch, commit)
 	local sourceUrl = spec.source.url
 	local sourceTag = spec.source.tag
 
-	---@type string, lpm.Lockfile.Dependency
+	---@type string, lde.Lockfile.Dependency
 	local dir, lockEntry
 	if sourceUrl:match("^git") then
 		sourceUrl = util.normalizeGitUrl(sourceUrl)
-		dir = lpm.global.getOrInitGitRepo(name, sourceUrl, branch or sourceTag, commit)
+		dir = lde.global.getOrInitGitRepo(name, sourceUrl, branch or sourceTag, commit)
 		lockEntry = { git = sourceUrl, commit = select(2, git.getCommitHash(dir)) or commit, rockspec = url }
 	elseif sourceUrl:match("^https?://") then
-		dir = lpm.global.getOrInitArchive(sourceUrl)
+		dir = lde.global.getOrInitArchive(sourceUrl)
 		lockEntry = { archive = sourceUrl, rockspec = url }
 	else
 		return nil, nil, "Unsupported source for '" .. name .. "': " .. sourceUrl
 	end
 
-	local pkg, err = lpm.Package.openRockspec(dir, url)
+	local pkg, err = lde.Package.openRockspec(dir, url)
 	return pkg, lockEntry, err
 end
 
 --- Resolves a luarocks package name/version to a Package via the luarocks registry.
 ---@param name string
 ---@param version string?
----@return lpm.Package?, lpm.Lockfile.Dependency?, string?
+---@return lde.Package?, lde.Lockfile.Dependency?, string?
 function util.openLuarocksPackage(name, version)
 	local manifest, err = getManifest()
 	if not manifest then return nil, nil, err end

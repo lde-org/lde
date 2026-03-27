@@ -1,11 +1,11 @@
 local env = require("env")
 local fs = require("fs")
 
-local lpm = require("lpm-core")
+local lde = require("lde-core")
 
 ---@param args clap.Args
 local function run(args)
-	local pkg, pkgErr = lpm.Package.open()
+	local pkg, pkgErr = lde.Package.open()
 
 	local scriptArgs = {}
 	local name = nil ---@type string?
@@ -23,7 +23,7 @@ local function run(args)
 
 	if not pkg then
 		if name and fs.exists(name) then
-			local ok, err = lpm.runtime.executeFile(name, {
+			local ok, err = lde.runtime.executeFile(name, {
 				args = scriptArgs,
 				cwd = env.cwd(),
 				packagePath = "",

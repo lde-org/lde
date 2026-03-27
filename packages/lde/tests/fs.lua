@@ -1,4 +1,4 @@
-local test = require("lpm-test")
+local test = require("lde-test")
 
 local fs = require("fs")
 local env = require("env")

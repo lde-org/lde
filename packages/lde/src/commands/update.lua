@@ -1,6 +1,6 @@
 local ansi = require("ansi")
 
-local lpm = require("lpm-core")
+local lde = require("lde-core")
 
 ---@param results table<string, { updated: boolean, message: string }>
 local function printResults(results)
@@ -15,7 +15,7 @@ end
 
 ---@param args clap.Args
 local function update(args)
-	local pkg, err = lpm.Package.open()
+	local pkg, err = lde.Package.open()
 	if not pkg then
 		ansi.printf("{red}%s", err)
 		return

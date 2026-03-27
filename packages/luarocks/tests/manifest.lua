@@ -1,4 +1,4 @@
-local test = require("lpm-test")
+local test = require("lde-test")
 local luarocks = require("luarocks")
 local Manifest = luarocks.Manifest
 

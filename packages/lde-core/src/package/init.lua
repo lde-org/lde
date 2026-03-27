@@ -1,7 +1,7 @@
-local Config = require("lpm-core.config")
-local Lockfile = require("lpm-core.lockfile")
+local Config = require("lde-core.config")
+local Lockfile = require("lde-core.lockfile")
 
-local global = require("lpm-core.global")
+local global = require("lde-core.global")
 
 local fs = require("fs")
 local env = require("env")
@@ -9,11 +9,11 @@ local json = require("json")
 local path = require("path")
 local process = require("process")
 
----@class lpm.Package
+---@class lde.Package
 ---@field dir string
----@field cachedConfig lpm.Config?
+---@field cachedConfig lde.Config?
 ---@field cachedConfigMtime number?
----@field buildfn (fun(pkg: lpm.Package, outputDir: string): boolean, string?)?
+---@field buildfn (fun(pkg: lde.Package, outputDir: string): boolean, string?)?
 local Package = {}
 Package.__index = Package
 
@@ -22,7 +22,7 @@ package.loaded[(...)] = Package
 
 ---@param dir string
 local function configPathAtDir(dir)
-	return path.join(dir, "lpm.json")
+	return path.join(dir, "lde.json")
 end
 
 function Package:getDir() return self.dir end
@@ -43,7 +43,7 @@ function Package:getConfigPath() return configPathAtDir(self.dir) end
 
 function Package:getLockfilePath() return path.join(self.dir, "lpm-lock.json") end
 
----@param pkg lpm.Package
+---@param pkg lde.Package
 ---@param outputDir string
 local function defaultBuildFn(pkg, outputDir)
 	fs.copy(pkg:getSrcDir(), outputDir)
@@ -68,23 +68,23 @@ function Package:runBuildScript(outputDir)
 end
 
 ---@param dir string?
----@return lpm.Package?, string?
+---@return lde.Package?, string?
 function Package.openLPM(dir)
 	dir = dir or env.cwd()
 
 	local configPath = configPathAtDir(dir)
 	if not fs.exists(configPath) then
-		return nil, "No lpm.json found in directory: " .. dir
+		return nil, "No lde.json found in directory: " .. dir
 	end
 
 	return setmetatable({ dir = dir }, Package), nil
 end
 
-Package.openRockspec = require("lpm-core.package.rockspec")
+Package.openRockspec = require("lde-core.package.rockspec")
 
 ---@param dir string?
----@param rockspec string? # Path to rockspec, forwarded to openRockspec if no lpm.json
----@return lpm.Package?, string?
+---@param rockspec string? # Path to rockspec, forwarded to openRockspec if no lde.json
+---@return lde.Package?, string?
 function Package.open(dir, rockspec)
 	dir = dir or env.cwd()
 
@@ -95,13 +95,13 @@ function Package.open(dir, rockspec)
 	return Package.openRockspec(dir, rockspec)
 end
 
----@return lpm.Config
+---@return lde.Config
 function Package:readConfig()
 	local configPath = self:getConfigPath()
 
 	local s = fs.stat(configPath)
 	if not s then
-		error("Could not read lpm.json: " .. configPath)
+		error("Could not read lde.json: " .. configPath)
 	end
 
 	if self.cachedConfig and self.cachedConfigMtime == s.modifyTime then
@@ -110,7 +110,7 @@ function Package:readConfig()
 
 	local content = fs.read(configPath)
 	if not content then
-		error("Could not read lpm.json: " .. configPath)
+		error("Could not read lde.json: " .. configPath)
 	end
 
 	local newConfig = Config.new(json.decode(content))
@@ -120,12 +120,12 @@ function Package:readConfig()
 	return newConfig
 end
 
----@return lpm.Lockfile?
+---@return lde.Lockfile?
 function Package:readLockfile()
 	return Lockfile.open(self:getLockfilePath())
 end
 
-Package.init = require("lpm-core.package.initialize")
+Package.init = require("lde-core.package.initialize")
 
 function Package:__tostring()
 	return "Package(" .. self.dir .. ")"
@@ -137,7 +137,7 @@ function Package:getDependencies()
 	local lockfile = self:readLockfile()
 	if not lockfile then return deps end
 
-	-- Prefer locked versions (which have pinned commits) over lpm.json
+	-- Prefer locked versions (which have pinned commits) over lde.json
 	local merged = {}
 	for name, depInfo in pairs(deps) do
 		merged[name] = lockfile:getDependency(name) or depInfo
@@ -153,10 +153,10 @@ function Package:getName()
 	return self:readConfig().name
 end
 
-Package.build = require("lpm-core.package.build")
+Package.build = require("lde-core.package.build")
 
 ---@param dir string
----@param info lpm.Config.Dependency
+---@param info lde.Config.Dependency
 ---@param relativeTo string?
 function Package:getDependencyPath(dir, info, relativeTo)
 	relativeTo = relativeTo or self.dir
@@ -170,32 +170,32 @@ function Package:getDependencyPath(dir, info, relativeTo)
 	end
 end
 
-Package.installDependencies = require("lpm-core.package.install")
+Package.installDependencies = require("lde-core.package.install")
 
 function Package:installDevDependencies()
 	self:installDependencies(self:getDevDependencies())
 end
 
-Package.updateDependencies = require("lpm-core.package.update")
+Package.updateDependencies = require("lde-core.package.update")
 
 function Package:updateDevDependencies()
 	return self:updateDependencies(self:getDevDependencies())
 end
 
-Package.compile = require("lpm-core.package.compile")
-local run = require("lpm-core.package.run")
+Package.compile = require("lde-core.package.compile")
+local run = require("lde-core.package.run")
 Package.runFile = run.runFile
 Package.runString = run.runString
-Package.runTests = require("lpm-core.package.test")
+Package.runTests = require("lde-core.package.test")
 
----@param name string # Name of a script defined in lpm.json scripts table
+---@param name string # Name of a script defined in lde.json scripts table
 ---@param capture boolean? # If true, capture stdout/stderr instead of inheriting them
 ---@return boolean?
 ---@return string?
 function Package:runScript(name, capture)
 	local scripts = self:readConfig().scripts
 	if not scripts or not scripts[name] then
-		error("No script named '" .. name .. "' in lpm.json")
+		error("No script named '" .. name .. "' in lde.json")
 	end
 	local opts = { unsafe = true, cwd = self:getDir() }
 	if not capture then

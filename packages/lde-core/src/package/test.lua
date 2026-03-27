@@ -1,16 +1,16 @@
 local fs = require("fs")
 local path = require("path")
 local ffi = require("ffi")
-local runtime = require("lpm-core.runtime")
+local runtime = require("lde-core.runtime")
 
----@class lpm.TestFileResult
+---@class lde.TestFileResult
 ---@field file string
----@field results lpm.test.Result[]
+---@field results lde.test.Result[]
 ---@field error string?
 
----@class lpm.TestResults
----@field package lpm.Package
----@field files lpm.TestFileResult[]
+---@class lde.TestResults
+---@field package lde.Package
+---@field files lde.TestFileResult[]
 ---@field total number
 ---@field failures number
 ---@field skipped number
@@ -31,11 +31,11 @@ local function getLuaPathsForPackage(package)
 	return luaPath, luaCPath
 end
 
-local lpmTest = require("lpm-test.test")
+local lpmTest = require("lde-test.test")
 
 --- Runs all tests for this package.
----@param package lpm.Package
----@return lpm.TestResults
+---@param package lde.Package
+---@return lde.TestResults
 local function runTests(package)
 	package:installDependencies()
 	package:installDevDependencies()
@@ -54,7 +54,7 @@ local function runTests(package)
 
 	local luaPath, luaCPath = getLuaPathsForPackage(package)
 
-	---@type lpm.TestFileResult[]
+	---@type lde.TestFileResult[]
 	local files = {}
 	local totalTests = 0
 	local totalFailures = 0

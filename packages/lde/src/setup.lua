@@ -3,7 +3,7 @@ local fs = require("fs")
 local path = require("path")
 local process = require("process")
 
-local lpm = require("lpm-core")
+local lde = require("lde-core")
 
 ---@param lpmDir string
 ---@param toolsDir string
@@ -111,8 +111,8 @@ local function installLpx(lpmDir)
 end
 
 local function setup()
-	local lpmDir = lpm.global.getDir()
-	local toolsDir = lpm.global.getToolsDir()
+	local lpmDir = lde.global.getDir()
+	local toolsDir = lde.global.getToolsDir()
 
 	updatePath(lpmDir, toolsDir)
 	installLpx(lpmDir)

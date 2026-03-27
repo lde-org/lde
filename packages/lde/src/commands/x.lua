@@ -1,9 +1,9 @@
 local ansi = require("ansi")
 local env = require("env")
 
-local resolvePackage = require("lpm.util.resolve")
+local resolvePackage = require("lde.util.resolve")
 
----@param pkg lpm.Package
+---@param pkg lde.Package
 ---@param scriptArgs string[]
 ---@param cwd string
 local function executePackage(pkg, scriptArgs, cwd)

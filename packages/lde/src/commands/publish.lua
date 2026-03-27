@@ -3,7 +3,7 @@ local git = require("git")
 local json = require("json")
 local process = require("process")
 
-local lpm = require("lpm-core")
+local lde = require("lde-core")
 
 local REGISTRY_REPO = "https://github.com/codebycruz/lpm-registry"
 
@@ -35,7 +35,7 @@ end
 
 ---@param args clap.Args
 local function publish(args)
-	local pkg, err = lpm.Package.open()
+	local pkg, err = lde.Package.open()
 	if not pkg then
 		ansi.printf("{red}%s", err)
 		return

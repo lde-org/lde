@@ -1,16 +1,16 @@
-local lpm = {}
+local lde = {}
 
-package.loaded[(...)] = lpm
+package.loaded[(...)] = lde
 
-lpm.verbose = false
+lde.verbose = false
 
-lpm.Package = require("lpm-core.package")
-lpm.Lockfile = require("lpm-core.lockfile")
-lpm.Config = require("lpm-core.config")
+lde.Package = require("lde-core.package")
+lde.Lockfile = require("lde-core.lockfile")
+lde.Config = require("lde-core.config")
 
-lpm.global = require("lpm-core.global")
-lpm.runtime = require("lpm-core.runtime")
+lde.global = require("lde-core.global")
+lde.runtime = require("lde-core.runtime")
 
-lpm.util = require("lpm-core.util")
+lde.util = require("lde-core.util")
 
-return lpm
+return lde

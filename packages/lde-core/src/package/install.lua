@@ -3,17 +3,17 @@ local path = require("path")
 local git = require("git")
 local util = require("util")
 
-local lpm = require("lpm-core")
+local lde = require("lde-core")
 
 ---@param alias string
----@param depInfo lpm.Config.Dependency
+---@param depInfo lde.Config.Dependency
 ---@param relativeTo string
----@return lpm.Package, lpm.Lockfile.Dependency
+---@return lde.Package, lde.Lockfile.Dependency
 local function dependencyToPackage(alias, depInfo, relativeTo)
 	local packageName = depInfo.name or alias
 
 	if depInfo.git then
-		local repoDir = lpm.global.getOrInitGitRepo(packageName, depInfo.git, depInfo.branch, depInfo.commit)
+		local repoDir = lde.global.getOrInitGitRepo(packageName, depInfo.git, depInfo.branch, depInfo.commit)
 
 		local resolvedCommit = depInfo.commit
 		if not resolvedCommit then
@@ -24,7 +24,7 @@ local function dependencyToPackage(alias, depInfo, relativeTo)
 			end
 		end
 
-		---@type lpm.Lockfile.GitDependency
+		---@type lde.Lockfile.GitDependency
 		local lockEntry = {
 			git = depInfo.git,
 			commit = resolvedCommit,
@@ -34,39 +34,39 @@ local function dependencyToPackage(alias, depInfo, relativeTo)
 				depInfo.rockspec
 		}
 
-		local pkg = lpm.Package.open(repoDir, depInfo.rockspec)
+		local pkg = lde.Package.open(repoDir, depInfo.rockspec)
 		if pkg and pkg:getName() == packageName then
 			return pkg, lockEntry
 		end
 
-		for _, config in ipairs(fs.scan(repoDir, "**" .. path.separator .. "lpm.json")) do
-			pkg = lpm.Package.open(path.join(repoDir, path.dirname(config)))
+		for _, config in ipairs(fs.scan(repoDir, "**" .. path.separator .. "lde.json")) do
+			pkg = lde.Package.open(path.join(repoDir, path.dirname(config)))
 			if pkg and pkg:getName() == packageName then
 				return pkg, lockEntry
 			end
 		end
 
-		error("No lpm.json with name '" .. packageName .. "' found in git repository")
+		error("No lde.json with name '" .. packageName .. "' found in git repository")
 	elseif depInfo.path then
-		local localPackage, err = lpm.Package.open(path.resolve(relativeTo, path.normalize(depInfo.path)),
+		local localPackage, err = lde.Package.open(path.resolve(relativeTo, path.normalize(depInfo.path)),
 			depInfo.rockspec)
 		if not localPackage then
 			error("Failed to load local dependency package for: " .. alias .. "\nError: " .. err)
 		end
 		return localPackage, { path = depInfo.path, name = depInfo.name, rockspec = depInfo.rockspec }
 	elseif depInfo.archive then
-		local archiveDir = lpm.global.getOrInitArchive(depInfo.archive)
-		local pkg, err = lpm.Package.open(archiveDir, depInfo.rockspec)
+		local archiveDir = lde.global.getOrInitArchive(depInfo.archive)
+		local pkg, err = lde.Package.open(archiveDir, depInfo.rockspec)
 		if not pkg then
 			error("Failed to load archive dependency '" .. alias .. "': " .. (err or ""))
 		end
 
-		---@type lpm.Lockfile.ArchiveDependency
+		---@type lde.Lockfile.ArchiveDependency
 		local lockEntry = { archive = depInfo.archive, name = depInfo.name, rockspec = depInfo.rockspec }
 
 		return pkg, lockEntry
 	elseif depInfo.luarocks then -- luarocks registry
-		local pkg, lockEntry, err = lpm.util.openLuarocksPackage(depInfo.luarocks, depInfo.version)
+		local pkg, lockEntry, err = lde.util.openLuarocksPackage(depInfo.luarocks, depInfo.version)
 		if not pkg then
 			error("Failed to resolve luarocks dep '" .. alias .. "': " .. (err or ""))
 		end ---@cast lockEntry -nil
@@ -74,39 +74,39 @@ local function dependencyToPackage(alias, depInfo, relativeTo)
 		lockEntry.name = depInfo.name
 		return pkg, lockEntry
 	elseif depInfo.version then -- lpm registry
-		lpm.global.syncRegistry()
+		lde.global.syncRegistry()
 
-		local portfile, registryErr = lpm.global.lookupRegistryPackage(packageName)
+		local portfile, registryErr = lde.global.lookupRegistryPackage(packageName)
 		if not portfile then
 			error("Registry lookup failed for '" .. alias .. "': " .. registryErr)
 		end
 
-		local _, commit = lpm.global.resolveRegistryVersion(portfile, depInfo.version)
-		local repoDir = lpm.global.getOrInitGitRepo(packageName, portfile.git, portfile.branch, commit)
+		local _, commit = lde.global.resolveRegistryVersion(portfile, depInfo.version)
+		local repoDir = lde.global.getOrInitGitRepo(packageName, portfile.git, portfile.branch, commit)
 
-		---@type lpm.Lockfile.GitDependency
+		---@type lde.Lockfile.GitDependency
 		local lockEntry = { git = portfile.git, commit = commit, branch = portfile.branch, name = depInfo.name }
 
-		local pkg = lpm.Package.open(repoDir, depInfo.rockspec)
+		local pkg = lde.Package.open(repoDir, depInfo.rockspec)
 		if pkg and pkg:getName() == packageName then
 			return pkg, lockEntry
 		end
 
-		for _, config in ipairs(fs.scan(repoDir, "**" .. path.separator .. "lpm.json")) do
-			pkg = lpm.Package.open(path.join(repoDir, path.dirname(config)))
+		for _, config in ipairs(fs.scan(repoDir, "**" .. path.separator .. "lde.json")) do
+			pkg = lde.Package.open(path.join(repoDir, path.dirname(config)))
 			if pkg and pkg:getName() == packageName then
 				return pkg, lockEntry
 			end
 		end
 
-		error("No lpm.json with name '" .. packageName .. "' found in registry package '" .. alias .. "'")
+		error("No lde.json with name '" .. packageName .. "' found in registry package '" .. alias .. "'")
 	else
 		error("Unsupported dependency type for: " .. alias)
 	end
 end
 
 --- Returns a string key that uniquely identifies a dependency's source.
----@param entry lpm.Lockfile.Dependency
+---@param entry lde.Lockfile.Dependency
 ---@return string
 local function sourceKey(entry)
 	if entry.git then
@@ -121,11 +121,11 @@ end
 
 --- Recursively resolves all dependencies onto a flat stack.
 --- Errors on duplicate names with differing sources.
----@param dependencies table<string, lpm.Config.Dependency>
+---@param dependencies table<string, lde.Config.Dependency>
 ---@param relativeTo string
----@param stack table<string, { pkg: lpm.Package, lock: lpm.Lockfile.Dependency }>
+---@param stack table<string, { pkg: lde.Package, lock: lde.Lockfile.Dependency }>
 ---@param visiting table<string, boolean>
----@param rootLockfile lpm.Lockfile?
+---@param rootLockfile lde.Lockfile?
 local function collectDependencies(dependencies, relativeTo, stack, visiting, rootLockfile)
 	for alias, depInfo in pairs(dependencies) do
 		if visiting[alias] then
@@ -160,8 +160,8 @@ local function collectDependencies(dependencies, relativeTo, stack, visiting, ro
 	end
 end
 
----@param package lpm.Package
----@param dependencies table<string, lpm.Config.Dependency>?
+---@param package lde.Package
+---@param dependencies table<string, lde.Config.Dependency>?
 ---@param relativeTo string?
 local function installDependencies(package, dependencies, relativeTo)
 	local isRoot = dependencies == nil
@@ -205,7 +205,7 @@ local function installDependencies(package, dependencies, relativeTo)
 		for alias, entry in pairs(stack) do
 			lockEntries[alias] = entry.lock
 		end
-		local lockfile = lpm.Lockfile.new(package:getLockfilePath(), lockEntries)
+		local lockfile = lde.Lockfile.new(package:getLockfilePath(), lockEntries)
 		lockfile:save()
 		local lockfileContent = fs.read(package:getLockfilePath())
 		fs.write(path.join(modulesDir, ".installed"), util.fnv1a(lockfileContent))

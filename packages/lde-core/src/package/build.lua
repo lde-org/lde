@@ -1,14 +1,14 @@
 local fs = require("fs")
 local path = require("path")
 local ansi = require("ansi")
-local lpm = require("lpm-core")
+local lde = require("lde-core")
 
----@type table<lpm.Package, boolean>
+---@type table<lde.Package, boolean>
 local currentlyBuilding = setmetatable({}, { __mode = "k" })
 ---@type table<string, boolean>
 local alreadyBuilt = {}
 
----@param package lpm.Package
+---@param package lde.Package
 ---@param destinationPath string?
 local function buildPackage(package, destinationPath)
 	if currentlyBuilding[package] then return end
@@ -23,7 +23,7 @@ local function buildPackage(package, destinationPath)
 		-- Check stamp before showing progress so already-built packages are silent
 		local stampFile = path.join(destinationPath, ".lpm-built")
 		local alreadyDone = alreadyBuilt[destinationPath] or fs.exists(stampFile)
-		local p = (lpm.verbose and not alreadyDone) and ansi.progress("Building " .. package:getName()) or nil
+		local p = (lde.verbose and not alreadyDone) and ansi.progress("Building " .. package:getName()) or nil
 		local ok, err = package:runBuildScript(destinationPath)
 		if not ok then
 			if p then p:fail("Building " .. package:getName()) end

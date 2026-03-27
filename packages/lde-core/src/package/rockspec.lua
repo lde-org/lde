@@ -1,6 +1,6 @@
 local rocked = require("rocked")
 local sea = require("sea")
-local lpm = require("lpm-core")
+local lde = require("lde-core")
 
 local fs = require("fs")
 local env = require("env")
@@ -11,7 +11,7 @@ local util = require("util")
 
 ---@param dir string?
 ---@param rockspecPath string? # Path to the rockspec file; if nil, scanned from dir
----@return lpm.Package?, string?
+---@return lde.Package?, string?
 local function openRockspec(dir, rockspecPath)
 	dir = dir or env.cwd()
 
@@ -37,7 +37,7 @@ local function openRockspec(dir, rockspecPath)
 			return nil, "Could not read rockspec: " .. rockspecPath
 		end
 	elseif rockspecPath:match("^https?://") then -- Looks like a URL
-		local cacheFile = path.join(lpm.global.getRockspecCacheDir(), (rockspecPath:gsub("[^%w]", "_")))
+		local cacheFile = path.join(lde.global.getRockspecCacheDir(), (rockspecPath:gsub("[^%w]", "_")))
 		if fs.exists(cacheFile) then
 			content = fs.read(cacheFile)
 		else
@@ -64,7 +64,7 @@ local function openRockspec(dir, rockspecPath)
 		return nil, "Failed to parse rockspec: " .. (spec or rockspecPath)
 	end ---@cast spec rocked.raw.Output
 
-	local pkg = setmetatable({ dir = dir }, lpm.Package)
+	local pkg = setmetatable({ dir = dir }, lde.Package)
 
 	local modules = {}
 	local nativeModules = {}
@@ -189,7 +189,7 @@ local function openRockspec(dir, rockspecPath)
 				"-DWITH_LUA_ENGINE=LuaJIT",
 				"-DLUAJIT_INCLUDE_DIR=" .. path.join(luajitPath, "include"),
 				"-DLUAJIT_LIBRARIES=" .. path.join(luajitPath, "lib", "libluajit.a"),
-				"-DCMAKE_INSTALL_PREFIX=" .. installDir,
+				"-DCMAKE_INSTALL_PREFIX=" .. installDir
 			}
 			for k, v in pairs(spec.build.build_variables or {}) do
 				configureArgs[#configureArgs + 1] = "-D" .. k .. "=" .. v
@@ -201,7 +201,8 @@ local function openRockspec(dir, rockspecPath)
 			ok, err = process.exec("cmake", { "--build", buildDir, "--config", "Release" }, { cwd = dir })
 			if not ok then return nil, "cmake build failed: " .. (err or "") end
 
-			ok, err = process.exec("cmake", { "--build", buildDir, "--target", "install", "--config", "Release" }, { cwd = dir })
+			ok, err = process.exec("cmake", { "--build", buildDir, "--target", "install", "--config", "Release" },
+				{ cwd = dir })
 			if not ok then return nil, "cmake install failed: " .. (err or "") end
 
 			local soExt = process.platform == "darwin" and "**.dylib" or "**.so"
@@ -276,7 +277,7 @@ local function openRockspec(dir, rockspecPath)
 			end
 		end
 
-		return lpm.Config.new({ name = spec.package, version = spec.version, bin = binEntry, dependencies = deps })
+		return lde.Config.new({ name = spec.package, version = spec.version, bin = binEntry, dependencies = deps })
 	end
 
 	return pkg, nil

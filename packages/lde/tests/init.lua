@@ -1,6 +1,6 @@
-local test = require("lpm-test")
+local test = require("lde-test")
 
-local lpm = require("lpm-core")
+local lde = require("lde-core")
 
 local fs = require("fs")
 local env = require("env")
@@ -15,14 +15,14 @@ fs.rmdir(tmpBase)
 -- Package.init (initialize)
 --
 
-test.it("Package.init creates lpm.json in the target directory", function()
+test.it("Package.init creates lde.json in the target directory", function()
 	fs.mkdir(tmpBase)
 	local dir = path.join(tmpBase, "new-project")
 	fs.mkdir(dir)
 
-	lpm.Package.init(dir)
+	lde.Package.init(dir)
 
-	test.truthy(fs.exists(path.join(dir, "lpm.json")))
+	test.truthy(fs.exists(path.join(dir, "lde.json")))
 end)
 
 test.it("Package.init uses the directory basename as the package name", function()
@@ -30,9 +30,9 @@ test.it("Package.init uses the directory basename as the package name", function
 	local dir = path.join(tmpBase, "my-lib")
 	fs.mkdir(dir)
 
-	lpm.Package.init(dir)
+	lde.Package.init(dir)
 
-	local pkg = lpm.Package.open(dir)
+	local pkg = lde.Package.open(dir)
 	test.equal(pkg:getName(), "my-lib")
 end)
 
@@ -41,9 +41,9 @@ test.it("Package.init sets version to 0.1.0", function()
 	local dir = path.join(tmpBase, "versioned")
 	fs.mkdir(dir)
 
-	lpm.Package.init(dir)
+	lde.Package.init(dir)
 
-	local pkg = lpm.Package.open(dir)
+	local pkg = lde.Package.open(dir)
 	local config = pkg:readConfig()
 	test.equal(config.version, "0.1.0")
 end)
@@ -53,7 +53,7 @@ test.it("Package.init creates a src directory with init.lua", function()
 	local dir = path.join(tmpBase, "with-src")
 	fs.mkdir(dir)
 
-	lpm.Package.init(dir)
+	lde.Package.init(dir)
 
 	test.truthy(fs.exists(path.join(dir, "src")))
 	test.truthy(fs.isfile(path.join(dir, "src", "init.lua")))
@@ -64,7 +64,7 @@ test.it("Package.init creates a .gitignore", function()
 	local dir = path.join(tmpBase, "with-gitignore")
 	fs.mkdir(dir)
 
-	lpm.Package.init(dir)
+	lde.Package.init(dir)
 
 	test.truthy(fs.exists(path.join(dir, ".gitignore")))
 
@@ -78,18 +78,18 @@ test.it("Package.init creates a .luarc.json", function()
 	local dir = path.join(tmpBase, "with-luarc")
 	fs.mkdir(dir)
 
-	lpm.Package.init(dir)
+	lde.Package.init(dir)
 
 	test.truthy(fs.isfile(path.join(dir, ".luarc.json")))
 end)
 
-test.it("Package.init errors if lpm.json already exists", function()
+test.it("Package.init errors if lde.json already exists", function()
 	fs.mkdir(tmpBase)
 	local dir = path.join(tmpBase, "already-exists")
 	fs.mkdir(dir)
-	fs.write(path.join(dir, "lpm.json"), '{"name":"existing","version":"1.0.0"}')
+	fs.write(path.join(dir, "lde.json"), '{"name":"existing","version":"1.0.0"}')
 
-	local ok, err = pcall(lpm.Package.init, dir)
+	local ok, err = pcall(lde.Package.init, dir)
 	test.falsy(ok)
 	test.truthy(err)
 end)
@@ -99,10 +99,10 @@ test.it("Package.init result can be opened as a Package", function()
 	local dir = path.join(tmpBase, "openable")
 	fs.mkdir(dir)
 
-	local pkg = lpm.Package.init(dir)
+	local pkg = lde.Package.init(dir)
 	test.truthy(pkg)
 
-	local reopened, err = lpm.Package.open(dir)
+	local reopened, err = lde.Package.open(dir)
 	test.truthy(reopened)
 	test.falsy(err)
 end)

@@ -1,7 +1,7 @@
 local ansi = require("ansi")
 
-local lpm = require("lpm-core")
-local run = require("lpm-core.package.run")
+local lde = require("lde-core")
+local run = require("lde-core.package.run")
 
 ---@param _args clap.Args
 local function repl(_args)
@@ -10,7 +10,7 @@ local function repl(_args)
 
 	local savedPath, savedCPath = package.path, package.cpath
 
-	local pkg = lpm.Package.open()
+	local pkg = lde.Package.open()
 	if pkg then
 		pkg:build()
 		pkg:installDependencies()

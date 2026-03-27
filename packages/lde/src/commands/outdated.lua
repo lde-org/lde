@@ -1,11 +1,11 @@
 local ansi = require("ansi")
 local semver = require("semver")
 local luarocks = require("luarocks")
-local lpm = require("lpm-core")
+local lde = require("lde-core")
 
 ---@param _args clap.Args
 local function outdated(_args)
-	local pkg, err = lpm.Package.open()
+	local pkg, err = lde.Package.open()
 	if not pkg then
 		ansi.printf("{red}%s", err)
 		return
@@ -17,8 +17,8 @@ local function outdated(_args)
 	for name, depInfo in pairs(deps) do
 		if depInfo.version then
 			-- lpm registry dep
-			lpm.global.syncRegistry()
-			local portfile, rerr = lpm.global.lookupRegistryPackage(depInfo.name or name)
+			lde.global.syncRegistry()
+			local portfile, rerr = lde.global.lookupRegistryPackage(depInfo.name or name)
 			if not portfile then
 				ansi.printf("{red}%s: %s", name, rerr)
 				goto continue
@@ -35,7 +35,7 @@ local function outdated(_args)
 			end
 		elseif depInfo.luarocks then
 			-- luarocks dep: pick latest from manifest
-			local manifest, merr = lpm.util.getManifest()
+			local manifest, merr = lde.util.getManifest()
 			if not manifest then
 				ansi.printf("{red}%s: %s", name, merr)
 				goto continue

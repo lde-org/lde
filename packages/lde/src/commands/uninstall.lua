@@ -3,7 +3,7 @@ local fs = require("fs")
 local path = require("path")
 local process = require("process")
 
-local lpm = require("lpm-core")
+local lde = require("lde-core")
 
 ---@param args clap.Args
 local function toolUninstall(args)
@@ -13,7 +13,7 @@ local function toolUninstall(args)
 		return
 	end
 
-	local toolsDir = lpm.global.getToolsDir()
+	local toolsDir = lde.global.getToolsDir()
 
 	-- Try the platform-specific wrapper path first, then the bare name
 	local candidates
