@@ -77,13 +77,14 @@ local function openRockspec(dir, rockspecPath)
 					nativeModules[modname] = { sources = { src } }
 				else
 					io.stderr:write("warning: " ..
-					(spec.package or "?") .. ": unrecognised source type for module '" .. modname .. "': " .. src .. "\n")
+						(spec.package or "?") ..
+						": unrecognised source type for module '" .. modname .. "': " .. src .. "\n")
 				end
 			elseif type(src) == "table" and src.sources then
 				nativeModules[modname] = src
 			elseif type(src) == "table" then
 				io.stderr:write("warning: " ..
-				(spec.package or "?") .. ": module '" .. modname .. "' has no sources field, skipping\n")
+					(spec.package or "?") .. ": module '" .. modname .. "' has no sources field, skipping\n")
 			end
 		end
 
@@ -151,8 +152,10 @@ local function openRockspec(dir, rockspecPath)
 				"LUA_INCDIR=" .. luajitInclude,
 				"LUA_LIBDIR=" .. path.join(luajitPath, "lib"),
 				"LUALIB=libluajit.a",
+				"CFLAGS=-fPIC",
+				"LIBFLAG=-shared",
 				"INST_LIBDIR=" .. modulesDir,
-				"INST_LUADIR=" .. modulesDir,
+				"INST_LUADIR=" .. modulesDir
 			}
 			local buildTarget = spec.build.build_target or ""
 			local installTarget = spec.build.install_target or "install"
