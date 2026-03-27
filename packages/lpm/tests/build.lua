@@ -406,3 +406,50 @@ build = {
 	-- must NOT be at target/system/init/init.lua
 	test.equal(fs.exists(path.join(modulesDir, "system", "init", "init.lua")), false)
 end)
+
+test.it("rockspec: platform lua modules are not misclassified as native modules", function()
+	local plat = require("process").platform
+	local platKey = plat == "darwin" and "macosx" or plat
+
+	local rockspecContent = string.format([[
+package = "mypkg"
+version = "1.0-1"
+source = { url = "https://example.com" }
+build = {
+  type = "builtin",
+  modules = {
+    ["mypkg.http"] = "src/http.lua",
+    ["mypkg.core"] = { sources = { "src/core.c" } },
+  },
+  platforms = {
+    ["%s"] = {
+      modules = {
+        ["mypkg.extra"] = "src/extra.lua",
+        ["mypkg.native"] = { sources = { "src/native.c" } },
+      }
+    }
+  }
+}
+]], platKey)
+
+	local dir = path.join(tmpBase, "rockspec-module-classify")
+	fs.mkdir(dir)
+	fs.mkdir(path.join(dir, "src"))
+	fs.write(path.join(dir, "mypkg-1.0-1.rockspec"), rockspecContent)
+	fs.write(path.join(dir, "src", "http.lua"), 'return "http"')
+	fs.write(path.join(dir, "src", "extra.lua"), 'return "extra"')
+
+	local pkg = lpm.Package.openRockspec(dir)
+	test.truthy(pkg)
+
+	local outputDir = path.join(dir, "target", "mypkg")
+	pkg:runBuildScript(outputDir) -- may fail on C compile, that's ok
+
+	local modulesDir = path.join(dir, "target")
+	-- lua modules must be copied as .lua files, not passed to gcc
+	test.truthy(fs.exists(path.join(modulesDir, "mypkg", "http.lua")))
+	test.truthy(fs.exists(path.join(modulesDir, "mypkg", "extra.lua")))
+	-- must NOT exist as .so (would mean they were misclassified as native)
+	test.equal(fs.exists(path.join(modulesDir, "mypkg", "http.so")), false)
+	test.equal(fs.exists(path.join(modulesDir, "mypkg", "extra.so")), false)
+end)
