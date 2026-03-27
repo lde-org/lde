@@ -9,14 +9,14 @@ const __dir = dirname(fileURLToPath(import.meta.url));
 
 const logoDataUri = (() => {
 	const b64 = readFileSync(
-		join(__dir, "../../../../public/lpm-small-text-nospace.svg"),
+		join(__dir, "../../../../public/lde-text-nospace.svg"),
 	).toString("base64");
 	return `data:image/svg+xml;base64,${b64}`;
 })();
 
 const logoSmallDataUri = (() => {
 	const b64 = readFileSync(
-		join(__dir, "../../../../public/lpm-small-nospace.svg"),
+		join(__dir, "../../../../public/lde-nospace.svg"),
 	).toString("base64");
 	return `data:image/svg+xml;base64,${b64}`;
 })();

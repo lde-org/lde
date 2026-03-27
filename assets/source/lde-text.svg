@@ -1,0 +1,180 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="100%"
+   viewBox="0 0 520 520"
+   version="1.1"
+   id="svg18"
+   sodipodi:docname="lde-text.svg"
+   inkscape:version="1.4.3 (0d15f75042, 2025-12-25)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview18"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="0.72233586"
+     inkscape:cx="152.28373"
+     inkscape:cy="137.05536"
+     inkscape:window-width="2048"
+     inkscape:window-height="1078"
+     inkscape:window-x="0"
+     inkscape:window-y="0"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg18" />
+  <defs
+     id="defs1">
+    <clipPath
+       id="clip">
+      <path
+         d="M84,84 L286,84 A80,80 0 0 0 436,185 L436,436 L84,436 Z"
+         id="path1" />
+    </clipPath>
+    <clipPath
+       id="circleclip">
+      <circle
+         cx="361"
+         cy="134.5"
+         r="60.3"
+         id="circle1" />
+    </clipPath>
+    <clipPath
+       id="clip-0">
+      <path
+         d="M 84,84 H 286 A 90.417089,90.417089 0 0 0 436,185 V 436 H 84 Z"
+         id="path1-7" />
+    </clipPath>
+  </defs>
+  <!-- MAIN SHAPE: six facets for a gem-cut look -->
+  <!-- Top-left bright highlight -->
+  <polygon
+     points="84,84 190,84 160,200 84,160"
+     fill="#2a2aff"
+     clip-path="url(#clip)"
+     style="fill:rgb(42, 42, 255);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"
+     id="polygon1" />
+  <!-- Top center -->
+  <polygon
+     points="190,84 286,84 310,160 160,200"
+     fill="#1a1aff"
+     clip-path="url(#clip)"
+     style="fill:rgb(26, 26, 255);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"
+     id="polygon2" />
+  <!-- Upper right catch (near circle) -->
+  <polygon
+     points="286,84 436,185 380,240 310,160"
+     fill="#3535ee"
+     clip-path="url(#clip)"
+     style="fill:#1313e8;stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:'Anthropic Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto;fill-opacity:1"
+     id="polygon3" />
+  <!-- Mid left -->
+  <polygon
+     points="84,160 160,200 180,310 84,280"
+     fill="#1212dd"
+     clip-path="url(#clip)"
+     style="fill:rgb(18, 18, 221);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"
+     id="polygon4" />
+  <!-- Center body -->
+  <polygon
+     points="160,200 310,160 380,240 280,360 180,310"
+     fill="#0000cc"
+     clip-path="url(#clip)"
+     style="fill:rgb(0, 0, 204);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"
+     id="polygon5" />
+  <!-- Right edge -->
+  <polygon
+     points="380,240 436,185 436,360 340,400"
+     fill="#0000bb"
+     clip-path="url(#clip)"
+     style="fill:rgb(0, 0, 187);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"
+     id="polygon6" />
+  <!-- Bottom left -->
+  <polygon
+     points="84,280 180,310 200,436 84,436"
+     fill="#0000b0"
+     clip-path="url(#clip)"
+     style="fill:rgb(0, 0, 176);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"
+     id="polygon7" />
+  <!-- Bottom center -->
+  <polygon
+     points="180,310 280,360 260,436 200,436"
+     fill="#0000a0"
+     clip-path="url(#clip)"
+     style="fill:rgb(0, 0, 160);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"
+     id="polygon8" />
+  <!-- Bottom right -->
+  <polygon
+     points="280,360 340,400 436,360 436,436 260,436"
+     fill="#000090"
+     clip-path="url(#clip)"
+     style="fill:rgb(0, 0, 144);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"
+     id="polygon9" />
+  <!-- CIRCLE base -->
+  <circle
+     cx="361"
+     cy="134.5"
+     r="60.3"
+     fill="#0a0acc"
+     style="fill:rgb(10, 10, 204);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"
+     id="circle9" />
+  <path
+     style="font-variation-settings:'opsz' 32, 'wght' 600;fill:#0000e0;fill-opacity:1;stroke-width:1px;-inkscape-stroke:none;opacity:1;stroke:none;stroke-linecap:butt;stroke-linejoin:miter"
+     d="m 280,360 59.99867,40.01334 40.01123,-160.03412 z"
+     id="path18"
+     sodipodi:nodetypes="cccc" />
+  <!-- Circle facets: same geometry clipped to circle -->
+  <polygon
+     points="84,84 190,84 160,200 84,160"
+     fill="#2a2aff"
+     clip-path="url(#circleclip)"
+     style="fill:rgb(42, 42, 255);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"
+     id="polygon10" />
+  <polygon
+     points="84,160 160,200 180,310 84,280"
+     fill="#1212dd"
+     clip-path="url(#circleclip)"
+     style="fill:rgb(18, 18, 221);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"
+     id="polygon13" />
+  <polygon
+     points="380,240 436,185 436,360 340,400"
+     fill="#0000bb"
+     clip-path="url(#circleclip)"
+     style="fill:rgb(0, 0, 187);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"
+     id="polygon15" />
+  <polygon
+     points="84,280 180,310 200,436 84,436"
+     fill="#0000b0"
+     clip-path="url(#circleclip)"
+     style="fill:rgb(0, 0, 176);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"
+     id="polygon16" />
+  <polygon
+     points="180,310 280,360 260,436 200,436"
+     fill="#0000a0"
+     clip-path="url(#circleclip)"
+     style="fill:rgb(0, 0, 160);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"
+     id="polygon17" />
+  <polygon
+     points="280,360 340,400 436,360 436,436 260,436"
+     fill="#000090"
+     clip-path="url(#circleclip)"
+     style="fill:rgb(0, 0, 144);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"
+     id="polygon18" />
+  <!-- Text -->
+  <text
+     x="108"
+     y="408"
+     font-family="Inter, sans-serif"
+     font-weight="600"
+     font-size="106.27"
+     fill="#ffffff"
+     style="color:#ffffff;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:141.333px;font-family:Inter, sans-serif;-inkscape-font-specification:'Inter, sans-serif, @opsz=32,wght=600';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'opsz' 32, 'wght' 600;dominant-baseline:auto;text-anchor:start;opacity:1;fill:#ffffff;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter"
+     id="text18"><tspan
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:141.333px;font-family:Inter;-inkscape-font-specification:'Inter, @opsz=32,wght=600';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variation-settings:'opsz' 32, 'wght' 600"
+       id="tspan1">lde</tspan></text>
+</svg>

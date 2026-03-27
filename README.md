@@ -1,7 +1,7 @@
 <div align="center">
 
 <a href="https://lualpm.com/">
-	<img src="./assets/lpm-small-text-nospace.svg" alt="lpm logo" width="256" />
+	<img src="./assets/dist/lde-text-nospace.svg" alt="lpm logo" width="256" />
 </a>
 
 ---

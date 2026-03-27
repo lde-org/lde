@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="352"
+   viewBox="0 0 352 361.79999"
+   version="1.1"
+   id="svg18"
+   height="361.79999"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs1">
+    <clipPath
+       id="clip">
+      <path
+         d="M 84,84 H 286 A 90.417089,90.417089 0 0 0 436,185 V 436 H 84 Z"
+         id="path1" />
+    </clipPath>
+    <clipPath
+       id="circleclip">
+      <circle
+         cx="361"
+         cy="134.5"
+         r="60.299999"
+         id="circle1" />
+    </clipPath>
+  </defs>
+  <!-- MAIN SHAPE: six facets for a gem-cut look -->
+  <!-- Top-left bright highlight -->
+  <polygon
+     points="84,84 190,84 160,200 84,160 "
+     fill="#2a2aff"
+     clip-path="url(#clip)"
+     style="color:#ffffff;font-weight:400;font-size:16px;font-family:'Anthropic Sans', '-apple-system', BlinkMacSystemFont, 'Segoe UI', sans-serif;dominant-baseline:auto;text-anchor:start;opacity:1;fill:#2a2aff;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter"
+     id="polygon1"
+     transform="translate(-84,-74.200001)" />
+  <!-- Top center -->
+  <polygon
+     points="190,84 286,84 310,160 160,200 "
+     fill="#1a1aff"
+     clip-path="url(#clip)"
+     style="color:#ffffff;font-weight:400;font-size:16px;font-family:'Anthropic Sans', '-apple-system', BlinkMacSystemFont, 'Segoe UI', sans-serif;dominant-baseline:auto;text-anchor:start;opacity:1;fill:#1a1aff;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter"
+     id="polygon2"
+     transform="translate(-84,-74.200001)" />
+  <!-- Upper right catch (near circle) -->
+  <polygon
+     points="286,84 436,185 380,240 310,160 "
+     fill="#3535ee"
+     clip-path="url(#clip)"
+     style="color:#ffffff;font-weight:400;font-size:16px;font-family:'Anthropic Sans', '-apple-system', BlinkMacSystemFont, 'Segoe UI', sans-serif;dominant-baseline:auto;text-anchor:start;opacity:1;fill:#1313e8;fill-opacity:1;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter"
+     id="polygon3"
+     transform="translate(-84,-74.200001)" />
+  <!-- Mid left -->
+  <polygon
+     points="84,160 160,200 180,310 84,280 "
+     fill="#1212dd"
+     clip-path="url(#clip)"
+     style="color:#ffffff;font-weight:400;font-size:16px;font-family:'Anthropic Sans', '-apple-system', BlinkMacSystemFont, 'Segoe UI', sans-serif;dominant-baseline:auto;text-anchor:start;opacity:1;fill:#1212dd;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter"
+     id="polygon4"
+     transform="translate(-84,-74.200001)" />
+  <!-- Center body -->
+  <polygon
+     points="280,360 180,310 160,200 310,160 380,240 "
+     fill="#0000cc"
+     clip-path="url(#clip)"
+     style="color:#ffffff;font-weight:400;font-size:16px;font-family:'Anthropic Sans', '-apple-system', BlinkMacSystemFont, 'Segoe UI', sans-serif;dominant-baseline:auto;text-anchor:start;opacity:1;fill:#0000cc;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter"
+     id="polygon5"
+     transform="translate(-84,-74.200001)" />
+  <!-- Right edge -->
+  <polygon
+     points="380,240 436,185 436,360 340,400 "
+     fill="#0000bb"
+     clip-path="url(#clip)"
+     style="color:#ffffff;font-weight:400;font-size:16px;font-family:'Anthropic Sans', '-apple-system', BlinkMacSystemFont, 'Segoe UI', sans-serif;dominant-baseline:auto;text-anchor:start;opacity:1;fill:#0000bb;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter"
+     id="polygon6"
+     transform="translate(-84,-74.200001)" />
+  <!-- Bottom left -->
+  <polygon
+     points="84,280 180,310 200,436 84,436 "
+     fill="#0000b0"
+     clip-path="url(#clip)"
+     style="color:#ffffff;font-weight:400;font-size:16px;font-family:'Anthropic Sans', '-apple-system', BlinkMacSystemFont, 'Segoe UI', sans-serif;dominant-baseline:auto;text-anchor:start;opacity:1;fill:#0000b0;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter"
+     id="polygon7"
+     transform="translate(-84,-74.200001)" />
+  <!-- Bottom center -->
+  <polygon
+     points="180,310 280,360 260,436 200,436 "
+     fill="#0000a0"
+     clip-path="url(#clip)"
+     style="color:#ffffff;font-weight:400;font-size:16px;font-family:'Anthropic Sans', '-apple-system', BlinkMacSystemFont, 'Segoe UI', sans-serif;dominant-baseline:auto;text-anchor:start;opacity:1;fill:#0000a0;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter"
+     id="polygon8"
+     transform="translate(-84,-74.200001)" />
+  <!-- Bottom right -->
+  <polygon
+     points="436,436 260,436 280,360 340,400 436,360 "
+     fill="#000090"
+     clip-path="url(#clip)"
+     style="color:#ffffff;font-weight:400;font-size:16px;font-family:'Anthropic Sans', '-apple-system', BlinkMacSystemFont, 'Segoe UI', sans-serif;dominant-baseline:auto;text-anchor:start;opacity:1;fill:#000090;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter"
+     id="polygon9"
+     transform="translate(-84,-74.200001)" />
+  <!-- CIRCLE base -->
+  <circle
+     cx="277"
+     cy="60.299999"
+     r="60.299999"
+     fill="#0a0acc"
+     style="color:#ffffff;font-weight:400;font-size:16px;font-family:'Anthropic Sans', '-apple-system', BlinkMacSystemFont, 'Segoe UI', sans-serif;dominant-baseline:auto;text-anchor:start;opacity:1;fill:#0a0acc;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter"
+     id="circle9" />
+  <path
+     style="font-variation-settings:'opsz' 32, 'wght' 600;opacity:1;fill:#0000e0;fill-opacity:1;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;-inkscape-stroke:none"
+     d="m 196,285.8 59.99867,40.01334 40.01123,-160.03412 z"
+     id="path18" />
+  <!-- Circle facets: same geometry clipped to circle -->
+  <polygon
+     points="380,240 436,185 436,360 340,400 "
+     fill="#0000bb"
+     clip-path="url(#circleclip)"
+     style="color:#ffffff;font-weight:400;font-size:16px;font-family:'Anthropic Sans', '-apple-system', BlinkMacSystemFont, 'Segoe UI', sans-serif;dominant-baseline:auto;text-anchor:start;opacity:1;fill:#0000bb;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter"
+     id="polygon15"
+     transform="translate(-84,-74.200001)" />
+  <!-- Text -->
+  <path
+     style="color:#ffffff;font-size:141.333px;font-family:Inter;-inkscape-font-specification:'Inter, @opsz=32,wght=600';font-variation-settings:'opsz' 32, 'wght' 600;fill:#ffffff;stroke-width:1px"
+     d="M 49.119731,230.97471 V 333.79999 H 31.729148 V 230.97471 Z m 43.61448,104.27449 q -9.454404,0 -16.63147,-4.7617 -7.108056,-4.76171 -11.04164,-13.31898 -3.864574,-8.55727 -3.864574,-19.87495 0,-11.17967 3.933584,-19.73694 3.933584,-8.55727 11.04164,-13.31897 7.108056,-4.76171 16.424439,-4.76171 4.761708,0 8.83331,1.31119 4.14062,1.24219 7.45311,3.86458 3.31249,2.62239 5.65884,6.62498 h 0.13802 v -40.30199 h 17.39058 v 102.82528 h -17.11454 v -11.11065 h -0.13802 q -2.27734,4.20962 -5.65884,7.03904 -3.31249,2.76041 -7.52212,4.14062 -4.140612,1.3802 -8.902319,1.3802 z m 4.071605,-14.56116 q 5.727854,0 9.937474,-2.82942 4.20963,-2.89843 6.55598,-8.14321 2.34634,-5.31379 2.34634,-12.42184 0,-7.10806 -2.34634,-12.35284 -2.34635,-5.24478 -6.55598,-8.14321 -4.20962,-2.89843 -9.937474,-2.89843 -5.31379,0 -9.385394,2.76041 -4.071605,2.6914 -6.348943,7.93618 -2.277339,5.17577 -2.277339,12.69789 0,7.52211 2.277339,12.76689 2.277338,5.24478 6.348943,7.93618 4.071604,2.6914 9.385394,2.6914 z m 82.881304,14.76819 q -10.90362,0 -18.90881,-4.89972 -8.00519,-4.89973 -12.35283,-13.457 -4.27864,-8.62628 -4.27864,-19.66792 0,-11.11065 4.41666,-19.73694 4.48566,-8.62628 12.35283,-13.526 7.86717,-4.89973 18.08069,-4.89973 7.86717,0 14.28512,2.76041 6.41795,2.76041 11.04164,7.86717 4.62369,5.03774 7.10805,12.00778 2.48437,6.90102 2.48437,15.25126 v 4.76171 h -62.86833 v -12.00778 h 54.17304 l -7.79816,3.24348 q 0,-6.21092 -2.27733,-10.69659 -2.20833,-4.48566 -6.27994,-6.90102 -4.00259,-2.48437 -9.59242,-2.48437 -5.52082,0 -9.59243,2.48437 -4.0716,2.41536 -6.27993,6.90102 -2.20833,4.48567 -2.20833,10.69659 v 7.52212 q 0,6.27993 2.20833,11.04164 2.20833,4.7617 6.41795,7.38409 4.27864,2.62239 10.28253,2.62239 4.34765,0 7.72915,-1.31119 3.3815,-1.3112 5.65884,-3.65754 2.27734,-2.34635 3.24348,-5.45181 h 16.28642 q -1.38021,7.10805 -6.0729,12.55986 -4.62369,5.45181 -11.66273,8.55727 -7.03905,3.03645 -15.59632,3.03645 z"
+     id="text18"
+     aria-label="lde" />
+</svg>

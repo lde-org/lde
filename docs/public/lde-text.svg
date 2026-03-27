@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="270400"
+   viewBox="0 0 270400 270400"
+   version="1.1"
+   id="svg18"
+   height="270400"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs1">
+    <clipPath
+       id="clip">
+      <path
+         d="M 84,84 H 286 A 90.417089,90.417089 0 0 0 436,185 V 436 H 84 Z"
+         id="path1" />
+    </clipPath>
+    <clipPath
+       id="circleclip">
+      <circle
+         cx="361"
+         cy="134.5"
+         r="60.299999"
+         id="circle1" />
+    </clipPath>
+  </defs>
+  <!-- MAIN SHAPE: six facets for a gem-cut look -->
+  <!-- Top-left bright highlight -->
+  <polygon
+     points="160,200 84,160 84,84 190,84 "
+     fill="#2a2aff"
+     clip-path="url(#clip)"
+     style="color:#ffffff;font-weight:400;font-size:16px;font-family:'Anthropic Sans', '-apple-system', BlinkMacSystemFont, 'Segoe UI', sans-serif;dominant-baseline:auto;text-anchor:start;opacity:1;fill:#2a2aff;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter"
+     id="polygon1" />
+  <!-- Top center -->
+  <polygon
+     points="310,160 160,200 190,84 286,84 "
+     fill="#1a1aff"
+     clip-path="url(#clip)"
+     style="color:#ffffff;font-weight:400;font-size:16px;font-family:'Anthropic Sans', '-apple-system', BlinkMacSystemFont, 'Segoe UI', sans-serif;dominant-baseline:auto;text-anchor:start;opacity:1;fill:#1a1aff;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter"
+     id="polygon2" />
+  <!-- Upper right catch (near circle) -->
+  <polygon
+     points="380,240 310,160 286,84 436,185 "
+     fill="#3535ee"
+     clip-path="url(#clip)"
+     style="color:#ffffff;font-weight:400;font-size:16px;font-family:'Anthropic Sans', '-apple-system', BlinkMacSystemFont, 'Segoe UI', sans-serif;dominant-baseline:auto;text-anchor:start;opacity:1;fill:#1313e8;fill-opacity:1;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter"
+     id="polygon3" />
+  <!-- Mid left -->
+  <polygon
+     points="180,310 84,280 84,160 160,200 "
+     fill="#1212dd"
+     clip-path="url(#clip)"
+     style="color:#ffffff;font-weight:400;font-size:16px;font-family:'Anthropic Sans', '-apple-system', BlinkMacSystemFont, 'Segoe UI', sans-serif;dominant-baseline:auto;text-anchor:start;opacity:1;fill:#1212dd;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter"
+     id="polygon4" />
+  <!-- Center body -->
+  <polygon
+     points="310,160 380,240 280,360 180,310 160,200 "
+     fill="#0000cc"
+     clip-path="url(#clip)"
+     style="color:#ffffff;font-weight:400;font-size:16px;font-family:'Anthropic Sans', '-apple-system', BlinkMacSystemFont, 'Segoe UI', sans-serif;dominant-baseline:auto;text-anchor:start;opacity:1;fill:#0000cc;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter"
+     id="polygon5" />
+  <!-- Right edge -->
+  <polygon
+     points="436,360 340,400 380,240 436,185 "
+     fill="#0000bb"
+     clip-path="url(#clip)"
+     style="color:#ffffff;font-weight:400;font-size:16px;font-family:'Anthropic Sans', '-apple-system', BlinkMacSystemFont, 'Segoe UI', sans-serif;dominant-baseline:auto;text-anchor:start;opacity:1;fill:#0000bb;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter"
+     id="polygon6" />
+  <!-- Bottom left -->
+  <polygon
+     points="200,436 84,436 84,280 180,310 "
+     fill="#0000b0"
+     clip-path="url(#clip)"
+     style="color:#ffffff;font-weight:400;font-size:16px;font-family:'Anthropic Sans', '-apple-system', BlinkMacSystemFont, 'Segoe UI', sans-serif;dominant-baseline:auto;text-anchor:start;opacity:1;fill:#0000b0;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter"
+     id="polygon7" />
+  <!-- Bottom center -->
+  <polygon
+     points="260,436 200,436 180,310 280,360 "
+     fill="#0000a0"
+     clip-path="url(#clip)"
+     style="color:#ffffff;font-weight:400;font-size:16px;font-family:'Anthropic Sans', '-apple-system', BlinkMacSystemFont, 'Segoe UI', sans-serif;dominant-baseline:auto;text-anchor:start;opacity:1;fill:#0000a0;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter"
+     id="polygon8" />
+  <!-- Bottom right -->
+  <polygon
+     points="340,400 436,360 436,436 260,436 280,360 "
+     fill="#000090"
+     clip-path="url(#clip)"
+     style="color:#ffffff;font-weight:400;font-size:16px;font-family:'Anthropic Sans', '-apple-system', BlinkMacSystemFont, 'Segoe UI', sans-serif;dominant-baseline:auto;text-anchor:start;opacity:1;fill:#000090;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter"
+     id="polygon9" />
+  <!-- CIRCLE base -->
+  <circle
+     cx="361"
+     cy="134.5"
+     r="60.299999"
+     fill="#0a0acc"
+     style="color:#ffffff;font-weight:400;font-size:16px;font-family:'Anthropic Sans', '-apple-system', BlinkMacSystemFont, 'Segoe UI', sans-serif;dominant-baseline:auto;text-anchor:start;opacity:1;fill:#0a0acc;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter"
+     id="circle9" />
+  <path
+     style="font-variation-settings:'opsz' 32, 'wght' 600;opacity:1;fill:#0000e0;fill-opacity:1;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;-inkscape-stroke:none"
+     d="m 280,360 59.99867,40.01334 40.01123,-160.03412 z"
+     id="path18" />
+  <!-- Circle facets: same geometry clipped to circle -->
+  <polygon
+     points="436,360 340,400 380,240 436,185 "
+     fill="#0000bb"
+     clip-path="url(#circleclip)"
+     style="color:#ffffff;font-weight:400;font-size:16px;font-family:'Anthropic Sans', '-apple-system', BlinkMacSystemFont, 'Segoe UI', sans-serif;dominant-baseline:auto;text-anchor:start;opacity:1;fill:#0000bb;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter"
+     id="polygon15" />
+  <!-- Text -->
+  <path
+     style="color:#ffffff;font-size:141.333px;font-family:Inter;-inkscape-font-specification:'Inter, @opsz=32,wght=600';font-variation-settings:'opsz' 32, 'wght' 600;fill:#ffffff;stroke-width:1px"
+     d="M 133.11973,305.17473 V 408 H 115.72915 V 305.17473 Z m 43.61448,104.27449 q -9.4544,0 -16.63147,-4.76171 -7.10806,-4.76171 -11.04164,-13.31898 -3.86457,-8.55727 -3.86457,-19.87495 0,-11.17966 3.93358,-19.73693 3.93359,-8.55728 11.04164,-13.31898 7.10806,-4.76171 16.42444,-4.76171 4.76171,0 8.83331,1.3112 4.14062,1.24218 7.45311,3.86457 3.31249,2.62239 5.65884,6.62498 h 0.13802 v -40.30198 h 17.39058 V 408 h -17.11454 v -11.11065 h -0.13802 q -2.27734,4.20962 -5.65884,7.03905 -3.31249,2.76041 -7.52212,4.14061 -4.14061,1.38021 -8.90232,1.38021 z m 4.07161,-14.56117 q 5.72785,0 9.93747,-2.82942 4.20963,-2.89843 6.55598,-8.14321 2.34634,-5.31379 2.34634,-12.42184 0,-7.10806 -2.34634,-12.35284 -2.34635,-5.24478 -6.55598,-8.14321 -4.20962,-2.89843 -9.93747,-2.89843 -5.31379,0 -9.3854,2.76041 -4.0716,2.6914 -6.34894,7.93618 -2.27734,5.17577 -2.27734,12.69789 0,7.52211 2.27734,12.76689 2.27734,5.24478 6.34894,7.93618 4.07161,2.6914 9.3854,2.6914 z m 82.8813,14.7682 q -10.90362,0 -18.90881,-4.89973 -8.00519,-4.89973 -12.35283,-13.457 -4.27864,-8.62628 -4.27864,-19.66792 0,-11.11065 4.41666,-19.73693 4.48566,-8.62628 12.35283,-13.52601 7.86717,-4.89973 18.08069,-4.89973 7.86717,0 14.28512,2.76041 6.41795,2.76041 11.04164,7.86717 4.62369,5.03775 7.10805,12.00778 2.48437,6.90103 2.48437,15.25127 v 4.7617 h -62.86833 v -12.00778 h 54.17304 l -7.79816,3.24348 q 0,-6.21092 -2.27733,-10.69659 -2.20833,-4.48566 -6.27994,-6.90102 -4.00259,-2.48437 -9.59242,-2.48437 -5.52082,0 -9.59243,2.48437 -4.0716,2.41536 -6.27993,6.90102 -2.20833,4.48567 -2.20833,10.69659 v 7.52212 q 0,6.27993 2.20833,11.04164 2.20833,4.76171 6.41795,7.3841 4.27864,2.62239 10.28253,2.62239 4.34765,0 7.72915,-1.3112 3.3815,-1.31119 5.65884,-3.65754 2.27734,-2.34635 3.24348,-5.45181 h 16.28642 q -1.38021,7.10805 -6.0729,12.55986 -4.62369,5.45181 -11.66273,8.55727 -7.03905,3.03646 -15.59632,3.03646 z"
+     id="text18"
+     aria-label="lde" />
+</svg>

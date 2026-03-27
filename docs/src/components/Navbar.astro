@@ -11,7 +11,8 @@ const entries = [
 
 const pathname = Astro.url.pathname;
 function isActive(href: string) {
-	if (href === "/docs/getting-started/introduction/") return pathname.startsWith("/docs/");
+	if (href === "/docs/getting-started/introduction/")
+		return pathname.startsWith("/docs/");
 	return pathname.startsWith(href);
 }
 ---
@@ -24,11 +25,7 @@ function isActive(href: string) {
 			href="/"
 			class="font-semibold text-2xl p-2 md:p-4 flex items-center gap-2"
 		>
-			<img
-				src="/lpm-small.svg"
-				alt="lpm logo"
-				class="size-8 object-contain"
-			/>
+			<img src="/lde.svg" alt="lde logo" class="size-8 object-contain" />
 			lpm
 		</a>
 
@@ -80,19 +77,86 @@ function isActive(href: string) {
 				aria-label="Toggle dark/light mode"
 				class="opacity-60 hover:opacity-100 p-2 md:p-4 transition-opacity cursor-pointer"
 			>
-				<svg class="icon-moon size-5 md:size-6" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-					<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+				<svg
+					class="icon-moon size-5 md:size-6"
+					xmlns="http://www.w3.org/2000/svg"
+					viewBox="0 0 24 24"
+					fill="currentColor"
+				>
+					<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"
+					></path>
 				</svg>
-				<svg class="icon-sun size-5 md:size-6 hidden" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-					<circle cx="12" cy="12" r="5"/>
-					<line x1="12" y1="1" x2="12" y2="3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-					<line x1="12" y1="21" x2="12" y2="23" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-					<line x1="4.22" y1="4.22" x2="5.64" y2="5.64" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-					<line x1="18.36" y1="18.36" x2="19.78" y2="19.78" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-					<line x1="1" y1="12" x2="3" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-					<line x1="21" y1="12" x2="23" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-					<line x1="4.22" y1="19.78" x2="5.64" y2="18.36" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-					<line x1="18.36" y1="5.64" x2="19.78" y2="4.22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+				<svg
+					class="icon-sun size-5 md:size-6 hidden"
+					xmlns="http://www.w3.org/2000/svg"
+					viewBox="0 0 24 24"
+					fill="currentColor"
+				>
+					<circle cx="12" cy="12" r="5"></circle>
+					<line
+						x1="12"
+						y1="1"
+						x2="12"
+						y2="3"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"></line>
+					<line
+						x1="12"
+						y1="21"
+						x2="12"
+						y2="23"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"></line>
+					<line
+						x1="4.22"
+						y1="4.22"
+						x2="5.64"
+						y2="5.64"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"></line>
+					<line
+						x1="18.36"
+						y1="18.36"
+						x2="19.78"
+						y2="19.78"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"></line>
+					<line
+						x1="1"
+						y1="12"
+						x2="3"
+						y2="12"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"></line>
+					<line
+						x1="21"
+						y1="12"
+						x2="23"
+						y2="12"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"></line>
+					<line
+						x1="4.22"
+						y1="19.78"
+						x2="5.64"
+						y2="18.36"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"></line>
+					<line
+						x1="18.36"
+						y1="5.64"
+						x2="19.78"
+						y2="4.22"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"></line>
 				</svg>
 			</button>
 
@@ -103,14 +167,34 @@ function isActive(href: string) {
 				aria-expanded="false"
 				class="md:hidden opacity-60 hover:opacity-100 p-2 transition-opacity cursor-pointer"
 			>
-				<svg id="burger-icon" class="size-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-					<line x1="3" y1="6" x2="21" y2="6"/>
-					<line x1="3" y1="12" x2="21" y2="12"/>
-					<line x1="3" y1="18" x2="21" y2="18"/>
+				<svg
+					id="burger-icon"
+					class="size-5"
+					xmlns="http://www.w3.org/2000/svg"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+				>
+					<line x1="3" y1="6" x2="21" y2="6"></line>
+					<line x1="3" y1="12" x2="21" y2="12"></line>
+					<line x1="3" y1="18" x2="21" y2="18"></line>
 				</svg>
-				<svg id="close-icon" class="size-5 hidden" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-					<line x1="18" y1="6" x2="6" y2="18"/>
-					<line x1="6" y1="6" x2="18" y2="18"/>
+				<svg
+					id="close-icon"
+					class="size-5 hidden"
+					xmlns="http://www.w3.org/2000/svg"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+				>
+					<line x1="18" y1="6" x2="6" y2="18"></line>
+					<line x1="6" y1="6" x2="18" y2="18"></line>
 				</svg>
 			</button>
 		</div>
@@ -131,7 +215,9 @@ function isActive(href: string) {
 				</a>
 			))
 		}
-		<div class="flex items-center gap-3 px-2 pt-3 pb-1 border-t border-black/10 dark:border-white/10 mt-1">
+		<div
+			class="flex items-center gap-3 px-2 pt-3 pb-1 border-t border-black/10 dark:border-white/10 mt-1"
+		>
 			<a
 				href={GITHUB_RELEASES_URL}
 				target="_blank"
@@ -159,36 +245,45 @@ function isActive(href: string) {
 		</div>
 	</div>
 
-<script>
-	// Theme toggle
-	const btn = document.getElementById("theme-toggle")!;
-	const html = document.documentElement;
+	<script>
+		// Theme toggle
+		const btn = document.getElementById("theme-toggle")!;
+		const html = document.documentElement;
 
-	function updateIcon() {
-		const isDark = html.classList.contains("dark");
-		(btn.querySelector(".icon-moon") as HTMLElement).classList.toggle("hidden", isDark);
-		(btn.querySelector(".icon-sun") as HTMLElement).classList.toggle("hidden", !isDark);
-	}
+		function updateIcon() {
+			const isDark = html.classList.contains("dark");
+			(btn.querySelector(".icon-moon") as HTMLElement).classList.toggle(
+				"hidden",
+				isDark,
+			);
+			(btn.querySelector(".icon-sun") as HTMLElement).classList.toggle(
+				"hidden",
+				!isDark,
+			);
+		}
 
-	updateIcon();
-
-	btn.addEventListener("click", () => {
-		html.classList.toggle("dark");
-		localStorage.setItem("theme", html.classList.contains("dark") ? "dark" : "light");
 		updateIcon();
-	});
 
-	// Burger toggle
-	const burger = document.getElementById("nav-burger")!;
-	const menu = document.getElementById("mobile-menu")!;
-	const burgerIcon = document.getElementById("burger-icon")!;
-	const closeIcon = document.getElementById("close-icon")!;
+		btn.addEventListener("click", () => {
+			html.classList.toggle("dark");
+			localStorage.setItem(
+				"theme",
+				html.classList.contains("dark") ? "dark" : "light",
+			);
+			updateIcon();
+		});
 
-	burger.addEventListener("click", () => {
-		const open = menu.classList.toggle("hidden");
-		burger.setAttribute("aria-expanded", String(!open));
-		burgerIcon.classList.toggle("hidden", !open);
-		closeIcon.classList.toggle("hidden", open);
-	});
-</script>
+		// Burger toggle
+		const burger = document.getElementById("nav-burger")!;
+		const menu = document.getElementById("mobile-menu")!;
+		const burgerIcon = document.getElementById("burger-icon")!;
+		const closeIcon = document.getElementById("close-icon")!;
+
+		burger.addEventListener("click", () => {
+			const open = menu.classList.toggle("hidden");
+			burger.setAttribute("aria-expanded", String(!open));
+			burgerIcon.classList.toggle("hidden", !open);
+			closeIcon.classList.toggle("hidden", open);
+		});
+	</script>
 </nav>
