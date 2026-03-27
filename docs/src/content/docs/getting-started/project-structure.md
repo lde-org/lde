@@ -5,7 +5,7 @@ order: 2
 
 # Project Structure
 
-The structure of an lpm project is very simple, but it is enforced.
+The structure of an lde project is very simple, but it is enforced.
 
 Your entrypoint _must_ be `/src/init.lua`, and dependencies resolve purely in a file tree order.
 
@@ -13,7 +13,7 @@ This is very important so that packages can be easily resolved via package.path 
 
 ```
 myproject/
-├── lpm.json # Configuration
+├── lde.json # Configuration
 ├── .luarc.json # This is what gives your editor types
 ├── .gitignore
 ├── src/

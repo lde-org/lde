@@ -9,9 +9,9 @@ Projects may contain a build script at the top level outside of the source direc
 
 This is for the sake of doing things like building native dependencies, or preprocessing your code from one language (ie, Teal) to Lua.
 
-It is provided the environment variable `LPM_OUTPUT_DIR` you can access with `os.getenv("LPM_OUTPUT_DIR")`, which will be the path to the output directory for your project, ie `./target/myproject`.
+It is provided the environment variable `LDE_OUTPUT_DIR` you can access with `os.getenv("LDE_OUTPUT_DIR")`, which will be the path to the output directory for your project, ie `./target/myproject`.
 
-When a build script is present, LPM will intentionally create a folder and clone the source directory of the project first, so the files are available, and are mutable as they won't be symlinked.
+When a build script is present, LDE will intentionally create a folder and clone the source directory of the project first, so the files are available, and are mutable as they won't be symlinked.
 
 Do file operations to this folder. Add .so file, modify files, all you need. Users will get types from the resulting ./target/ folder, so you can even do code generation.
 
@@ -20,7 +20,7 @@ Do file operations to this folder. Add .so file, modify files, all you need. Use
 Here's an example that builds [luafilesystem](https://github.com/lunarmodules/luafilesystem) and places it in your `target` directory, to be required as normal!
 
 ```lua
-local outDir = os.getenv("LPM_OUTPUT_DIR")
+local outDir = os.getenv("LDE_OUTPUT_DIR")
 local parentDir = outDir:match("^(.*)/[^/]+$")
 
 os.execute("rm -rf " .. outDir)
@@ -35,7 +35,7 @@ This example is used in the [hood](https://github.com/codebycruz/hood) graphics 
 
 ```lua
 local separator = string.sub(package.config, 1, 1)
-local outDir = os.getenv("LPM_OUTPUT_DIR")
+local outDir = os.getenv("LDE_OUTPUT_DIR")
 
 local function read(p)
 	local handle = io.open(p, "r")

@@ -9,24 +9,24 @@ Testing is essential. That's why most programming languages ship their own form 
 
 Rust has `cargo test`, Node recently even got `node:test`, Bun has `bun test`.
 
-So why not Lua? That's why lpm comes with a built-in test runner!
+So why not Lua? That's why lde comes with a built-in test runner!
 
-## lpm test
+## lde test
 
 This command is used to run a set of lua files you create inside of your /tests/ folder. You can nest them in folders however you like.
 
-It will run all of the files in that folder using the [LPM runtime](/docs/features/runtime).
+It will run all of the files in that folder using the [LDE runtime](/docs/features/runtime).
 
 But just running files isn't traditionally enough. Usually you write more than a single test per file.
 
-This is why lpm ships the minimal testing library, [`lpm-test`](#`lpm-test`).
+This is why lde ships the minimal testing library, [`lde-test`](#`lde-test`).
 
-## lpm-test
+## lde-test
 
-This is a minimal testing library that comes bundled with lpm. You can require it in your test files and use its simple API to write tests.
+This is a minimal testing library that comes bundled with lde. You can require it in your test files and use its simple API to write tests.
 
 ```lua
-local test = require("lpm-test")
+local test = require("lde-test")
 
 test.it("should add numbers correctly", function()
 	test.equal(1 + 1, 2)
@@ -40,8 +40,8 @@ end)
 
 ### Usage
 
-Simply add the types to your package and use the built-in LuaCATs types for lpm-test!
+Simply add the types to your package and use the built-in LuaCATs types for lde-test!
 
 ```
-lpm add lpm-test --dev --git https://github.com/codebycruz/lpm
+lde add lde-test --dev --git https://github.com/codebycruz/lde
 ```

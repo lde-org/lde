@@ -51,7 +51,7 @@ export default function PackageDetail({ name: nameProp }: { name: string }) {
 	}, [nameProp]);
 
 	const { portfile, loading: portfileLoading } = usePortfile(
-		name !== "_fallback" ? name : ""
+		name !== "_fallback" ? name : "",
 	);
 	const { packages, loading: registryLoading } = useRegistry();
 
@@ -78,8 +78,8 @@ export default function PackageDetail({ name: nameProp }: { name: string }) {
 			<div class="flex flex-col gap-4 py-12 text-center">
 				<p class="text-2xl font-semibold">Package not found</p>
 				<p class="text-black/50 dark:text-white/50">
-					<code class="font-mono text-sm">{name}</code> doesn't exist in the
-					registry.
+					<code class="font-mono text-sm">{name}</code> doesn't exist
+					in the registry.
 				</p>
 			</div>
 		);
@@ -88,7 +88,8 @@ export default function PackageDetail({ name: nameProp }: { name: string }) {
 	const description = portfile?.description ?? pkg?.description ?? null;
 	const authors = portfile?.authors ?? pkg?.authors ?? [];
 	const git = portfile?.git ?? pkg?.git ?? "";
-	const latest = pkg?.latest ?? (portfile ? computeLatest(portfile.versions) : null);
+	const latest =
+		pkg?.latest ?? (portfile ? computeLatest(portfile.versions) : null);
 	const lastUpdated = pkg?.lastUpdated ?? null;
 	const license = portfile?.license ?? null;
 	const deps = portfile?.dependencies
@@ -96,7 +97,7 @@ export default function PackageDetail({ name: nameProp }: { name: string }) {
 		: null;
 	const versions = portfile ? sortedVersions(portfile.versions) : null;
 
-	const installCmd = `lpm add ${name}`;
+	const installCmd = `lde add ${name}`;
 	const repoName = git
 		.replace(/\.git$/, "")
 		.replace(/\/$/, "")

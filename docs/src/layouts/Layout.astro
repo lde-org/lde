@@ -12,14 +12,14 @@ interface Props {
 }
 
 const DEFAULT_DESCRIPTION =
-	"Lpm is an open-source project providing easy accessibility to a Lua runtime alongside intuitive package management for dependencies.";
+	"Lde is an open-source project providing easy accessibility to a Lua runtime alongside intuitive package management for dependencies.";
 
 const {
 	title,
 	description = DEFAULT_DESCRIPTION,
 	hideFooter = false,
 } = Astro.props;
-const pageTitle = title ? `${title} - lpm` : "lpm";
+const pageTitle = title ? `${title} - lde` : "lde";
 const ogSlug = Astro.url.pathname.replace(/^\/|\/$/g, "") || "index";
 const ogImage = `${SITE_URL}/og/${ogSlug}.png`;
 ---
@@ -46,7 +46,7 @@ const ogImage = `${SITE_URL}/og/${ogSlug}.png`;
 
 		<!-- Open Graph -->
 		<meta property="og:type" content="website" />
-		<meta property="og:site_name" content="lpm" />
+		<meta property="og:site_name" content="lde" />
 		<meta property="og:title" content={pageTitle} />
 		<meta property="og:description" content={description} />
 		<meta property="og:image" content={ogImage} />
@@ -61,7 +61,7 @@ const ogImage = `${SITE_URL}/og/${ogSlug}.png`;
 		<link
 			rel="alternate"
 			type="application/rss+xml"
-			title="lpm blog"
+			title="lde blog"
 			href="/rss.xml"
 		/>
 	</head>

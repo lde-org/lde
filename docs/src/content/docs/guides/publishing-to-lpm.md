@@ -1,26 +1,26 @@
 ---
-title: Publishing to LPM
+title: Publishing to LDE
 order: 1
 ---
 
-# Publishing to LPM
+# Publishing to LDE
 
 ## How does the registry work?
 
-The LPM registry is hosted on a GitHub repository for everyone to access and send
+The LDE registry is hosted on a GitHub repository for everyone to access and send
 pull requests to.
 
 Packages are simply links to git repositories hosted anywhere with a few bits of metadata such as package description, authors, license, etc.
 
 ## Okay, how can I upload my package?
 
-For convenience, the `lpm publish` command exists which will take the information from your `lpm.json` such as name, version, description, etc and open your browser with a pre-filled pull request to the registry repository.
+For convenience, the `lde publish` command exists which will take the information from your `lde.json` such as name, version, description, etc and open your browser with a pre-filled pull request to the registry repository.
 
 Then just submit it, and wait for it to be merged!
 
 ## What about updates?
 
-The same deal here. You can simply use `lpm publish` and should be able to update your package with a new version, and the registry will automatically update to the new version once it's merged.
+The same deal here. You can simply use `lde publish` and should be able to update your package with a new version, and the registry will automatically update to the new version once it's merged.
 
 ## How's security?
 

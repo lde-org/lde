@@ -19,7 +19,7 @@ const REGISTRY_URL =
 	"https://raw.githubusercontent.com/codebycruz/lpm-registry/refs/heads/dist/index.json";
 
 function PackageCard({ pkg }: { pkg: Package }) {
-	const installCmd = `lpm add ${pkg.name}`;
+	const installCmd = `lde add ${pkg.name}`;
 	const repoName = pkg.git
 		.replace(/\.git$/, "")
 		.replace(/\/$/, "")

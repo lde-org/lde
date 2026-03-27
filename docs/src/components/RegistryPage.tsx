@@ -48,16 +48,26 @@ export default function RegistryPage() {
 				<p class="text-black/60 dark:text-white/60">
 					Browse community packages. Install any package with{" "}
 					<code class="text-sm font-mono px-1.5 py-0.5 rounded bg-black/5 dark:bg-white/10">
-						lpm add &lt;name&gt;
+						lde add &lt;name&gt;
 					</code>
 					.
 				</p>
 			</div>
 			<Note>
 				Looking for LuaRocks packages? Search for them at{" "}
-				<a href="https://luarocks.org/" target="_blank" rel="noopener noreferrer" class="text-blue-500 hover:text-blue-400 underline underline-offset-2">luarocks.org</a>
-				{" "}and install with{" "}
-				<code class="text-sm font-mono px-1.5 py-0.5 rounded bg-black/5 dark:bg-white/10">lpm add rocks:packagename</code>.
+				<a
+					href="https://luarocks.org/"
+					target="_blank"
+					rel="noopener noreferrer"
+					class="text-blue-500 hover:text-blue-400 underline underline-offset-2"
+				>
+					luarocks.org
+				</a>{" "}
+				and install with{" "}
+				<code class="text-sm font-mono px-1.5 py-0.5 rounded bg-black/5 dark:bg-white/10">
+					lde add rocks:packagename
+				</code>
+				.
 			</Note>
 			<Registry />
 		</div>

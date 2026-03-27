@@ -15,7 +15,7 @@ const { Content, headings } = await render(post);
 const tocHeadings = headings.filter((h) => h.depth <= 3);
 ---
 
-<Layout title={post.data.title} description={`${post.data.title} — lpm blog`}>
+<Layout title={post.data.title} description={`${post.data.title} — lde blog`}>
 	<div class="w-full max-w-3xl mx-auto px-4 py-12">
 		<div class="mb-8">
 			<a
@@ -41,72 +41,82 @@ const tocHeadings = headings.filter((h) => h.depth <= 3);
 		</main>
 	</div>
 
-	{tocHeadings.length > 0 && (
-		<aside class="hidden xl:block fixed right-8 w-48" style="top: calc(56px + 5rem);">
-			<p class="text-xs font-semibold uppercase tracking-wider text-black/40 dark:text-white/40 mb-3">
-				On this page
-			</p>
-			<ul class="border-l border-black/10 dark:border-white/10 space-y-1">
-				{tocHeadings.map((h) => (
-					<li>
-						<a
-							href={`#${h.slug}`}
-							data-toc-slug={h.slug}
-							class={`toc-link block text-sm text-black/40 dark:text-white/40 hover:text-black dark:hover:text-white transition-colors leading-snug border-l border-transparent -ml-px py-0.5 ${h.depth === 3 ? "pl-5" : "pl-3"}`}
-						>
-							{h.text}
-						</a>
-					</li>
-				))}
-			</ul>
-		</aside>
-	)}
-
-<script>
-	const links = document.querySelectorAll<HTMLAnchorElement>("a[data-toc-slug]");
-	if (links.length > 0) {
-		const slugs = [...links].map((l) => l.dataset.tocSlug!);
-		const headingEls = slugs.map((s) => document.getElementById(s)).filter(Boolean) as HTMLElement[];
-
-		function setActive(slug: string) {
-			links.forEach((l) => {
-				const active = l.dataset.tocSlug === slug;
-				l.classList.toggle("border-blue-500", active);
-				l.classList.toggle("text-blue-500", active);
-				l.classList.toggle("dark:text-blue-400", active);
-				l.classList.toggle("border-transparent", !active);
-				l.classList.toggle("text-black/40", !active);
-				l.classList.toggle("dark:text-white/40", !active);
-			});
-		}
-
-		// Set first active by default
-		if (slugs[0]) setActive(slugs[0]);
-
-		let ignoreObserver = false;
-
-		links.forEach((l) => {
-			l.addEventListener("click", () => {
-				setActive(l.dataset.tocSlug!);
-				ignoreObserver = true;
-				setTimeout(() => { ignoreObserver = false; }, 1000);
-			});
-		});
-
-		const observer = new IntersectionObserver(
-			(entries) => {
-				if (ignoreObserver) return;
-				for (const entry of entries) {
-					if (entry.isIntersecting) {
-						setActive(entry.target.id);
-						break;
-					}
-				}
-			},
-			{ rootMargin: "0px 0px -70% 0px", threshold: 0 },
-		);
-
-		headingEls.forEach((el) => observer.observe(el));
+	{
+		tocHeadings.length > 0 && (
+			<aside
+				class="hidden xl:block fixed right-8 w-48"
+				style="top: calc(56px + 5rem);"
+			>
+				<p class="text-xs font-semibold uppercase tracking-wider text-black/40 dark:text-white/40 mb-3">
+					On this page
+				</p>
+				<ul class="border-l border-black/10 dark:border-white/10 space-y-1">
+					{tocHeadings.map((h) => (
+						<li>
+							<a
+								href={`#${h.slug}`}
+								data-toc-slug={h.slug}
+								class={`toc-link block text-sm text-black/40 dark:text-white/40 hover:text-black dark:hover:text-white transition-colors leading-snug border-l border-transparent -ml-px py-0.5 ${h.depth === 3 ? "pl-5" : "pl-3"}`}
+							>
+								{h.text}
+							</a>
+						</li>
+					))}
+				</ul>
+			</aside>
+		)
 	}
-</script>
+
+	<script>
+		const links =
+			document.querySelectorAll<HTMLAnchorElement>("a[data-toc-slug]");
+		if (links.length > 0) {
+			const slugs = [...links].map((l) => l.dataset.tocSlug!);
+			const headingEls = slugs
+				.map((s) => document.getElementById(s))
+				.filter(Boolean) as HTMLElement[];
+
+			function setActive(slug: string) {
+				links.forEach((l) => {
+					const active = l.dataset.tocSlug === slug;
+					l.classList.toggle("border-blue-500", active);
+					l.classList.toggle("text-blue-500", active);
+					l.classList.toggle("dark:text-blue-400", active);
+					l.classList.toggle("border-transparent", !active);
+					l.classList.toggle("text-black/40", !active);
+					l.classList.toggle("dark:text-white/40", !active);
+				});
+			}
+
+			// Set first active by default
+			if (slugs[0]) setActive(slugs[0]);
+
+			let ignoreObserver = false;
+
+			links.forEach((l) => {
+				l.addEventListener("click", () => {
+					setActive(l.dataset.tocSlug!);
+					ignoreObserver = true;
+					setTimeout(() => {
+						ignoreObserver = false;
+					}, 1000);
+				});
+			});
+
+			const observer = new IntersectionObserver(
+				(entries) => {
+					if (ignoreObserver) return;
+					for (const entry of entries) {
+						if (entry.isIntersecting) {
+							setActive(entry.target.id);
+							break;
+						}
+					}
+				},
+				{ rootMargin: "0px 0px -70% 0px", threshold: 0 },
+			);
+
+			headingEls.forEach((el) => observer.observe(el));
+		}
+	</script>
 </Layout>

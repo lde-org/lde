@@ -1,7 +1,7 @@
 <div align="center">
 
 <a href="https://lualpm.com/">
-	<img src="./assets/dist/lde-text-nospace.svg" alt="lpm logo" width="256" />
+	<img src="./assets/dist/lde-text-nospace.svg" alt="lde logo" width="256" />
 </a>
 
 ---
@@ -10,7 +10,7 @@
 
 </div>
 
-`lpm` is a modern package manager and toolkit for Lua, written in Lua.
+`lde` is a modern package manager and toolkit for Lua, written in Lua.
 
 It includes a LuaJIT runtime for any operating system, a test runner, and the ability to compile your Lua programs into single executables users can run in **<1mB**. All of this alongside a package manager and package registry to easily share and reuse lua code, properly version locked and isolated to your individual projects.
 
@@ -18,18 +18,18 @@ To get started, [read the docs](https://lualpm.com/docs/getting-started/introduc
 
 ## Features
 
-- Easy project creation with `lpm new` and `lpm init`
+- Easy project creation with `lde new` and `lde init`
 - Automatic local package management, avoid conflicting global installs
-- `lpm add --path <package>` - Install local dependencies (good for monorepos)
-- `lpm add --git <repo>` - Install git dependencies (supports monorepos)
-- `lpm run` - Runs your project's init file and installs dependencies
-- `lpm compile` - Turn your project into a single executable, easily distributable
-- `lpm test` - Run project tests with the built-in test framework, [`lpm-test`](./packages/lpm-test)
-- `lpm bundle` - Bundle your project into a single lua file
-- `lpm x` - Execute a project in another location, perfect for CLIs (alias: `lpx`)
-- `lpm tree` - View your dependencies at a glance
-- `lpm update` - Update your dependencies to their latest versions
-- `lpm publish` - Create a PR to add your package to [the registry](https://github.com/codebycruz/lpm-registry)
+- `lde add --path <package>` - Install local dependencies (good for monorepos)
+- `lde add --git <repo>` - Install git dependencies (supports monorepos)
+- `lde run` - Runs your project's init file and installs dependencies
+- `lde compile` - Turn your project into a single executable, easily distributable
+- `lde test` - Run project tests with the built-in test framework, [`lde-test`](./packages/lde-test)
+- `lde bundle` - Bundle your project into a single lua file
+- `lde x` - Execute a project in another location, perfect for CLIs (alias: `ldx`)
+- `lde tree` - View your dependencies at a glance
+- `lde update` - Update your dependencies to their latest versions
+- `lde publish` - Create a PR to add your package to [the registry](https://github.com/codebycruz/lpm-registry)
 
 ## Installation
 
@@ -38,24 +38,24 @@ To get started, [read the docs](https://lualpm.com/docs/getting-started/introduc
 | Linux   | `curl -fsSL https://lualpm.com/install \| sh` |
 | Windows | `irm https://lualpm.com/install.ps1 \| iex`   |
 
-_To upgrade your `lpm` version, simply run `lpm upgrade`!_
+_To upgrade your `lde` version, simply run `lde upgrade`!_
 
 ## Quickstart
 
 Create a project with dependencies..
 
 ```bash
-lpm new myproject && cd myproject
-lpm add hood --git https://github.com/codebycruz/hood
+lde new myproject && cd myproject
+lde add hood --git https://github.com/codebycruz/hood
 echo "print(require('hood'))" > ./src/init.lua
-lpm run
+lde run
 # Output: table: 0x7f53326fd030
 ```
 
 Or run a repository's code in a single command!
 
 ```bash
-lpx triangle --git https://github.com/codebycruz/hood
+lde triangle --git https://github.com/codebycruz/hood
 ```
 
 ## Comparison to LuaRocks and Lux
@@ -64,19 +64,17 @@ I made this to the best of my ability with limited information about LuaRocks an
 
 If anyone has any corrections, please do submit a pull request.
 
-|                       | lpm            | lux          | luarocks     |
+|                       | lde            | lux          | luarocks     |
 | --------------------- | -------------- | ------------ | ------------ |
 | Written in            | Lua            | Rust         | Teal         |
 | Project format        | JSON           | TOML/Lua     | Lua          |
 | Add/remove deps       | ✓              | ✓            | ❌            |
-| Built-in test runner  | ✓ (lpm-test)   | ✓ (busted)   | ❌            |
+| Built-in test runner  | ✓ (lde-test)   | ✓ (busted)   | ❌            |
 | Ships with LuaJIT     | ✓              | ❌            | ❌            |
 | Compile to executable | ✓              | ❌            | ❌            |
 | Git deps              | ✓              | ✓            | ❌            |
-| Registry deps         | ✓ (lpm)        | ✓ (luarocks) | ✓ (luarocks) |
+| Registry deps         | ✓ (lde)        | ✓ (luarocks) | ✓ (luarocks) |
 | Custom Registry       | ✓              | ❌            | ✓            |
 | Lockfile              | ✓              | ✓            | ✓            |
 | Luarocks Support      | 🚧             | ✓            | ✓            |
 | Lua build scripts     | build.lua      | rockspec     | rockspec     |
-
-[53]: https://github.com/codebycruz/lpm/issues/53

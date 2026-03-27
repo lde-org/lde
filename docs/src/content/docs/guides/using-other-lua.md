@@ -5,11 +5,11 @@ order: 3
 
 # Using an Alternate Lua Engine
 
-By default, LPM ships with the [LPM Runtime](/docs/features/runtime) which is based on LuaJIT.
+By default, LDE ships with the [LDE Runtime](/docs/features/runtime) which is based on LuaJIT.
 
-But LPM supports usage of other Lua Engines, such as Lua 5.4
+But LDE supports usage of other Lua Engines, such as Lua 5.4
 
-To do this, edit your `lpm.json` to provide which program to run instead of using LPM.
+To do this, edit your `lde.json` to provide which program to run instead of using LDE.
 
 ```json
 {
@@ -18,6 +18,6 @@ To do this, edit your `lpm.json` to provide which program to run instead of usin
 }
 ```
 
-After this, `lpm run` will try to use that engine you provided.
+After this, `lde run` will try to use that engine you provided.
 
-_This currently does NOT support running tests, which are integrated with the LPM runtime!_
+_This currently does NOT support running tests, which are integrated with the LDE runtime!_

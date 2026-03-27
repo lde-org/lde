@@ -63,9 +63,9 @@ export const getStaticPaths: GetStaticPaths = async () => {
 		{
 			params: { slug: "index" },
 			props: {
-				title: "lpm",
+				title: "lde",
 				description:
-					"Lpm is an open-source project providing easy accessibility to a Lua runtime alongside intuitive package management for dependencies.",
+					"Lde is an open-source project providing easy accessibility to a Lua runtime alongside intuitive package management for dependencies.",
 				date: "",
 				index: true,
 			},
@@ -74,7 +74,7 @@ export const getStaticPaths: GetStaticPaths = async () => {
 			params: { slug: "blog" },
 			props: {
 				title: "Blog",
-				description: "News and updates from the lpm team.",
+				description: "News and updates from the lde team.",
 				date: "",
 				index: false,
 			},
@@ -83,7 +83,7 @@ export const getStaticPaths: GetStaticPaths = async () => {
 			params: { slug: "docs" },
 			props: {
 				title: "Documentation",
-				description: "Learn how to use lpm.",
+				description: "Learn how to use lde.",
 				date: "",
 				index: false,
 			},
@@ -92,7 +92,7 @@ export const getStaticPaths: GetStaticPaths = async () => {
 			params: { slug: "registry" },
 			props: {
 				title: "Registry",
-				description: "Browse and discover Lua packages for lpm.",
+				description: "Browse and discover Lua packages for lde.",
 				date: "",
 				index: false,
 			},

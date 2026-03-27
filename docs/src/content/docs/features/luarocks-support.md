@@ -5,14 +5,14 @@ order: 9
 
 # Luarocks Support
 
-LPM supports rockspecs and the [luarocks package registry](https://luarocks.org/) backwards compatibly.
+LDE supports rockspecs and the [luarocks package registry](https://luarocks.org/) backwards compatibly.
 
 ## Installing a luarocks dependency
 
-Simply prepend `rocks:` to add a luarocks dependency the same way you would an lpm dependency!
+Simply prepend `rocks:` to add a luarocks dependency the same way you would an lde dependency!
 
 ```sh
-lpm add rocks:luasocket
+lde add rocks:luasocket
 ```
 
 ## Installing a luarocks tool
@@ -20,9 +20,9 @@ lpm add rocks:luasocket
 Same thing here!
 
 ```sh
-lpm install rocks:busted
+lde install rocks:busted
 ```
 
 ## Compatibility
 
-If you have any issues with compatibility, please do [make an issue](https://github.com/codebycruz/lpm/issues).
+If you have any issues with compatibility, please do [make an issue](https://github.com/codebycruz/lde/issues).

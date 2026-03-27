@@ -13,13 +13,13 @@ export async function GET(_context: APIContext) {
 	const blog = (await getCollection("blog")).sort(
 		(a, b) =>
 			new Date(b.data.published).getTime() -
-			new Date(a.data.published).getTime()
+			new Date(a.data.published).getTime(),
 	);
 
 	const lines: string[] = [
-		`# lpm Documentation`,
+		`# lde Documentation`,
 		``,
-		`> lpm is a fast, modern package manager and runtime for Lua.`,
+		`> lde is a fast, modern package manager and runtime for Lua.`,
 		`> Source: ${SITE_URL}/docs`,
 		``,
 	];
@@ -33,7 +33,7 @@ export async function GET(_context: APIContext) {
 		lines.push(``);
 	}
 
-	lines.push(`# lpm Blog`);
+	lines.push(`# lde Blog`);
 	lines.push(``);
 
 	for (const post of blog) {

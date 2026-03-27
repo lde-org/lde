@@ -5,19 +5,19 @@ order: 6
 
 # Tools
 
-LPM has support for running packages as tools, which is useful for command line applications, build tools, and more.
+LDE has support for running packages as tools, which is useful for command line applications, build tools, and more.
 
 Any package is automatically a 'tool', simply by the nature of packages all having init.lua as their entrypoint.
 
-## lpm x
+## lde x
 
 You can run any package from git or a local path.
 
 ```bash
-lpm x triangle --git https://github.com/codebycruz/hood
+lde x triangle --git https://github.com/codebycruz/hood
 ```
 
-For short, lpm registers a `lpx` alias for `lpm x`, so you can also run:
+For short, lde registers a `lpx` alias for `lde x`, so you can also run:
 
 ```bash
 lpx triangle --git https://github.com/codebycruz/hood
@@ -25,20 +25,20 @@ lpx triangle --git https://github.com/codebycruz/hood
 
 This clones the hood repository, resolves the triangle package, and then instantly runs the package. You can do this with --path dependencies as well.
 
-## lpm install
+## lde install
 
 But this is quite tedious if you need to repeatedly run this tool, so you can install tools to your PATH.
 
 ```bash
-lpm install triangle --git https://github.com/codebycruz/hood
+lde install triangle --git https://github.com/codebycruz/hood
 # Now you can run `triangle` from your terminal!
 triangle
 ```
 
-## lpm uninstall
+## lde uninstall
 
 To remove previously installed tools, you can run:
 
 ```bash
-lpm uninstall triangle
+lde uninstall triangle
 ```

@@ -5,20 +5,20 @@ order: 3
 
 # Quick Start
 
-Get up and running with lpm in under a minute.
+Get up and running with lde in under a minute.
 
 ## Create a new project
 
 ```sh
-lpm new myproject && cd myproject
+lde new myproject && cd myproject
 ```
 
 ## Add a package
 
-For this example, we'll import the `path` library from lpm itself.
+For this example, we'll import the `path` library from lde itself.
 
 ```sh
-lpm add path --git https://github.com/codebycruz/lpm
+lde add path --git https://github.com/codebycruz/lde
 ```
 
 ## Write your main file
@@ -34,8 +34,8 @@ print(path.join("hello", "world"))
 ## Run your project
 
 ```sh
-lpm run
+lde run
 # 'hello/world'
 ```
 
-That's it. It's that simple. You just ran your project with a dependency from an entirely remote git repository stored in a monorepo, with all the heavy lifting done by lpm!
+That's it. It's that simple. You just ran your project with a dependency from an entirely remote git repository stored in a monorepo, with all the heavy lifting done by lde!
