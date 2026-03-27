@@ -16,7 +16,7 @@ An example list of dependencies:
 ```json
 "dependencies": {
 	"hood": { "path": "../hood" },
-	"lde-test": { "git": "https://github.com/codebycruz/lde" },
+	"lde-test": { "git": "https://github.com/lde-org/lde" },
 }
 ```
 

@@ -21,6 +21,6 @@ Use `lde update` to update registry dependencies to the latest compatible versio
 
 ## Publishing a package
 
-Publishing a package is as simple as creating a pull request to the [lde-registry](https://github.com/codebycruz/lde-registry) repository with a single JSON file.
+Publishing a package is as simple as creating a pull request to the [lde-registry](https://github.com/lde-org/registry) repository with a single JSON file.
 
 This is simplified with a single `lde publish` command which automatically opens your browser to a URL with the necessary info pre-filled to make a pull request.

@@ -25,4 +25,4 @@ lde install rocks:busted
 
 ## Compatibility
 
-If you have any issues with compatibility, please do [make an issue](https://github.com/codebycruz/lde/issues).
+If you have any issues with compatibility, please do [make an issue](https://github.com/lde-org/lde/issues).

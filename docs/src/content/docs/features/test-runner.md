@@ -43,5 +43,5 @@ end)
 Simply add the types to your package and use the built-in LuaCATs types for lde-test!
 
 ```
-lde add lde-test --dev --git https://github.com/codebycruz/lde
+lde add lde-test --dev --git https://github.com/lde-org/lde
 ```
