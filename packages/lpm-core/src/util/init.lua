@@ -68,7 +68,7 @@ function util.openRockspecUrl(name, url, branch, commit)
 	if sourceUrl:match("^git") then
 		sourceUrl = sourceUrl:gsub("^git%+", "")
 		dir = lpm.global.getOrInitGitRepo(name, sourceUrl, branch or sourceTag, commit)
-		lockEntry = { git = sourceUrl, commit = select(2, git.getCommitHash(dir)) or commit }
+		lockEntry = { git = sourceUrl, commit = select(2, git.getCommitHash(dir)) or commit, rockspec = url }
 	elseif sourceUrl:match("^https?://") then
 		dir = lpm.global.getOrInitArchive(sourceUrl)
 		lockEntry = { archive = sourceUrl, rockspec = url }
