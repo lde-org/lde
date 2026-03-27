@@ -55,13 +55,22 @@ local function restore(t, saved)
 	end
 end
 
----@param chunk function
+---@param compile fun(): function?, string?
 ---@param opts lpm.ExecuteOptions?
-local function executeChunk(chunk, opts)
+local function executeWith(compile, opts)
 	opts = opts or {}
 
-	local oldCwd = opts.cwd and env.cwd()
-	if opts.cwd then env.chdir(opts.cwd) end
+	local oldCwd
+	if opts.cwd then
+		oldCwd = env.cwd()
+		env.chdir(opts.cwd)
+	end
+
+	local chunk, err = compile()
+	if not chunk then
+		if oldCwd then env.chdir(oldCwd) end
+		return false, err or "Failed to compile"
+	end
 
 	local oldPath, oldCPath = package.path, package.cpath
 
@@ -106,7 +115,7 @@ local function executeChunk(chunk, opts)
 		end
 	end
 
-	local ok, err = pcall(function()
+	local ok, result = pcall(function()
 		package.path = opts.packagePath or oldPath
 		package.cpath = opts.packageCPath or oldCPath
 		if opts.args then
@@ -126,30 +135,21 @@ local function executeChunk(chunk, opts)
 	package.loaders = oldLoaders
 	package.path, package.cpath = oldPath, oldCPath
 
-	return ok, err
+	return ok, result
 end
 
 ---@param scriptPath string
 ---@param opts lpm.ExecuteOptions?
 local function executeFile(scriptPath, opts)
-	local chunk, err = loadfile(scriptPath, "t")
-	if not chunk then
-		return false, err or "Failed to compile script"
-	end
-	return executeChunk(chunk, opts)
+	return executeWith(function() return loadfile(scriptPath, "t") end, opts)
 end
 
 ---@param code string
 ---@param opts lpm.ExecuteOptions?
 local function executeString(code, opts)
-	local chunk, err = loadstring("return " .. code, "-e")
-	if not chunk then
-		chunk, err = loadstring(code, "-e")
-	end
-	if not chunk then
-		return false, err
-	end
-	return executeChunk(chunk, opts)
+	return executeWith(function()
+		return loadstring("return " .. code, "-e") or loadstring(code, "-e")
+	end, opts)
 end
 
 return {
