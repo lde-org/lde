@@ -28,11 +28,16 @@ local rocked = {}
 ---@field install rocked.raw.BuildInstall?
 
 ---@class rocked.raw.Build
----@field type "builtin" | "module"
+---@field type "builtin" | "module" | "make" | "cmake" | "none"
 ---@field modules table<string, rocked.raw.BuildSource>?
 ---@field install rocked.raw.BuildInstall?
 ---@field copy_directories string[]?
 ---@field platforms table<string, rocked.raw.PlatformBuild>?
+---@field makefile string?
+---@field build_target string?
+---@field install_target string?
+---@field build_variables table<string, string>?
+---@field install_variables table<string, string>?
 
 ---@class rocked.raw.Output
 ---@field version string
@@ -79,7 +84,10 @@ end
 
 local validRockTypes = {
 	["builtin"] = true,
-	["module"] = true
+	["module"]  = true,
+	["make"]    = true,
+	["cmake"]   = true,
+	["none"]    = true,
 }
 
 ---@overload fun(spec: string): false, string?
