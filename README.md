@@ -55,26 +55,9 @@ lde run
 Or run a repository's code in a single command!
 
 ```bash
-lde triangle --git https://github.com/codebycruz/hood
+ldx triangle --git https://github.com/codebycruz/hood
 ```
 
-## Comparison to LuaRocks and Lux
+## How does lde compare to other tools?
 
-I made this to the best of my ability with limited information about LuaRocks and Lux.
-
-If anyone has any corrections, please do submit a pull request.
-
-|                       | lde            | lux          | luarocks     |
-| --------------------- | -------------- | ------------ | ------------ |
-| Written in            | Lua            | Rust         | Teal         |
-| Project format        | JSON           | TOML/Lua     | Lua          |
-| Add/remove deps       | ✓              | ✓            | ❌            |
-| Built-in test runner  | ✓ (lde-test)   | ✓ (busted)   | ❌            |
-| Ships with LuaJIT     | ✓              | ❌            | ❌            |
-| Compile to executable | ✓              | ❌            | ❌            |
-| Git deps              | ✓              | ✓            | ❌            |
-| Registry deps         | ✓ (lde)        | ✓ (luarocks) | ✓ (luarocks) |
-| Custom Registry       | ✓              | ❌            | ✓            |
-| Lockfile              | ✓              | ✓            | ✓            |
-| Luarocks Support      | 🚧             | ✓            | ✓            |
-| Lua build scripts     | build.lua      | rockspec     | rockspec     |
+See [this table](https://lde.sh#compare) for a comparison between some of the most common tools.
