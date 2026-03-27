@@ -3,7 +3,7 @@ description: "Install lde package manager"
 
 inputs:
   version:
-    description: "Version to install (e.g., '0.8.0', 'latest', or 'nightly')"
+    description: "Version to install (e.g., '0.8.1', 'latest', or 'nightly')"
     required: false
     default: "latest"
 

@@ -15,7 +15,7 @@ local util = require("util")
 
 local REGISTRY_URL = "https://github.com/lde-org/registry"
 
-global.currentVersion = "0.8.0"
+global.currentVersion = "0.8.1"
 
 ---@class lde.Portfile
 ---@field name string
