@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <svg
-   width="270400"
-   viewBox="0 0 270400 270400"
+   width="520"
+   viewBox="0 0 520 520"
    version="1.1"
    id="svg18"
-   height="270400"
+   height="520"
    xmlns="http://www.w3.org/2000/svg"
    xmlns:svg="http://www.w3.org/2000/svg">
   <defs
@@ -55,7 +55,7 @@
      id="polygon4" />
   <!-- Center body -->
   <polygon
-     points="310,160 380,240 280,360 180,310 160,200 "
+     points="180,310 160,200 310,160 380,240 280,360 "
      fill="#0000cc"
      clip-path="url(#clip)"
      style="color:#ffffff;font-weight:400;font-size:16px;font-family:'Anthropic Sans', '-apple-system', BlinkMacSystemFont, 'Segoe UI', sans-serif;dominant-baseline:auto;text-anchor:start;opacity:1;fill:#0000cc;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter"
@@ -83,7 +83,7 @@
      id="polygon8" />
   <!-- Bottom right -->
   <polygon
-     points="340,400 436,360 436,436 260,436 280,360 "
+     points="260,436 280,360 340,400 436,360 436,436 "
      fill="#000090"
      clip-path="url(#clip)"
      style="color:#ffffff;font-weight:400;font-size:16px;font-family:'Anthropic Sans', '-apple-system', BlinkMacSystemFont, 'Segoe UI', sans-serif;dominant-baseline:auto;text-anchor:start;opacity:1;fill:#000090;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter"
