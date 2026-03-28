@@ -1,6 +1,7 @@
 ---
 import Layout from "../layouts/Layout.astro";
 import InstallTabs from "../components/InstallTabs";
+import TerminalDemo from "../components/TerminalDemo";
 import { GITHUB_RELEASES_URL } from "../data/info";
 
 const comparison = [
@@ -157,29 +158,13 @@ const comparison = [
 				</div>
 
 				<div class="relative hidden lg:block mt-4">
-					<!-- Orbital rings, always centered on the logo -->
-					<div
-						class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[calc(50%+24px)] size-[350px] rounded-full border border-slate-500/40 dark:border-slate-400/25 pointer-events-none"
-					>
+					<div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 size-[500px] rounded-full border border-slate-500/40 dark:border-slate-400/25 pointer-events-none"></div>
+					<div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 size-[680px] rounded-full border border-slate-500/25 dark:border-slate-400/15 pointer-events-none"></div>
+					<div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 size-[880px] rounded-full border border-slate-500/15 dark:border-slate-400/[0.08] pointer-events-none"></div>
+					<div class="absolute inset-0 bg-blue-500/30 dark:bg-blue-500/20 rounded-full blur-3xl scale-110 pointer-events-none z-0"></div>
+					<div class="relative z-10">
+						<TerminalDemo client:idle />
 					</div>
-					<div
-						class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[calc(50%+24px)] size-[560px] rounded-full border border-slate-500/25 dark:border-slate-400/15 pointer-events-none"
-					>
-					</div>
-					<div
-						class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[calc(50%+24px)] size-[800px] rounded-full border border-slate-500/15 dark:border-slate-400/[0.08] pointer-events-none"
-					>
-					</div>
-					<div
-						class="absolute inset-0 -mt-12 bg-blue-500/40 dark:bg-blue-500/20 rounded-full blur-3xl scale-125"
-					>
-					</div>
-					<img
-						src="/lde.svg"
-						alt="lde logo"
-						class="size-96 -mt-12 relative"
-						fetchpriority="high"
-					/>
 				</div>
 			</div>
 		</div>
