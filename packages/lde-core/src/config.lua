@@ -10,6 +10,7 @@
 ---@field scripts table<string, string>?
 ---@field dependencies lde.Config.Dependencies?
 ---@field devDependencies lde.Config.Dependencies?
+---@field features table<string, string[]>?
 local Config = {}
 Config.__index = Config
 
@@ -21,6 +22,7 @@ end
 ---@class lde.Config.BaseDependency
 ---@field name string? # The actual package name in the registry, when aliasing
 ---@field rockspec string? # Path to the rockspec file, relative to the dependency directory
+---@field features string[]? # Feature flags to enable for this dependency
 
 ---@class lde.Config.GitDependency: lde.Config.BaseDependency
 ---@field git string
