@@ -90,12 +90,11 @@ local function bundle(args)
 	local files = {}
 	local modulesDir = pkg:getModulesDir()
 
-	bundleDir(pkg:getName(), path.join(modulesDir, pkg:getName()), files)
-
-	local lockfile = pkg:readLockfile()
-	local deps = lockfile and lockfile:getDependencies() or pkg:getDependencies()
-	for depName in pairs(deps) do
-		bundleDir(depName, path.join(modulesDir, depName), files)
+	for entry in fs.readdir(modulesDir) do
+		local p = path.join(modulesDir, entry.name)
+		if fs.isdir(p) then
+			bundleDir(entry.name, p, files)
+		end
 	end
 
 	local parts = {}
