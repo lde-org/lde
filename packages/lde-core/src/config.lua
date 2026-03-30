@@ -10,7 +10,7 @@
 ---@field scripts table<string, string>?
 ---@field dependencies lde.Config.Dependencies?
 ---@field devDependencies lde.Config.Dependencies?
----@field features table<string, string[]>?
+---@field features table<lde.Config.FeatureFlag, string[]>?
 local Config = {}
 Config.__index = Config
 

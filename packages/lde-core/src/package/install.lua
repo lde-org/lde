@@ -168,11 +168,34 @@ local function collectDependencies(dependencies, relativeTo, stack, visiting, ro
 	end
 end
 
+---@type table<string, lde.Config.FeatureFlag>
+local platformLookup = {
+	["Windows"] = "windows",
+	["Linux"] = "linux",
+	["OSX"] = "macos"
+}
+
+-- Preallocate this for the main case where no features are passed
+local basicFeatureTable = { platformLookup[jit.os] }
+
+--- Adds the current platform ("windows", "linux", or "macos") to a features table.
+---@param t lde.Config.FeatureFlag[]?
+---@return lde.Config.FeatureFlag[]
+local function addPlatformFeatures(t)
+	if not t then
+		return basicFeatureTable
+	end
+
+	t[#t + 1] = platformLookup[jit.os]
+	return t
+end
+
 ---@param package lde.Package
 ---@param dependencies table<string, lde.Config.Dependency>?
 ---@param relativeTo string?
----@param features string[]?
+---@param features lde.Config.FeatureFlag[]?
 local function installDependencies(package, dependencies, relativeTo, features)
+	features = addPlatformFeatures(features) -- features is not to be mutated from here on out
 	local isRoot = dependencies == nil
 	dependencies = dependencies or package:getDependencies()
 	relativeTo = relativeTo or package.dir
