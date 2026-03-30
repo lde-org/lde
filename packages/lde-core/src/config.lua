@@ -19,10 +19,12 @@ function Config.new(conf)
 	return setmetatable(conf, Config) --[[@as lde.Config]]
 end
 
+---@alias lde.Config.FeatureFlag "windows" | "linux" | "macos" | string
+
 ---@class lde.Config.BaseDependency
 ---@field name string? # The actual package name in the registry, when aliasing
 ---@field rockspec string? # Path to the rockspec file, relative to the dependency directory
----@field features string[]? # Feature flags to enable for this dependency
+---@field features lde.Config.FeatureFlag[]? # Feature flags to enable for this dependency
 ---@field optional boolean? # If true, the dependency is not required for the project to run
 
 ---@class lde.Config.GitDependency: lde.Config.BaseDependency
