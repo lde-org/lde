@@ -23,6 +23,7 @@ end
 ---@field name string? # The actual package name in the registry, when aliasing
 ---@field rockspec string? # Path to the rockspec file, relative to the dependency directory
 ---@field features string[]? # Feature flags to enable for this dependency
+---@field optional boolean? # If true, the dependency is not required for the project to run
 
 ---@class lde.Config.GitDependency: lde.Config.BaseDependency
 ---@field git string
