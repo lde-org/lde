@@ -13,8 +13,14 @@
 		"http": { "path": "../http" },
 		"semver": { "path": "../semver" },
 		"lde-core": { "path": "../lde-core" },
-		"winapi": { "git": "https://github.com/codebycruz/winapi" },
+		"winapi": {
+			"git": "https://github.com/codebycruz/winapi",
+			"optional": true
+		},
 		"git": { "path": "../git" },
 		"luarocks": { "path": "../luarocks" }
+	},
+	"features": {
+		"windows": ["winapi"]
 	}
 }

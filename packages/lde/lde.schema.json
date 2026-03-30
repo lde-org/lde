@@ -3,6 +3,19 @@
 	"type": "object",
 	"required": ["name", "version", "dependencies"],
 	"definitions": {
+		"featureFlag": {
+			"anyOf": [
+				{ "type": "string", "enum": ["windows", "linux", "macos"] },
+				{ "type": "string" }
+			]
+		},
+		"dependencyFeatures": {
+			"features": {
+				"type": "array",
+				"items": { "$ref": "#/definitions/featureFlag" },
+				"description": "Feature flags to enable for this dependency"
+			}
+		},
 		"dependencyObject": {
 			"type": "object",
 			"additionalProperties": {
@@ -22,6 +35,15 @@
 							"rockspec": {
 								"type": "string",
 								"description": "Path to the rockspec file relative to the dependency directory"
+							},
+							"features": {
+								"type": "array",
+								"items": { "$ref": "#/definitions/featureFlag" },
+								"description": "Feature flags to enable for this dependency"
+							},
+							"optional": {
+								"type": "boolean",
+								"description": "If true, the dependency is not required for the project to run"
 							}
 						},
 						"additionalProperties": false
@@ -48,6 +70,15 @@
 							"rockspec": {
 								"type": "string",
 								"description": "Path to the rockspec file relative to the dependency directory"
+							},
+							"features": {
+								"type": "array",
+								"items": { "$ref": "#/definitions/featureFlag" },
+								"description": "Feature flags to enable for this dependency"
+							},
+							"optional": {
+								"type": "boolean",
+								"description": "If true, the dependency is not required for the project to run"
 							}
 						},
 						"additionalProperties": false
@@ -62,6 +93,15 @@
 							"package": {
 								"type": "string",
 								"description": "Actual package name in the registry, when aliasing (key is the require name)"
+							},
+							"features": {
+								"type": "array",
+								"items": { "$ref": "#/definitions/featureFlag" },
+								"description": "Feature flags to enable for this dependency"
+							},
+							"optional": {
+								"type": "boolean",
+								"description": "If true, the dependency is not required for the project to run"
 							}
 						},
 						"additionalProperties": false
@@ -76,6 +116,15 @@
 							"version": {
 								"type": "string",
 								"description": "Optional version constraint e.g. '>= 1.0'"
+							},
+							"features": {
+								"type": "array",
+								"items": { "$ref": "#/definitions/featureFlag" },
+								"description": "Feature flags to enable for this dependency"
+							},
+							"optional": {
+								"type": "boolean",
+								"description": "If true, the dependency is not required for the project to run"
 							}
 						},
 						"additionalProperties": false
@@ -94,6 +143,15 @@
 							"rockspec": {
 								"type": "string",
 								"description": "Path to the rockspec file relative to the dependency directory"
+							},
+							"features": {
+								"type": "array",
+								"items": { "$ref": "#/definitions/featureFlag" },
+								"description": "Feature flags to enable for this dependency"
+							},
+							"optional": {
+								"type": "boolean",
+								"description": "If true, the dependency is not required for the project to run"
 							}
 						},
 						"additionalProperties": false
@@ -157,6 +215,15 @@
 					"description": "Development dependencies with source locations"
 				}
 			]
+		},
+		"features": {
+			"type": "object",
+			"description": "Named feature groups, each containing a list of dependency names",
+			"additionalProperties": {
+				"type": "array",
+				"items": { "type": "string" },
+				"description": "List of dependency names included in this feature"
+			}
 		}
 	},
 	"additionalProperties": false

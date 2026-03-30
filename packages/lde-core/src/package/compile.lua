@@ -59,12 +59,12 @@ local function compilePackage(package)
 	end
 
 	local modulesDir = package:getModulesDir()
-	bundleDir(package:getName(), path.join(modulesDir, package:getName()))
 
-	local lockfile = package:readLockfile()
-	local deps = lockfile and lockfile:getDependencies() or package:getDependencies()
-	for depName in pairs(deps) do
-		bundleDir(depName, path.join(modulesDir, depName))
+	for entry in fs.readdir(modulesDir) do
+		local p = path.join(modulesDir, entry.name)
+		if fs.isdir(p) then
+			bundleDir(entry.name, p)
+		end
 	end
 
 	return sea.compile(package:getName(), files, sharedLibs)

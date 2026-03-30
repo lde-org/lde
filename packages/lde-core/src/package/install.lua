@@ -168,13 +168,50 @@ local function collectDependencies(dependencies, relativeTo, stack, visiting, ro
 	end
 end
 
+---@type table<string, lde.Config.FeatureFlag>
+local platformLookup = {
+	["Windows"] = "windows",
+	["Linux"] = "linux",
+	["OSX"] = "macos"
+}
+
+-- Preallocate this for the main case where no features are passed
+local basicFeatureTable = { platformLookup[jit.os] }
+
+--- Adds the current platform ("windows", "linux", or "macos") to a features table.
+---@param t lde.Config.FeatureFlag[]?
+---@return lde.Config.FeatureFlag[]
+local function addPlatformFeatures(t)
+	if not t then
+		return basicFeatureTable
+	end
+
+	t[#t + 1] = platformLookup[jit.os]
+	return t
+end
+
 ---@param package lde.Package
 ---@param dependencies table<string, lde.Config.Dependency>?
 ---@param relativeTo string?
-local function installDependencies(package, dependencies, relativeTo)
+---@param features lde.Config.FeatureFlag[]?
+local function installDependencies(package, dependencies, relativeTo, features)
+	features = addPlatformFeatures(features) -- features is not to be mutated from here on out
 	local isRoot = dependencies == nil
 	dependencies = dependencies or package:getDependencies()
 	relativeTo = relativeTo or package.dir
+
+	---@type table<string, true> # depname: true
+	local enabledOptional = {}
+	if features and package:readConfig().features then
+		for _, featureName in ipairs(features) do
+			local deps = package:readConfig().features[featureName]
+			if deps then
+				for _, depName in ipairs(deps) do
+					enabledOptional[depName] = true
+				end
+			end
+		end
+	end
 
 	local modulesDir = package:getModulesDir()
 
@@ -199,22 +236,29 @@ local function installDependencies(package, dependencies, relativeTo)
 	local rootLockfile = isRoot and package:readLockfile() or nil
 	collectDependencies(dependencies, relativeTo, stack, {}, rootLockfile)
 
-	-- 2. Install each resolved dependency
+	-- 2. Install each resolved dependency (skip optional deps not enabled via features)
 	for alias, entry in pairs(stack) do
+		local depInfo = dependencies[alias]
+		if depInfo and depInfo.optional and not enabledOptional[alias] then
+			goto continue
+		end
 		local destinationPath = path.join(modulesDir, alias)
 		if not fs.islink(destinationPath) then
 			entry.pkg:build(destinationPath)
 		end
+		::continue::
 	end
 
-	-- 3. Write a single flat lockfile only for the root call
+	-- 3. Write a single flat lockfile only for the root call (includes optional deps regardless)
 	if isRoot then
 		local lockEntries = {}
 		for alias, entry in pairs(stack) do
 			lockEntries[alias] = entry.lock
 		end
+
 		local lockfile = lde.Lockfile.new(package:getLockfilePath(), lockEntries)
 		lockfile:save()
+
 		local lockfileContent = fs.read(package:getLockfilePath())
 		fs.write(path.join(modulesDir, ".installed"), util.fnv1a(lockfileContent))
 	end
