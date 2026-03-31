@@ -60,7 +60,7 @@ local function runTests(package)
 	local totalFailures = 0
 	local totalSkipped = 0
 
-	local testFiles = fs.scan(testDir, "**" .. path.separator .. "*.lua")
+	local testFiles = fs.scan(testDir, "**" .. path.separator .. "*.test.lua")
 	for _, relativePath in ipairs(testFiles) do
 		local testFile = path.join(testDir, relativePath)
 
