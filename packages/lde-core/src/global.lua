@@ -28,7 +28,16 @@ local function sanitize(s)
 	return (string.gsub(s, "[^%w_%-]", "_"))
 end
 
+---@type string?
+local dirOverride = nil
+
+---@param dir string?
+function global.setDir(dir)
+	dirOverride = dir
+end
+
 function global.getDir()
+	if dirOverride then return dirOverride end
 	local home = os.getenv("HOME") or os.getenv("USERPROFILE")
 	return path.join(home, ".lde")
 end

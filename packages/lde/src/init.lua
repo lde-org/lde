@@ -88,10 +88,16 @@ if jit.os == "Windows" then
 	end
 end
 
-lde.global.init()
 lde.verbose = true
 
 local args = clap.parse({ ... })
+
+local treeOverride = args:option("tree")
+if treeOverride then
+	lde.global.setDir(treeOverride)
+end
+
+lde.global.init()
 
 if args:flag("version") and args:count() == 0 then
 	print(lde.global.currentVersion)
