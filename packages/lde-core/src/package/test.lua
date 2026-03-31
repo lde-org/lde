@@ -54,6 +54,16 @@ local function runTests(package)
 
 	local luaPath, luaCPath = getLuaPathsForPackage(package)
 
+	-- Expose tests/ via target/tests so test files can require each other
+	local targetTestsDir = path.join(package:getModulesDir(), "tests")
+	if not fs.exists(targetTestsDir) then
+		if package:hasBuildScript() then
+			fs.copy(testDir, targetTestsDir)
+		else
+			fs.mklink(testDir, targetTestsDir)
+		end
+	end
+
 	---@type lde.TestFileResult[]
 	local files = {}
 	local totalTests = 0
