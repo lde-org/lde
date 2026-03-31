@@ -118,13 +118,15 @@ export default function BenchmarkChart() {
 							</div>
 							<div class="h-6 rounded-lg bg-black/5 dark:bg-white/5 overflow-hidden">
 								<div
-									class={`h-full rounded-lg transition-[width] duration-700 ease-out ${isLde ? "bg-blue-500" : "bg-gray-300 dark:bg-gray-600"}`}
-									style={{
-										width: animated
-											? `${(r.time / max) * 100}%`
-											: "0%",
-									}}
-								/>
+									class={`h-full rounded-lg transition-[width] duration-700 ease-out flex items-center justify-end pr-2 ${isLde ? "bg-blue-500" : "bg-gray-300 dark:bg-gray-600"}`}
+									style={{ width: animated ? `${(r.time / max) * 100}%` : "0%" }}
+								>
+									{rank > 0 && animated && (
+										<span class="text-xs font-medium text-white/70 whitespace-nowrap">
+											{(r.time / sorted[0].time).toFixed(1)}x slower
+										</span>
+									)}
+								</div>
 							</div>
 						</div>
 					);
@@ -132,7 +134,7 @@ export default function BenchmarkChart() {
 			</div>
 			{/* Footer */}
 			<div class="px-6 py-3 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
-				<span class="text-xs text-gray-400 dark:text-gray-500">Linux x86-64 · 16 cores · avg of 4 runs</span>
+				<span class="text-xs text-gray-400 dark:text-gray-500">Linux x86-64 · 16 cores · avg of 4 runs · 3/31/26, latest versions</span>
 				<a href="https://github.com/lde-org/lde/tree/master/benchmarks" class="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">View source</a>
 			</div>
 		</div>
