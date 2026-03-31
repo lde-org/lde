@@ -1,0 +1,31 @@
+name: Benchmarks
+
+on:
+  workflow_dispatch:
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup lde
+        uses: lde-org/lde@master
+        with:
+          version: nightly
+
+      - name: Install luarocks
+        run: |
+          sudo apt-get install -y luarocks
+
+      - name: Install lux
+        run: |
+          curl -fsSL https://github.com/lumen-oss/lux/releases/download/v0.27.0/lx-x86_64-unknown-linux-gnu.tar.gz | tar -xz
+          sudo mv lx /usr/local/bin/lx
+
+      - name: Run benchmarks
+        run: |
+          cd benchmarks
+          lde run
