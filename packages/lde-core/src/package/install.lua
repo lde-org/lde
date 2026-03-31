@@ -115,12 +115,13 @@ end
 
 --- Returns a string key that uniquely identifies a dependency's source.
 ---@param entry lde.Lockfile.Dependency
+---@param pkg lde.Package
 ---@return string
-local function sourceKey(entry)
+local function sourceKey(entry, pkg)
 	if entry.git then
 		return "git:" .. entry.git .. "@" .. (entry.commit or "")
 	elseif entry.path then
-		return "path:" .. entry.path
+		return "path:" .. pkg.dir
 	elseif entry.archive then
 		return "archive:" .. entry.archive
 	end
@@ -149,11 +150,14 @@ local function collectDependencies(dependencies, relativeTo, stack, visiting, ro
 		local pkg, lockEntry = dependencyToPackage(alias, depInfo, relativeTo)
 
 		if stack[alias] then
-			if sourceKey(stack[alias].lock) ~= sourceKey(lockEntry) then
+			local existingKey = sourceKey(stack[alias].lock, stack[alias].pkg)
+			local newKey = sourceKey(lockEntry, pkg)
+
+			if existingKey ~= newKey then
 				error(
 					"Conflicting sources for dependency '" .. alias .. "':\n" ..
-					"  " .. sourceKey(stack[alias].lock) .. "\n" ..
-					"  " .. sourceKey(lockEntry)
+					"  " .. existingKey .. "\n" ..
+					"  " .. newKey
 				)
 			end
 		else

@@ -328,6 +328,45 @@ test.it("installDependencies installs transitive dependencies", function()
 	test.truthy(fs.exists(path.join(rootDir, "target", "leaf-dep")))
 end)
 
+-- Regression: path deps pointing to the same package from different relative starting
+-- points must not be treated as conflicts.
+test.it("installDependencies does not conflict when two deps reference the same path package differently", function()
+	-- shared-dep is referenced by both root (../shared-dep) and mid (../shared-dep, same abs path)
+	makePackageWithSrc("shared-dep", { ["init.lua"] = 'return "shared"' })
+
+	-- mid-dep lives one level deeper inside a subdir so its relative path differs
+	local midDir = path.join(tmpBase, "conflict-mid")
+	fs.mkdir(midDir)
+	fs.mkdir(path.join(midDir, "src"))
+	fs.write(path.join(midDir, "src", "init.lua"), 'return true')
+	fs.write(path.join(midDir, "lde.json"), json.encode({
+		name = "conflict-mid",
+		version = "0.1.0",
+		dependencies = {
+			["shared-dep"] = { path = "../shared-dep" }
+		}
+	}))
+
+	local rootDir = path.join(tmpBase, "conflict-root")
+	fs.mkdir(rootDir)
+	fs.mkdir(path.join(rootDir, "src"))
+	fs.write(path.join(rootDir, "src", "init.lua"), 'return true')
+	fs.write(path.join(rootDir, "lde.json"), json.encode({
+		name = "conflict-root",
+		version = "0.1.0",
+		dependencies = {
+			["shared-dep"] = { path = "../shared-dep" },
+			["conflict-mid"] = { path = "../conflict-mid" }
+		}
+	}))
+
+	local pkg = lde.Package.open(rootDir)
+	-- Should not error
+	pkg:installDependencies()
+
+	test.truthy(fs.exists(path.join(rootDir, "target", "shared-dep")))
+end)
+
 --
 -- Rockspec buildfn: init.lua module mapping regression
 --
