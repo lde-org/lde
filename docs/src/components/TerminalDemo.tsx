@@ -116,17 +116,17 @@ export default function TerminalDemo() {
 	}
 
 	return (
-		<div class="w-[560px] rounded-xl border border-white/10 bg-[#0a0a0f] overflow-hidden shadow-2xl font-mono text-sm">
+		<div class="w-[560px] rounded-xl border border-black/10 dark:border-white/10 bg-gray-100 dark:bg-[#0a0a0f] overflow-hidden shadow-2xl font-mono text-sm">
 			{/* Title bar */}
-			<div class="flex items-center gap-1.5 px-4 py-3 border-b border-white/10 bg-[#111118]">
+			<div class="flex items-center gap-1.5 px-4 py-3 border-b border-black/10 dark:border-white/10 bg-gray-200 dark:bg-[#111118]">
 				<span class="size-3 rounded-full bg-red-500/70" />
 				<span class="size-3 rounded-full bg-yellow-500/70" />
 				<span class="size-3 rounded-full bg-green-500/70" />
-				<span class="ml-3 text-white/30 text-xs">lde — terminal</span>
+				<span class="ml-3 text-black/30 dark:text-white/30 text-xs">lde — terminal</span>
 			</div>
 
 			{/* Tabs */}
-			<div class="flex border-b border-white/10">
+			<div class="flex border-b border-black/10 dark:border-white/10">
 				{tabs.map((tab) => (
 					<button
 						key={tab.id}
@@ -134,8 +134,8 @@ export default function TerminalDemo() {
 						onClick={() => setActiveId(tab.id)}
 						class={`px-4 py-2 text-xs cursor-pointer transition-colors border-b-2 -mb-px ${
 							activeId === tab.id
-								? "border-blue-500 text-white"
-								: "border-transparent text-white/40 hover:text-white/70"
+								? "border-blue-500 text-black dark:text-white"
+								: "border-transparent text-black/40 dark:text-white/40 hover:text-black/70 dark:hover:text-white/70"
 						}`}
 					>
 						{tab.label}
@@ -150,18 +150,18 @@ export default function TerminalDemo() {
 					if (line.type === "cmd")
 						return (
 							<div key={i} class="flex gap-2">
-								<span class="text-blue-400 select-none">$</span>
-								<span class="text-white/90">{line.text}</span>
+								<span class="text-blue-500 dark:text-blue-400 select-none">$</span>
+								<span class="text-black/90 dark:text-white/90">{line.text}</span>
 							</div>
 						);
 					return (
-						<div key={i} class="text-white/50 pl-4 whitespace-pre">
+						<div key={i} class="text-black/50 dark:text-white/50 pl-4 whitespace-pre">
 							{line.text}
 						</div>
 					);
 				})}
 				{visibleCount < lines.length && (
-					<span class="inline-block w-2 h-4 bg-white/70 animate-pulse ml-4" />
+					<span class="inline-block w-2 h-4 bg-black/70 dark:bg-white/70 animate-pulse ml-4" />
 				)}
 			</div>
 		</div>
