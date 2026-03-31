@@ -1,6 +1,6 @@
 ---
 import { Icon } from "astro-icon/components";
-import { GITHUB_URL, GITHUB_RELEASES_URL, DISCORD_URL } from "../data/info";
+import { GITHUB_URL, GITHUB_RELEASES_URL } from "../data/info";
 import Search from "./Search.tsx";
 
 const entries = [
@@ -57,7 +57,7 @@ function isActive(href: string) {
 				Download
 			</a>
 			<a
-				href={DISCORD_URL}
+				href="/discord"
 				target="_blank"
 				rel="noopener noreferrer"
 				class="hidden md:inline-flex opacity-60 hover:opacity-100 p-2 md:p-4 transition-opacity"
@@ -227,7 +227,7 @@ function isActive(href: string) {
 				Download
 			</a>
 			<a
-				href={DISCORD_URL}
+				href="/discord"
 				target="_blank"
 				rel="noopener noreferrer"
 				class="opacity-60 hover:opacity-100 p-1 transition-opacity"

@@ -30,7 +30,7 @@ test.it("should not ignore --git in ldx", function()
 	fs.mkdir(path.join(repoDir, "src"))
 	fs.write(path.join(repoDir, "src", "init.lua"), "")
 
-	local ok, out = ldecli { "x", "triangle", "--git", "https://github.com/codebycruz/hood" }
+	local _, out = ldecli { "x", "triangle", "--git", "https://github.com/codebycruz/hood" }
 	test.falsy(out:find("not found in lde registry"))
 	test.includes(out, "No package named 'triangle'")
 

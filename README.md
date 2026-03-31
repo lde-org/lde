@@ -6,7 +6,7 @@
 
 ---
 
-[![Build+Test](https://github.com/lde-org/lde/actions/workflows/nightly.yml/badge.svg)](https://github.com/lde-org/lde/actions/workflows/nightly.yml) [![Latest Release](https://img.shields.io/github/v/release/lde-org/lde?labelColor=2d333b)](https://github.com/lde-org/lde/releases/latest) [![Discord](https://img.shields.io/discord/1473159418257604752?logo=discord&logoColor=white&label=Discord&labelColor=2d333b)](https://discord.gg/rHgp7DhkHm)
+[![Build+Test](https://github.com/lde-org/lde/actions/workflows/nightly.yml/badge.svg)](https://github.com/lde-org/lde/actions/workflows/nightly.yml) [![Latest Release](https://img.shields.io/github/v/release/lde-org/lde?labelColor=2d333b)](https://github.com/lde-org/lde/releases/latest) [![Discord](https://img.shields.io/discord/1473159418257604752?logo=discord&logoColor=white&label=Discord&labelColor=2d333b)](https://lde.sh/discord)
 
 </div>
 
@@ -33,8 +33,8 @@ To get started, [read the docs](https://lde.sh/docs/getting-started/introduction
 
 ## Installation
 
-| OS      | Command                                       |
-| ------- | --------------------------------------------- |
+| OS      | Command                                   |
+| ------- | ----------------------------------------- |
 | Linux   | `curl -fsSL https://lde.sh/install \| sh` |
 | Windows | `irm https://lde.sh/install.ps1 \| iex`   |
 

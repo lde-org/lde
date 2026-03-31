@@ -4,7 +4,7 @@ import { Icon } from "astro-icon/components";
 import Layout from "../../layouts/Layout.astro";
 import SidebarTree from "../../components/SidebarTree.astro";
 import type { TreeItem } from "../../components/SidebarTree.astro";
-import { GITHUB_URL, DISCORD_URL } from "../../data/info";
+import { GITHUB_URL } from "../../data/info";
 
 export async function getStaticPaths() {
 	const entries = await getCollection("docs");
@@ -155,7 +155,7 @@ const sidebarItems: TreeItem[] = [...sections.entries()]
 						<Icon name="simple-icons:github" class="size-4" />
 					</a>
 					<a
-						href={DISCORD_URL}
+						href="/discord"
 						target="_blank"
 						rel="noopener noreferrer"
 						class="hover:text-black dark:hover:text-white transition-colors"
