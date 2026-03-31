@@ -36,3 +36,13 @@ test.it("should not ignore --git in ldx", function()
 
 	fs.rmdir(repoDir)
 end)
+
+test.it("--tree overrides the global lde directory", function()
+	local tmpTree = path.join(env.tmpdir(), "lde-tree-test")
+	fs.rmdir(tmpTree)
+
+	ldecli { "--tree", tmpTree, "--version" }
+
+	test.truthy(fs.exists(tmpTree))
+	test.truthy(fs.exists(path.join(tmpTree, "git")))
+end)
