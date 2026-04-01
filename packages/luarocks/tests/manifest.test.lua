@@ -193,3 +193,37 @@ test.it("getUrl returns src for src-only package", function()
 	test.equal(arch, "src")
 	test.truthy(url:find("some-pkg-1.0.0-1.src.rock", 1, true))
 end)
+
+-- Regression: getUrl must pick the LATEST version first, then prefer src within that version.
+-- Previously it would find the latest src version independently, returning an old version
+-- even when a newer version existed with only a rockspec.
+test.it("getUrl picks latest version even if older version has src", function()
+	local m = Manifest.new([[
+repository = {
+   mypkg = {
+      ["2.0.0-1"] = { { arch = "rockspec" } },
+      ["1.0.0-1"] = { { arch = "rockspec" }, { arch = "src" } }
+   }
+}
+]])
+	local url, arch, err = luarocks.getUrl(m, "mypkg")
+	test.equal(err, nil)
+	-- Must use 2.0.0-1 (latest), not 1.0.0-1 (has src but older)
+	test.truthy(url:find("mypkg-2.0.0-1", 1, true))
+	test.equal(arch, "rockspec")
+end)
+
+test.it("getUrl prefers src when latest version has both src and rockspec", function()
+	local m = Manifest.new([[
+repository = {
+   mypkg = {
+      ["2.0.0-1"] = { { arch = "rockspec" }, { arch = "src" } },
+      ["1.0.0-1"] = { { arch = "rockspec" } }
+   }
+}
+]])
+	local url, arch, err = luarocks.getUrl(m, "mypkg")
+	test.equal(err, nil)
+	test.truthy(url:find("mypkg-2.0.0-1.src.rock", 1, true))
+	test.equal(arch, "src")
+end)

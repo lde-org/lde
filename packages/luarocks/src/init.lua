@@ -290,6 +290,7 @@ function luarocks.getSrcUrl(manifest, name, constraint)
 end
 
 --- Returns a URL preferring src arch over rockspec.
+--- Picks the latest (constraint-satisfying) version first, then prefers src over rockspec for that version.
 ---@param manifest luarocks.Manifest
 ---@param name string
 ---@param constraint string?
@@ -297,17 +298,53 @@ end
 ---@return "src"|"rockspec"|nil arch
 ---@return string? err
 function luarocks.getUrl(manifest, name, constraint)
-	local srcUrls = luarocks.getSrcUrls(manifest, name)
-	if srcUrls then
-		local url = pickUrl(srcUrls, name, constraint)
-		if url then return url, "src" end
+	local versions, err = manifest:package(name)
+	if not versions then return nil, nil, "Package not found in luarocks registry: " .. name end
+
+	-- Collect all versions that satisfy the constraint
+	local sorted = {}
+	for v in pairs(versions) do sorted[#sorted + 1] = v end
+	table.sort(sorted, function(a, b) return cmpVer(parseVer(a), parseVer(b)) > 0 end)
+
+	local constraints = {}
+	if constraint and constraint ~= "" then
+		for op, ver in constraint:gmatch("([><=~!]+)%s*([%d%.%-]+)") do
+			constraints[#constraints + 1] = { op = op, ver = ver }
+		end
+		if #constraints == 0 then
+			-- Exact version string
+			sorted = { constraint }
+		end
 	end
 
-	local rockspecUrls, err = luarocks.getRockspecUrls(manifest, name)
-	if not rockspecUrls then return nil, nil, err end
-	local url, uerr = pickUrl(rockspecUrls, name, constraint)
-	if url then return url, "rockspec" end
-	return nil, nil, uerr
+	for _, v in ipairs(sorted) do
+		if #constraints > 0 then
+			local ok = true
+			for _, c in ipairs(constraints) do
+				if not satisfies(v, c.op, c.ver) then ok = false; break end
+			end
+			if not ok then goto continue end
+		end
+
+		local entries = versions[v]
+		if not entries then goto continue end
+
+		local hasSrc, hasRockspec = false, false
+		for _, entry in ipairs(entries) do
+			if entry.arch == "src" then hasSrc = true end
+			if entry.arch == "rockspec" then hasRockspec = true end
+		end
+
+		if hasSrc then
+			return string.format("%s/%s-%s.src.rock", ROCKSPEC_BASE, name, v), "src"
+		elseif hasRockspec then
+			return string.format("%s/%s-%s.rockspec", ROCKSPEC_BASE, name, v), "rockspec"
+		end
+
+		::continue::
+	end
+
+	return nil, nil, "No version of '" .. name .. "'" .. (constraint and (" satisfies: " .. constraint) or " found")
 end
 
 luarocks.Manifest = Manifest
