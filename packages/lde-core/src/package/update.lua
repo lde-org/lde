@@ -10,7 +10,7 @@ local util = require("lde-core.util")
 --- Updates a single git dependency by pulling latest changes.
 --- Only applies to git dependencies without a pinned commit.
 ---@param name string
----@param depInfo lde.Config.GitDependency
+---@param depInfo lde.Package.Config.GitDependency
 ---@return boolean updated
 ---@return string message
 local function updateGitDependency(name, depInfo)
@@ -35,7 +35,7 @@ end
 --- Writes the new version back to lde.json if updated.
 ---@param package lde.Package
 ---@param name string
----@param depInfo lde.Config.RegistryDependency
+---@param depInfo lde.Package.Config.RegistryDependency
 ---@return boolean updated
 ---@return string message
 local function updateRegistryDependency(package, name, depInfo)
@@ -81,7 +81,7 @@ end
 --- Updates a luarocks dependency to the latest version.
 ---@param package lde.Package
 ---@param name string
----@param depInfo lde.Config.Dependency
+---@param depInfo lde.Package.Config.Dependency
 ---@return boolean updated
 ---@return string message
 local function updateLuarocksDependency(package, name, depInfo)
@@ -115,7 +115,7 @@ end
 
 --- Updates all dependencies for a package.
 ---@param package lde.Package
----@param dependencies table<string, lde.Config.Dependency>?
+---@param dependencies table<string, lde.Package.Config.Dependency>?
 ---@return table<string, { updated: boolean, message: string }>
 local function updateDependencies(package, dependencies)
 	dependencies = dependencies or package:getDependencies()
@@ -123,9 +123,9 @@ local function updateDependencies(package, dependencies)
 	local results = {}
 	for name, depInfo in pairs(dependencies) do
 		local updated, message
-		if depInfo.version then ---@cast depInfo lde.Config.RegistryDependency
+		if depInfo.version then ---@cast depInfo lde.Package.Config.RegistryDependency
 			updated, message = updateRegistryDependency(package, name, depInfo)
-		elseif depInfo.git then ---@cast depInfo lde.Config.GitDependency
+		elseif depInfo.git then ---@cast depInfo lde.Package.Config.GitDependency
 			updated, message = updateGitDependency(name, depInfo)
 		elseif depInfo.luarocks then
 			updated, message = updateLuarocksDependency(package, name, depInfo)

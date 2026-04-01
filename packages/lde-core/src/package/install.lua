@@ -6,7 +6,7 @@ local util = require("util")
 local lde = require("lde-core")
 
 ---@param alias string
----@param depInfo lde.Config.Dependency
+---@param depInfo lde.Package.Config.Dependency
 ---@param relativeTo string
 ---@return lde.Package, lde.Lockfile.Dependency
 local function dependencyToPackage(alias, depInfo, relativeTo)
@@ -130,7 +130,7 @@ end
 
 --- Recursively resolves all dependencies onto a flat stack.
 --- Errors on duplicate names with differing sources.
----@param dependencies table<string, lde.Config.Dependency>
+---@param dependencies table<string, lde.Package.Config.Dependency>
 ---@param relativeTo string
 ---@param stack table<string, { pkg: lde.Package, lock: lde.Lockfile.Dependency }>
 ---@param visiting table<string, boolean>
@@ -172,7 +172,7 @@ local function collectDependencies(dependencies, relativeTo, stack, visiting, ro
 	end
 end
 
----@type table<string, lde.Config.FeatureFlag>
+---@type table<string, lde.Package.Config.FeatureFlag>
 local platformLookup = {
 	["Windows"] = "windows",
 	["Linux"] = "linux",
@@ -183,8 +183,8 @@ local platformLookup = {
 local basicFeatureTable = { platformLookup[jit.os] }
 
 --- Adds the current platform ("windows", "linux", or "macos") to a features table.
----@param t lde.Config.FeatureFlag[]?
----@return lde.Config.FeatureFlag[]
+---@param t lde.Package.Config.FeatureFlag[]?
+---@return lde.Package.Config.FeatureFlag[]
 local function addPlatformFeatures(t)
 	if not t then
 		return basicFeatureTable
@@ -195,9 +195,9 @@ local function addPlatformFeatures(t)
 end
 
 ---@param package lde.Package
----@param dependencies table<string, lde.Config.Dependency>?
+---@param dependencies table<string, lde.Package.Config.Dependency>?
 ---@param relativeTo string?
----@param features lde.Config.FeatureFlag[]?
+---@param features lde.Package.Config.FeatureFlag[]?
 local function installDependencies(package, dependencies, relativeTo, features)
 	features = addPlatformFeatures(features) -- features is not to be mutated from here on out
 	local isRoot = dependencies == nil

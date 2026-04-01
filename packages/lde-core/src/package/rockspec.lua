@@ -277,7 +277,7 @@ local function openRockspec(dir, rockspecPath)
 			end
 		end
 
-		return lde.Config.new({ name = spec.package, version = spec.version, bin = binEntry, dependencies = deps })
+		return lde.Package.Config.new({ name = spec.package, version = spec.version, bin = binEntry, dependencies = deps })
 	end
 
 	return pkg, nil

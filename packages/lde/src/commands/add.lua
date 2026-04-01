@@ -43,10 +43,10 @@ local function add(args)
 		return
 	end
 
-	---@type lde.Config
+	---@type lde.Package.Config
 	local config = json.decode(configRaw)
 
-	local dependencyTable ---@type lde.Config.Dependencies
+	local dependencyTable ---@type lde.Package.Config.Dependencies
 	if isDevelopment then
 		if not config.devDependencies then
 			config.devDependencies = {}

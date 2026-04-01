@@ -1,4 +1,3 @@
-local Config = require("lde-core.config")
 local Lockfile = require("lde-core.lockfile")
 
 local global = require("lde-core.global")
@@ -11,7 +10,7 @@ local process = require("process")
 
 ---@class lde.Package
 ---@field dir string
----@field cachedConfig lde.Config?
+---@field cachedConfig lde.Package.Config?
 ---@field cachedConfigMtime number?
 ---@field buildfn (fun(pkg: lde.Package, outputDir: string): boolean, string?)?
 local Package = {}
@@ -19,6 +18,8 @@ Package.__index = Package
 
 -- Add this since files in . will want access to the `Package` class.
 package.loaded[(...)] = Package
+
+Package.Config = require("lde-core.package.config")
 
 ---@param dir string
 local function configPathAtDir(dir)
@@ -103,7 +104,7 @@ function Package.open(dir, rockspec)
 	return Package.openRockspec(dir, rockspec)
 end
 
----@return lde.Config
+---@return lde.Package.Config
 function Package:readConfig()
 	local configPath = self:getConfigPath()
 
@@ -121,7 +122,7 @@ function Package:readConfig()
 		error("Could not read lde.json: " .. configPath)
 	end
 
-	local newConfig = Config.new(json.decode(content))
+	local newConfig = Package.Config.new(json.decode(content))
 	self.cachedConfig = newConfig
 	self.cachedConfigMtime = s.modifyTime
 
@@ -164,7 +165,7 @@ end
 Package.build = require("lde-core.package.build")
 
 ---@param dir string
----@param info lde.Config.Dependency
+---@param info lde.Package.Config.Dependency
 ---@param relativeTo string?
 function Package:getDependencyPath(dir, info, relativeTo)
 	relativeTo = relativeTo or self.dir

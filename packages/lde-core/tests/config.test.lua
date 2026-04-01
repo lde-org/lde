@@ -3,7 +3,7 @@ local test = require("lde-test")
 local lde = require("lde-core")
 
 test.it("Config.new wraps a table with the Config metatable", function()
-	local conf = lde.Config.new({
+	local conf = lde.Package.Config.new({
 		name = "my-package",
 		version = "1.0.0"
 	})
@@ -13,7 +13,7 @@ test.it("Config.new wraps a table with the Config metatable", function()
 end)
 
 test.it("Config preserves dependencies", function()
-	local conf = lde.Config.new({
+	local conf = lde.Package.Config.new({
 		name = "test-pkg",
 		version = "0.1.0",
 		dependencies = {
@@ -25,7 +25,7 @@ test.it("Config preserves dependencies", function()
 end)
 
 test.it("Config preserves git dependencies", function()
-	local conf = lde.Config.new({
+	local conf = lde.Package.Config.new({
 		name = "test-pkg",
 		version = "0.2.0",
 		dependencies = {
@@ -37,7 +37,7 @@ test.it("Config preserves git dependencies", function()
 end)
 
 test.it("Config with no dependencies returns nil for dependencies field", function()
-	local conf = lde.Config.new({
+	local conf = lde.Package.Config.new({
 		name = "empty",
 		version = "0.0.1"
 	})
@@ -46,7 +46,7 @@ test.it("Config with no dependencies returns nil for dependencies field", functi
 end)
 
 test.it("Config preserves devDependencies", function()
-	local conf = lde.Config.new({
+	local conf = lde.Package.Config.new({
 		name = "test-pkg",
 		version = "0.1.0",
 		devDependencies = {
@@ -58,7 +58,7 @@ test.it("Config preserves devDependencies", function()
 end)
 
 test.it("Config preserves engine field", function()
-	local conf = lde.Config.new({
+	local conf = lde.Package.Config.new({
 		name = "test-pkg",
 		version = "0.1.0",
 		engine = "luajit"
