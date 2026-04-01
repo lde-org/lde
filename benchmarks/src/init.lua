@@ -117,7 +117,7 @@ local function runBenchmarks(tool, tmpdir)
 
 	bench("install busted (cold)", function()
 		if tool == "lde" then
-			return process.exec("lde", { "install", "rocks:busted" }, { cwd = tmpdir, stdout = "null" })
+			return process.exec("lde", { "--tree", tmpdir .. "/lde", "install", "rocks:busted" }, { stdout = "null" })
 		elseif tool == "luarocks" then
 			return process.exec("luarocks", { "--tree", tmpdir .. "/rocks", "install", "busted" })
 		elseif tool == "lx" then
@@ -129,7 +129,7 @@ local function runBenchmarks(tool, tmpdir)
 
 	bench("install busted (warm)", function()
 		if tool == "lde" then
-			return process.exec("lde", { "install", "rocks:busted" }, { cwd = tmpdir, stdout = "null" })
+			return process.exec("lde", { "--tree", tmpdir .. "/lde", "install", "rocks:busted" }, { stdout = "null" })
 		elseif tool == "luarocks" then
 			return process.exec("luarocks", { "--tree", tmpdir .. "/rocks", "install", "busted" })
 		elseif tool == "lx" then
@@ -141,7 +141,7 @@ local function runBenchmarks(tool, tmpdir)
 
 	bench("build C rock (luafilesystem)", function()
 		if tool == "lde" then
-			return process.exec("lde", { "install", "rocks:luafilesystem" }, { cwd = tmpdir, stdout = "null" })
+			return process.exec("lde", { "--tree", tmpdir .. "/lde", "install", "rocks:luafilesystem" }, { stdout = "null" })
 		elseif tool == "luarocks" then
 			return process.exec("luarocks", { "--tree", tmpdir .. "/rocks", "install", "luafilesystem" })
 		elseif tool == "lx" then
@@ -170,18 +170,6 @@ for _, tool in ipairs(tools) do
 		os.execute("mkdir " .. tmpdir)
 	else
 		os.execute("mkdir -p " .. tmpdir)
-	end
-
-	if tool == "lde" then
-		-- TODO: remove this when lde supports --tree for isolated installs
-		local home = os.getenv(jit.os == "Windows" and "USERPROFILE" or "HOME")
-
-		local ldeTree = home .. "/.lde/"
-		for _, dir in ipairs({ "git", "tar", "rockspecs" }) do
-			os.execute((jit.os == "Windows" and "rmdir /s /q " or "rm -rf ") .. ldeTree .. dir)
-		end
-
-		os.remove(ldeTree .. "luarocks-manifest.raw")
 	end
 
 	runBenchmarks(tool, tmpdir)
