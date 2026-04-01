@@ -99,3 +99,8 @@ ansi.printf("\n{bold}json round-trip (decode + encode){reset}")
 bench("small",  function() json.encode(json.decode(SMALL))  end, 5000)
 bench("medium", function() json.encode(json.decode(MEDIUM)) end, 500)
 bench("large",  function() json.encode(json.decode(LARGE))  end, 20)
+
+ansi.printf("\n{bold}json decodeDocument only (zero-alloc){reset}")
+bench("small",  function() json.decodeDocument(SMALL)  end, 5000)
+bench("medium", function() json.decodeDocument(MEDIUM) end, 500)
+bench("large",  function() json.decode(LARGE)  end, 20)
