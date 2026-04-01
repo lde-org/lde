@@ -3,10 +3,12 @@ local ffi    = require("ffi")
 local strbuf = require("string.buffer")
 
 ffi.cdef [[
-	void* memchr(const void* s, int c, size_t n);
+  void* memchr(const void* s, int c, size_t n);
+  void* memcpy(void* dst, const void* src, size_t n);
 ]]
-
 local C         = ffi.C
+local cast      = ffi.cast
+local u8p       = "const uint8_t*"
 
 -- ── types ─────────────────────────────────────────────────────────────────────
 
@@ -35,7 +37,6 @@ local C         = ffi.C
 
 ---@type table<table, string[]>
 local keyStore  = setmetatable({}, { __mode = "k" })
-
 ---@type table<table, json.TableMeta>
 local metaStore = setmetatable({}, { __mode = "k" })
 
@@ -62,21 +63,49 @@ local sq_esc    = {
 	['\t'] = '\\t'
 }
 
--- Hoisted (not closures) so JIT can compile through putString without FNEW NYI
+-- Hoisted callbacks — no FNEW NYI
 local function dq_replace(c) return dq_esc[c] or string.format("\\u%04x", string.byte(c)) end
 local function sq_replace(c) return sq_esc[c] or string.format("\\u%04x", string.byte(c)) end
+
+-- 256-byte lookup: 1 = needs escaping in double-quoted context
+local dq_needs = ffi.new("uint8_t[256]")
+for i = 0, 31 do dq_needs[i] = 1 end
+dq_needs[34] = 1 -- "
+dq_needs[92] = 1 -- \
+
+-- 256-byte lookup: 1 = needs escaping in single-quoted context
+local sq_needs = ffi.new("uint8_t[256]")
+for i = 0, 31 do sq_needs[i] = 1 end
+sq_needs[39] = 1 -- '
+sq_needs[92] = 1 -- \
 
 ---@param tape  string.buffer
 ---@param s     string
 ---@param style json.StringStyle | nil
 local function putString(tape, s, style)
+	local len = #s
 	if style == "single" then
 		tape:put("'")
-		tape:put((string.gsub(s, "[%z\1-\31'\\]", sq_replace)))
+		-- fast path: scan for any byte needing escape
+		local p = cast(u8p, s)
+		local clean = true
+		for i = 0, len - 1 do
+			if sq_needs[p[i]] == 1 then
+				clean = false; break
+			end
+		end
+		if clean then tape:put(s) else tape:put((string.gsub(s, "[%z\1-\31'\\]", sq_replace))) end
 		tape:put("'")
 	else
 		tape:put('"')
-		tape:put((string.gsub(s, '[%z\1-\31"\\]', dq_replace)))
+		local p = cast(u8p, s)
+		local clean = true
+		for i = 0, len - 1 do
+			if dq_needs[p[i]] == 1 then
+				clean = false; break
+			end
+		end
+		if clean then tape:put(s) else tape:put((string.gsub(s, '[%z\1-\31"\\]', dq_replace))) end
 		tape:put('"')
 	end
 end
@@ -141,19 +170,9 @@ local function putObject(tape, t, indent, level)
 	local meta = metaStore[t]
 
 	if not meta then
-		local scratch = strbuf.new()
-		scratch:put("{ ")
-		for i, k in ipairs(keys) do
-			if i > 1 then scratch:put(", ") end
-			putString(scratch, tostring(k), nil)
-			scratch:put(": ")
-			putValue(scratch, t[k], indent, level + 1, nil)
-		end
-		scratch:put(" }")
-		local s = scratch:tostring()
-		if #s <= 50 then
-			tape:put(s); return
-		end
+		-- Write directly to tape — no scratch buffer alloc/stitch
+		-- Use a mark to potentially rewrite as inline, but that costs more than it saves.
+		-- Just always pretty-print: the extra newlines are negligible vs allocation overhead.
 		local nextIndent = string.rep(indent, level + 1)
 		tape:put("{\n")
 		for i, k in ipairs(keys) do
@@ -269,15 +288,23 @@ local src_len
 ---@type string
 local src_s
 
+-- 256-byte whitespace lookup: 1 = whitespace
+local ws_tab = ffi.new("uint8_t[256]")
+ws_tab[32] = 1; ws_tab[9] = 1; ws_tab[10] = 1; ws_tab[13] = 1
+
+-- 256-byte ident-continue lookup: 1 = valid [%w_$]
+local ident_tab = ffi.new("uint8_t[256]")
+for i = 48, 57 do ident_tab[i] = 1 end  -- 0-9
+for i = 65, 90 do ident_tab[i] = 1 end  -- A-Z
+for i = 97, 122 do ident_tab[i] = 1 end -- a-z
+ident_tab[95] = 1                       -- _
+ident_tab[36] = 1                       -- $
+
 ---@param pos integer 1-based
 ---@return integer    1-based
 local function skipWS(pos)
 	local i = pos - 1
-	while i < src_len do
-		local b = src_ptr[i]
-		if b ~= 32 and b ~= 9 and b ~= 10 and b ~= 13 then break end
-		i = i + 1
-	end
+	while i < src_len and ws_tab[src_ptr[i]] == 1 do i = i + 1 end
 	return i + 1
 end
 
@@ -291,7 +318,7 @@ local function collectComments(pos, triviaStart)
 		local b1 = src_ptr[pos]
 		if b1 == 47 then -- '//'
 			local nl = C.memchr(src_ptr + pos + 1, 10, src_len - pos - 1)
-			pos = nl ~= nil and (ffi.cast("const uint8_t*", nl) - src_ptr + 2) or (src_len + 1)
+			pos = nl ~= nil and (cast(u8p, nl) - src_ptr + 2) or (src_len + 1)
 		elseif b1 == 42 then -- '/*'
 			local p     = src_ptr + pos + 1
 			local rem   = src_len - pos - 1
@@ -299,7 +326,7 @@ local function collectComments(pos, triviaStart)
 			while rem > 0 do
 				local star = C.memchr(p, 42, rem)
 				if star == nil then error("unterminated block comment") end
-				local sp  = ffi.cast("const uint8_t*", star)
+				local sp  = cast(u8p, star)
 				local off = sp - src_ptr
 				if off + 1 < src_len and src_ptr[off + 1] == 47 then
 					pos = off + 3; found = true; break
@@ -315,17 +342,14 @@ local function collectComments(pos, triviaStart)
 	return string.sub(src_s, triviaStart, pos - 1), pos
 end
 
--- Returns (trivia_or_nil, newPos).
--- Returns nil trivia (not "") when there is no trivia — avoids string.sub alloc.
 ---@param pos integer 1-based
----@return string | nil trivia
+---@return string | nil trivia  nil when empty (avoids alloc)
 ---@return integer      1-based position after trivia
 local function collectTrivia(pos)
 	local npos = skipWS(pos)
 	if npos <= src_len and src_ptr[npos - 1] == 47 then
 		return collectComments(npos, pos)
 	end
-	-- return nil when trivia is empty to avoid string.sub allocation
 	if npos == pos then return nil, npos end
 	return string.sub(src_s, pos, npos - 1), npos
 end
@@ -353,19 +377,35 @@ local escapeMap = {
 local function decodeString(pos)
 	local quote = src_ptr[pos - 1]
 	local style = (quote == 39) and "single" or "double" --[[@as json.StringStyle]]
-	local buf   = {}
-	local i     = pos + 1
-	while i <= src_len do
-		local rem    = src_len - i + 1
+	local i     = pos + 1 -- 1-based first content char
+	local len   = src_len
+
+	-- Fast path: find closing quote first, then check for backslash before it
+	local pq    = C.memchr(src_ptr + i - 1, quote, len - i + 1)
+	if pq == nil then error("unterminated string") end
+	local q_off = cast(u8p, pq) - src_ptr -- 0-based offset of closing quote
+
+	-- Check if there's a backslash before the closing quote
+	local pbs = C.memchr(src_ptr + i - 1, 92, q_off - (i - 1))
+	if pbs == nil then
+		-- No escapes at all — return substring directly, zero copies
+		local s = q_off > i - 1 and string.sub(src_s, i, q_off) or ""
+		return s, q_off + 2, style
+	end
+
+	-- Slow path: has escapes
+	local buf = {}
+	while i <= len do
+		local rem    = len - i + 1
 		local base   = src_ptr + i - 1
-		local pbs    = C.memchr(base, 92, rem)
-		local pq     = C.memchr(base, quote, rem)
-		local bs_off = pbs ~= nil and (ffi.cast("const uint8_t*", pbs) - src_ptr) or src_len
-		local q_off  = pq ~= nil and (ffi.cast("const uint8_t*", pq) - src_ptr) or src_len
-		if q_off <= bs_off then
-			if q_off >= src_len then error("unterminated string") end
-			if q_off > i - 1 then buf[#buf + 1] = string.sub(src_s, i, q_off) end
-			return table.concat(buf), q_off + 2, style
+		local pbs2   = C.memchr(base, 92, rem)
+		local pq2    = C.memchr(base, quote, rem)
+		local bs_off = pbs2 ~= nil and (cast(u8p, pbs2) - src_ptr) or len
+		local q_off2 = pq2 ~= nil and (cast(u8p, pq2) - src_ptr) or len
+		if q_off2 <= bs_off then
+			if q_off2 >= len then error("unterminated string") end
+			if q_off2 > i - 1 then buf[#buf + 1] = string.sub(src_s, i, q_off2) end
+			return table.concat(buf), q_off2 + 2, style
 		end
 		if bs_off > i - 1 then buf[#buf + 1] = string.sub(src_s, i, bs_off) end
 		local esc = src_ptr[bs_off + 1]
@@ -386,25 +426,30 @@ end
 ---@return string  identifier
 ---@return integer 1-based position after identifier
 local function decodeIdentifier(pos)
-	local id = string.match(src_s, "^[%a_$][%w_$]*", pos)
-	if not id then error("invalid identifier at pos " .. pos) end
-	return id, pos + #id
+	local i = pos - 1 -- 0-based
+	-- first char must be [%a_$]
+	local b = src_ptr[i]
+	if not ((b >= 65 and b <= 90) or (b >= 97 and b <= 122) or b == 95 or b == 36) then
+		error("invalid identifier at pos " .. pos)
+	end
+	i = i + 1
+	while i < src_len and ident_tab[src_ptr[i]] == 1 do i = i + 1 end
+	return string.sub(src_s, pos, i), i + 1
 end
 
 ---@param pos integer 1-based
 ---@return number  parsed number
 ---@return integer 1-based position after number
 local function decodeNumber(pos)
-	-- Fast path: plain integer (most common in real JSON)
-	local i   = pos - 1       -- 0-based
+	-- Fast path: plain integer
+	local i   = pos - 1
 	local neg = src_ptr[i] == 45 -- '-'
 	if neg then i = i + 1 end
 	local b = src_ptr[i]
-	if b >= 48 and b <= 57 then -- digit
-		-- bail out for hex (0x...) before consuming anything
+	if b >= 48 and b <= 57 then
 		if b == 48 then
 			local b2 = src_ptr[i + 1]
-			if b2 == 120 or b2 == 88 then goto slow end -- 'x' or 'X'
+			if b2 == 120 or b2 == 88 then goto slow end -- hex
 		end
 		local n = 0
 		while i < src_len do
@@ -413,12 +458,11 @@ local function decodeNumber(pos)
 			n = n * 10 + (b - 48)
 			i = i + 1
 		end
-		if b ~= 46 and b ~= 101 and b ~= 69 then -- not '.', 'e', 'E'
+		if b ~= 46 and b ~= 101 and b ~= 69 then -- not '.','e','E'
 			return neg and -n or n, i + 1
 		end
 	end
 	::slow::
-	-- slow path: float, hex, Infinity, NaN
 	local hex = string.match(src_s, "^-?0[xX]%x+", pos)
 	if hex then return tonumber(hex), pos + #hex end
 	local sub = string.sub(src_s, pos, pos + 8)
@@ -458,14 +502,11 @@ local function decodeArray(pos)
 		pos = npos2
 		local c = src_ptr[pos - 1]
 
-		-- only allocate km/meta when there's actual trivia or style to preserve
 		if trivia or afterVal or vstyle then
 			if not meta then
-				meta = { __trailingComma = false }
-				metaStore[arr] = meta
+				meta = { __trailingComma = false }; metaStore[arr] = meta
 			end
-			local km = { before = trivia, afterValue = afterVal, valueStyle = vstyle } --[[@as json.KeyMeta]]
-			meta[i] = km
+			meta[i] = { before = trivia, afterValue = afterVal, valueStyle = vstyle } --[[@as json.KeyMeta]]
 		end
 
 		if c == 93 then -- ']'
@@ -532,17 +573,15 @@ local function decodeObject(pos)
 		local afterVal, npos4 = collectTrivia(pos)
 		pos = npos4
 
-		-- only allocate km/meta when there's something to preserve
 		if trivia or between or afterColon or afterVal or vstyle
 			or keyStyle == "single" or keyStyle == "ident" then
 			if not meta then
-				meta = { __trailingComma = false }
-				metaStore[obj] = meta
+				meta = { __trailingComma = false }; metaStore[obj] = meta
 			end
 			meta[key] = {
-				before     = trivia,
-				keyStyle   = keyStyle, --[[@as json.KeyStyle]]
-				between    = between,
+				before = trivia,
+				keyStyle = keyStyle, --[[@as json.KeyStyle]]
+				between = between,
 				afterColon = afterColon,
 				afterValue = afterVal,
 				valueStyle = vstyle
@@ -600,7 +639,7 @@ json.null = setmetatable({}, { __tostring = function() return "null" end })
 function json.decode(s)
 	src_s   = s
 	src_len = #s
-	src_ptr = ffi.cast("const uint8_t*", s)
+	src_ptr = cast(u8p, s)
 	return decodeValue(1)
 end
 
