@@ -32,7 +32,7 @@ local path = require("path")
 ---@field rmlink fun(p: string): boolean
 ---@field stat fun(p: string): fs.Stat?
 ---@field lstat fun(p: string): fs.Stat?
----@field watch fun(p: string, callback: fun(event: fs.WatchEvent, name: string)): fs.Watcher?
+---@field watch fun(p: string, callback: fun(event: fs.WatchEvent, name: string), opts: { recursive: boolean? }?): fs.Watcher?
 
 local rawfs ---@type fs.raw
 if jit.os == "Windows" then

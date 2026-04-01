@@ -470,8 +470,11 @@ local WAIT_TIMEOUT   = 0x102
 --- Returns a watcher with :poll() (non-blocking), :wait() (blocking), and :close().
 ---@param p string
 ---@param callback fun(event: fs.WatchEvent, name: string)
+---@param opts { recursive: boolean? }?
 ---@return fs.Watcher?
-function fs.watch(p, callback)
+function fs.watch(p, callback, opts)
+	local recursive = opts and opts.recursive or false
+
 	local handle = kernel32.CreateFileA(
 		p,
 		FILE_LIST_DIRECTORY,
@@ -502,7 +505,7 @@ function fs.watch(p, callback)
 	local function issueRead()
 		ffi.fill(overlapped, ffi.sizeof("OVERLAPPED_W"))
 		overlapped[0].hEvent = event
-		kernel32.ReadDirectoryChangesW(handle, buf, bufSize, 0, notifyFilter, bytesReturned, overlapped, nil)
+		kernel32.ReadDirectoryChangesW(handle, buf, bufSize, recursive and 1 or 0, notifyFilter, bytesReturned, overlapped, nil)
 	end
 
 	issueRead()

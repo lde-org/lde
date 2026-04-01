@@ -342,3 +342,85 @@ test.it("wait blocks until file deletion", function()
 	test.truthy(#events > 0)
 	test.equal(events[1].event, "delete")
 end)
+
+--
+-- watch recursive
+--
+
+test.it("watch recursive detects file creation in subdirectory via poll", function()
+	local d = tmp("watch-rec-create")
+	local sub = path.join(d, "sub")
+	fs.mkdir(d)
+	fs.mkdir(sub)
+
+	local events = {}
+	local w = fs.watch(d, function(event, name)
+		events[#events + 1] = { event = event, name = name }
+	end, { recursive = true })
+	test.truthy(w)
+
+	fs.write(path.join(sub, "deep.txt"), "hello")
+
+	local deadline = os.clock() + 1
+	while #events == 0 and os.clock() < deadline do
+		w.poll()
+	end
+
+	w.close()
+	test.truthy(#events > 0)
+	test.equal(events[1].event, "create")
+end)
+
+test.it("watch recursive detects file modification in subdirectory via poll", function()
+	local d = tmp("watch-rec-modify")
+	local sub = path.join(d, "sub")
+	fs.mkdir(d)
+	fs.mkdir(sub)
+	local p = path.join(sub, "mod.txt")
+	fs.write(p, "v1")
+
+	local events = {}
+	local w = fs.watch(d, function(event, name)
+		events[#events + 1] = { event = event, name = name }
+	end, { recursive = true })
+	test.truthy(w)
+
+	fs.write(p, "v2")
+
+	local deadline = os.clock() + 1
+	while #events == 0 and os.clock() < deadline do
+		w.poll()
+	end
+
+	w.close()
+	test.truthy(#events > 0)
+end)
+
+test.it("watch recursive detects creation in newly created subdirectory", function()
+	local d = tmp("watch-rec-newdir")
+	fs.mkdir(d)
+
+	local events = {}
+	local w = fs.watch(d, function(event, name)
+		events[#events + 1] = { event = event, name = name }
+	end, { recursive = true })
+	test.truthy(w)
+
+	local sub = path.join(d, "newdir")
+	fs.mkdir(sub)
+
+	-- Drain the mkdir event and let the watcher register the new subdir
+	local deadline = os.clock() + 1
+	while os.clock() < deadline do w.poll() end
+
+	local before = #events
+	fs.write(path.join(sub, "file.txt"), "hi")
+
+	deadline = os.clock() + 1
+	while #events == before and os.clock() < deadline do
+		w.poll()
+	end
+
+	w.close()
+	test.truthy(#events > before)
+end)

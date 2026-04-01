@@ -95,8 +95,11 @@ end)
 --- Returns a watcher with :poll() (non-blocking), :wait() (blocking), and :close().
 ---@param p string
 ---@param callback fun(event: fs.WatchEvent, name: string)
+---@param opts { recursive: boolean? }?
 ---@return fs.Watcher?
-function fs.watch(p, callback)
+function fs.watch(p, callback, opts)
+	local recursive = opts and opts.recursive or false
+
 	local kq = ffi.C.kqueue()
 	if kq < 0 then return nil end
 
@@ -117,25 +120,55 @@ function fs.watch(p, callback)
 	if dirfd < 0 then ffi.C.close(kq); return nil end
 	register(dirfd)
 
-	-- fd -> name map for file watches inside a directory
-	local filefds = {} ---@type table<number, string>  fd -> filename
+	-- fd -> relative path (from p) for all watched entries
+	local filefds  = {} ---@type table<number, string>  fd -> relative path
+	-- fd -> absolute dir path for watched subdirs (recursive mode)
+	local subdirfds = {} ---@type table<number, string>  fd -> absolute dir path
+	-- dir absolute path -> snapshot of children names
+	local dirSnaps = {} ---@type table<string, table<string, boolean>>
 
-	local function watchFile(name)
-		local fd = ffi.C.open(p .. "/" .. name, O_EVTONLY)
-		if fd >= 0 then
-			register(fd)
-			filefds[tonumber(fd)] = name
+	local function watchEntry(absPath, relPath, isDirectory)
+		local fd = ffi.C.open(absPath, O_EVTONLY)
+		if fd < 0 then return end
+		register(fd)
+		if isDirectory then
+			subdirfds[tonumber(fd)] = absPath
+		else
+			filefds[tonumber(fd)] = relPath
+		end
+	end
+
+	local function snapDir(absDir)
+		local snap = {}
+		local iter = fs.readdir(absDir)
+		if iter then for entry in iter do snap[entry.name] = true end end
+		return snap
+	end
+
+	local function walkDir(absDir, relBase)
+		local snap = snapDir(absDir)
+		dirSnaps[absDir] = snap
+		for name in pairs(snap) do
+			local absChild = absDir .. "/" .. name
+			local relChild = relBase ~= "" and (relBase .. "/" .. name) or name
+			local childIsDir = fs.isdir(absChild)
+			watchEntry(absChild, relChild, childIsDir)
+			if recursive and childIsDir then
+				walkDir(absChild, relChild)
+			end
 		end
 	end
 
 	local prev ---@type table<string, boolean>?
 	if isDir then
-		prev = {}
-		local iter = fs.readdir(p)
-		if iter then
-			for entry in iter do
-				prev[entry.name] = true
-				watchFile(entry.name)
+		prev = snapDir(p)
+		dirSnaps[p] = prev
+		for name in pairs(prev) do
+			local absChild = p .. "/" .. name
+			local childIsDir = fs.isdir(absChild)
+			watchEntry(absChild, name, childIsDir)
+			if recursive and childIsDir then
+				walkDir(absChild, name)
 			end
 		end
 	end
@@ -149,30 +182,56 @@ function fs.watch(p, callback)
 			local ff    = events[i].fflags
 
 			if ident == tonumber(dirfd) then
-				-- Event on the directory itself
 				if isDir and bit.band(ff, NOTE_WRITE) ~= 0 then
-					local curr = {}
-					local iter = fs.readdir(p)
-					if iter then for entry in iter do curr[entry.name] = true end end
+					local curr = snapDir(p)
 					for name in pairs(curr) do
 						if not prev[name] then
+							local absChild = p .. "/" .. name
+							local childIsDir = fs.isdir(absChild)
 							callback("create", name)
-							watchFile(name)
+							watchEntry(absChild, name, childIsDir)
+							if recursive and childIsDir then walkDir(absChild, name) end
 						end
 					end
 					for name in pairs(prev) do
 						if not curr[name] then callback("delete", name) end
 					end
 					prev = curr
+					dirSnaps[p] = curr
 				end
 				if bit.band(ff, NOTE_DELETE) ~= 0 then callback("delete", p)
 				elseif bit.band(ff, NOTE_RENAME) ~= 0 then callback("rename", p) end
+
+			elseif subdirfds[ident] then
+				-- Event on a watched subdir (recursive mode)
+				local absDir = subdirfds[ident]
+				local relDir = string.sub(absDir, #p + 2)
+				if bit.band(ff, NOTE_WRITE) ~= 0 then
+					local oldSnap = dirSnaps[absDir] or {}
+					local curr = snapDir(absDir)
+					for name in pairs(curr) do
+						if not oldSnap[name] then
+							local absChild = absDir .. "/" .. name
+							local relChild = relDir .. "/" .. name
+							local childIsDir = fs.isdir(absChild)
+							callback("create", relChild)
+							watchEntry(absChild, relChild, childIsDir)
+							if childIsDir then walkDir(absChild, relChild) end
+						end
+					end
+					for name in pairs(oldSnap) do
+						if not curr[name] then callback("delete", relDir .. "/" .. name) end
+					end
+					dirSnaps[absDir] = curr
+				end
+				if bit.band(ff, NOTE_DELETE) ~= 0 then callback("delete", relDir)
+				elseif bit.band(ff, NOTE_RENAME) ~= 0 then callback("rename", relDir) end
+
 			else
-				-- Event on a watched file inside the directory
-				local name = filefds[ident]
-				if name then
+				local relPath = filefds[ident]
+				if relPath then
 					if bit.band(ff, NOTE_WRITE) ~= 0 or bit.band(ff, NOTE_ATTRIB) ~= 0 then
-						callback("modify", name)
+						callback("modify", relPath)
 					end
 					if bit.band(ff, NOTE_DELETE) ~= 0 or bit.band(ff, NOTE_RENAME) ~= 0 then
 						ffi.C.close(ident)
@@ -198,13 +257,13 @@ function fs.watch(p, callback)
 	end
 
 	function watcher.wait()
-		-- nil timeout = block indefinitely until an event arrives
 		local n = ffi.C.kevent(kq, nil, 0, events, 16, nil)
 		process(n)
 	end
 
 	function watcher.close()
 		for fd in pairs(filefds) do ffi.C.close(fd) end
+		for fd in pairs(subdirfds) do ffi.C.close(fd) end
 		ffi.C.close(dirfd)
 		ffi.C.close(kq)
 	end

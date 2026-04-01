@@ -105,16 +105,43 @@ end)
 --- Returns a watcher with :poll() (non-blocking), :wait() (blocking), and :close().
 ---@param p string
 ---@param callback fun(event: fs.WatchEvent, name: string)
+---@param opts { recursive: boolean? }?
 ---@return fs.Watcher?
-function fs.watch(p, callback)
+function fs.watch(p, callback, opts)
+	local recursive = opts and opts.recursive or false
+
 	local ifd = ffi.C.inotify_init1(IN_NONBLOCK)
 	if ifd < 0 then return nil end
 
 	local mask = bit.bor(IN_CREATE, IN_DELETE, IN_MODIFY, IN_MOVED_FROM, IN_MOVED_TO)
-	local wd = ffi.C.inotify_add_watch(ifd, p, mask)
-	if wd < 0 then
+
+	-- wd -> absolute dir path, for resolving event names in recursive mode
+	local wdPaths = {} ---@type table<number, string>
+
+	local function addWatch(dir)
+		local wd = ffi.C.inotify_add_watch(ifd, dir, mask)
+		if wd >= 0 then wdPaths[tonumber(wd)] = dir end
+		return wd
+	end
+
+	if addWatch(p) < 0 then
 		ffi.C.close(ifd)
 		return nil
+	end
+
+	if recursive then
+		local function walkDirs(dir)
+			local iter = fs.readdir(dir)
+			if not iter then return end
+			for entry in iter do
+				if entry.type == "dir" then
+					local sub = dir .. "/" .. entry.name
+					addWatch(sub)
+					walkDirs(sub)
+				end
+			end
+		end
+		walkDirs(p)
 	end
 
 	local bufSize = 4096
@@ -127,13 +154,25 @@ function fs.watch(p, callback)
 		local i = 0
 		while i < n do
 			local ptr = buf + i
-			local evMask = ffi.cast("uint32_t*", ptr + 4)[0]
+			local wd      = ffi.cast("int32_t*",  ptr)[0]
+			local evMask  = ffi.cast("uint32_t*", ptr + 4)[0]
 			local nameLen = ffi.cast("uint32_t*", ptr + 12)[0]
-			local name = nameLen > 0 and ffi.string(ptr + 16) or ""
+			local name    = nameLen > 0 and ffi.string(ptr + 16) or ""
+
+			-- In recursive mode, prefix name with the relative subdir path
+			if recursive and wdPaths[tonumber(wd)] and wdPaths[tonumber(wd)] ~= p then
+				local rel = string.sub(wdPaths[tonumber(wd)], #p + 2)
+				name = rel .. "/" .. name
+			end
 
 			local event ---@type fs.WatchEvent
 			if bit.band(evMask, IN_CREATE) ~= 0 then
 				event = "create"
+				-- Watch newly created subdirectories
+				if recursive and bit.band(evMask, 0x40000000) ~= 0 then -- IN_ISDIR
+					local newDir = wdPaths[tonumber(wd)] .. "/" .. (nameLen > 0 and ffi.string(ptr + 16) or "")
+					addWatch(newDir)
+				end
 			elseif bit.band(evMask, IN_DELETE) ~= 0 then
 				event = "delete"
 			elseif bit.band(evMask, IN_MODIFY) ~= 0 then
@@ -155,7 +194,6 @@ function fs.watch(p, callback)
 	end
 
 	function watcher.wait()
-		-- Temporarily make the fd blocking, read (sleeps until event), restore
 		local flags = ffi.C.fcntl(ifd, F_GETFL)
 		ffi.C.fcntl(ifd, F_SETFL, bit.band(flags, bit.bnot(O_NONBLOCK)))
 		drain()
@@ -163,7 +201,9 @@ function fs.watch(p, callback)
 	end
 
 	function watcher.close()
-		ffi.C.inotify_rm_watch(ifd, wd)
+		for wd in pairs(wdPaths) do
+			ffi.C.inotify_rm_watch(ifd, wd)
+		end
 		ffi.C.close(ifd)
 	end
 
