@@ -61,8 +61,23 @@ ffi.cdef([[
 	};
 ]])
 
+pcall(ffi.cdef, [[
+	int inotify_init1(int flags);
+	int inotify_add_watch(int fd, const char* pathname, uint32_t mask);
+	int inotify_rm_watch(int fd, int wd);
+	long read(int fd, void* buf, size_t count);
+	int close(int fd);
+]])
+
+local IN_CREATE     = 0x00000100
+local IN_DELETE     = 0x00000200
+local IN_MODIFY     = 0x00000002
+local IN_MOVED_FROM = 0x00000040
+local IN_MOVED_TO   = 0x00000080
+local IN_NONBLOCK   = 0x800
+
 ---@class fs.raw.linux: fs.raw.posix
-return require("fs.raw.posix")(function(s, modeToStatType)
+local fs            = require("fs.raw.posix")(function(s, modeToStatType)
 	return {
 		size = s.st_size,
 		modifyTime = s.st_mtime,
@@ -71,3 +86,68 @@ return require("fs.raw.posix")(function(s, modeToStatType)
 		mode = bit.band(s.st_mode, 0x1FF)
 	}
 end)
+
+---@alias fs.WatchEvent "create" | "modify" | "delete" | "rename"
+
+---@class fs.Watcher
+---@field close fun()
+---@field poll fun()
+
+--- Watch a path for changes. Calls callback(event, name) for each change.
+--- Returns a watcher with :poll() (non-blocking) and :close().
+---@param p string
+---@param callback fun(event: fs.WatchEvent, name: string)
+---@return fs.Watcher?
+function fs.watch(p, callback)
+	local ifd = ffi.C.inotify_init1(IN_NONBLOCK)
+	if ifd < 0 then return nil end
+
+	local mask = bit.bor(IN_CREATE, IN_DELETE, IN_MODIFY, IN_MOVED_FROM, IN_MOVED_TO)
+	local wd = ffi.C.inotify_add_watch(ifd, p, mask)
+	if wd < 0 then
+		ffi.C.close(ifd)
+		return nil
+	end
+
+	local bufSize = 4096
+	local buf = ffi.new("uint8_t[?]", bufSize)
+
+	---@type fs.Watcher
+	local watcher = {}
+
+	function watcher.poll()
+		local n = ffi.C.read(ifd, buf, bufSize)
+		if n <= 0 then return end
+
+		local i = 0
+		while i < n do
+			local ptr = buf + i
+			local evMask = ffi.cast("uint32_t*", ptr + 4)[0]
+			local nameLen = ffi.cast("uint32_t*", ptr + 12)[0]
+			local name = nameLen > 0 and ffi.string(ptr + 16) or ""
+
+			local event ---@type fs.WatchEvent
+			if bit.band(evMask, IN_CREATE) ~= 0 then
+				event = "create"
+			elseif bit.band(evMask, IN_DELETE) ~= 0 then
+				event = "delete"
+			elseif bit.band(evMask, IN_MODIFY) ~= 0 then
+				event = "modify"
+			elseif bit.band(evMask, bit.bor(IN_MOVED_FROM, IN_MOVED_TO)) ~= 0 then
+				event = "rename"
+			end
+
+			if event then callback(event, name) end
+			i = i + 16 + nameLen
+		end
+	end
+
+	function watcher.close()
+		ffi.C.inotify_rm_watch(ifd, wd)
+		ffi.C.close(ifd)
+	end
+
+	return watcher
+end
+
+return fs

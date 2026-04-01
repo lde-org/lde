@@ -14,6 +14,12 @@ local path = require("path")
 ---@field name string
 ---@field type fs.DirEntry.Type
 
+---@alias fs.WatchEvent "create" | "modify" | "delete" | "rename"
+
+---@class fs.Watcher
+---@field poll fun()
+---@field close fun()
+
 ---@class fs.raw
 ---@field exists fun(p: string): boolean
 ---@field isdir fun(p: string): boolean
@@ -25,6 +31,7 @@ local path = require("path")
 ---@field rmlink fun(p: string): boolean
 ---@field stat fun(p: string): fs.Stat?
 ---@field lstat fun(p: string): fs.Stat?
+---@field watch fun(p: string, callback: fun(event: fs.WatchEvent, name: string)): fs.Watcher?
 
 local rawfs ---@type fs.raw
 if jit.os == "Windows" then
