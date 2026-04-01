@@ -153,7 +153,7 @@ function fs.rmdir(dir)
 		end
 	end
 
-	return os.remove(dir) ~= nil
+	return fs.rmlink(dir)
 end
 
 local sep = string.sub(package.config, 1, 1)

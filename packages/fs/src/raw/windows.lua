@@ -452,13 +452,19 @@ local FILE_ACTION_RENAMED_NEW = 5
 
 ffi.cdef([[
 	typedef struct {
-		DWORD Internal;
-		DWORD InternalHigh;
+		uintptr_t Internal;
+		uintptr_t InternalHigh;
 		DWORD Offset;
 		DWORD OffsetHigh;
 		HANDLE hEvent;
 	} OVERLAPPED_W;
+
+	HANDLE CreateEventA(void* lpEventAttributes, BOOL bManualReset, BOOL bInitialState, const char* lpName);
+	DWORD WaitForSingleObject(HANDLE hHandle, DWORD dwMilliseconds);
 ]])
+
+local WAIT_OBJECT_0  = 0
+local WAIT_TIMEOUT   = 0x102
 
 --- Watch a directory for changes. Calls callback(event, name) for each change.
 --- Returns a watcher with :poll() (non-blocking) and :close().
@@ -477,9 +483,13 @@ function fs.watch(p, callback)
 	)
 	if handle == INVALID_HANDLE_VALUE then return nil end
 
+	local event = kernel32.CreateEventA(nil, 1, 0, nil)  -- manual reset, initially unsignaled
+	if event == nil then kernel32.CloseHandle(handle); return nil end
+
 	local bufSize = 4096
 	local buf = ffi.new("uint8_t[?]", bufSize)
 	local overlapped = ffi.new("OVERLAPPED_W[1]")
+	overlapped[0].hEvent = event
 	local bytesReturned = ffi.new("DWORD[1]")
 
 	local notifyFilter = bit.bor(
@@ -489,20 +499,27 @@ function fs.watch(p, callback)
 		FILE_NOTIFY_CHANGE_SIZE
 	)
 
-	-- Issue the first async read
-	kernel32.ReadDirectoryChangesW(handle, buf, bufSize, 0, notifyFilter, bytesReturned, overlapped, nil)
+	local function issueRead()
+		ffi.fill(overlapped, ffi.sizeof("OVERLAPPED_W"))
+		overlapped[0].hEvent = event
+		kernel32.ReadDirectoryChangesW(handle, buf, bufSize, 0, notifyFilter, bytesReturned, overlapped, nil)
+	end
+
+	issueRead()
 
 	---@type fs.Watcher
 	local watcher = {}
 
 	function watcher.poll()
+		if kernel32.WaitForSingleObject(event, 0) ~= WAIT_OBJECT_0 then return end
+
 		local transferred = ffi.new("DWORD[1]")
 		if kernel32.GetOverlappedResult(handle, overlapped, transferred, 0) == 0 then
-			return
+			issueRead(); return
 		end
 
 		local n = tonumber(transferred[0])
-		if not n or n == 0 then return end
+		if not n or n == 0 then issueRead(); return end
 
 		-- FILE_NOTIFY_INFORMATION: NextEntryOffset(4), Action(4), FileNameLength(4), FileName[...]
 		local i = 0
@@ -510,37 +527,30 @@ function fs.watch(p, callback)
 			local ptr = buf + i
 			local nextOff  = ffi.cast("uint32_t*", ptr)[0]
 			local action   = ffi.cast("uint32_t*", ptr + 4)[0]
-			local nameLen  = ffi.cast("uint32_t*", ptr + 8)[0]  -- bytes (UTF-16LE)
-			local nameWords = nameLen / 2
+			local nameLen  = ffi.cast("uint32_t*", ptr + 8)[0]
 			local name = ""
-			for j = 0, nameWords - 1 do
+			for j = 0, nameLen / 2 - 1 do
 				local ch = ffi.cast("uint16_t*", ptr + 12)[j]
 				name = name .. string.char(ch < 128 and ch or 63)
 			end
 
-			local event ---@type fs.WatchEvent
-			if action == FILE_ACTION_ADDED then
-				event = "create"
-			elseif action == FILE_ACTION_REMOVED then
-				event = "delete"
-			elseif action == FILE_ACTION_MODIFIED then
-				event = "modify"
-			elseif action == FILE_ACTION_RENAMED_OLD or action == FILE_ACTION_RENAMED_NEW then
-				event = "rename"
+			local ev ---@type fs.WatchEvent
+			if action == FILE_ACTION_ADDED then ev = "create"
+			elseif action == FILE_ACTION_REMOVED then ev = "delete"
+			elseif action == FILE_ACTION_MODIFIED then ev = "modify"
+			elseif action == FILE_ACTION_RENAMED_OLD or action == FILE_ACTION_RENAMED_NEW then ev = "rename"
 			end
 
-			if event then callback(event, name) end
-
+			if ev then callback(ev, name) end
 			if nextOff == 0 then break end
 			i = i + nextOff
 		end
 
-		-- Re-issue the async read for next poll
-		ffi.fill(overlapped, ffi.sizeof("OVERLAPPED_W"))
-		kernel32.ReadDirectoryChangesW(handle, buf, bufSize, 0, notifyFilter, bytesReturned, overlapped, nil)
+		issueRead()
 	end
 
 	function watcher.close()
+		kernel32.CloseHandle(event)
 		kernel32.CloseHandle(handle)
 	end
 
