@@ -1,3 +1,9 @@
+local ffi = require("ffi")
+
+ffi.cdef [[
+	void* memchr(const void* s, int c, size_t n);
+]]
+
 local ROCKSPEC_BASE = "https://luarocks.org"
 
 local luarocks = {}
@@ -19,27 +25,58 @@ end
 ---@param name string
 ---@return table<string, luarocks.Manifest.Entry[]>?
 function Manifest:package(name)
+	if not self._cache then self._cache = {} end
+	if self._cache[name] ~= nil then return self._cache[name] or nil end
+
+	local raw = self._raw
 	local escaped = name:gsub("([%-%.%+%*%?%[%]%^%$%(%)%%])", "%%%1")
 	-- Try quoted key: ["name"] = {
-	local start = self._raw:find('%["' .. escaped .. '"%]%s*=%s*{')
+	local start = raw:find('%["' .. escaped .. '"%]%s*=%s*{')
 	-- Fall back to unquoted ident key with frontier pattern: name = {
 	if not start then
-		start = self._raw:find('%f[%w_]' .. escaped .. '%f[^%w_]%s*=%s*{')
+		start = raw:find('%f[%w_]' .. escaped .. '%f[^%w_]%s*=%s*{')
 	end
-	if not start then return nil end
+	if not start then
+		self._cache[name] = false; return nil
+	end
 
-	local i = self._raw:find("{", start)
-	local depth, blockStart = 0, i
-	while i <= #self._raw do
-		local c = self._raw:sub(i, i)
-		if c == "{" then depth = depth + 1
-		elseif c == "}" then
-			depth = depth - 1
-			if depth == 0 then break end
-		end
-		i = i + 1
+	local braceStart = raw:find('{', start, true)
+	if not braceStart then
+		self._cache[name] = false; return nil
 	end
-	local block = self._raw:sub(blockStart, i)
+
+	-- Use memchr to scan for { and } to find the matching close brace
+	local ptr = ffi.cast("const char*", raw)
+	local rawlen = #raw
+	local openByte = string.byte('{')
+	local closeByte = string.byte('}')
+	local depth = 0
+	local i = braceStart - 1 -- 0-based
+	local blockEnd = braceStart
+
+	while i < rawlen do
+		local nextOpen  = ffi.C.memchr(ptr + i, openByte, rawlen - i)
+		local nextClose = ffi.C.memchr(ptr + i, closeByte, rawlen - i)
+		local openPos   = nextOpen ~= nil and tonumber(ffi.cast("size_t", nextOpen) - ffi.cast("size_t", ptr)) or rawlen
+		local closePos  = nextClose ~= nil and tonumber(ffi.cast("size_t", nextClose) - ffi.cast("size_t", ptr)) or
+			rawlen
+
+		if openPos >= rawlen and closePos >= rawlen then break end
+
+		if openPos < closePos then
+			depth = depth + 1
+			i = openPos + 1
+		else
+			depth = depth - 1
+			if depth == 0 then
+				blockEnd = closePos + 1 -- 1-based
+				break
+			end
+			i = closePos + 1
+		end
+	end
+
+	local block = raw:sub(braceStart, blockEnd)
 
 	local versions = {}
 	for verKey, verBody in block:gmatch('%["([^"]+)"%]%s*=%s*(%b{})') do
@@ -50,6 +87,7 @@ function Manifest:package(name)
 		versions[verKey] = entries
 	end
 
+	self._cache[name] = versions
 	return versions
 end
 
@@ -107,13 +145,20 @@ end
 ---@return boolean
 local function satisfies(ver, op, constraint)
 	local c = cmpVer(parseVer(ver), parseVer(constraint))
-	if op == ">=" then return c >= 0
-	elseif op == ">" then return c > 0
-	elseif op == "<=" then return c <= 0
-	elseif op == "<" then return c < 0
-	elseif op == "==" or op == "=" then return c == 0
-	elseif op == "~=" then return c ~= 0
+	if op == ">=" then
+		return c >= 0
+	elseif op == ">" then
+		return c > 0
+	elseif op == "<=" then
+		return c <= 0
+	elseif op == "<" then
+		return c < 0
+	elseif op == "==" or op == "=" then
+		return c == 0
+	elseif op == "~=" then
+		return c ~= 0
 	end
+
 	return false
 end
 
@@ -147,7 +192,10 @@ function luarocks.getRockspecUrl(manifest, name, constraint)
 	for _, v in ipairs(sorted) do
 		local ok = true
 		for _, c in ipairs(constraints) do
-			if not satisfies(v, c.op, c.ver) then ok = false; break end
+			if not satisfies(v, c.op, c.ver) then
+				ok = false
+				break
+			end
 		end
 		if ok then return urls[v] end
 	end

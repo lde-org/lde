@@ -4,6 +4,7 @@ local http = require("http")
 local fs = require("fs")
 local path = require("path")
 local git = require("git")
+local json = require("json")
 local rocked = require("rocked")
 local ansi = require("ansi")
 local lde = require("lde-core")
@@ -43,6 +44,41 @@ local function getManifest()
 	return cachedManifest
 end
 
+--- Cache of resolved rockspec URLs: name -> url, persisted alongside the manifest.
+--- Invalidated when the manifest file is refreshed.
+---@type table<string, string>?
+local urlCache
+
+local function getUrlCachePath()
+	return path.join(lde.global.getDir(), "luarocks-url-cache.json")
+end
+
+local function loadUrlCache()
+	if urlCache then return urlCache end
+	local cachePath = getUrlCachePath()
+	local manifestPath = path.join(lde.global.getDir(), "luarocks-manifest.raw")
+	local cstat = fs.stat(cachePath)
+	local mstat = fs.stat(manifestPath)
+	if cstat and mstat and cstat.modifyTime >= mstat.modifyTime then
+		local raw = fs.read(cachePath)
+		if raw then
+			local ok, decoded = pcall(json.decode, raw)
+			if ok and type(decoded) == "table" then
+				urlCache = decoded
+				return urlCache
+			end
+		end
+	end
+	urlCache = {}
+	return urlCache
+end
+
+local function saveUrlCache()
+	if urlCache then
+		fs.write(getUrlCachePath(), json.encode(urlCache))
+	end
+end
+
 --- Normalises various git URL formats to a plain https:// URL.
 ---@param url string
 ---@return string
@@ -61,9 +97,19 @@ end
 ---@param commit string?
 ---@return lde.Package?, lde.Lockfile.Dependency?, string?
 function util.openRockspecUrl(name, url, branch, commit)
-	local content, fetchErr = http.get(url)
+	-- Cache rockspec content by URL to avoid re-fetching on every warm run
+	local rockspecCacheFile = path.join(lde.global.getRockspecCacheDir(), (url:gsub("[^%w]", "_")))
+	local content
+	if fs.exists(rockspecCacheFile) then
+		content = fs.read(rockspecCacheFile)
+	end
 	if not content then
-		return nil, nil, "Failed to fetch rockspec: " .. (fetchErr or "")
+		local fetchErr
+		content, fetchErr = http.get(url)
+		if not content then
+			return nil, nil, "Failed to fetch rockspec: " .. (fetchErr or "")
+		end
+		fs.write(rockspecCacheFile, content)
 	end
 
 	local ok, spec = rocked.parse(content)
@@ -96,10 +142,29 @@ end
 ---@param version string?
 ---@return lde.Package?, lde.Lockfile.Dependency?, string?
 function util.openLuarocksPackage(name, version)
-	local manifest, err = getManifest()
-	if not manifest then return nil, nil, err end
-	local url, uerr = luarocks.getRockspecUrl(manifest, name, version)
-	if not url then return nil, nil, uerr end
+	-- For unversioned lookups, check the URL cache first to skip manifest scan
+	local cache = loadUrlCache()
+	local cacheKey = name .. (version and ("@" .. version) or "")
+	local cachedUrl = (not version) and cache[cacheKey] or nil
+
+	local url
+	if cachedUrl then
+		url = cachedUrl
+	else
+		local manifest, err = getManifest()
+		if not manifest then return nil, nil, err end
+
+		local uerr
+		url, uerr = luarocks.getRockspecUrl(manifest, name, version)
+		if not url then return nil, nil, uerr end
+
+		-- Cache the resolved URL for future invocations
+		if not version then
+			cache[cacheKey] = url
+			saveUrlCache()
+		end
+	end
+
 	return util.openRockspecUrl(name, url)
 end
 
