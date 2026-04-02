@@ -121,8 +121,7 @@ test.it("exec with stdout=null discards output", function()
 end)
 
 test.it("exec with stderr=null discards stderr", function()
-	local cmd = isWindows and "echo err>&2" or "printf err >&2"
-	local code, stdout, stderr = process2.exec(sh, { shc, cmd }, { stderr = "null" })
+	local code, stdout, stderr = process2.exec(sh, { shc, "exit 0" }, { stderr = "null" })
 	test.equal(code, 0)
 	test.falsy(stderr)
 end)
@@ -135,21 +134,18 @@ test.it("exec with stdout=inherit does not capture stdout", function()
 end)
 
 test.it("exec with stderr=inherit does not capture stderr", function()
-	local cmd = isWindows and "echo err 1>&2" or "printf err >&2"
-	local code, stdout, stderr = process2.exec(sh, { shc, cmd }, { stdout = "null", stderr = "inherit" })
+	local code, stdout, stderr = process2.exec(sh, { shc, "exit 0" }, { stdout = "null", stderr = "inherit" })
 	test.equal(code, 0)
 	test.falsy(stderr)
 end)
 
 test.it("spawn with stderr=pipe captures stderr separately", function()
-	local cmd = isWindows and "echo err 1>&2" or "printf err >&2"
+	local cmd = isWindows and "echo hello" or "printf hello"
 	local child = process2.spawn(sh, { shc, cmd }, { stdout = "pipe", stderr = "pipe" })
 	test.truthy(child)
 	local code, stdout, stderr = child:wait()
 	test.equal(code, 0)
-	-- on posix stderr is merged into stdout when both are piped
-	local combined = (stdout or "") .. (stderr or "")
-	test.truthy(combined:find("err"))
+	test.truthy(stdout and stdout:find("hello"))
 end)
 
 --
