@@ -118,7 +118,8 @@ function fs.move(old, new)
 
 	-- Fallback to copy+delete for cross-device moves and directories
 	if not fs.copy(old, new) then return false, "Failed to copy" end
-	if not fs.delete(old) then return false, "Failed to delete" end
+	local ok = fs.isdir(old) and fs.rmdir(old) or fs.delete(old)
+	if not ok then return false, "Failed to delete" end
 
 	return true
 end

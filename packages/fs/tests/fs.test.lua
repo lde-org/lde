@@ -137,6 +137,16 @@ test.it("move renames a file", function()
 	test.equal(fs.read(dst), "moved")
 end)
 
+test.it("move removes source directory after moving", function()
+	local src = tmp("move-dir-src")
+	local dst = tmp("move-dir-dst")
+	fs.mkdir(src)
+	fs.write(path.join(src, "file.txt"), "content")
+	test.truthy(fs.move(src, dst))
+	test.falsy(fs.exists(src))
+	test.equal(fs.read(path.join(dst, "file.txt")), "content")
+end)
+
 --
 -- readdir
 --
