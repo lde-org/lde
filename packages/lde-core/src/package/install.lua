@@ -5,6 +5,16 @@ local util = require("util")
 
 local lde = require("lde-core")
 
+--- Copies config-only flags (optional, features) from a config entry onto a lock entry.
+---@param lockEntry lde.Lockfile.Dependency
+---@param depInfo lde.Package.Config.Dependency
+---@return lde.Lockfile.Dependency
+local function withConfigFlags(lockEntry, depInfo)
+	lockEntry.optional = depInfo.optional
+	lockEntry.features = depInfo.features
+	return lockEntry
+end
+
 ---@param alias string
 ---@param depInfo lde.Package.Config.Dependency
 ---@param relativeTo string
@@ -25,14 +35,13 @@ local function dependencyToPackage(alias, depInfo, relativeTo)
 		end
 
 		---@type lde.Lockfile.GitDependency
-		local lockEntry = {
+		local lockEntry = withConfigFlags({
 			git = depInfo.git,
 			commit = resolvedCommit,
 			branch = depInfo.branch,
 			name = depInfo.name,
-			rockspec =
-				depInfo.rockspec
-		}
+			rockspec = depInfo.rockspec,
+		}, depInfo)
 
 		local pkg = lde.Package.open(repoDir, depInfo.rockspec)
 		if pkg and pkg:getName() == packageName then
@@ -61,7 +70,7 @@ local function dependencyToPackage(alias, depInfo, relativeTo)
 		if not localPackage then
 			error("Failed to load local dependency package for: " .. alias .. "\nError: " .. err)
 		end
-		return localPackage, { path = depInfo.path, name = depInfo.name, rockspec = depInfo.rockspec }
+		return localPackage, withConfigFlags({ path = depInfo.path, name = depInfo.name, rockspec = depInfo.rockspec }, depInfo)
 	elseif depInfo.archive then
 		local archiveDir = lde.global.getOrInitArchive(depInfo.archive)
 		local pkg, err = lde.Package.open(archiveDir, depInfo.rockspec)
@@ -70,7 +79,7 @@ local function dependencyToPackage(alias, depInfo, relativeTo)
 		end
 
 		---@type lde.Lockfile.ArchiveDependency
-		local lockEntry = { archive = depInfo.archive, name = depInfo.name, rockspec = depInfo.rockspec }
+		local lockEntry = withConfigFlags({ archive = depInfo.archive, name = depInfo.name, rockspec = depInfo.rockspec }, depInfo)
 
 		return pkg, lockEntry
 	elseif depInfo.luarocks then -- luarocks registry
@@ -80,7 +89,7 @@ local function dependencyToPackage(alias, depInfo, relativeTo)
 		end ---@cast lockEntry -nil
 
 		lockEntry.name = depInfo.name
-		return pkg, lockEntry
+		return pkg, withConfigFlags(lockEntry, depInfo)
 	elseif depInfo.version then -- lde registry
 		lde.global.syncRegistry()
 
@@ -93,7 +102,7 @@ local function dependencyToPackage(alias, depInfo, relativeTo)
 		local repoDir = lde.global.getOrInitGitRepo(packageName, portfile.git, portfile.branch, commit)
 
 		---@type lde.Lockfile.GitDependency
-		local lockEntry = { git = portfile.git, commit = commit, branch = portfile.branch, name = depInfo.name }
+		local lockEntry = withConfigFlags({ git = portfile.git, commit = commit, branch = portfile.branch, name = depInfo.name }, depInfo)
 
 		local pkg = lde.Package.open(repoDir, depInfo.rockspec)
 		if pkg and pkg:getName() == packageName then
@@ -144,7 +153,7 @@ local function collectDependencies(dependencies, relativeTo, stack, visiting, ro
 		-- Use root lockfile entry if available to avoid re-resolving luarocks deps
 		if rootLockfile then
 			local locked = rootLockfile:getDependency(alias)
-			if locked then depInfo = locked end
+			if locked then depInfo = withConfigFlags(locked, depInfo) end
 		end
 
 		local pkg, lockEntry = dependencyToPackage(alias, depInfo, relativeTo)

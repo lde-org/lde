@@ -4,6 +4,8 @@ local json = require("json")
 ---@class lde.Lockfile.BaseDependency
 ---@field name string?
 ---@field rockspec string? # URL or relative path to the rockspec file
+---@field optional boolean? # If true, only installed when enabled via features
+---@field features lde.Package.Config.FeatureFlag[]? # Feature flags to enable for this dependency
 
 ---@class lde.Lockfile.GitDependency: lde.Lockfile.BaseDependency
 ---@field git string

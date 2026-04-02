@@ -146,10 +146,18 @@ function Package:getDependencies()
 	local lockfile = self:readLockfile()
 	if not lockfile then return deps end
 
-	-- Prefer locked versions (which have pinned commits) over lde.json
+	-- Prefer locked versions (which have pinned commits) over lde.json,
+	-- but preserve config-only flags (optional, features) that aren't stored in the lockfile
 	local merged = {}
 	for name, depInfo in pairs(deps) do
-		merged[name] = lockfile:getDependency(name) or depInfo
+		local locked = lockfile:getDependency(name)
+		if locked then
+			locked.optional = depInfo.optional
+			locked.features = depInfo.features
+			merged[name] = locked
+		else
+			merged[name] = depInfo
+		end
 	end
 	return merged
 end

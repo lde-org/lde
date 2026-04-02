@@ -11,7 +11,6 @@ local tmpBase = path.join(env.tmpdir(), "lde-optionaldeps-tests")
 fs.rmdir(tmpBase)
 fs.mkdir(tmpBase)
 
--- Create three dummy platform-specific packages
 local platforms = { "linux-dep", "windows-dep", "macos-dep" }
 for _, name in ipairs(platforms) do
 	local dir = path.join(tmpBase, name)
@@ -21,7 +20,6 @@ for _, name in ipairs(platforms) do
 	fs.write(path.join(dir, "lde.json"), json.encode({ name = name, version = "0.1.0" }))
 end
 
--- Consumer with all three as optional deps, each gated behind its platform feature
 local appDir = path.join(tmpBase, "consumer")
 fs.mkdir(appDir)
 fs.write(path.join(appDir, "lde.json"), json.encode({
@@ -39,30 +37,46 @@ fs.write(path.join(appDir, "lde.json"), json.encode({
 	}
 }))
 
+local osDep = { Linux = "linux-dep", Windows = "windows-dep", OSX = "macos-dep" }
+
 test.it("optional deps: only the current platform dep is installed", function()
 	local app = lde.Package.open(appDir)
 	app:installDependencies()
 
 	local targetDir = app:getModulesDir()
-	local osDep = {
-		Linux   = "linux-dep",
-		Windows = "windows-dep",
-		OSX     = "macos-dep",
-	}
-
 	local expected = osDep[jit.os]
-	local unexpected = {}
+
+	test.truthy(fs.exists(path.join(targetDir, expected)))
 	for _, name in ipairs(platforms) do
 		if name ~= expected then
-			unexpected[#unexpected + 1] = name
+			test.falsy(fs.exists(path.join(targetDir, name)))
 		end
 	end
+end)
 
-	test.truthy(fs.exists(path.join(targetDir, expected)),
-		"expected " .. expected .. " to be installed for " .. jit.os)
+test.it("optional deps: lockfile preserves optional flag", function()
+	local app = lde.Package.open(appDir)
+	local lockfile = lde.Lockfile.open(app:getLockfilePath())
+	test.truthy(lockfile)
+	for _, name in ipairs(platforms) do
+		local entry = lockfile:getDependency(name)
+		test.truthy(entry)
+		test.truthy(entry.optional)
+	end
+end)
 
-	for _, name in ipairs(unexpected) do
-		test.falsy(fs.exists(path.join(targetDir, name)),
-			"expected " .. name .. " NOT to be installed on " .. jit.os)
+test.it("optional deps: still respected on second install (lockfile path)", function()
+	local app = lde.Package.open(appDir)
+	fs.rmdir(app:getModulesDir())
+	app:installDependencies()
+
+	local targetDir = app:getModulesDir()
+	local expected = osDep[jit.os]
+
+	test.truthy(fs.exists(path.join(targetDir, expected)))
+	for _, name in ipairs(platforms) do
+		if name ~= expected then
+			test.falsy(fs.exists(path.join(targetDir, name)))
+		end
 	end
 end)
