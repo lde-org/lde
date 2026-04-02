@@ -1,4 +1,5 @@
-local ffi = require("ffi")
+local ffi    = require("ffi")
+local buffer = require("string.buffer")
 
 ffi.cdef([[
 	typedef void*    HANDLE;
@@ -190,6 +191,15 @@ local function nullHandle(write)
 	return h ~= INVALID_HANDLE_VALUE and h or nil
 end
 
+---@param env table<string, string>
+---@return string
+local function buildEnvBlock(env)
+	local buf = buffer.new()
+	for k, v in pairs(env) do buf:put(k, "=", v, "\0") end
+	buf:put("\0")
+	return buf:tostring()
+end
+
 ---@param name string
 ---@param args string[]
 ---@param opts { cwd: string?, env: table<string,string>?, stdin: string?, stdout: "pipe"|"inherit"|"null"?, stderr: "pipe"|"inherit"|"null"? }?
@@ -237,13 +247,14 @@ function M.spawn(name, args, opts)
 		si.hStdError = kernel32.GetStdHandle(STD_ERROR_HANDLE)
 	end
 
-	local cmdStr  = buildCmdLine(name, args)
-	local cmdLine = CharBuf(#cmdStr + 1, cmdStr)
-	local pi      = ProcessInformation()
+	local cmdStr   = buildCmdLine(name, args)
+	local cmdLine  = CharBuf(#cmdStr + 1, cmdStr)
+	local envBlock = opts.env and buildEnvBlock(opts.env) or nil
+	local pi       = ProcessInformation()
 
-	local ok      = kernel32.CreateProcessA(
+	local ok       = kernel32.CreateProcessA(
 		nil, cmdLine, nil, nil, 1,
-		CREATE_NO_WINDOW, nil, opts.cwd or nil, si, pi
+		CREATE_NO_WINDOW, envBlock, opts.cwd or nil, si, pi
 	)
 
 	if stdinR then kernel32.CloseHandle(stdinR) end
