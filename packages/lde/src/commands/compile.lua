@@ -24,9 +24,9 @@ local function compile(args)
 	end
 
 	local executable = pkg:compile()
-	local ok, err = fs.move(executable, outFile)
+	local ok, moveErr = fs.move(executable, outFile)
 	if not ok then
-		error("Failed to move executable: " .. err)
+		error("Failed to move executable: " .. moveErr)
 	end
 
 	if process.platform ~= "win32" then ---@cast fs fs.raw.posix

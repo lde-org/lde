@@ -107,39 +107,23 @@ local function safeIdent(name)
 	return string.gsub(name, "[^%w]", "_")
 end
 
----@param content string
----@param chunkName string
-function sea.bytecode(content, chunkName)
-	local success, bytecode = process.exec("luajit", { "-b", "-g", "-F", chunkName, "-", "-" }, { stdin = content })
-
-	if not success then
-		error("Failed to compile bytecode: " .. bytecode)
-	end
-
-	return bytecode
-end
-
----@param main string
----@param files { path: string, content: string }[]
+---@param main string # name used as the chunk label
+---@param source string # bundled lua source (output of bundlePackage)
 ---@param sharedLibs? { name: string, content: string }[]
 ---@return string
-function sea.compile(main, files, sharedLibs)
+function sea.compile(main, source, sharedLibs)
 	local outPath = path.join(env.tmpdir(), "sea.out")
 	sharedLibs = sharedLibs or {}
 
-	-- Build preload entries for Lua source modules.
-	local filePreloads = {}
-	for i, file in ipairs(files) do
-		local escapedName = file.path:gsub(".", CEscapes)
-
-		filePreloads[i] = ('luaL_loadbuffer(L, "%s", %d, "%s"); lua_setfield(L, -2, "%s");')
+	local filePreloads = {
+		('luaL_loadbuffer(L, "%s", %d, "%s"); lua_setfield(L, -2, "%s");')
 			:format(
-				file.content:gsub(".", CEscapes),
-				#file.content,
-				"@" .. escapedName,
-				escapedName
+				source:gsub(".", CEscapes),
+				#source,
+				"@" .. main:gsub(".", CEscapes),
+				main:gsub(".", CEscapes)
 			)
-	end
+	}
 
 	-- For each shared library, emit a uint8_t array and the write+preload logic.
 	-- The path is deterministic: /tmp/lde-lib-<name>-<hash>.so so that

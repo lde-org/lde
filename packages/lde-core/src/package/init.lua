@@ -191,6 +191,7 @@ function Package:updateDevDependencies()
 	return self:updateDependencies(self:getDevDependencies())
 end
 
+Package.bundle = require("lde-core.package.bundle")
 Package.compile = require("lde-core.package.compile")
 local run = require("lde-core.package.run")
 Package.runFile = run.runFile
