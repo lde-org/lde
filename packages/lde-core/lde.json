@@ -1,7 +1,6 @@
 {
 	"name": "lde-core",
 	"version": "0.1.0",
-	"$schema": "./lde.schema.json",
 	"dependencies": {
 		"json": { "path": "../json" },
 		"ansi": { "path": "../ansi" },

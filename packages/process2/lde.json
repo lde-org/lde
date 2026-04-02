@@ -1,7 +1,6 @@
 {
 	"name": "process2",
 	"version": "0.1.0",
-	"$schema": "../lde/lde.schema.json",
 	"dependencies": {},
 	"devDependencies": {
 		"lde-test": { "path": "../lde-test" }

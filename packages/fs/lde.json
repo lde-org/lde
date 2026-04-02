@@ -1,8 +1,6 @@
 {
 	"name": "fs",
 	"version": "0.1.0",
-	"engine": "luajit",
-	"$schema": "../lde/lde.schema.json",
 	"dependencies": {},
 	"devDependencies": {
 		"lde-test": { "path": "../lde-test" },
