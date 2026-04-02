@@ -249,7 +249,8 @@ function M.spawn(name, args, opts)
 
 	local cmdStr   = buildCmdLine(name, args)
 	local cmdLine  = CharBuf(#cmdStr + 1, cmdStr)
-	local envBlock = opts.env and buildEnvBlock(opts.env) or nil
+	local envStr   = opts.env and buildEnvBlock(opts.env) or nil
+	local envBlock = envStr and ffi.cast("void*", envStr) or nil
 	local pi       = ProcessInformation()
 
 	local ok       = kernel32.CreateProcessA(
