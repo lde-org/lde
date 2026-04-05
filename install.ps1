@@ -12,7 +12,7 @@ if ($nightly) {
 } elseif ($version) {
     $tag = "v$version"
 } else {
-    $tag = (Invoke-RestMethod "https://api.github.com/repos/$repo/releases/latest").tag_name
+    $tag = ((Invoke-WebRequest "https://github.com/$repo/releases/latest" -MaximumRedirection 0 -ErrorAction SilentlyContinue).Headers.Location -split '/')[-1]
 }
 
 $rawArch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture

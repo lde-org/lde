@@ -30,7 +30,7 @@ if [ "$NIGHTLY" = "1" ]; then
 elif [ -n "$VERSION" ]; then
     TAG="v$VERSION"
 else
-    TAG=$(curl -sf "https://api.github.com/repos/$REPO/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+    TAG=$(curl -sfL "https://github.com/$REPO/releases/latest" -o /dev/null -w '%{url_effective}' | sed 's|.*/||')
 fi
 
 mkdir -p "$DIR"
