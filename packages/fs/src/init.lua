@@ -164,8 +164,8 @@ function fs.globToPattern(glob)
 	local pattern = glob
 		:gsub("([%^%$%(%)%%%.%[%]%+%-])", "%%%1")
 		:gsub("%*%*", "\001")
-		:gsub("%*", "[^" .. sep .. "]*")
-		:gsub("%?", "[^" .. sep .. "]")
+		:gsub("%*", "[^/\\]*")
+		:gsub("%?", "[^/\\]")
 		:gsub("\001", ".*")
 
 	return "^" .. pattern .. "$"
