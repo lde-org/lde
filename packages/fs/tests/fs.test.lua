@@ -170,7 +170,13 @@ test.it("mklink creates a symlink and islink detects it", function()
 	local link   = tmp("link-itself")
 	fs.write(target, "target")
 	test.truthy(fs.mklink(target, link))
-	test.truthy(fs.islink(link))
+	-- On Windows, file symlinks fall back to hard links when Developer Mode is
+	-- disabled. Hard links are not reparse points, so islink returns false.
+	if jit.os ~= "Windows" then
+		test.truthy(fs.islink(link))
+	else
+		test.truthy(fs.exists(link))
+	end
 end)
 
 test.it("rmlink removes a symlink", function()

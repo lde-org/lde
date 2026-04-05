@@ -76,6 +76,7 @@ ffi.cdef([[
 
 	BOOL RemoveDirectoryA(const char* lpPathName);
 	BOOL DeleteFileA(const char* lpFileName);
+	BOOL CreateHardLinkA(const char* lpFileName, const char* lpExistingFileName, void* lpSecurityAttributes);
 
 	HANDLE CreateIoCompletionPort(HANDLE FileHandle, HANDLE ExistingCompletionPort,
 	                              uintptr_t CompletionKey, DWORD NumberOfConcurrentThreads);
@@ -329,7 +330,10 @@ function fs.mklink(src, dest)
 		return createJunction(src, dest)
 	end
 
-	return kernel32.CreateSymbolicLinkA(dest, src, 0x2) ~= 0
+	if kernel32.CreateSymbolicLinkA(dest, src, 0x2) ~= 0 then
+		return true
+	end
+	return kernel32.CreateHardLinkA(dest, src, nil) ~= 0
 end
 
 ---@param p string
