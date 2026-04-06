@@ -1,11 +1,7 @@
-name: Release
+name: Build
 
 on:
-  release:
-    types: [created]
-
-permissions:
-  contents: write
+  workflow_dispatch:
 
 jobs:
   build:
@@ -70,7 +66,8 @@ jobs:
           cd packages/lde
           lde compile --outfile ${{ matrix.outfile }}
 
-      - name: Upload release asset
-        uses: softprops/action-gh-release@v2
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
         with:
-          files: packages/lde/${{ matrix.outfile }}
+          name: ${{ matrix.outfile }}
+          path: packages/lde/${{ matrix.outfile }}

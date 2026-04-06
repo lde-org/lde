@@ -12,7 +12,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup lde
-        uses: lde-org/lde@master
+        uses: lde-org/setup-lde@master
         with:
           version: nightly
 

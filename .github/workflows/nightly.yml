@@ -63,7 +63,7 @@ jobs:
         run: echo "$env:GITHUB_WORKSPACE\llvm-mingw-20260311-ucrt-aarch64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Setup lde
-        uses: lde-org/lde@master
+        uses: lde-org/setup-lde@master
         with:
           version: nightly
 
