@@ -1,8 +1,8 @@
-local fs = require("fs")
-local path = require("path")
-local util = require("util")
+local fs              = require("fs")
+local path            = require("path")
+local util            = require("util")
 
-local lde = require("lde-core")
+local lde             = require("lde-core")
 
 local resolveGit      = require("lde-core.package.install.git")
 local resolvePath     = require("lde-core.package.install.path")
@@ -63,12 +63,14 @@ end
 ---@field rootLockfile lde.Lockfile?
 
 --- Recursively resolves all dependencies onto a flat stack.
+--- Errors on duplicate names with differing sources.
 ---@param dependencies table<string, lde.Package.Config.Dependency>
 ---@param ctx lde.install.Context
 local function collectDependencies(dependencies, ctx)
 	for alias, depInfo in pairs(dependencies) do
 		if ctx.visiting[alias] then goto continue end
 
+		-- Use root lockfile entry if available to avoid re-resolving luarocks deps
 		if ctx.rootLockfile then
 			local locked = ctx.rootLockfile:getDependency(alias)
 			if locked then depInfo = withConfigFlags(locked, depInfo) end
@@ -85,7 +87,10 @@ local function collectDependencies(dependencies, ctx)
 		else
 			ctx.stack[alias] = { pkg = pkg, lock = lockEntry }
 			ctx.visiting[alias] = true
-			collectDependencies(pkg:getDependencies(), { relativeTo = pkg:getDir(), stack = ctx.stack, visiting = ctx.visiting, rootLockfile = ctx.rootLockfile })
+			local parentRelativeTo = ctx.relativeTo
+			ctx.relativeTo = pkg:getDir()
+			collectDependencies(pkg:getDependencies(), ctx)
+			ctx.relativeTo = parentRelativeTo
 			ctx.visiting[alias] = nil
 		end
 
@@ -94,15 +99,44 @@ local function collectDependencies(dependencies, ctx)
 end
 
 ---@type table<string, lde.Package.Config.FeatureFlag>
+---@type table<string, lde.Package.Config.FeatureFlag>
 local platformLookup = { Windows = "windows", Linux = "linux", OSX = "macos" }
-local basicFeatureTable = { platformLookup[jit.os] }
 
----@param t lde.Package.Config.FeatureFlag[]?
----@return lde.Package.Config.FeatureFlag[]
-local function addPlatformFeatures(t)
-	if not t then return basicFeatureTable end
-	t[#t + 1] = platformLookup[jit.os]
-	return t
+--- Resolves which optional deps are enabled given a feature list + current platform.
+---@param pkg lde.Package
+---@param features lde.Package.Config.FeatureFlag[]
+---@return table<string, true>
+local function resolveEnabledOptional(pkg, features)
+	local enabled = {}
+
+	local featureDefs = pkg:readConfig().features
+	if not featureDefs then return enabled end
+
+	for _, flag in ipairs(features) do
+		local deps = featureDefs[flag]
+		if deps then
+			for _, depName in ipairs(deps) do enabled[depName] = true end
+		end
+	end
+
+	return enabled
+end
+
+--- Saves the lockfile and writes the .installed hash marker.
+---@param pkg lde.Package
+---@param stack table<string, { pkg: lde.Package, lock: lde.Lockfile.Dependency }>
+---@param modulesDir string
+local function commitLockfile(pkg, stack, modulesDir)
+	local lockEntries = {}
+	for alias, entry in pairs(stack) do
+		lockEntries[alias] = entry.lock
+	end
+
+	local lockfile = lde.Lockfile.new(pkg:getLockfilePath(), lockEntries)
+	lockfile:save()
+
+	local content = assert(fs.read(pkg:getLockfilePath()), "Failed to read " .. pkg:getLockfilePath())
+	fs.write(path.join(modulesDir, ".installed"), util.fnv1a(content))
 end
 
 ---@param package lde.Package
@@ -110,33 +144,22 @@ end
 ---@param relativeTo string?
 ---@param features lde.Package.Config.FeatureFlag[]?
 local function installDependencies(package, dependencies, relativeTo, features)
-	features = addPlatformFeatures(features)
 	local isRoot = dependencies == nil
 	dependencies = dependencies or package:getDependencies()
 	relativeTo = relativeTo or package.dir
 
-	local enabledOptional = {}
-	if features and package:readConfig().features then
-		for _, featureName in ipairs(features) do
-			local deps = package:readConfig().features[featureName]
-			if deps then
-				for _, depName in ipairs(deps) do
-					enabledOptional[depName] = true
-				end
-			end
-		end
-	end
+	features = features or {}
+	features[#features + 1] = platformLookup[jit.os]
 
 	local modulesDir = package:getModulesDir()
 
+	-- Fast path: if target/.installed hash matches the current lockfile, skip all work
 	if isRoot then
-		local lockfilePath = package:getLockfilePath()
 		local installedPath = path.join(modulesDir, ".installed")
+		local lockfilePath = package:getLockfilePath()
 		if fs.exists(lockfilePath) and fs.exists(installedPath) then
-			local lockfileContent = fs.read(lockfilePath)
-			if lockfileContent and fs.read(installedPath) == util.fnv1a(lockfileContent) then
-				return
-			end
+			local content = fs.read(lockfilePath)
+			if content and fs.read(installedPath) == util.fnv1a(content) then return end
 		end
 	end
 
@@ -146,31 +169,35 @@ local function installDependencies(package, dependencies, relativeTo, features)
 		relativeTo = relativeTo,
 		stack = {},
 		visiting = {},
-		rootLockfile = isRoot and package:readLockfile() or nil,
+		rootLockfile = isRoot and package:readLockfile() or nil
 	}
+
+	-- This collects all deps to a flat stack and validates versioning problems.
 	collectDependencies(dependencies, ctx)
+
+	-- Gets which features are enabled (+ OS specific features)
+	local enabledOptional = resolveEnabledOptional(package, features)
 
 	for alias, entry in pairs(ctx.stack) do
 		local depInfo = dependencies[alias]
-		if depInfo and depInfo.optional and not enabledOptional[alias] then goto continue end
-		local destinationPath = path.join(modulesDir, alias)
-		if not fs.islink(destinationPath) then
-			entry.pkg:build(destinationPath)
+
+		-- Optional, skip..
+		if depInfo and depInfo.optional and not enabledOptional[alias] then
+			goto continue
 		end
+
+		local dest = path.join(modulesDir, alias)
+
+		-- Has a build script, needs to run.
+		if not fs.islink(dest) then
+			entry.pkg:build(dest)
+		end
+
 		::continue::
 	end
 
 	if isRoot then
-		local lockEntries = {}
-		for alias, entry in pairs(ctx.stack) do
-			lockEntries[alias] = entry.lock
-		end
-
-		local lockfile = lde.Lockfile.new(package:getLockfilePath(), lockEntries)
-		lockfile:save()
-
-		local lockfileContent = fs.read(package:getLockfilePath())
-		fs.write(path.join(modulesDir, ".installed"), util.fnv1a(lockfileContent))
+		commitLockfile(package, ctx.stack, modulesDir)
 	end
 end
 
