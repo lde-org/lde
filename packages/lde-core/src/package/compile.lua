@@ -1,7 +1,8 @@
 local sea = require("sea")
 local fs = require("fs")
 local path = require("path")
-local process = require("process2")
+
+local lde = require("lde-core")
 
 local bundlePackage = require("lde-core.package.bundle")
 
