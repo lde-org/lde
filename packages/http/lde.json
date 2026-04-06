@@ -2,6 +2,6 @@
 	"name": "http",
 	"version": "0.1.0",
 	"dependencies": {
-		"process": { "path": "../process" }
+		"process2": { "path": "../process2" }
 	}
 }

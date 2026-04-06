@@ -4,6 +4,6 @@
 	"dependencies": {
 		"json": { "path": "../" },
 		"ansi": { "path": "../../ansi" },
-		"process": { "path": "../../process" }
+		"process2": { "path": "../../process2" }
 	}
 }

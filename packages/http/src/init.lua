@@ -1,6 +1,6 @@
 local http = {}
 
-local process = require("process")
+local process = require("process2")
 
 --- Perform a HTTP GET request
 ---@param url string
@@ -11,12 +11,12 @@ function http.get(url)
 		return nil, "Invalid URL"
 	end
 
-	local ok, out = process.exec("curl", { "-sL", url }, { maxOutputChunks = math.huge })
-	if not ok then
-		return nil, out or "Request failed"
+	local code, stdout, stderr = process.exec("curl", { "-sL", url })
+	if code ~= 0 then
+		return nil, stderr or "Request failed"
 	end
 
-	return out
+	return stdout
 end
 
 --- Perform a HTTP POST request
@@ -33,12 +33,12 @@ function http.post(url, data)
 		return nil, "Invalid data"
 	end
 
-	local ok, out = process.exec("curl", { "-sL", "-X", "POST", "-d", data, url })
-	if not ok then
-		return nil, out or "Request failed"
+	local code, stdout, stderr = process.exec("curl", { "-sL", "-X", "POST", "-d", data, url })
+	if code ~= 0 then
+		return nil, stderr or "Request failed"
 	end
 
-	return out
+	return stdout
 end
 
 return http

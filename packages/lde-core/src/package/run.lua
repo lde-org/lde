@@ -1,7 +1,7 @@
 local fs = require("fs")
 local path = require("path")
 local ffi = require("ffi")
-local process = require("process")
+local process = require("process2")
 local runtime = require("lde-core.runtime")
 
 ---@param package lde.Package
@@ -62,7 +62,8 @@ local function runFileWithLuaCLI(package, scriptPath, args, vars, engine, cwd)
 	local luaPath, luaCPath = getLuaPathsForPackage(package)
 	local env = { LUA_PATH = luaPath, LUA_CPATH = luaCPath }
 	if vars then for k, v in pairs(vars) do env[k] = v end end
-	return process.exec(engine, { scriptPath }, { cwd = cwd, env = env, stdout = "inherit", stderr = "inherit" })
+	local code, _, stderr = process.exec(engine, { scriptPath }, { cwd = cwd, env = env, stdout = "inherit", stderr = "inherit" })
+	return code == 0 or nil, stderr
 end
 
 ---@param package lde.Package
@@ -75,8 +76,9 @@ local function runStringWithLuaCLI(package, code, args, vars, engine, cwd)
 	local luaPath, luaCPath = getLuaPathsForPackage(package)
 	local env = { LUA_PATH = luaPath, LUA_CPATH = luaCPath }
 	if vars then for k, v in pairs(vars) do env[k] = v end end
-	return process.exec(engine, { "-e", code, unpack(args or {}) },
+	local exitCode, _, stderr = process.exec(engine, { "-e", code, unpack(args or {}) },
 		{ cwd = cwd, env = env, stdout = "inherit", stderr = "inherit" })
+	return exitCode == 0 or nil, stderr
 end
 
 ---@param package lde.Package

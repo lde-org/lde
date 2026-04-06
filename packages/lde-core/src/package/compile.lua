@@ -1,12 +1,12 @@
 local sea = require("sea")
 local fs = require("fs")
 local path = require("path")
-local process = require("process")
+local process = require("process2")
 
 local bundlePackage = require("lde-core.package.bundle")
 
-local nativeExt = process.platform == "win32" and "dll"
-	or process.platform == "darwin" and "dylib"
+local nativeExt = jit.os == "Windows" and "dll"
+	or jit.os == "OSX" and "dylib"
 	or "so"
 
 ---@param package lde.Package

@@ -447,8 +447,7 @@ build = {
 end)
 
 test.it("rockspec: platform lua modules are not misclassified as native modules", function()
-	local plat = require("process").platform
-	local platKey = plat == "darwin" and "macosx" or plat
+	local platKey = jit.os == "OSX" and "macosx" or jit.os == "Windows" and "win32" or "linux"
 
 	local rockspecContent = string.format([[
 package = "mypkg"

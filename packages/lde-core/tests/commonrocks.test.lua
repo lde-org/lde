@@ -4,7 +4,7 @@ local fs = require("fs")
 local env = require("env")
 local path = require("path")
 local json = require("json")
-local process = require("process")
+local process = require("process2")
 
 local tmpBase = path.join(env.tmpdir(), "lde-commonrocks-tests")
 fs.rmdir(tmpBase)
@@ -35,7 +35,7 @@ test.skip("luarocks: lpeg matches a pattern", function()
 end)
 
 -- Disabled for macos: https://github.com/lde-org/lde/issues/90
-test.skipIf(process.platform == "win32" or process.platform == "darwin")("luarocks: luasocket parses a url", function()
+test.skipIf(jit.os == "Windows" or jit.os == "OSX")("luarocks: luasocket parses a url", function()
 	local app = makeApp("rocks-luasocket", { socket = { luarocks = "luasocket" } })
 	app:installDependencies()
 	local ok, err = app:runString([[
@@ -47,7 +47,7 @@ test.skipIf(process.platform == "win32" or process.platform == "darwin")("luaroc
 end)
 
 -- Disabled for macos: https://github.com/lde-org/lde/issues/90
-test.skipIf(process.platform == "win32" or process.platform == "darwin")("luarocks: lua-cjson encodes and decodes",
+test.skipIf(jit.os == "Windows" or jit.os == "OSX")("luarocks: lua-cjson encodes and decodes",
 	function()
 		local app = makeApp("rocks-cjson", { cjson = { luarocks = "lua-cjson" } })
 		app:installDependencies()

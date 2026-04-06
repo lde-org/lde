@@ -1,4 +1,4 @@
-local process = require("process")
+local process = require("process2")
 
 local git = {}
 
@@ -14,32 +14,33 @@ function git.clone(url, dir, branch, commit)
 		args[#args + 1] = branch
 	end
 
-	local ok, err = process.exec("git", args)
-	if not ok then
-		return ok, err
+	local code, stdout, stderr = process.exec("git", args)
+	if code ~= 0 then
+		return nil, stderr
 	end
 
 	if commit then
 		return git.checkout(commit, dir)
 	end
 
-	return ok, err
+	return true, stdout
 end
 
 ---@param cwd string?
 ---@param ref "HEAD" | string?
 function git.getCommitHash(cwd, ref)
-	local ok, hash = process.exec("git", { "rev-parse", ref or "HEAD" }, { cwd = cwd })
-	if not ok then
-		return ok, hash
-	end ---@cast hash -nil
+	local code, stdout, stderr = process.exec("git", { "rev-parse", ref or "HEAD" }, { cwd = cwd })
+	if code ~= 0 then
+		return nil, stderr
+	end
 
-	return ok, string.gsub(hash, "%s+$", "")
+	return true, string.gsub(stdout, "%s+$", "")
 end
 
 ---@param repoDir string?
 function git.pull(repoDir)
-	return process.exec("git", { "pull" }, { cwd = repoDir })
+	local code, _, stderr = process.exec("git", { "pull" }, { cwd = repoDir })
+	return code == 0, stderr
 end
 
 ---@param dir string?
@@ -49,33 +50,39 @@ function git.init(dir, bare)
 	if bare then
 		args[#args + 1] = "--bare"
 	end
-	return process.exec("git", args, { cwd = dir })
+	local code, _, stderr = process.exec("git", args, { cwd = dir })
+	return code == 0, stderr
 end
 
 ---@param commit string
 ---@param repoDir string?
 function git.checkout(commit, repoDir)
-	return process.exec("git", { "checkout", commit }, { cwd = repoDir })
+	local code, _, stderr = process.exec("git", { "checkout", commit }, { cwd = repoDir })
+	return code == 0, stderr
 end
 
 function git.version()
-	return process.exec("git", { "--version" })
+	local code, stdout, stderr = process.exec("git", { "--version" })
+	return code == 0, stdout or stderr
 end
 
 ---@param dir string?
 function git.isInsideWorkTree(dir)
-	return process.exec("git", { "rev-parse", "--is-inside-work-tree" }, { cwd = dir })
+	local code, _, stderr = process.exec("git", { "rev-parse", "--is-inside-work-tree" }, { cwd = dir })
+	return code == 0, stderr
 end
 
 ---@param remoteName string
 ---@param cwd string?
 function git.remoteGetUrl(remoteName, cwd)
-	return process.exec("git", { "remote", "get-url", remoteName }, { cwd = cwd })
+	local code, stdout, stderr = process.exec("git", { "remote", "get-url", remoteName }, { cwd = cwd })
+	return code == 0, stdout or stderr
 end
 
 ---@param cwd string?
 function git.getCurrentBranch(cwd)
-	return process.exec("git", { "rev-parse", "--abbrev-ref", "HEAD" }, { cwd = cwd })
+	local code, stdout, stderr = process.exec("git", { "rev-parse", "--abbrev-ref", "HEAD" }, { cwd = cwd })
+	return code == 0, stdout or stderr
 end
 
 return git

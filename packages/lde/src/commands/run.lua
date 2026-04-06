@@ -1,6 +1,7 @@
 local env = require("env")
 local fs = require("fs")
 local ansi = require("ansi")
+local process = require("process2")
 
 local lde = require("lde-core")
 
@@ -70,18 +71,28 @@ local function run(args)
 
 	ansi.printf("{cyan}Watching %s for changes...\n", watchDir)
 
-	local ok, err = xpcall(execute, function(e) return e end)
-	if not ok then
-		ansi.printf("{red}Error: %s\n", tostring(err))
+	local spawnArgs = { "run" }
+	if name then spawnArgs[#spawnArgs + 1] = name end
+	if #scriptArgs > 0 then
+		spawnArgs[#spawnArgs + 1] = "--"
+		for _, a in ipairs(scriptArgs) do spawnArgs[#spawnArgs + 1] = a end
 	end
+
+	local function spawnChild()
+		local child, err = process.spawn(env.execPath(), spawnArgs, { stdout = "inherit", stderr = "inherit" })
+		if not child then
+			ansi.printf("{red}Error: %s\n", tostring(err))
+		end
+		return child
+	end
+
+	local child = spawnChild()
 
 	while true do
 		watcher.wait()
 		ansi.printf("{cyan}Change detected, restarting...\n")
-		ok, err = xpcall(execute, function(e) return e end)
-		if not ok then
-			ansi.printf("{red}Error: %s\n", tostring(err))
-		end
+		if child then child:kill() end
+		child = spawnChild()
 	end
 end
 

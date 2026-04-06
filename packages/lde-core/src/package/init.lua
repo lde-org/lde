@@ -6,7 +6,7 @@ local fs = require("fs")
 local env = require("env")
 local json = require("json")
 local path = require("path")
-local process = require("process")
+local process = require("process2")
 
 ---@class lde.Package
 ---@field dir string
@@ -215,12 +215,15 @@ function Package:runScript(name, capture)
 	if not scripts or not scripts[name] then
 		error("No script named '" .. name .. "' in lde.json")
 	end
-	local opts = { unsafe = true, cwd = self:getDir() }
+	local opts = { cwd = self:getDir() }
 	if not capture then
 		opts.stdout = "inherit"
 		opts.stderr = "inherit"
 	end
-	return process.exec(scripts[name], nil, opts)
+
+	local shell = jit.os == "Windows" and { "cmd", "/c" } or { "sh", "-c" }
+	local code, stdout, stderr = process.exec(shell[1], { shell[2], scripts[name] }, opts)
+	return code == 0 or nil, stdout or stderr
 end
 
 return Package

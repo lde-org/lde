@@ -1,22 +1,22 @@
 local ansi = require("ansi")
 local fs = require("fs")
 local path = require("path")
-local process = require("process")
+local process = require("process2")
 
 local lde = require("lde-core")
 
 ---@param ldeDir string
 ---@param toolsDir string
 local function updatePath(ldeDir, toolsDir)
-	if process.platform == "win32" then
+	if jit.os == "Windows" then
 		-- Read current user PATH, append missing dirs, write back via PowerShell
 		local getCmd = '[Environment]::GetEnvironmentVariable("Path","User")'
-		local ok, currentPath = process.exec("powershell", { "-NoProfile", "-Command", getCmd })
-		if not ok then
+		local code, stdout, stderr = process.exec("powershell", { "-NoProfile", "-Command", getCmd })
+		if code ~= 0 then
 			ansi.printf("{red}Failed to read user PATH from registry")
 			return
 		end
-		currentPath = currentPath and currentPath:gsub("%s+$", "") or ""
+		currentPath = stdout and stdout:gsub("%s+$", "") or ""
 
 		local dirsToAdd = {}
 		if not currentPath:find(ldeDir, 1, true) then
@@ -34,11 +34,12 @@ local function updatePath(ldeDir, toolsDir)
 		local sep = (currentPath ~= "" and not currentPath:match(";$")) and ";" or ""
 		local newPath = currentPath .. sep .. table.concat(dirsToAdd, ";")
 		local setCmd = string.format('[Environment]::SetEnvironmentVariable("Path","%s","User")', newPath)
-		local setOk, setErr = process.spawn("powershell", { "-NoProfile", "-Command", setCmd })
-		if not setOk then
+		local setChild, setErr = process.spawn("powershell", { "-NoProfile", "-Command", setCmd })
+		if not setChild then
 			ansi.printf("{red}Failed to update PATH: %s", setErr or "unknown error")
 			return
 		end
+		setChild:wait()
 		for _, d in ipairs(dirsToAdd) do
 			ansi.printf("{green}Added to PATH: %s", d)
 		end
@@ -98,14 +99,14 @@ end
 
 ---@param ldeDir string
 local function installBinaries(ldeDir)
-	if process.platform == "win32" then
+	if jit.os == "Windows" then
 		local ldxPath = path.join(ldeDir, "ldx.cmd")
 		fs.write(ldxPath, "@echo off\r\nlde x %*\r\n")
 		ansi.printf("{green}Installed ldx -> %s", ldxPath)
 	else
 		local ldxPath = path.join(ldeDir, "ldx")
 		fs.write(ldxPath, "#!/bin/sh\nexec lde x \"$@\"\n")
-		process.spawn("chmod", { "+x", ldxPath })
+		process.spawn("chmod", { "+x", ldxPath }):wait()
 		ansi.printf("{green}Installed ldx -> %s", ldxPath)
 	end
 end

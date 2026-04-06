@@ -1,7 +1,7 @@
 local ansi = require("ansi")
 local git = require("git")
 local json = require("json")
-local process = require("process")
+local process = require("process2")
 
 local lde = require("lde-core")
 
@@ -17,11 +17,14 @@ end
 local function openBrowser(url)
 	if jit.os == "Windows" then
 		-- Empty string before URL is the window title, required when URL contains special chars
-		process.spawn("cmd", { "/c", "start", "", url })
+		local child = process.spawn("cmd", { "/c", "start", "", url })
+		if child then child:wait() end
 	elseif jit.os == "OSX" then
-		process.spawn("open", { url })
+		local child = process.spawn("open", { url })
+		if child then child:wait() end
 	else
-		process.spawn("xdg-open", { url })
+		local child = process.spawn("xdg-open", { url })
+		if child then child:wait() end
 	end
 end
 

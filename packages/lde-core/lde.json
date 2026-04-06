@@ -6,7 +6,7 @@
 		"ansi": { "path": "../ansi" },
 		"sea": { "path": "../sea" },
 		"path": { "path": "../path" },
-		"process": { "path": "../process" },
+		"process2": { "path": "../process2" },
 		"clap": { "path": "../clap" },
 		"fs": { "path": "../fs" },
 		"env": { "path": "../env" },

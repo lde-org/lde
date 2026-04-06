@@ -1,5 +1,5 @@
 local http = require("http")
-local process = require("process")
+local process = require("process2")
 local semver = require("semver")
 local json = require("json")
 local ansi = require("ansi")
@@ -13,9 +13,9 @@ local releasesUrl = "https://api.github.com/repos/lde-org/lde/releases"
 
 local arch = jit.arch == "arm64" and "aarch64" or "x86-64"
 local artifactNames = {
-	win32 = "lde-windows-" .. arch .. ".exe",
-	linux = "lde-linux-" .. arch,
-	darwin = "lde-macos-" .. arch
+	Windows = "lde-windows-" .. arch .. ".exe",
+	Linux = "lde-linux-" .. arch,
+	OSX = "lde-macos-" .. arch
 }
 
 ---@param args clap.Args
@@ -71,9 +71,9 @@ local function upgrade(args)
 		return
 	end
 
-	local artifactName = artifactNames[process.platform]
+	local artifactName = artifactNames[jit.os]
 	if not artifactName then
-		ansi.printf("{red}No artifact available for platform: %s", process.platform)
+		ansi.printf("{red}No artifact available for platform: %s", jit.os)
 		return
 	end
 
@@ -98,9 +98,14 @@ local function upgrade(args)
 	ansi.printf("{green}==> Downloading {white}%s {green}from {cyan}%s", artifactName, downloadUrl)
 
 	-- Download directly to file to avoid output size limits in process.exec
-	local downloadSuccess, downloadErr = process.spawn("curl", { "-sL", "-o", tempNewLocation, downloadUrl })
-	if not downloadSuccess then
-		ansi.printf("{red}Failed to download binary: %s", downloadErr)
+	local child, spawnErr = process.spawn("curl", { "-sL", "-o", tempNewLocation, downloadUrl })
+	if not child then
+		ansi.printf("{red}Failed to download binary: %s", spawnErr)
+		return
+	end
+	local downloadCode = child:wait()
+	if downloadCode ~= 0 then
+		ansi.printf("{red}Failed to download binary: curl exited with code %d", downloadCode)
 		return
 	end
 
@@ -127,7 +132,7 @@ local function upgrade(args)
 		return
 	end
 
-	if process.platform ~= "win32" then ---@cast fs fs.raw.posix
+	if jit.os ~= "Windows" then ---@cast fs fs.raw.posix
 		fs.chmod(binLocation, tonumber("755", 8))
 	end
 

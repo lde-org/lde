@@ -42,7 +42,7 @@ if os.getenv("BOOTSTRAP") then
 
 	local pathPackages = {
 		"ansi", "clap", "fs", "http", "env", "path", "json", "git", "luarocks",
-		"process", "sea", "semver", "util", "lde-core", "lde-test", "rocked"
+		"process2", "sea", "semver", "util", "lde-core", "lde-test", "rocked"
 	}
 
 	for _, pkg in ipairs(pathPackages) do
