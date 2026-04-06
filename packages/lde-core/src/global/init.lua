@@ -68,7 +68,10 @@ end
 
 function global.getGCCBin()
 	if jit.os == "Windows" then
-		return path.join(global.getMingwDir(), "bin", "gcc.exe")
+		local mingwGcc = path.join(global.getMingwDir(), "bin", "gcc.exe")
+		if fs.exists(mingwGcc) then
+			return mingwGcc
+		end
 	end
 
 	return "gcc"
