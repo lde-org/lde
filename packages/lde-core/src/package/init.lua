@@ -220,7 +220,9 @@ function Package:runScript(name, capture)
 		opts.stdout = "inherit"
 		opts.stderr = "inherit"
 	end
-	local code, stdout, stderr = process.exec(scripts[name], nil, opts)
+
+	local shell = jit.os == "Windows" and { "cmd", "/c" } or { "sh", "-c" }
+	local code, stdout, stderr = process.exec(shell[1], { shell[2], scripts[name] }, opts)
 	return code == 0 or nil, stdout or stderr
 end
 
