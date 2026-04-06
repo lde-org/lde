@@ -49,6 +49,23 @@ test.it("exec passes env vars", function()
 	test.truthy(stdout and stdout:find("testval"))
 end)
 
+test.it("exec inherits existing env vars when passing custom env", function()
+	-- PATH must always be inherited or nothing works
+	local cmd = isWindows and "echo %PATH%" or "printf $PATH"
+	local code, stdout = process.exec(sh, { shc, cmd }, { env = { MY_EXTRA = "extra" } })
+	test.equal(code, 0)
+	test.truthy(stdout and #stdout > 0)
+end)
+
+test.it("exec env override replaces specific var without dropping others", function()
+	local cmd = isWindows and "echo %MY_VAR% %PATH%" or "printf '%s %s' $MY_VAR $PATH"
+	local code, stdout = process.exec(sh, { shc, cmd }, { env = { MY_VAR = "overridden" } })
+	test.equal(code, 0)
+	-- both the override and inherited PATH should be present
+	test.truthy(stdout and stdout:find("overridden"))
+	test.truthy(stdout and #stdout > #"overridden") -- PATH adds more content
+end)
+
 test.it("exec respects cwd", function()
 	local cmd = isWindows and "cd" or "pwd"
 	local tmpdir = isWindows and (os.getenv("TEMP") or "C:\\Temp") or "/tmp"
