@@ -133,26 +133,31 @@ function sea.compile(main, source, sharedLibs, compiler)
 		local ext                           = jit.os == "Windows" and "dll"
 			or jit.os == "OSX" and "dylib"
 			or "so"
-		local libPath                       = string.format("/tmp/lde-lib-%s-%s.%s", lib.name, hash, ext)
-		ffiShimEntries[#ffiShimEntries + 1] = string.format('["%s"]="%s"', lib.name, libPath)
+		local libFileName                   = string.format("lde-lib-%s-%s.%s", lib.name, hash, ext)
+		ffiShimEntries[#ffiShimEntries + 1] = string.format('["%s"]="%s"', lib.name, libFileName)
 		-- alias as libcurl, libcurl.so, and curl
 		local leaf                          = lib.name:match("[^.]+$")        -- e.g. "libcurl"
 		local bare                          = leaf:match("^lib(.+)$") or leaf -- e.g. "curl"
-		ffiShimEntries[#ffiShimEntries + 1] = string.format('["%s"]="%s"', leaf, libPath)
-		ffiShimEntries[#ffiShimEntries + 1] = string.format('["%s.%s"]="%s"', leaf, ext, libPath)
-		ffiShimEntries[#ffiShimEntries + 1] = string.format('["%s"]="%s"', bare, libPath)
+		ffiShimEntries[#ffiShimEntries + 1] = string.format('["%s"]="%s"', leaf, libFileName)
+		ffiShimEntries[#ffiShimEntries + 1] = string.format('["%s.%s"]="%s"', leaf, ext, libFileName)
+		ffiShimEntries[#ffiShimEntries + 1] = string.format('["%s"]="%s"', bare, libFileName)
 
 		libDecls[#libDecls + 1]             = string.format(
 			"static const uint8_t %sLibrary[] = {%s};",
 			id, toByteLiteral(lib.content)
 		)
 		libDecls[#libDecls + 1]             = string.format(
-			'static const char* %sLibraryPath = "%s";',
-			id, libPath
+			'static const char %sLibraryName[] = "%s";',
+			id, libFileName
+		)
+		libDecls[#libDecls + 1]             = string.format(
+			"static char %sLibraryPath[4096];",
+			id
 		)
 
 		libStartup[#libStartup + 1]         = string.format([[
 	{
+		snprintf(%sLibraryPath, sizeof(%sLibraryPath), "%%s/%%s", lde_tmpdir, %sLibraryName);
 		FILE* f = fopen(%sLibraryPath, "rb");
 		if (f == NULL) {
 			f = fopen(%sLibraryPath, "wb");
@@ -162,7 +167,7 @@ function sea.compile(main, source, sharedLibs, compiler)
 		} else {
 			fclose(f);
 		}
-	}]], id, id, lib.name, id, id)
+	}]], id, id, id, id, id, lib.name, id, id)
 
 		libPreloads[#libPreloads + 1]       = string.format([[
 	lua_pushstring(L, %sLibraryPath);
@@ -170,15 +175,43 @@ function sea.compile(main, source, sharedLibs, compiler)
 	lua_setfield(L, -2, "%s");]], id, string.gsub(lib.name, ".", CEscapes))
 	end
 
+	local hasLibs        = #sharedLibs > 0
 	local libDeclsStr    = table.concat(libDecls, "\n")
-	local libStartupStr  = table.concat(libStartup, "\n")
+	local libTmpDirInit  = not hasLibs and "" or [[
+char lde_tmpdir[4096];
+{
+#ifdef _WIN32
+	const char* lde_tmp_env = getenv("TEMP");
+	if (!lde_tmp_env) lde_tmp_env = getenv("TMP");
+	if (!lde_tmp_env) lde_tmp_env = "C:\\Windows\\Temp";
+#else
+	const char* lde_tmp_env = getenv("TMPDIR");
+	if (!lde_tmp_env) lde_tmp_env = "/tmp";
+#endif
+	snprintf(lde_tmpdir, sizeof(lde_tmpdir), "%s", lde_tmp_env);
+	size_t lde_tmp_len = strlen(lde_tmpdir);
+	while (lde_tmp_len > 1 && (lde_tmpdir[lde_tmp_len-1] == '/' || lde_tmpdir[lde_tmp_len-1] == '\\')) {
+		lde_tmpdir[--lde_tmp_len] = '\0';
+	}
+}
+]]
+	local libStartupStr  = libTmpDirInit .. table.concat(libStartup, "\n")
 	local libPreloadsStr = table.concat(libPreloads, "\n")
 
 	if #ffiShimEntries > 0 then
 		source = util.dedent(string.format([[
 			do
-				local _map = {%s}
 				local _ffi = require("ffi")
+				local _tmpdir
+				if _ffi.os == "Windows" then
+					_tmpdir = os.getenv("TEMP") or os.getenv("TMP") or "C:\\Windows\\Temp"
+				else
+					_tmpdir = os.getenv("TMPDIR") or "/tmp"
+				end
+				_tmpdir = _tmpdir:gsub("[\\/]+$", "")
+				local _names = {%s}
+				local _map = {}
+				for k, v in pairs(_names) do _map[k] = _tmpdir .. "/" .. v end
 				local _orig = _ffi.load
 				_ffi.load = function(name, ...)
 					local remap = _map[name] or _map[name:match("[^/\\]+$")]
@@ -198,8 +231,7 @@ function sea.compile(main, source, sharedLibs, compiler)
 			)
 	}
 
-	local hasLibs       = #sharedLibs > 0
-	local stdintInclude = hasLibs and "#include <stdint.h>" or ""
+	local stdintInclude = hasLibs and "#include <stdint.h>\n#include <string.h>\n#include <stdlib.h>" or ""
 
 	-- lde_loadlib_loader: a C closure that calls package.loadlib(upvalue1, "*").
 	-- Only emitted when there are shared libs to avoid dead-code warnings.
