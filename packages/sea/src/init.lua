@@ -269,7 +269,12 @@ int main(int argc, char** argv) {
 	end
 
 	local compiler = compiler or env.var("SEA_CC") or "gcc"
-	local code, stdout, stderr = process.exec(compiler, args, { stdin = code })
+	local execEnv
+	if jit.os == "Windows" and compiler ~= "gcc" then
+		-- compiler is a full path into mingw/bin; ensure subtools (as.exe etc) are found
+		execEnv = { PATH = path.dirname(compiler) .. ";" .. (env.var("PATH") or "") }
+	end
+	local code, stdout, stderr = process.exec(compiler, args, { stdin = code, env = execEnv })
 	if code ~= 0 or string.find(stderr or "", "is not recognized as an internal", 1, true) then
 		error("Compilation failed: " .. (stderr or ""))
 	end
