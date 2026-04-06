@@ -110,8 +110,9 @@ end
 ---@param main string # name used as the chunk label
 ---@param source string # bundled lua source (output of bundlePackage)
 ---@param sharedLibs? { name: string, content: string }[]
+---@param compiler? string # path to compiler binary; defaults to SEA_CC env var or "gcc"
 ---@return string
-function sea.compile(main, source, sharedLibs)
+function sea.compile(main, source, sharedLibs, compiler)
 	local outPath = path.join(env.tmpdir(), "sea.out")
 	sharedLibs = sharedLibs or {}
 
@@ -267,7 +268,7 @@ int main(int argc, char** argv) {
 		args[#args + 1] = "-Wl,-export_dynamic" -- expose lua symbols for lua dependencies
 	end
 
-	local compiler = env.var("SEA_CC") or "gcc"
+	local compiler = compiler or env.var("SEA_CC") or "gcc"
 	local code, stdout, stderr = process.exec(compiler, args, { stdin = code })
 	if code ~= 0 or string.find(stderr or "", "is not recognized as an internal", 1, true) then
 		error("Compilation failed: " .. (stderr or ""))
