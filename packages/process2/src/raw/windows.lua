@@ -61,6 +61,8 @@ ffi.cdef([[
 	BOOL   CloseHandle(HANDLE hObject);
 	HANDLE GetStdHandle(DWORD nStdHandle);
 	HANDLE CreateFileA(const char*, DWORD, DWORD, void*, DWORD, DWORD, HANDLE);
+	char*  GetEnvironmentStringsA(void);
+	BOOL   FreeEnvironmentStringsA(char* penv);
 ]])
 
 local kernel32               = ffi.load("kernel32")
@@ -191,11 +193,27 @@ local function nullHandle(write)
 	return h ~= INVALID_HANDLE_VALUE and h or nil
 end
 
----@param env table<string, string>
+---@param overrides table<string, string>
 ---@return string
-local function buildEnvBlock(env)
+local function buildEnvBlock(overrides)
+	-- Start with current environment
+	local env = {}
+	local block = kernel32.GetEnvironmentStringsA()
+	if block ~= nil then
+		local i = 0
+		while true do
+			local s = ffi.string(block + i)
+			if #s == 0 then break end
+			local k, v = s:match("^([^=]+)=(.*)")
+			if k then env[k:upper()] = { key = k, val = v } end
+			i = i + #s + 1
+		end
+		kernel32.FreeEnvironmentStringsA(block)
+	end
+	-- Apply overrides
+	for k, v in pairs(overrides) do env[k:upper()] = { key = k, val = v } end
 	local buf = buffer.new()
-	for k, v in pairs(env) do buf:put(k, "=", v, "\0") end
+	for _, entry in pairs(env) do buf:put(entry.key, "=", entry.val, "\0") end
 	buf:put("\0")
 	return buf:tostring()
 end
