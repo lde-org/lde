@@ -9,6 +9,7 @@ local rocked = require("rocked")
 local ansi = require("ansi")
 local lde = require("lde-core")
 local luarocks = require("luarocks")
+local process = require("process2")
 
 local MANIFEST_URL = "https://luarocks.org/manifest"
 local MANIFEST_TTL = 60 * 60 * 24 -- 24 hours
@@ -168,9 +169,9 @@ function util.openLuarocksPackage(name, version)
 
 	if arch == "src" then
 		local archiveDir = lde.global.getOrInitArchive(url)
-		-- .src.rock extracts with the rockspec at root and source in a subdirectory.
-		-- Scan once to find both the rockspec and the source subdir.
-		local rockspecPath, srcDir
+		-- .src.rock extracts with the rockspec at root; source may be a subdir or a nested archive.
+		-- Scan once to find the rockspec, a source subdir, and any nested archive.
+		local rockspecPath, srcDir, nestedArchive
 		local iter = fs.readdir(archiveDir)
 		if iter then
 			for entry in iter do
@@ -178,11 +179,38 @@ function util.openLuarocksPackage(name, version)
 					rockspecPath = path.join(archiveDir, entry.name)
 				elseif entry.type == "dir" and not srcDir then
 					srcDir = path.join(archiveDir, entry.name)
+				elseif entry.type == "file" and (entry.name:match("%.zip$") or entry.name:match("%.tar%.[gbx]z2?$")) then
+					nestedArchive = path.join(archiveDir, entry.name)
 				end
 			end
 		end
 		if not rockspecPath then
 			return nil, nil, "No rockspec found in src rock for '" .. name .. "'"
+		end
+
+		-- If no subdir was found but a nested archive was, extract it now.
+		if not srcDir and nestedArchive then
+			srcDir = nestedArchive:gsub("%.tar%.[gbx]z2?$", ""):gsub("%.zip$", "")
+			if not fs.isdir(srcDir) then
+				local ok2, err2
+				if nestedArchive:match("%.zip$") and process.platform == "linux" then
+					local tmpDir = srcDir .. "_tmp"
+					ok2, err2 = process.exec("unzip", { "-q", nestedArchive, "-d", tmpDir })
+					if ok2 then
+						local entries = fs.readdir(tmpDir)
+						local first = entries and entries()
+						local inner = (first and first.type == "dir") and path.join(tmpDir, first.name) or tmpDir
+						fs.move(inner, srcDir)
+						fs.rmdir(tmpDir)
+					end
+				else
+					fs.mkdir(srcDir)
+					ok2, err2 = process.exec("tar", { "-xf", nestedArchive, "-C", srcDir, "--strip-components=1" })
+				end
+				if not ok2 then
+					return nil, nil, "Failed to extract nested archive in src rock '" .. name .. "': " .. (err2 or "")
+				end
+			end
 		end
 
 		local pkg, err = lde.Package.openRockspec(srcDir or archiveDir, rockspecPath)
