@@ -6,6 +6,7 @@ local process = require("process2")
 local semver = require("semver")
 local lde = require("lde-core")
 local ansi = require("ansi")
+local Archive = require("archive")
 
 local global = {}
 package.loaded[(...)] = global
@@ -208,39 +209,34 @@ function global.getOrInitArchive(url)
 		local label = "Downloading " .. (url:match("([^/]+)$") or url)
 		local p = lde.verbose and ansi.progress(label) or nil
 		fs.mkdir(archiveDir)
+
 		local archiveFile = archiveDir .. ".archive"
+
 		local code, _, stderr = process.exec("curl", { "-sL", "-o", archiveFile, url })
 		if code ~= 0 then
 			if p then p:fail(label) end
 			error("Failed to download archive '" .. url .. "': " .. (stderr or ""))
 		end
-		local code2, _, stderr2
+
+		local code2, err2
 		if url:match("%.src%.rock$") then
 			-- .src.rock is a zip with no single top-level dir; extract directly
-			if jit.os == "Linux" then
-				code2, _, stderr2 = process.exec("unzip", { "-q", archiveFile, "-d", archiveDir })
-			else
-				code2, _, stderr2 = process.exec("tar", { "-xf", archiveFile, "-C", archiveDir })
-			end
-		elseif url:match("%.zip$") and jit.os == "Linux" then
-			local tmpDir = archiveDir .. "_tmp"
-			code2, _, stderr2 = process.exec("unzip", { "-q", archiveFile, "-d", tmpDir })
-			if code2 == 0 then
-				local entries = fs.readdir(tmpDir)
-				local first = entries and entries()
-				local inner = (first and first.type == "dir") and path.join(tmpDir, first.name) or tmpDir
-				fs.move(inner, archiveDir)
-				fs.rmdir(tmpDir)
-			end
+			local ok
+			ok, err2 = Archive.new(archiveFile):extract(archiveDir)
+			code2 = ok and 0 or 1
 		else
-			code2, _, stderr2 = process.exec("tar", { "-xf", archiveFile, "-C", archiveDir, "--strip-components=1" })
+			local ok
+			ok, err2 = Archive.new(archiveFile):extract(archiveDir, { stripComponents = true })
+			code2 = ok and 0 or 1
 		end
+
 		if code2 ~= 0 then
 			fs.rmdir(archiveDir)
 			fs.delete(archiveFile)
 			if p then p:fail(label) end
-			error("Failed to extract archive '" .. url .. "': " .. (stderr2 or ""))
+			error("Failed to extract archive '" .. url .. "': " .. (err2 or ""))
 		end
+
 		fs.delete(archiveFile)
 		if p then p:done(label) end
 	end

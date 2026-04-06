@@ -5,6 +5,7 @@ local path = require("path")
 local env = require("env")
 local fs = require("fs")
 local jit = require("jit")
+local Archive = require("archive")
 
 local util = require("util")
 
@@ -67,9 +68,9 @@ local function getLuajitPath()
 		error("Failed to download LuaJIT from " .. downloadUrl .. ": " .. (stderr or ""))
 	end
 
-	local code, _, stderr = process.exec("tar", { "-xzf", tarballPath, "-C", cacheDir })
-	if code ~= 0 then
-		error("Failed to extract LuaJIT: " .. (stderr or ""))
+	local ok, err = Archive.new(tarballPath):extract(cacheDir)
+	if not ok then
+		error("Failed to extract LuaJIT: " .. (err or ""))
 	end
 
 	fs.delete(tarballPath)

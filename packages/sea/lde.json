@@ -6,6 +6,7 @@
 		"fs": { "path": "../fs" },
 		"path": { "path": "../path" },
 		"env": { "path": "../env" },
-		"util": { "path": "../util" }
+		"util": { "path": "../util" },
+		"archive": { "path": "../archive" }
 	}
 }

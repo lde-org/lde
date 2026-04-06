@@ -10,6 +10,7 @@ local ansi = require("ansi")
 local lde = require("lde-core")
 local luarocks = require("luarocks")
 local process = require("process2")
+local Archive = require("archive")
 
 local MANIFEST_URL = "https://luarocks.org/manifest"
 local MANIFEST_TTL = 60 * 60 * 24 -- 24 hours
@@ -192,21 +193,8 @@ function util.openLuarocksPackage(name, version)
 		if not srcDir and nestedArchive then
 			srcDir = nestedArchive:gsub("%.tar%.[gbx]z2?$", ""):gsub("%.zip$", "")
 			if not fs.isdir(srcDir) then
-				local ok2, err2
-				if nestedArchive:match("%.zip$") and process.platform == "linux" then
-					local tmpDir = srcDir .. "_tmp"
-					ok2, err2 = process.exec("unzip", { "-q", nestedArchive, "-d", tmpDir })
-					if ok2 then
-						local entries = fs.readdir(tmpDir)
-						local first = entries and entries()
-						local inner = (first and first.type == "dir") and path.join(tmpDir, first.name) or tmpDir
-						fs.move(inner, srcDir)
-						fs.rmdir(tmpDir)
-					end
-				else
-					fs.mkdir(srcDir)
-					ok2, err2 = process.exec("tar", { "-xf", nestedArchive, "-C", srcDir, "--strip-components=1" })
-				end
+				fs.mkdir(srcDir)
+				local ok2, err2 = Archive.new(nestedArchive):extract(srcDir, { stripComponents = true })
 				if not ok2 then
 					return nil, nil, "Failed to extract nested archive in src rock '" .. name .. "': " .. (err2 or "")
 				end
