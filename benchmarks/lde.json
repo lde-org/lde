@@ -2,7 +2,7 @@
 	"name": "benchmarks",
 	"version": "0.1.0",
 	"dependencies": {
-		"process": { "path": "../packages/process" },
+		"process2": { "path": "../packages/process2" },
 		"ansi": { "path": "../packages/ansi" }
 	}
 }

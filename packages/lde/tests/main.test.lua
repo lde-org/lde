@@ -1,6 +1,6 @@
 local test = require("lde-test")
 
-local process = require("process")
+local process = require("process2")
 local fs = require("fs")
 local env = require("env")
 local path = require("path")
@@ -13,7 +13,8 @@ local ldePath = assert(env.execPath())
 
 ---@param args string[]
 local function ldecli(args)
-	return process.exec(ldePath, args)
+	local code, stdout, stderr = process.exec(ldePath, args)
+	return code == 0, stdout or stderr
 end
 
 test.it("should not ignore --git in ldx", function()

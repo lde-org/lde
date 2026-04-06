@@ -1,6 +1,6 @@
 local sea = {}
 
-local process = require("process")
+local process = require("process2")
 local path = require("path")
 local env = require("env")
 local fs = require("fs")
@@ -12,10 +12,10 @@ local ljDistRepo = "codebycruz/lj-dist"
 local ljDistTag = "latest"
 
 local function getPlatformArch()
-	local platform = process.platform == "linux" and "linux"
-		or process.platform == "win32" and "windows"
-		or process.platform == "darwin" and "macos"
-		or error("Unsupported platform: " .. process.platform)
+	local platform = jit.os == "Linux" and "linux"
+		or jit.os == "Windows" and "windows"
+		or jit.os == "OSX" and "macos"
+		or error("Unsupported platform: " .. jit.os)
 
 	local arch = jit.arch == "x64" and "x86-64"
 		or jit.arch == "arm64" and "aarch64"
@@ -26,11 +26,11 @@ end
 
 ---@return "musl" | "gnu" | nil
 local function getPlatformLibc()
-	if process.platform == "darwin" then return nil end
-	if process.platform == "windows" then return "gnu" end
+	if jit.os == "OSX" then return nil end
+	if jit.os == "Windows" then return "gnu" end
 
 	-- note: for some reason 'ok' is nil here.
-	local _ok, out = process.exec("ldd", { "--version" })
+	local _code, out = process.exec("ldd", { "--version" })
 
 	if string.find(out, "musl", 1, true) then
 		return "musl"
@@ -62,14 +62,14 @@ local function getLuajitPath()
 	)
 	local tarballPath = path.join(cacheDir, tarballName)
 
-	local success, output = process.exec("curl", { "-L", "-o", tarballPath, downloadUrl })
-	if not success then
-		error("Failed to download LuaJIT from " .. downloadUrl .. ": " .. output)
+	local code, _, stderr = process.exec("curl", { "-L", "-o", tarballPath, downloadUrl })
+	if code ~= 0 then
+		error("Failed to download LuaJIT from " .. downloadUrl .. ": " .. (stderr or ""))
 	end
 
-	local success, output = process.exec("tar", { "-xzf", tarballPath, "-C", cacheDir })
-	if not success then
-		error("Failed to extract LuaJIT: " .. output)
+	local code, _, stderr = process.exec("tar", { "-xzf", tarballPath, "-C", cacheDir })
+	if code ~= 0 then
+		error("Failed to extract LuaJIT: " .. (stderr or ""))
 	end
 
 	fs.delete(tarballPath)
@@ -135,8 +135,8 @@ function sea.compile(main, source, sharedLibs)
 	for _, lib in ipairs(sharedLibs) do
 		local id                      = safeIdent(lib.name)
 		local hash                    = util.fnv1a(lib.content)
-		local ext                     = process.platform == "win32" and "dll"
-			or process.platform == "darwin" and "dylib"
+		local ext                     = jit.os == "Windows" and "dll"
+			or jit.os == "OSX" and "dylib"
 			or "so"
 		local libPath                 = string.format("/tmp/lde-lib-%s-%s.%s", lib.name, hash, ext)
 
@@ -259,18 +259,18 @@ int main(int argc, char** argv) {
 		"-xnone", path.join(libPath, "libluajit.a")
 	}
 
-	if process.platform == "linux" then
+	if jit.os == "Linux" then
 		args[#args + 1] = "-lm"
 		args[#args + 1] = "-ldl"
 		args[#args + 1] = "-Wl,--export-dynamic" -- expose lua symbols for lua dependencies
-	elseif process.platform == "darwin" then
+	elseif jit.os == "OSX" then
 		args[#args + 1] = "-Wl,-export_dynamic" -- expose lua symbols for lua dependencies
 	end
 
 	local compiler = env.var("SEA_CC") or "gcc"
-	local success, output = process.exec(compiler, args, { stdin = code })
-	if not success or string.find(output, "is not recognized as an internal", 1, true) then
-		error("Compilation failed: " .. output)
+	local code, stdout, stderr = process.exec(compiler, args, { stdin = code })
+	if code ~= 0 or string.find(stderr or "", "is not recognized as an internal", 1, true) then
+		error("Compilation failed: " .. (stderr or ""))
 	end
 
 	return outPath

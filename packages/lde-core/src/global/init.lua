@@ -2,7 +2,7 @@ local fs = require("fs")
 local git = require("git")
 local json = require("json")
 local path = require("path")
-local process = require("process")
+local process = require("process2")
 local semver = require("semver")
 local lde = require("lde-core")
 local ansi = require("ansi")
@@ -194,23 +194,23 @@ function global.getOrInitArchive(url)
 		local p = lde.verbose and ansi.progress(label) or nil
 		fs.mkdir(archiveDir)
 		local archiveFile = archiveDir .. ".archive"
-		local ok, err = process.exec("curl", { "-sL", "-o", archiveFile, url })
-		if not ok then
+		local code, _, stderr = process.exec("curl", { "-sL", "-o", archiveFile, url })
+		if code ~= 0 then
 			if p then p:fail(label) end
-			error("Failed to download archive '" .. url .. "': " .. (err or ""))
+			error("Failed to download archive '" .. url .. "': " .. (stderr or ""))
 		end
-		local ok2, err2
+		local code2, _, stderr2
 		if url:match("%.src%.rock$") then
 			-- .src.rock is a zip with no single top-level dir; extract directly
-			if process.platform == "linux" then
-				ok2, err2 = process.exec("unzip", { "-q", archiveFile, "-d", archiveDir })
+			if jit.os == "Linux" then
+				code2, _, stderr2 = process.exec("unzip", { "-q", archiveFile, "-d", archiveDir })
 			else
-				ok2, err2 = process.exec("tar", { "-xf", archiveFile, "-C", archiveDir })
+				code2, _, stderr2 = process.exec("tar", { "-xf", archiveFile, "-C", archiveDir })
 			end
-		elseif url:match("%.zip$") and process.platform == "linux" then
+		elseif url:match("%.zip$") and jit.os == "Linux" then
 			local tmpDir = archiveDir .. "_tmp"
-			ok2, err2 = process.exec("unzip", { "-q", archiveFile, "-d", tmpDir })
-			if ok2 then
+			code2, _, stderr2 = process.exec("unzip", { "-q", archiveFile, "-d", tmpDir })
+			if code2 == 0 then
 				local entries = fs.readdir(tmpDir)
 				local first = entries and entries()
 				local inner = (first and first.type == "dir") and path.join(tmpDir, first.name) or tmpDir
@@ -218,13 +218,13 @@ function global.getOrInitArchive(url)
 				fs.rmdir(tmpDir)
 			end
 		else
-			ok2, err2 = process.exec("tar", { "-xf", archiveFile, "-C", archiveDir, "--strip-components=1" })
+			code2, _, stderr2 = process.exec("tar", { "-xf", archiveFile, "-C", archiveDir, "--strip-components=1" })
 		end
-		if not ok2 then
+		if code2 ~= 0 then
 			fs.rmdir(archiveDir)
 			fs.delete(archiveFile)
 			if p then p:fail(label) end
-			error("Failed to extract archive '" .. url .. "': " .. (err2 or ""))
+			error("Failed to extract archive '" .. url .. "': " .. (stderr2 or ""))
 		end
 		fs.delete(archiveFile)
 		if p then p:done(label) end
@@ -295,7 +295,7 @@ function global.writeWrapper(toolName, packageDir, packageName)
 		and ("lde x --path '" .. packageDir .. "' " .. packageName)
 		or ("lde x " .. packageName)
 
-	if process.platform == "win32" then
+	if jit.os == "Windows" then
 		local wrapperPath = path.join(toolsDir, toolName .. ".cmd")
 		local winInvocation = packageDir
 			and ('lde x --path \\"' .. packageDir .. '\\" ' .. packageName)
@@ -313,10 +313,11 @@ function global.writeWrapper(toolName, packageDir, packageName)
 			error("Failed to write wrapper script: " .. wrapperPath)
 		end
 
-		local ok, err = process.spawn("chmod", { "+x", wrapperPath })
-		if not ok then
+		local child, err = process.spawn("chmod", { "+x", wrapperPath })
+		if not child then
 			error("Failed to make wrapper executable: " .. (err or "unknown error"))
 		end
+		child:wait()
 
 		ansi.printf("{green}Installed tool '%s' -> %s", toolName, wrapperPath)
 	end

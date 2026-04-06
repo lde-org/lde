@@ -1,6 +1,6 @@
 local ansi = require("ansi")
 local fs = require("fs")
-local process = require("process")
+local process = require("process2")
 local path = require("path")
 
 local lde = require("lde-core")
@@ -19,7 +19,7 @@ local function compile(args)
 		outFile = path.join(pkg:getDir(), pkg:getName())
 	end
 
-	if process.platform == "win32" and string.sub(outFile, -4) ~= ".exe" then
+	if jit.os == "Windows" and string.sub(outFile, -4) ~= ".exe" then
 		outFile = outFile .. ".exe"
 	end
 
@@ -29,7 +29,7 @@ local function compile(args)
 		error("Failed to move executable: " .. moveErr)
 	end
 
-	if process.platform ~= "win32" then ---@cast fs fs.raw.posix
+	if jit.os ~= "Windows" then ---@cast fs fs.raw.posix
 		fs.chmod(outFile, tonumber("755", 8))
 	end
 

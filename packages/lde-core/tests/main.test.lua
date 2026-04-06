@@ -4,7 +4,7 @@ local fs = require("fs")
 local env = require("env")
 local path = require("path")
 local json = require("json")
-local process = require("process")
+local process = require("process2")
 local git = require("git")
 
 local lde = require("lde-core")
@@ -472,7 +472,7 @@ test.it("transitive dep: util is resolvable as a dependency of lde-core", functi
 	test.truthy(util.dedent)
 end)
 
-test.skipIf(process.platform ~= "linux")("archive dep: installs a .tar.gz dependency from a URL", function()
+test.skipIf(jit.os ~= "Linux")("archive dep: installs a .tar.gz dependency from a URL", function()
 	fs.mkdir(tmpBase)
 	local appDir = path.join(tmpBase, "archive-dep-app")
 	fs.mkdir(appDir)

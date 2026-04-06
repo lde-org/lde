@@ -6,7 +6,7 @@ local fs = require("fs")
 local env = require("env")
 local http = require("http")
 local path = require("path")
-local process = require("process")
+local process = require("process2")
 local util = require("util")
 
 ---@param dir string?
@@ -94,15 +94,16 @@ local function openRockspec(dir, rockspecPath)
 			linux  = { "linux", "unix" },
 			win32  = { "win32", "mingw32" }
 		}
+		local jitPlatform = jit.os == "Windows" and "win32" or jit.os == "OSX" and "darwin" or "linux"
 
 		local platBuild
-		for _, key in ipairs(platFallbacks[process.platform] or { process.platform }) do
+		for _, key in ipairs(platFallbacks[jitPlatform] or { jitPlatform }) do
 			platBuild = spec.build.platforms and spec.build.platforms[key]
 			if platBuild then break end
 		end
 		if spec.build.platforms and not platBuild then
 			io.stderr:write("warning: " ..
-				(spec.package or "?") .. ": no platform config for '" .. process.platform .. "'\n")
+				(spec.package or "?") .. ": no platform config for '" .. jitPlatform .. "'\n")
 		end
 
 		for modname, src in pairs(platBuild and platBuild.modules or {}) do
@@ -164,15 +165,15 @@ local function openRockspec(dir, rockspecPath)
 			for _, v in ipairs(makeVars) do buildArgs[#buildArgs + 1] = v end
 			if buildTarget ~= "" then buildArgs[#buildArgs + 1] = buildTarget end
 
-			local ok, err = process.exec("make", buildArgs, { cwd = dir })
-			if not ok then return nil, "make failed: " .. (err or "") end
+			local code, _, stderr = process.exec("make", buildArgs, { cwd = dir })
+			if code ~= 0 then return nil, "make failed: " .. (stderr or "") end
 
 			local installArgs = {}
 			for _, v in ipairs(makeVars) do installArgs[#installArgs + 1] = v end
 			installArgs[#installArgs + 1] = installTarget
 
-			ok, err = process.exec("make", installArgs, { cwd = dir })
-			if not ok then return nil, "make install failed: " .. (err or "") end
+			code, _, stderr = process.exec("make", installArgs, { cwd = dir })
+			if code ~= 0 then return nil, "make install failed: " .. (stderr or "") end
 
 			fs.write(stampFile, buildStamp)
 			return true
@@ -195,17 +196,17 @@ local function openRockspec(dir, rockspecPath)
 				configureArgs[#configureArgs + 1] = "-D" .. k .. "=" .. v
 			end
 
-			local ok, err = process.exec("cmake", configureArgs, { cwd = dir })
-			if not ok then return nil, "cmake configure failed: " .. (err or "") end
+			local code, _, stderr = process.exec("cmake", configureArgs, { cwd = dir })
+			if code ~= 0 then return nil, "cmake configure failed: " .. (stderr or "") end
 
-			ok, err = process.exec("cmake", { "--build", buildDir, "--config", "Release" }, { cwd = dir })
-			if not ok then return nil, "cmake build failed: " .. (err or "") end
+			code, _, stderr = process.exec("cmake", { "--build", buildDir, "--config", "Release" }, { cwd = dir })
+			if code ~= 0 then return nil, "cmake build failed: " .. (stderr or "") end
 
-			ok, err = process.exec("cmake", { "--build", buildDir, "--target", "install", "--config", "Release" },
+			code, _, stderr = process.exec("cmake", { "--build", buildDir, "--target", "install", "--config", "Release" },
 				{ cwd = dir })
-			if not ok then return nil, "cmake install failed: " .. (err or "") end
+			if code ~= 0 then return nil, "cmake install failed: " .. (stderr or "") end
 
-			local soExt = process.platform == "darwin" and "**.dylib" or "**.so"
+			local soExt = jit.os == "OSX" and "**.dylib" or "**.so"
 			for _, rel in ipairs(fs.scan(installDir, soExt)) do
 				fs.copy(path.join(installDir, rel), path.join(modulesDir, path.basename(rel)))
 			end
@@ -235,7 +236,7 @@ local function openRockspec(dir, rockspecPath)
 			end
 
 			for modname, src in pairs(nativeModules) do
-				local ext = process.platform == "darwin" and "dylib" or "so"
+				local ext = jit.os == "OSX" and "dylib" or "so"
 				local destAbs = path.join(modulesDir, modname:gsub("%.", path.separator) .. "." .. ext)
 				local destDir = path.dirname(destAbs)
 				if not fs.isdir(destDir) then mkdirp(destDir) end
@@ -250,9 +251,9 @@ local function openRockspec(dir, rockspecPath)
 				gccArgs[#gccArgs + 1] = "-o"
 				gccArgs[#gccArgs + 1] = destAbs
 
-				local ok, err = process.exec("gcc", gccArgs)
-				if not ok then
-					return nil, "Failed to compile native module '" .. modname .. "': " .. (err or "")
+				local code, _, stderr = process.exec("gcc", gccArgs)
+				if code ~= 0 then
+					return nil, "Failed to compile native module '" .. modname .. "': " .. (stderr or "")
 				end
 			end
 

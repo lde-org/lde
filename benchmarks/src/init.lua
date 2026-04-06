@@ -1,6 +1,6 @@
 local ffi = require("ffi")
 
-local process = require("process")
+local process = require("process2")
 local ansi = require("ansi")
 
 ---@type fun(): number
@@ -40,8 +40,8 @@ local function sysinfo()
 	end
 
 	local function read(cmd)
-		local ok, out = process.exec(cmd, nil, { unsafe = true, stderr = "null" })
-		return ok and out and out:gsub("%s+$", "") or nil
+		local code, stdout = process.exec(cmd, nil, { unsafe = true, stderr = "null" })
+		return code == 0 and stdout and stdout:gsub("%s+$", "") or nil
 	end
 
 	if ffi.os == "Windows" then
@@ -116,45 +116,46 @@ local function runBenchmarks(tool, tmpdir)
 	ansi.printf("\n{bold}=== %s ==={reset}", tool)
 
 	bench("install busted (cold)", function()
+		local code, _, stderr
 		if tool == "lde" then
-			return process.exec("lde", { "--tree", tmpdir .. "/lde", "install", "rocks:busted" }, { stdout = "null" })
+			code, _, stderr = process.exec("lde", { "--tree", tmpdir .. "/lde", "install", "rocks:busted" }, { stdout = "null" })
 		elseif tool == "luarocks" then
-			return process.exec("luarocks", { "--tree", tmpdir .. "/rocks", "install", "busted" })
+			code, _, stderr = process.exec("luarocks", { "--tree", tmpdir .. "/rocks", "install", "busted" })
 		elseif tool == "lx" then
-			return process.exec("lx", { "--tree", tmpdir .. "/rocks", "install", "busted" })
+			code, _, stderr = process.exec("lx", { "--tree", tmpdir .. "/rocks", "install", "busted" })
 		end
-
-		return false
+		return code == 0, stderr
 	end)
 
 	bench("install busted (warm)", function()
+		local code, _, stderr
 		if tool == "lde" then
-			return process.exec("lde", { "--tree", tmpdir .. "/lde", "install", "rocks:busted" }, { stdout = "null" })
+			code, _, stderr = process.exec("lde", { "--tree", tmpdir .. "/lde", "install", "rocks:busted" }, { stdout = "null" })
 		elseif tool == "luarocks" then
-			return process.exec("luarocks", { "--tree", tmpdir .. "/rocks", "install", "busted" })
+			code, _, stderr = process.exec("luarocks", { "--tree", tmpdir .. "/rocks", "install", "busted" })
 		elseif tool == "lx" then
-			return process.exec("lx", { "--tree", tmpdir .. "/rocks", "install", "--force", "busted" })
+			code, _, stderr = process.exec("lx", { "--tree", tmpdir .. "/rocks", "install", "--force", "busted" })
 		end
-
-		return false
+		return code == 0, stderr
 	end)
 
 	bench("build C rock (luafilesystem)", function()
+		local code, _, stderr
 		if tool == "lde" then
-			return process.exec("lde", { "--tree", tmpdir .. "/lde", "install", "rocks:luafilesystem" }, { stdout = "null" })
+			code, _, stderr = process.exec("lde", { "--tree", tmpdir .. "/lde", "install", "rocks:luafilesystem" }, { stdout = "null" })
 		elseif tool == "luarocks" then
-			return process.exec("luarocks", { "--tree", tmpdir .. "/rocks", "install", "luafilesystem" })
+			code, _, stderr = process.exec("luarocks", { "--tree", tmpdir .. "/rocks", "install", "luafilesystem" })
 		elseif tool == "lx" then
-			return process.exec("lx", { "--tree", tmpdir .. "/rocks", "install", "luafilesystem" })
+			code, _, stderr = process.exec("lx", { "--tree", tmpdir .. "/rocks", "install", "luafilesystem" })
 		end
-
-		return false
+		return code == 0, stderr
 	end)
 end
 
 local tools = {}
 for _, tool in ipairs({ "lde", "luarocks", "lx" }) do
-	if process.exec(tool, { "--version" }, { stdout = "null", stderr = "null" }) then
+	local code = process.exec(tool, { "--version" }, { stdout = "null", stderr = "null" })
+	if code == 0 then
 		tools[#tools + 1] = tool
 	end
 end

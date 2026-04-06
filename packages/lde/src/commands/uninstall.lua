@@ -1,7 +1,7 @@
 local ansi = require("ansi")
 local fs = require("fs")
 local path = require("path")
-local process = require("process")
+local process = require("process2")
 
 local lde = require("lde-core")
 
@@ -17,7 +17,7 @@ local function toolUninstall(args)
 
 	-- Try the platform-specific wrapper path first, then the bare name
 	local candidates
-	if process.platform == "win32" then
+	if jit.os == "Windows" then
 		candidates = {
 			path.join(toolsDir, toolName .. ".cmd"),
 			path.join(toolsDir, toolName)
