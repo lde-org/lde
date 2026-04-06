@@ -430,3 +430,238 @@ test.it("watch recursive detects creation in newly created subdirectory", functi
 	w.close()
 	test.truthy(#events > before)
 end)
+
+
+--
+-- rmdir edge cases
+--
+
+test.it("rmdir returns false for non-existent directory", function()
+	test.falsy(fs.rmdir(tmp("rmdir-missing")))
+end)
+
+test.it("rmdir removes an empty directory", function()
+	local d = tmp("rmdir-empty")
+	fs.mkdir(d)
+	test.truthy(fs.rmdir(d))
+	test.falsy(fs.exists(d))
+end)
+
+test.it("rmdir removes deeply nested directories", function()
+	local d = tmp("rmdir-deep")
+	local deep = path.join(d, "a", "b", "c")
+	-- mkdir only creates one level, so build manually
+	fs.mkdir(d)
+	fs.mkdir(path.join(d, "a"))
+	fs.mkdir(path.join(d, "a", "b"))
+	fs.mkdir(deep)
+	fs.write(path.join(deep, "leaf.txt"), "x")
+	test.truthy(fs.rmdir(d))
+	test.falsy(fs.exists(d))
+end)
+
+test.it("rmdir on a symlink to a directory removes only the link", function()
+	local target = tmp("rmdir-link-target")
+	local link   = tmp("rmdir-link-itself")
+	fs.mkdir(target)
+	fs.mklink(target, link)
+	test.truthy(fs.rmdir(link))
+	test.falsy(fs.exists(link))
+	test.truthy(fs.exists(target)) -- target must survive
+	fs.rmdir(target)
+end)
+
+--
+-- delete edge cases
+--
+
+test.it("delete returns false for non-existent file", function()
+	test.falsy(fs.delete(tmp("delete-missing.txt")))
+end)
+
+--
+-- mkdir edge cases
+--
+
+test.it("mkdir is idempotent on an existing directory", function()
+	local d = tmp("mkdir-idempotent")
+	fs.mkdir(d)
+	-- second call should not error and directory still exists
+	fs.mkdir(d)
+	test.truthy(fs.isdir(d))
+end)
+
+--
+-- write / read edge cases
+--
+
+test.it("write overwrites existing file content", function()
+	local p = tmp("overwrite.txt")
+	fs.write(p, "first")
+	fs.write(p, "second")
+	test.equal(fs.read(p), "second")
+end)
+
+test.it("write handles empty string content", function()
+	local p = tmp("empty-write.txt")
+	test.truthy(fs.write(p, ""))
+	test.equal(fs.read(p), "")
+end)
+
+test.it("write handles binary / multi-line content", function()
+	local p = tmp("binary.txt")
+	local content = "line1\nline2\nline3"
+	fs.write(p, content)
+	test.equal(fs.read(p), content)
+end)
+
+--
+-- copy edge cases
+--
+
+test.it("copy returns false for missing source", function()
+	test.falsy(fs.copy(tmp("copy-no-src.txt"), tmp("copy-no-dst.txt")))
+end)
+
+test.it("copy overwrites an existing destination file", function()
+	local src = tmp("copy-over-src.txt")
+	local dst = tmp("copy-over-dst.txt")
+	fs.write(src, "new")
+	fs.write(dst, "old")
+	test.truthy(fs.copy(src, dst))
+	test.equal(fs.read(dst), "new")
+end)
+
+--
+-- move edge cases
+--
+
+test.it("move overwrites an existing destination file", function()
+	local src = tmp("move-over-src.txt")
+	local dst = tmp("move-over-dst.txt")
+	fs.write(src, "winner")
+	fs.write(dst, "loser")
+	test.truthy(fs.move(src, dst))
+	test.falsy(fs.exists(src))
+	test.equal(fs.read(dst), "winner")
+end)
+
+--
+-- stat / lstat edge cases
+--
+
+test.it("lstat on a symlink returns type=symlink", function()
+	local target = tmp("lstat-target.txt")
+	local link   = tmp("lstat-link")
+	fs.write(target, "t")
+	fs.mklink(target, link)
+	local s = fs.lstat(link)
+	test.truthy(s)
+	test.equal(s.type, "symlink")
+end)
+
+test.it("stat on a symlink follows it and returns type=file", function()
+	local target = tmp("stat-link-target.txt")
+	local link   = tmp("stat-link-itself")
+	fs.write(target, "t")
+	fs.mklink(target, link)
+	local s = fs.stat(link)
+	test.truthy(s)
+	test.equal(s.type, "file")
+end)
+
+--
+-- readdir entry types
+--
+
+test.it("readdir reports correct entry types", function()
+	local d      = tmp("readdir-types")
+	local sub    = path.join(d, "subdir")
+	local file   = path.join(d, "file.txt")
+	local target = path.join(d, "link-target.txt")
+	local link   = path.join(d, "link")
+	fs.mkdir(d)
+	fs.mkdir(sub)
+	fs.write(file, "x")
+	fs.write(target, "t")
+	fs.mklink(target, link)
+
+	local types = {}
+	for entry in fs.readdir(d) do
+		types[entry.name] = entry.type
+	end
+
+	test.equal(types["subdir"], "dir")
+	test.equal(types["file.txt"], "file")
+	-- symlink type may be "symlink" or resolved depending on OS; just check it exists
+	test.truthy(types["link"])
+end)
+
+--
+-- scan edge cases
+--
+
+test.it("scan returns empty table when no files match", function()
+	local d = tmp("scan-nomatch")
+	fs.mkdir(d)
+	fs.write(path.join(d, "a.txt"), "")
+	local results = fs.scan(d, "**.lua")
+	test.equal(#results, 0)
+end)
+
+test.it("scan with absolute option returns absolute paths", function()
+	local d = tmp("scan-absolute")
+	fs.mkdir(d)
+	fs.write(path.join(d, "x.lua"), "")
+	local results = fs.scan(d, "**.lua", { absolute = true })
+	test.equal(#results, 1)
+	-- absolute path must start with the base dir
+	test.truthy(results[1]:sub(1, #d) == d)
+end)
+
+test.it("scan finds files in nested directories with ** glob", function()
+	local d = tmp("scan-nested")
+	fs.mkdir(d)
+	fs.mkdir(path.join(d, "a"))
+	fs.mkdir(path.join(d, "a", "b"))
+	fs.write(path.join(d, "root.lua"), "")
+	fs.write(path.join(d, "a", "mid.lua"), "")
+	fs.write(path.join(d, "a", "b", "deep.lua"), "")
+	local results = fs.scan(d, "**.lua")
+	test.equal(#results, 3)
+end)
+
+test.it("scan errors on a non-directory path", function()
+	local p = tmp("scan-notdir.txt")
+	fs.write(p, "x")
+	local ok = pcall(fs.scan, p, "**")
+	test.falsy(ok)
+end)
+
+--
+-- globToPattern
+--
+
+test.it("globToPattern matches exact filename", function()
+	local pat = fs.globToPattern("foo.lua")
+	test.truthy(string.find("foo.lua", pat))
+	test.falsy(string.find("bar.lua", pat))
+end)
+
+test.it("globToPattern * does not cross path separators", function()
+	local pat = fs.globToPattern("*.lua")
+	test.truthy(string.find("hello.lua", pat))
+	test.falsy(string.find("a/hello.lua", pat))
+end)
+
+test.it("globToPattern ** crosses path separators", function()
+	local pat = fs.globToPattern("**.lua")
+	test.truthy(string.find("hello.lua", pat))
+	test.truthy(string.find("a/b/hello.lua", pat))
+end)
+
+test.it("globToPattern ? matches single non-separator character", function()
+	local pat = fs.globToPattern("fo?.lua")
+	test.truthy(string.find("foo.lua", pat))
+	test.falsy(string.find("fo.lua", pat))
+end)
