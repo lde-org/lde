@@ -252,7 +252,13 @@ local function openRockspec(dir, rockspecPath)
 				gccArgs[#gccArgs + 1] = "-o"
 				gccArgs[#gccArgs + 1] = destAbs
 
-				local code, _, stderr = process.exec(lde.global.getGCCBin(), gccArgs)
+				local gccEnv
+				if jit.os == "Windows" then
+					local mingwBin = path.join(lde.global.getMingwDir(), "bin")
+					gccEnv = { PATH = mingwBin .. ";" .. (env.var("PATH") or "") }
+				end
+
+				local code, _, stderr = process.exec(lde.global.getGCCBin(), gccArgs, { env = gccEnv })
 				if code ~= 0 then
 					return nil, "Failed to compile native module '" .. modname .. "': " .. (stderr or "")
 				end
