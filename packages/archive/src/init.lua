@@ -27,22 +27,42 @@ function Archive.new(source)
 	return setmetatable({ _source = source }, Archive)
 end
 
+---@class Archive.ExtractOptions
+---@field stripComponents boolean? # Strip the single top-level directory when extracting (default: false)
+
 --- Extract the archive to the given output directory.
 --- Only valid when the Archive was created with a file path.
 ---@param toPath string
+---@param opts Archive.ExtractOptions?
 ---@return boolean ok
 ---@return string? err
-function Archive:extract(toPath)
+function Archive:extract(toPath, opts)
 	local src = self._source
 	if type(src) ~= "string" then
 		return false, "extract() is only valid for file-backed archives"
 	end
 
+	local strip = opts and opts.stripComponents or false
 	local code, _, stderr
+
 	if jit.os == "Linux" and isZip(src) then
-		code, _, stderr = process.exec("unzip", { "-q", src, "-d", toPath })
+		if strip then
+			local tmpDir = toPath .. ".tmp"
+			code, _, stderr = process.exec("unzip", { "-q", src, "-d", tmpDir })
+			if code == 0 then
+				local iter = fs.readdir(tmpDir)
+				local first = iter and iter()
+				local inner = (first and first.type == "dir") and path.join(tmpDir, first.name) or tmpDir
+				fs.move(inner, toPath)
+				fs.rmdir(tmpDir)
+			end
+		else
+			code, _, stderr = process.exec("unzip", { "-q", src, "-d", toPath })
+		end
 	else
-		code, _, stderr = process.exec("tar", { "-xf", src, "-C", toPath })
+		local args = { "-xf", src, "-C", toPath }
+		if strip then args[#args + 1] = "--strip-components=1" end
+		code, _, stderr = process.exec("tar", args)
 	end
 
 	if code ~= 0 then
@@ -74,10 +94,8 @@ function Archive:save(toPath)
 
 	for name, content in pairs(src) do
 		local filePath = path.join(tmpDir, name)
-
 		local dir = path.dirname(filePath)
 		if dir then fs.mkdir(dir) end
-
 		if not fs.write(filePath, content) then
 			fs.rmdir(tmpDir)
 			return false, "failed to write temp file: " .. filePath
@@ -96,7 +114,6 @@ function Archive:save(toPath)
 	if code ~= 0 then
 		return false, stderr
 	end
-
 	return true
 end
 
