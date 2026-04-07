@@ -472,6 +472,29 @@ test.it("transitive dep: util is resolvable as a dependency of lde-core", functi
 	test.truthy(util.dedent)
 end)
 
+test.it("runFile: errors with a clear message when package has no bin and no init.lua", function()
+	fs.mkdir(tmpBase)
+	local dir = path.join(tmpBase, "no-entrypoint")
+	fs.mkdir(dir)
+
+	fs.write(path.join(dir, "lde.json"), json.encode({
+		name = "no-entrypoint",
+		version = "0.1.0",
+		dependencies = {}
+	}))
+
+	-- src/ exists but has no init.lua — simulates a library-only rockspec package
+	local srcDir = path.join(dir, "src")
+	fs.mkdir(srcDir)
+	fs.write(path.join(srcDir, "lib.lua"), 'return {}')
+
+	local pkg = lde.Package.open(dir)
+	local ok, err = pkg:runFile(nil, {})
+	test.falsy(ok)
+	test.includes(err, "no runnable entry point")
+	test.includes(err, "no-entrypoint")
+end)
+
 test.skipIf(jit.os ~= "Linux")("archive dep: installs a .tar.gz dependency from a URL", function()
 	fs.mkdir(tmpBase)
 	local appDir = path.join(tmpBase, "archive-dep-app")
