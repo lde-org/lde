@@ -12,7 +12,7 @@ local global = {}
 package.loaded[(...)] = global
 
 global.getConfig = require("lde-core.global.config")
-global.currentVersion = "0.8.1"
+global.currentVersion = "0.9.0"
 
 ---@class lde.Portfile
 ---@field name string
