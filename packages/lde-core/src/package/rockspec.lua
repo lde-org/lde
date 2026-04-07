@@ -126,11 +126,8 @@ local function openRockspec(dir, rockspecPath)
 	local binScripts = (spec.build and spec.build.install and spec.build.install.bin) or {}
 	local installLuaFiles = (spec.build and spec.build.install and spec.build.install.lua) or {}
 	local binEntry
-	for k, v in pairs(binScripts) do
-		local name = type(k) == "number" and path.basename(v) or k
-		binEntry = name
-		break
-	end
+	local bk, bv = next(binScripts)
+	if bk then binEntry = type(bk) == "number" and path.basename(bv) or bk end
 
 	local buildType = spec.build and spec.build.type or "builtin"
 
@@ -154,8 +151,8 @@ local function openRockspec(dir, rockspecPath)
 
 		if buildType == "make" then
 			if not process.exec("make", { "--version" }) then
-				return nil, "Package '" .. (spec.package or "?") ..
-					"' requires 'make' to build, but it was not found. Install make (e.g. build-essential on Debian/Ubuntu, Xcode Command Line Tools on macOS)."
+				return nil, "Package '" .. (spec.package or "?") .. "' requires 'make' to build, but it was not found." ..
+					" Install make (e.g. build-essential on Debian/Ubuntu, Xcode Command Line Tools on macOS)."
 			end
 
 			local luajitPath = sea.getLuajitPath()
@@ -402,11 +399,11 @@ local function openRockspec(dir, rockspecPath)
 				return true
 			end
 
-			local ok, err = execCmd(spec.build.build_command)
-			if not ok then return nil, "build_command failed: " .. (err or "(no output)") end
+			local cmdOk, cmdErr = execCmd(spec.build.build_command)
+			if not cmdOk then return nil, "build_command failed: " .. (cmdErr or "(no output)") end
 
-			ok, err = execCmd(spec.build.install_command)
-			if not ok then return nil, "install_command failed: " .. (err or "(no output)") end
+			cmdOk, cmdErr = execCmd(spec.build.install_command)
+			if not cmdOk then return nil, "install_command failed: " .. (cmdErr or "(no output)") end
 
 			fs.write(stampFile, buildStamp)
 			return true
@@ -419,7 +416,7 @@ local function openRockspec(dir, rockspecPath)
 		local deps = {}
 		for _, depStr in ipairs(spec.dependencies or {}) do
 			local name, rest = depStr:match("^([%w%-_]+)%s*(.*)")
-			if name and name ~= "lua" then
+			if name and name ~= "lua" and name ~= "luajit" then
 				deps[name] = { luarocks = name, version = rest ~= "" and rest or nil }
 			end
 		end
