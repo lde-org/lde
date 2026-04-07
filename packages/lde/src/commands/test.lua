@@ -92,7 +92,9 @@ local function test(_args)
 		local allResults = {}
 		for _, relativePath in ipairs(fs.scan(cwd, "**" .. path.separator .. "lde.json")) do
 			local configPath = path.join(cwd, relativePath)
-			local pkg = lde.Package.open(path.dirname(configPath))
+			local pkgDir = path.dirname(configPath)
+			if not fs.isdir(path.join(pkgDir, "tests")) then goto continue end
+			local pkg = lde.Package.open(pkgDir)
 			if pkg then
 				local results = pkg:runTests()
 				if not results.error then
@@ -102,6 +104,7 @@ local function test(_args)
 					totalSkipped = totalSkipped + (results.skipped or 0)
 				end
 			end
+			::continue::
 		end
 
 		local totalTests = totalPassed + totalFailures
