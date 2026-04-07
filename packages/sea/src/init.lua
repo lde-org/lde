@@ -169,10 +169,12 @@ function sea.compile(main, source, sharedLibs, compiler)
 		}
 	}]], id, id, id, id, id, lib.name, id, id)
 
+		local luaopenSym = "luaopen_" .. lib.name:gsub("%.", "_")
 		libPreloads[#libPreloads + 1]       = string.format([[
 	lua_pushstring(L, %sLibraryPath);
-	lua_pushcclosure(L, lde_loadlib_loader, 1);
-	lua_setfield(L, -2, "%s");]], id, string.gsub(lib.name, ".", CEscapes))
+	lua_pushstring(L, "%s");
+	lua_pushcclosure(L, lde_loadlib_loader, 2);
+	lua_setfield(L, -2, "%s");]], id, luaopenSym, string.gsub(lib.name, ".", CEscapes))
 	end
 
 	local hasLibs        = #sharedLibs > 0
@@ -240,12 +242,18 @@ char lde_tmpdir[4096];
 		loadlibHelper = [[
 static int lde_loadlib_loader(lua_State* L) {
 	const char* soPath = lua_tostring(L, lua_upvalueindex(1));
+	const char* sym    = lua_tostring(L, lua_upvalueindex(2));
 	lua_getglobal(L, "package");
 	lua_getfield(L, -1, "loadlib");
 	lua_pushstring(L, soPath);
-	lua_pushstring(L, "*");
+	lua_pushstring(L, sym);
 	if (lua_pcall(L, 2, 1, 0) != LUA_OK) {
 		return luaL_error(L, "loadlib failed for %s: %s", soPath, lua_tostring(L, -1));
+	}
+	if (lua_type(L, -1) == LUA_TFUNCTION) {
+		if (lua_pcall(L, 0, 1, 0) != LUA_OK) {
+			return luaL_error(L, "init failed for %s: %s", soPath, lua_tostring(L, -1));
+		}
 	}
 	return 1;
 }
