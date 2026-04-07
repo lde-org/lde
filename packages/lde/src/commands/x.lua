@@ -30,6 +30,7 @@ local function x(args)
 	local pkg, err = resolvePackage(args)
 	if not pkg then error(err) end
 
+	args:flag("") -- consume -- separator if present
 	executePackage(pkg, args:drain() or {}, userCwd)
 end
 
