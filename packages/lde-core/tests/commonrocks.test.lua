@@ -58,8 +58,8 @@ test.skipIf(jit.os == "Windows" or jit.os == "OSX")("luarocks: lua-cjson encodes
 		test.truthy(ok)
 	end)
 
--- Skipped pending command build support
-test.skip("luarocks: luaposix gets pid", function()
+-- Skipped pending command build support on Windows/OSX
+test.skipIf(jit.os == "Windows" or jit.os == "OSX")("luarocks: luaposix gets pid", function()
 	local app = makeApp("rocks-luaposix", { posix = { luarocks = "luaposix" } })
 	app:installDependencies()
 	local ok, err = app:runString([[

@@ -250,7 +250,8 @@ local function openRockspec(dir, rockspecPath)
 
 				lde.global.ensureMingw()
 				local ljPath = sea.getLuajitPath()
-				local gccArgs = { "-shared", "-fPIC", "-DLUAJIT_VERSION=LuaJIT 2.1.0-beta3", "-DLUA_VERSION_NUM=501", "-I" .. path.join(ljPath, "include") }
+				local gccArgs = { "-shared", "-fPIC", "-DLUAJIT_VERSION=LuaJIT 2.1.0-beta3", "-DLUA_VERSION_NUM=501",
+					"-I" .. path.join(ljPath, "include") }
 				for _, d in ipairs(src.defines or {}) do gccArgs[#gccArgs + 1] = "-D" .. d end
 				for _, s in ipairs(srcFiles) do gccArgs[#gccArgs + 1] = s end
 				gccArgs[#gccArgs + 1] = "-o"
@@ -276,6 +277,75 @@ local function openRockspec(dir, rockspecPath)
 				local binName, binRelSrc = type(k) == "number" and v or k, v
 				fs.copy(path.join(dir, binRelSrc), path.join(outputDir, binName))
 			end
+
+			fs.write(stampFile, buildStamp)
+			return true
+		elseif buildType == "command" then
+			local luajitPath = sea.getLuajitPath()
+			local ldeBin = env.execPath()
+			local vars = {
+				LUA           = ldeBin,
+				LUA_INCDIR    = path.join(luajitPath, "include"),
+				LUA_LIBDIR    = path.join(luajitPath, "lib"),
+				LIBDIR        = modulesDir,
+				LUADIR        = modulesDir,
+				PREFIX        = modulesDir,
+				CC            = lde.global.getGCCBin(),
+				LD            = lde.global.getGCCBin(),
+				CFLAGS        = "-fPIC",
+				LIBFLAG       = "-shared",
+				LIB_EXTENSION = jit.os == "Windows" and "dll" or jit.os == "OSX" and "dylib" or "so",
+				OBJ_EXTENSION = "o"
+			}
+
+			local function subst(cmd)
+				return (cmd:gsub("%$%(([%w_]+)%)", function(k) return vars[k] or "" end))
+			end
+
+			local function shellSplit(cmd)
+				local args = {}
+				local i = 1
+				while i <= #cmd do
+					while i <= #cmd and cmd:sub(i, i) == " " do i = i + 1 end
+					if i > #cmd then break end
+					local token = ""
+					while i <= #cmd and cmd:sub(i, i) ~= " " do
+						local c = cmd:sub(i, i)
+						if c == '"' then
+							i = i + 1
+							while i <= #cmd and cmd:sub(i, i) ~= '"' do
+								token = token .. cmd:sub(i, i)
+								i = i + 1
+							end
+							if i <= #cmd then i = i + 1 end -- skip closing quote
+						else
+							token = token .. c
+							i = i + 1
+						end
+					end
+					args[#args + 1] = token
+				end
+				return args
+			end
+
+			local function execCmd(cmdStr)
+				if not cmdStr or cmdStr == "" then return true end
+				local argv = shellSplit(subst(cmdStr))
+				local bin = table.remove(argv, 1)
+				-- If bin is the lde binary, inject --lua so it runs the next arg as a plain script
+				if bin == ldeBin then
+					table.insert(argv, 1, "--lua")
+				end
+				local code, stdout, stderr = process.exec(bin, argv, { cwd = dir })
+				if code ~= 0 then return nil, stderr or stdout end
+				return true
+			end
+
+			local ok, err = execCmd(spec.build.build_command)
+			if not ok then return nil, "build_command failed: " .. (err or "(no output)") end
+
+			ok, err = execCmd(spec.build.install_command)
+			if not ok then return nil, "install_command failed: " .. (err or "(no output)") end
 
 			fs.write(stampFile, buildStamp)
 			return true
