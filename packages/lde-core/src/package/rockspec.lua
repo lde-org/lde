@@ -153,20 +153,25 @@ local function openRockspec(dir, rockspecPath)
 		local modulesDir = path.dirname(outputDir)
 
 		if buildType == "make" then
+			if not process.exec("make", { "--version" }) then
+				return nil, "Package '" .. (spec.package or "?") ..
+					"' requires 'make' to build, but it was not found. Install make (e.g. build-essential on Debian/Ubuntu, Xcode Command Line Tools on macOS)."
+			end
+
 			local luajitPath = sea.getLuajitPath()
 			local luajitInclude = path.join(luajitPath, "include")
 			local stdVars = {
-				LUA_INCDIR = luajitInclude,
-				LUA_LIBDIR = path.join(luajitPath, "lib"),
-				LUALIB     = "libluajit.a",
-				CFLAGS     = "-fPIC",
-				LIBFLAG    = "-shared",
+				LUA_INCDIR  = luajitInclude,
+				LUA_LIBDIR  = path.join(luajitPath, "lib"),
+				LUALIB      = "libluajit.a",
+				CFLAGS      = "-fPIC",
+				LIBFLAG     = "-shared",
 				INST_LIBDIR = modulesDir,
 				INST_LUADIR = modulesDir,
 				LUADIR      = modulesDir,
 				LIBDIR      = modulesDir,
 				PREFIX      = modulesDir,
-				LUA         = env.execPath(),
+				LUA         = env.execPath()
 			}
 
 			local function subst(s)
@@ -292,7 +297,9 @@ local function openRockspec(dir, rockspecPath)
 				gccArgs[#gccArgs + 1] = "-L" .. path.join(ljPath, "lib")
 				for _, d in ipairs(src.libdirs or {}) do gccArgs[#gccArgs + 1] = "-L" .. d end
 				if jit.os == "Windows" then gccArgs[#gccArgs + 1] = "-lluajit" end
-				if jit.os == "OSX" then gccArgs[#gccArgs + 1] = "-undefined"; gccArgs[#gccArgs + 1] = "dynamic_lookup" end
+				if jit.os == "OSX" then
+					gccArgs[#gccArgs + 1] = "-undefined"; gccArgs[#gccArgs + 1] = "dynamic_lookup"
+				end
 				for _, l in ipairs(src.libraries or {}) do gccArgs[#gccArgs + 1] = "-l" .. l end
 
 				local gccEnv
@@ -429,7 +436,8 @@ local function openRockspec(dir, rockspecPath)
 			end
 		end
 
-		return lde.Package.Config.new({ name = spec.package, version = spec.version, bin = resolvedBin, dependencies = deps })
+		return lde.Package.Config.new({ name = spec.package, version = spec.version, bin = resolvedBin, dependencies =
+		deps })
 	end
 
 	return pkg, nil
