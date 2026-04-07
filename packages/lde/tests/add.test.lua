@@ -1,19 +1,11 @@
 local test = require("lde-test")
 
-local process = require("process2")
 local fs = require("fs")
 local env = require("env")
 local path = require("path")
 local json = require("json")
 
-local ldePath = assert(env.execPath())
-
----@param args string[]
----@param cwd string?
-local function ldecli(args, cwd)
-	local code, stdout, stderr = process.exec(ldePath, args, { cwd = cwd })
-	return code == 0, stdout or stderr
-end
+local ldecli = require("tests.lib.ldecli")
 
 local tmpBase = path.join(env.tmpdir(), "lde-add-tests")
 fs.rmdir(tmpBase)

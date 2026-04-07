@@ -1,6 +1,5 @@
 local test = require("lde-test")
 
-local process = require("process2")
 local fs = require("fs")
 local env = require("env")
 local path = require("path")
@@ -9,13 +8,7 @@ local git = require("git")
 
 local lde = require("lde-core")
 
-local ldePath = assert(env.execPath())
-
----@param args string[]
-local function ldecli(args)
-	local code, stdout, stderr = process.exec(ldePath, args)
-	return code == 0, stdout or stderr
-end
+local ldecli = require("tests.lib.ldecli")
 
 test.it("should not ignore --git in ldx", function()
 	-- Pre-populate the git cache so no real clone happens
