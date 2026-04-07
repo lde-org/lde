@@ -198,4 +198,6 @@ if not ok then ---@cast err { msg: string, trace: string }
 	if env.var("DEBUG") then
 		print(err.trace)
 	end
+
+	os.exit(1)
 end
