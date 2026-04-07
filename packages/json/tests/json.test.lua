@@ -185,16 +185,35 @@ test.it("json.str handles escaped strings", function()
 	test.equal(json.str(doc, doc.root), "hello\nworld")
 end)
 
--- regression: keys from a decoded object must survive a subsequent json.decode call
--- (the shared key_arena was being reset, corrupting keyStore slices from prior decodes)
+-- regression: keys from a decoded object must survive any number of subsequent decodes
+-- (key_arena was being reset to 0 on each decodeDocument, corrupting prior slices)
 test.it("encode preserves keys after a subsequent decode clobbers the key arena", function()
 	local config = json.decode('{"name":"myproject","version":"1.0.0","dependencies":{}}')
-	-- A second decode resets key_arena_top to 0, overwriting the arena with new keys
+	-- A second decode used to reset key_arena_top to 0, overwriting arena slots with new keys
 	json.decode('{"arch":null,"url":null,"luarocks":null}')
-	-- Encoding config must still produce the original keys, not the clobbered ones
+	json.decode('{"x":1,"y":2,"z":3}')
 	local out = json.encode(config)
 	local roundtrip = json.decode(out)
 	test.equal(roundtrip.name, "myproject")
 	test.equal(roundtrip.version, "1.0.0")
 	test.truthy(roundtrip.dependencies)
+end)
+
+test.it("decodeDocument+materialise key slices survive subsequent decodeDocument calls", function()
+	local doc1 = json.decodeDocument('{"a":1,"b":2}')
+	local obj1 = json.materialise(doc1)
+	-- second decodeDocument used to reset key_arena_top, clobbering doc1's slice
+	local doc2 = json.decodeDocument('{"x":10,"y":20,"z":30}')
+	local obj2 = json.materialise(doc2)
+	-- obj1's key order must still be intact
+	local out1 = json.encode(obj1)
+	local r1 = json.decode(out1)
+	test.equal(r1.a, 1)
+	test.equal(r1.b, 2)
+	-- obj2 must also be correct
+	local out2 = json.encode(obj2)
+	local r2 = json.decode(out2)
+	test.equal(r2.x, 10)
+	test.equal(r2.y, 20)
+	test.equal(r2.z, 30)
 end)

@@ -103,8 +103,9 @@ local function tok_alloc()
 	return idx
 end
 
--- ── key arena (per-decode) ────────────────────────────────────────────────────
+-- ── key arena (append-only) ───────────────────────────────────────────────────
 -- Stores ordered key strings for decoded objects (replaces per-object Lua table).
+-- Never reset: slices from old decodes remain valid as long as the decoded object lives.
 
 ---@type string[]
 local key_arena     = {}
@@ -743,7 +744,6 @@ json.null = setmetatable({}, { __tostring = function() return "null" end })
 ---@return json.Doc
 function json.decodeDocument(s)
 	tok_top       = 0
-	key_arena_top = 0
 	src_s         = s
 	src_len       = #s
 	src_ptr       = cast(u8p, s)
