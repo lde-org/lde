@@ -110,6 +110,13 @@ if evalCode then
 	return
 end
 
+local luaFile = args:flag("lua") and args:pop()
+if luaFile then
+	local ok, err = lde.runtime.executeFile(luaFile, { args = args:drain(), cwd = env.cwd() })
+	if not ok then ansi.printf("{red}Error: %s", tostring(err)); os.exit(1) end
+	return
+end
+
 if args:count() == 0 and args:flag("help") then
 	require("lde.commands.help")(args)
 	return
