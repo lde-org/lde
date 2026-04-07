@@ -196,12 +196,17 @@ local function openRockspec(dir, rockspecPath)
 
 			local buildTarget = spec.build.build_target or ""
 			local installTarget = spec.build.install_target or "install"
+			local makeEnv = nil
+			if shellBin then
+				local shellDir = path.dirname(shellBin)
+				makeEnv = { PATH = shellDir .. ";" .. (os.getenv("PATH") or "") }
+			end
 
 			local buildArgs = buildVarList(spec.build.variables)
 			if shellBin then buildArgs[#buildArgs + 1] = "SHELL=" .. shellBin end
 			if buildTarget ~= "" then buildArgs[#buildArgs + 1] = buildTarget end
 
-			local code, stdout, stderr = process.exec(makeBin, buildArgs, { cwd = dir })
+			local code, stdout, stderr = process.exec(makeBin, buildArgs, { cwd = dir, env = makeEnv })
 			if code ~= 0 then
 				local msg = (stderr ~= "" and stderr) or (stdout ~= "" and stdout) or ("exited with code " .. code)
 				return nil, "make failed: " .. msg
@@ -211,7 +216,7 @@ local function openRockspec(dir, rockspecPath)
 			if shellBin then installArgs[#installArgs + 1] = "SHELL=" .. shellBin end
 			installArgs[#installArgs + 1] = installTarget
 
-			code, stdout, stderr = process.exec(makeBin, installArgs, { cwd = dir })
+			code, stdout, stderr = process.exec(makeBin, installArgs, { cwd = dir, env = makeEnv })
 			if code ~= 0 then
 				local msg = (stderr ~= "" and stderr) or (stdout ~= "" and stdout) or ("exited with code " .. code)
 				return nil, "make install failed: " .. msg
