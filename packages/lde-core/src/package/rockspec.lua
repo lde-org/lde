@@ -197,6 +197,19 @@ local function openRockspec(dir, rockspecPath)
 			code, _, stderr = process.exec("make", installArgs, { cwd = dir })
 			if code ~= 0 then return nil, "make install failed: " .. (stderr or "") end
 
+			-- Promote any binaries installed to modulesDir/bin/ into outputDir
+			local binDir = path.join(modulesDir, "bin")
+			if fs.isdir(binDir) then
+				local iter = fs.readdir(binDir)
+				if iter then
+					for entry in iter do
+						if entry.type == "file" then
+							fs.copy(path.join(binDir, entry.name), path.join(outputDir, entry.name))
+						end
+					end
+				end
+			end
+
 			fs.write(stampFile, buildStamp)
 			return true
 		elseif buildType == "cmake" then
@@ -399,7 +412,24 @@ local function openRockspec(dir, rockspecPath)
 			end
 		end
 
-		return lde.Package.Config.new({ name = spec.package, version = spec.version, bin = binEntry, dependencies = deps })
+		local resolvedBin = binEntry
+		if not resolvedBin and (buildType == "make" or buildType == "cmake") then
+			-- Binaries from make/cmake installs are promoted into the package target dir
+			local targetDir = path.join(dir, "target", spec.package or "")
+			if fs.isdir(targetDir) then
+				local iter = fs.readdir(targetDir)
+				if iter then
+					for entry in iter do
+						if entry.type == "file" and entry.name ~= ".lde-built" then
+							resolvedBin = entry.name
+							break
+						end
+					end
+				end
+			end
+		end
+
+		return lde.Package.Config.new({ name = spec.package, version = spec.version, bin = resolvedBin, dependencies = deps })
 	end
 
 	return pkg, nil
