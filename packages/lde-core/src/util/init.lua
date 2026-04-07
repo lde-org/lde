@@ -120,7 +120,7 @@ function util.openRockspecUrl(name, url, branch, commit)
 	end ---@cast spec rocked.raw.Output
 
 	local sourceUrl = spec.source.url
-	local sourceTag = spec.source.tag
+	local sourceTag = spec.source.tag or spec.source.branch
 
 	---@type string, lde.Lockfile.Dependency
 	local dir, lockEntry
