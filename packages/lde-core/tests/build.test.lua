@@ -538,3 +538,52 @@ test.it("runTests can require tests.fixture with build script", function()
 	test.equal(results.failures, 0)
 	test.equal(results.error, nil)
 end)
+
+test.skipIf(jit.os == "Windows" or jit.os == "OSX")(
+	"rockspec buildfn: array-style sources table compiles native module", function()
+		local rockDir = path.join(tmpBase, "array-sources-rock")
+		fs.mkdir(rockDir)
+		fs.mkdir(path.join(rockDir, "src"))
+		fs.write(path.join(rockDir, "src", "greet.c"), [[
+#include <stddef.h>
+typedef struct lua_State lua_State;
+typedef int (*lua_CFunction)(lua_State *L);
+extern void lua_pushstring(lua_State *L, const char *s);
+extern void lua_createtable(lua_State *L, int narr, int nrec);
+extern void lua_setfield(lua_State *L, int idx, const char *k);
+extern void lua_pushcclosure(lua_State *L, lua_CFunction fn, int n);
+static int greet(lua_State *L) { lua_pushstring(L, "hello"); return 1; }
+int luaopen_greet(lua_State *L) {
+	lua_createtable(L, 0, 1);
+	lua_pushcclosure(L, greet, 0);
+	lua_setfield(L, -2, "greet");
+	return 1;
+}
+]])
+		fs.write(path.join(rockDir, "greet-1.0.0-1.rockspec"), [[
+			package = "greet"
+			version = "1.0.0-1"
+			source = { url = "git://example.com/greet" }
+			build = {
+				type = "builtin",
+				modules = { greet = { "src/greet.c" } }
+			}
+		]])
+
+		local appDir = path.join(tmpBase, "array-sources-app")
+		fs.mkdir(appDir)
+		fs.mkdir(path.join(appDir, "src"))
+		fs.write(path.join(appDir, "src", "init.lua"),
+			'local m = require("greet"); assert(m.greet() == "hello")')
+		fs.write(path.join(appDir, "lde.json"), json.encode({
+			name = "array-sources-app",
+			version = "0.1.0",
+			dependencies = { greet = { path = "../array-sources-rock" } }
+		}))
+
+		local app = lde.Package.open(appDir)
+		app:installDependencies()
+		local ok, err = app:runFile()
+		if not ok then print(err) end
+		test.truthy(ok)
+	end)

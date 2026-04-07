@@ -82,6 +82,8 @@ local function openRockspec(dir, rockspecPath)
 				end
 			elseif type(src) == "table" and src.sources then
 				nativeModules[modname] = src
+			elseif type(src) == "table" and src[1] then
+				nativeModules[modname] = { sources = src }
 			elseif type(src) == "table" then
 				io.stderr:write("warning: " ..
 					(spec.package or "?") .. ": module '" .. modname .. "' has no sources field, skipping\n")
