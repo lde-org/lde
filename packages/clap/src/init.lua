@@ -99,6 +99,7 @@ end
 function Args:short(desiredKey)
 	local flag = "-" .. desiredKey
 	for i, arg in ipairs(self.raw) do
+		if arg == "--" then break end
 		if arg == flag and self.raw[i + 1] ~= nil then
 			table.remove(self.raw, i)
 			return table.remove(self.raw, i)
