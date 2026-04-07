@@ -535,3 +535,156 @@ int luaopen_greet(lua_State *L) {
 		if not ok then print(err) end
 		test.truthy(ok)
 	end)
+
+--
+-- Regression: src.sources as a string (not a table) must not crash ipairs
+--
+
+test.it("rockspec: sources = 'file.c' (string) is accepted without crashing", function()
+	local dir = path.join(tmpBase, "string-sources-rock")
+	fs.mkdir(dir)
+	fs.write(path.join(dir, "string-sources-1.0-1.rockspec"), [[
+package = "string-sources"
+version = "1.0-1"
+source = { url = "https://example.com" }
+build = {
+  type = "builtin",
+  modules = {
+    foo = { sources = "src/foo.c" },
+  }
+}
+]])
+	-- openRockspec must not error even though sources is a string
+	local pkg, err = lde.Package.openRockspec(dir)
+	test.truthy(pkg, err)
+end)
+
+--
+-- Regression: build.install.lua files must be copied to target
+--
+
+test.it("rockspec: install.lua files are copied to target modulesDir", function()
+	local dir = path.join(tmpBase, "install-lua-rock")
+	fs.mkdir(dir)
+	fs.mkdir(path.join(dir, "lua"))
+	fs.mkdir(path.join(dir, "lua", "mypkg"))
+	fs.write(path.join(dir, "lua", "mypkg", "util.lua"), 'return "util"')
+	fs.write(path.join(dir, "install-lua-1.0-1.rockspec"), [[
+package = "install-lua"
+version = "1.0-1"
+source = { url = "https://example.com" }
+build = {
+  type = "builtin",
+  modules = {},
+  install = {
+    lua = {
+      ["mypkg.util"] = "lua/mypkg/util.lua",
+    }
+  }
+}
+]])
+
+	local pkg, err = lde.Package.openRockspec(dir)
+	test.truthy(pkg, err)
+
+	local outputDir = path.join(dir, "target", "install-lua")
+	local ok, berr = pkg:runBuildScript(outputDir)
+	test.truthy(ok, berr)
+
+	-- mypkg.util -> lua/mypkg/util.lua => target/mypkg/util.lua
+	test.truthy(fs.exists(path.join(dir, "target", "mypkg", "util.lua")))
+end)
+
+--
+-- Regression: array-style install.bin should use basename, not full relative path
+--
+
+test.it("rockspec: array-style install.bin uses basename as bin name and target location", function()
+	local dir = path.join(tmpBase, "array-bin-rock")
+	fs.mkdir(dir)
+	fs.mkdir(path.join(dir, "bin"))
+	fs.write(path.join(dir, "bin", "myscript"), 'print("hi")')
+	fs.write(path.join(dir, "array-bin-1.0-1.rockspec"), [[
+package = "array-bin"
+version = "1.0-1"
+source = { url = "https://example.com" }
+build = {
+  type = "builtin",
+  modules = {},
+  install = {
+    bin = { "bin/myscript" }
+  }
+}
+]])
+
+	local pkg, err = lde.Package.openRockspec(dir)
+	test.truthy(pkg, err)
+
+	local outputDir = path.join(dir, "target", "array-bin")
+	local ok, berr = pkg:runBuildScript(outputDir)
+	test.truthy(ok, berr)
+
+	-- file must land at target/array-bin/myscript, not target/array-bin/bin/myscript
+	test.truthy(fs.exists(path.join(outputDir, "myscript")))
+	test.equal(fs.exists(path.join(outputDir, "bin", "myscript")), false)
+
+	-- readConfig must return bin = "myscript", not "bin/myscript"
+	local cfg = pkg:readConfig()
+	test.equal(cfg.bin, "myscript")
+end)
+
+--
+-- Regression: make build.variables / install_variables substitution + bin promotion
+--
+
+test.skipIf(jit.os == "Windows")(
+	"rockspec: make build.variables are substituted and passed to make", function()
+		local dir = path.join(tmpBase, "make-vars-rock")
+		fs.mkdir(dir)
+		-- Makefile that writes MY_INCDIR to built.txt on build, then copies it on install.
+		-- install must NOT depend on build (a phony dep would re-run build with install's vars,
+		-- overwriting built.txt with an empty MY_INCDIR since it only appears in build.variables).
+		fs.write(path.join(dir, "Makefile"), [[
+build:
+	echo "$(MY_INCDIR)" > built.txt
+
+install:
+	mkdir -p $(MY_LIBDIR)
+	cp built.txt $(MY_LIBDIR)/vars.txt
+	mkdir -p $(PREFIX)/bin
+	echo "#!/bin/sh" > $(PREFIX)/bin/myprog
+	chmod 755 $(PREFIX)/bin/myprog
+]])
+		fs.write(path.join(dir, "make-vars-1.0-1.rockspec"), [[
+package = "make-vars"
+version = "1.0-1"
+source = { url = "https://example.com" }
+build = {
+  type = "make",
+  variables     = { MY_INCDIR = "$(LUA_INCDIR)" },
+  install_variables = { MY_LIBDIR = "$(LUADIR)", PREFIX = "$(PREFIX)" },
+}
+]])
+
+		local pkg, err = lde.Package.openRockspec(dir)
+		test.truthy(pkg, err)
+
+		local outputDir = path.join(dir, "target", "make-vars")
+		local ok, berr = pkg:runBuildScript(outputDir)
+		test.truthy(ok, berr)
+
+		-- vars.txt must exist in modulesDir (= target/)
+		local modulesDir = path.join(dir, "target")
+		test.truthy(fs.exists(path.join(modulesDir, "vars.txt")))
+
+		-- vars.txt must contain the LuaJIT include path (substituted from $(LUA_INCDIR))
+		local content = fs.read(path.join(modulesDir, "vars.txt")) or ""
+		test.truthy(content:find("luajit", 1, true) or content:find("include", 1, true))
+
+		-- myprog binary must be promoted from target/bin/ into target/make-vars/
+		test.truthy(fs.exists(path.join(outputDir, "myprog")))
+
+		-- readConfig must discover the promoted bin
+		local cfg = pkg:readConfig()
+		test.equal(cfg.bin, "myprog")
+	end)

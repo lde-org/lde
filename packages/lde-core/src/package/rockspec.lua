@@ -143,7 +143,7 @@ local function openRockspec(dir, rockspecPath)
 	end
 
 	pkg.buildfn = function(_, outputDir)
-		if not fs.isdir(outputDir) then fs.mkdir(outputDir) end
+		if not fs.isdir(outputDir) then mkdirp(outputDir) end
 
 		local stampFile = path.join(outputDir, ".lde-built")
 		if fs.exists(stampFile) and fs.read(stampFile) == buildStamp then

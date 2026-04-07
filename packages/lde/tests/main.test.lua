@@ -76,3 +76,21 @@ test.it("--tree overrides the global lde directory", function()
 	test.truthy(fs.exists(tmpTree))
 	test.truthy(fs.exists(path.join(tmpTree, "git")))
 end)
+
+test.it("lde <script> <args> passes positional args to the script", function()
+	local script = path.join(env.tmpdir(), "lde-argtest.lua")
+	fs.write(script, 'io.write(arg[1] .. " " .. arg[2])')
+
+	local ok, out = ldecli { script, "hello", "world" }
+	test.truthy(ok)
+	test.includes(out, "hello world")
+end)
+
+test.it("lde <script> receives arg[0] as the script path", function()
+	local script = path.join(env.tmpdir(), "lde-arg0test.lua")
+	fs.write(script, "io.write(arg[0])")
+
+	local ok, out = ldecli { script }
+	test.truthy(ok)
+	test.includes(out, script)
+end)
