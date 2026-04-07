@@ -136,6 +136,27 @@ This means multiple `lde run` calls in the same process don't pollute each other
 
 `lde` can be built with `BOOTSTRAP=1` using stock LuaJIT (no existing `lde` binary required). In this mode, `packages/lde/src/init.lua` manually creates symlinks in `target/` for all dependencies instead of using the normal install flow.
 
+## `lde -e` — Inline Eval
+
+`lde -e <code>` evaluates a Lua string directly. If run inside a project directory, it installs dependencies first and runs the code with full access to the project's `require()` environment. Outside a project, it runs the code in a bare runtime context. Prints the return value if non-nil.
+
+```sh
+lde -e "print(require('json').encode({a=1}))"
+```
+
+## `ldx` — Remote Package Execution
+
+`ldx` is short for `lde x`. It executes packages remotely without adding them as project dependencies, similar to `npx` or `bun x`. It's most useful for running LuaRocks tools like `busted`, `teal`, etc.
+
+```sh
+ldx rocks:tl                    # run the 'tl' (Teal) compiler from LuaRocks
+ldx rocks:busted                # run the busted test runner
+ldx mytool --git https://...    # run a package from a git repo
+ldx mytool --path ../my-tool    # run a package from a local path
+```
+
+`ldx` fetches, installs, and runs the package in a temporary context without modifying the current project.
+
 ## Naming
 
 The project was previously named `lpm`. You may see `lpm.json` or `lpm-test` references in older code — always use the `lde` equivalents (`lde.json`, `lde-test`) when writing new code.
