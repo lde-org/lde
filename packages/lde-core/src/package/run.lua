@@ -62,7 +62,8 @@ local function runFileWithLuaCLI(package, scriptPath, args, vars, engine, cwd)
 	local luaPath, luaCPath = getLuaPathsForPackage(package)
 	local env = { LUA_PATH = luaPath, LUA_CPATH = luaCPath }
 	if vars then for k, v in pairs(vars) do env[k] = v end end
-	local code, _, stderr = process.exec(engine, { scriptPath }, { cwd = cwd, env = env, stdout = "inherit", stderr = "inherit" })
+	local code, _, stderr = process.exec(engine, { scriptPath },
+		{ cwd = cwd, env = env, stdout = "inherit", stderr = "inherit" })
 	return code == 0 or nil, stderr
 end
 
@@ -93,6 +94,12 @@ local function runFile(package, scriptPath, args, vars, cwd)
 	local config = package:readConfig()
 
 	if not scriptPath then
+		if not config.bin and not fs.exists(path.join(package:getTargetDir(), "init.lua")) then
+			return nil,
+				"Package '" ..
+				(config.name or "?") .. "' has no runnable entry point (no bin defined — it may be a library)"
+		end
+
 		scriptPath = config.bin
 			and path.join(package:getTargetDir(), config.bin)
 			or path.join(package:getTargetDir(), "init.lua")
