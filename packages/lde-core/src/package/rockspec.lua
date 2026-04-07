@@ -150,7 +150,8 @@ local function openRockspec(dir, rockspecPath)
 		local modulesDir = path.dirname(outputDir)
 
 		if buildType == "make" then
-			if not process.exec("make", { "--version" }) then
+			local makeBin = lde.global.getMakeBin()
+			if not process.exec(makeBin, { "--version" }) then
 				return nil, "Package '" .. (spec.package or "?") .. "' requires 'make' to build, but it was not found." ..
 					" Install make (e.g. build-essential on Debian/Ubuntu, Xcode Command Line Tools on macOS)."
 			end
@@ -190,7 +191,7 @@ local function openRockspec(dir, rockspecPath)
 			local buildArgs = buildVarList(spec.build.variables)
 			if buildTarget ~= "" then buildArgs[#buildArgs + 1] = buildTarget end
 
-			local code, stdout, stderr = process.exec("make", buildArgs, { cwd = dir })
+			local code, stdout, stderr = process.exec(makeBin, buildArgs, { cwd = dir })
 			if code ~= 0 then
 				local msg = (stderr ~= "" and stderr) or (stdout ~= "" and stdout) or ("exited with code " .. code)
 				return nil, "make failed: " .. msg
@@ -199,7 +200,7 @@ local function openRockspec(dir, rockspecPath)
 			local installArgs = buildVarList(spec.build.install_variables)
 			installArgs[#installArgs + 1] = installTarget
 
-			code, stdout, stderr = process.exec("make", installArgs, { cwd = dir })
+			code, stdout, stderr = process.exec(makeBin, installArgs, { cwd = dir })
 			if code ~= 0 then
 				local msg = (stderr ~= "" and stderr) or (stdout ~= "" and stdout) or ("exited with code " .. code)
 				return nil, "make install failed: " .. msg

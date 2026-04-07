@@ -78,6 +78,17 @@ function global.getGCCBin()
 	return "gcc"
 end
 
+function global.getMakeBin()
+	if jit.os == "Windows" then
+		local mingwMake = path.join(global.getMingwDir(), "bin", "mingw32-make.exe")
+		if fs.exists(mingwMake) then
+			return mingwMake
+		end
+	end
+
+	return "make"
+end
+
 function global.getRegistryDir()
 	return path.join(global.getDir(), "registry")
 end
