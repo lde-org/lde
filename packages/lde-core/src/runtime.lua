@@ -57,7 +57,8 @@ end
 
 ---@param compile fun(): function?, string?
 ---@param opts lde.ExecuteOptions?
-local function executeWith(compile, opts)
+---@param scriptName string?
+local function executeWith(compile, opts, scriptName)
 	opts = opts or {}
 
 	local oldCwd
@@ -120,6 +121,7 @@ local function executeWith(compile, opts)
 		package.cpath = opts.packageCPath or oldCPath
 		if opts.args then
 			arg = opts.args
+			arg[0] = scriptName
 			return chunk(unpack(opts.args))
 		else
 			return chunk()
@@ -141,7 +143,7 @@ end
 ---@param scriptPath string
 ---@param opts lde.ExecuteOptions?
 local function executeFile(scriptPath, opts)
-	return executeWith(function() return loadfile(scriptPath, "t") end, opts)
+	return executeWith(function() return loadfile(scriptPath, "t") end, opts, scriptPath)
 end
 
 ---@param code string
