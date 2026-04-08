@@ -32,10 +32,10 @@ jobs:
           #   artifact: luajit-macos-aarch64
           #   outfile: lde-macos-aarch64
           #   sea_cc: gcc
-          - os: macos-15-intel
-            artifact: luajit-macos-x86-64
-            outfile: lde-macos-x86-64
-            sea_cc: gcc
+          # - os: macos-15-intel
+          #   artifact: luajit-macos-x86-64
+          #   outfile: lde-macos-x86-64
+          #   sea_cc: gcc
           - os: ubuntu-22.04
             artifact: luajit-linux-x86-64
             outfile: lde-linux-aarch64-android
