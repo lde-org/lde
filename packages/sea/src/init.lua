@@ -357,7 +357,8 @@ int main(int argc, char** argv) {
 	end
 	local code, stdout, stderr = process.exec(compiler, args, { stdin = code, env = execEnv })
 	if code ~= 0 or string.find(stderr or "", "is not recognized as an internal", 1, true) then
-		error("Compilation failed: " .. (stderr or ""))
+		local err = (stderr and stderr ~= "") and stderr or stdout or ""
+		error("Compilation failed: " .. err)
 	end
 
 	return outPath
