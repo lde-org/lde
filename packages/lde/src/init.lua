@@ -42,7 +42,7 @@ if os.getenv("BOOTSTRAP") then
 
 	local pathPackages = {
 		"ansi", "clap", "fs", "http", "env", "path", "json", "git", "luarocks",
-		"process2", "sea", "semver", "util", "lde-core", "lde-test", "rocked"
+		"process2", "sea", "semver", "util", "lde-core", "lde-test", "rocked", "archive"
 	}
 
 	for _, pkg in ipairs(pathPackages) do
@@ -113,7 +113,9 @@ end
 local luaFile = args:flag("lua") and args:pop()
 if luaFile then
 	local ok, err = lde.runtime.executeFile(luaFile, { args = args:drain(), cwd = env.cwd() })
-	if not ok then ansi.printf("{red}Error: %s", tostring(err)); os.exit(1) end
+	if not ok then
+		ansi.printf("{red}Error: %s", tostring(err)); os.exit(1)
+	end
 	return
 end
 
