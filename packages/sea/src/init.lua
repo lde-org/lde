@@ -41,9 +41,9 @@ local function getTargetFromCompiler(compiler)
 		out = out:match("^%s*(.-)%s*$")
 
 		local arch
-		if out:find("^x86_64", 1, true) or out:find("^x86-64", 1, true) then
+		if out:find("^x86_64") or out:find("^x86%-64") then
 			arch = "x86-64"
-		elseif out:find("^aarch64", 1, true) then
+		elseif out:find("^aarch64") then
 			arch = "aarch64"
 		end
 
@@ -108,7 +108,6 @@ local function getLuajitPath(compiler)
 
 	local ok, err = Archive.new(tarballPath):extract(cacheDir)
 	if not ok then
-		print("?", tarballPath)
 		error("Failed to extract LuaJIT: " .. (err or ""))
 	end
 
