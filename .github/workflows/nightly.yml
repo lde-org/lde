@@ -35,6 +35,10 @@ jobs:
           - os: macos-15
             outfile: lde-macos-aarch64
             sea_cc: gcc
+          - os: ubuntu-22.04
+            outfile: lde-android-aarch64
+            sea_cc: $ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang
+            android: true
 
     runs-on: ${{ matrix.os }}
 
@@ -75,7 +79,16 @@ jobs:
           lde compile --outfile ${{ matrix.outfile }}
 
       - name: Run tests
+        if: "!matrix.android"
         run: ./packages/lde/${{ matrix.outfile }} test
+
+      - name: Run tests (Android)
+        if: matrix.android
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}:/workspace \
+            termux/termux-docker:aarch64 \
+            /workspace/packages/lde/${{ matrix.outfile }} test
 
       - name: Upload nightly release asset
         uses: softprops/action-gh-release@v2
