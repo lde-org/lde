@@ -6,6 +6,7 @@ local process = require("process2")
 local semver = require("semver")
 local lde = require("lde-core")
 local ansi = require("ansi")
+local env = require("env")
 local Archive = require("archive")
 
 local global = {}
@@ -68,6 +69,11 @@ function global.getMingwDir()
 end
 
 function global.getGCCBin()
+	local override = env.var("SEA_CC")
+	if override then
+		return override
+	end
+
 	if jit.os == "Windows" then
 		local mingwGcc = path.join(global.getMingwDir(), "bin", "gcc.exe")
 		if fs.exists(mingwGcc) then
