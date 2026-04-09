@@ -79,10 +79,14 @@ jobs:
         if: "!matrix.android"
         run: ./packages/lde/${{ matrix.outfile }} test
 
+      - name: Setup QEMU (Android)
+        if: matrix.android
+        run: docker run --rm --privileged aptman/qus -s -- -p aarch64
+
       - name: Run tests (Android)
         if: matrix.android
         run: |
-          docker run --rm \
+          docker run --rm --privileged \
             -v ${{ github.workspace }}:/workspace \
             termux/termux-docker:aarch64 \
             /workspace/packages/lde/${{ matrix.outfile }} test
