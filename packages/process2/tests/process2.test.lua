@@ -30,9 +30,8 @@ test.it("exec captures stderr (merged into stdout on posix)", function()
 	local cmd = isWindows and "echo err 1>&2" or "printf err >&2"
 	local code, stdout, stderr = process.exec(sh, { shc, cmd })
 	test.equal(code, 0)
-	-- on posix both pipes merge; on windows they are separate
-	local combined = (stdout or "") .. (stderr or "")
-	test.truthy(combined:find("err"))
+	-- stderr is captured separately on all platforms
+	test.truthy(stderr and stderr:find("err"))
 end)
 
 test.it("exec passes stdin", function()
@@ -144,8 +143,7 @@ test.it("exec with stderr=null discards stderr", function()
 end)
 
 test.it("exec with stdout=inherit does not capture stdout", function()
-	local cmd = isWindows and "echo hello" or "printf hello"
-	local code, stdout = process.exec(sh, { shc, cmd }, { stdout = "inherit", stderr = "null" })
+	local code, stdout = process.exec(sh, { shc, "exit 0" }, { stdout = "inherit", stderr = "null" })
 	test.equal(code, 0)
 	test.falsy(stdout)
 end)

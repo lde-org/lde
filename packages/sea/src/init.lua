@@ -25,25 +25,63 @@ local function getPlatformArch()
 	return platform, arch
 end
 
----@return "musl" | "gnu" | nil
-local function getPlatformLibc()
-	if jit.os == "OSX" then return nil end
-	if jit.os == "Windows" then return "gnu" end
+--- Parse arch and libc from a compiler's -dumpmachine output.
+--- Returns nil for both if the platform doesn't use a libc triplet component (OSX, Windows).
+--- On Linux, derives arch from the triplet so cross-compilers (e.g. Android NDK) work correctly.
+---@param compiler string
+---@return string|nil arch  -- e.g. "x86-64" or "aarch64"
+---@return "musl" | "gnu" | "android" | nil libc
+local function getTargetFromCompiler(compiler)
+	if jit.os == "OSX" then return nil, nil end
+	if jit.os == "Windows" then return nil, "gnu" end
 
-	-- note: for some reason 'ok' is nil here.
-	local _code, out = process.exec("ldd", { "--version" })
+	-- Use the compiler's -dumpmachine to get the target triplet.
+	local code, out = process.exec(compiler, { "-dumpmachine" })
+	if code == 0 and out and out ~= "" then
+		out = out:match("^%s*(.-)%s*$")
 
-	if string.find(out, "musl", 1, true) then
-		return "musl"
+		local arch
+		if out:find("^x86_64") or out:find("^x86%-64") then
+			arch = "x86-64"
+		elseif out:find("^aarch64") then
+			arch = "aarch64"
+		end
+
+		local libc
+		if out:find("android", 1, true) then
+			libc = "android"
+		elseif out:find("musl", 1, true) then
+			libc = "musl"
+		elseif out:find("gnu", 1, true) then
+			libc = "gnu"
+		end
+
+		if arch or libc then
+			return arch, libc
+		end
 	end
 
-	return "gnu"
+	local lddPatterns = { ["musl"] = "musl", ["gnu"] = "GNU libc" }
+
+	local _, lddout = process.exec("ldd", { "--version" })
+	for libc, pattern in pairs(lddPatterns) do
+		if string.find(lddout or "", pattern, 1, true) then return nil, libc end
+	end
+
+	io.stderr:write("[sea] warning: could not detect target from compiler '" .. compiler .. "', defaulting to gnu\n")
+
+	return nil, "gnu"
 end
 
-local function getLuajitPath()
+---@param compiler? string
+---@return string
+local function getLuajitPath(compiler)
+	compiler = compiler or env.var("SEA_CC") or "gcc"
+
 	local cacheDir = path.join(env.tmpdir(), "luajit-cache")
-	local platform, arch = getPlatformArch()
-	local libc = getPlatformLibc()
+	local platform, hostArch = getPlatformArch()
+	local compilerArch, libc = getTargetFromCompiler(compiler)
+	local arch = compilerArch or hostArch
 
 	local target = table.concat({ "libluajit", platform, arch, libc }, "-")
 	local targetDir = path.join(cacheDir, target)
@@ -136,7 +174,7 @@ function sea.compile(main, source, sharedLibs, compiler)
 		local libFileName                   = string.format("lde-lib-%s-%s.%s", lib.name, hash, ext)
 		ffiShimEntries[#ffiShimEntries + 1] = string.format('["%s"]="%s"', lib.name, libFileName)
 		-- alias as libcurl, libcurl.so, and curl
-		local leaf                          = lib.name:match("[^.]+$")        -- e.g. "libcurl"
+		local leaf                          = lib.name:match("[^.]+$")  -- e.g. "libcurl"
 		local bare                          = leaf:match("^lib(.+)$") or leaf -- e.g. "curl"
 		ffiShimEntries[#ffiShimEntries + 1] = string.format('["%s"]="%s"', leaf, libFileName)
 		ffiShimEntries[#ffiShimEntries + 1] = string.format('["%s.%s"]="%s"', leaf, ext, libFileName)
@@ -169,7 +207,7 @@ function sea.compile(main, source, sharedLibs, compiler)
 		}
 	}]], id, id, id, id, id, lib.name, id, id)
 
-		local luaopenSym = "luaopen_" .. lib.name:gsub("%.", "_")
+		local luaopenSym                    = "luaopen_" .. lib.name:gsub("%.", "_")
 		libPreloads[#libPreloads + 1]       = string.format([[
 	lua_pushstring(L, %sLibraryPath);
 	lua_pushstring(L, "%s");
@@ -332,16 +370,15 @@ int main(int argc, char** argv) {
 	elseif jit.os == "OSX" then
 		args[#args + 1] = "-Wl,-export_dynamic" -- expose lua symbols for lua dependencies
 	end
-
-	local compiler = compiler or env.var("SEA_CC") or "gcc"
 	local execEnv
 	if jit.os == "Windows" and compiler ~= "gcc" then
 		-- compiler is a full path into mingw/bin; ensure subtools (as.exe etc) are found
 		execEnv = { PATH = path.dirname(compiler) .. ";" .. (env.var("PATH") or "") }
 	end
-	local code, stdout, stderr = process.exec(compiler, args, { stdin = code, env = execEnv })
+	local code, _, stderr = process.exec(compiler, args, { stdin = code, env = execEnv })
 	if code ~= 0 or string.find(stderr or "", "is not recognized as an internal", 1, true) then
-		error("Compilation failed: " .. (stderr or ""))
+		local err = (stderr and stderr ~= "") and stderr or ""
+		error("Compilation failed: " .. err)
 	end
 
 	return outPath

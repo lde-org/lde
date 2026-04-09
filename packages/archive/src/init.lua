@@ -68,6 +68,7 @@ function Archive:extract(toPath, opts)
 	if code ~= 0 then
 		return false, stderr
 	end
+
 	return true
 end
 
@@ -116,6 +117,7 @@ function Archive:save(toPath)
 	if code ~= 0 then
 		return false, stderr
 	end
+
 	return true
 end
 

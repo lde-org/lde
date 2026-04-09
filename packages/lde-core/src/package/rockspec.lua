@@ -190,18 +190,18 @@ local function openRockspec(dir, rockspecPath)
 			local buildArgs = buildVarList(spec.build.variables)
 			if buildTarget ~= "" then buildArgs[#buildArgs + 1] = buildTarget end
 
-			local code, stdout, stderr = process.exec("make", buildArgs, { cwd = dir })
+			local code, _, stderr = process.exec("make", buildArgs, { cwd = dir })
 			if code ~= 0 then
-				local msg = (stderr ~= "" and stderr) or (stdout ~= "" and stdout) or ("exited with code " .. code)
+				local msg = (stderr ~= "" and stderr) or ("exited with code " .. code)
 				return nil, "make failed: " .. msg
 			end
 
 			local installArgs = buildVarList(spec.build.install_variables)
 			installArgs[#installArgs + 1] = installTarget
 
-			code, stdout, stderr = process.exec("make", installArgs, { cwd = dir })
+			code, _, stderr = process.exec("make", installArgs, { cwd = dir })
 			if code ~= 0 then
-				local msg = (stderr ~= "" and stderr) or (stdout ~= "" and stdout) or ("exited with code " .. code)
+				local msg = (stderr ~= "" and stderr) or ("exited with code " .. code)
 				return nil, "make install failed: " .. msg
 			end
 
@@ -311,9 +311,9 @@ local function openRockspec(dir, rockspecPath)
 					gccEnv = { PATH = mingwBin .. ";" .. (env.var("PATH") or "") }
 				end
 
-				local code, stdout, stderr = process.exec(lde.global.getGCCBin(), gccArgs, { env = gccEnv })
+				local code, _, stderr = process.exec(lde.global.getGCCBin(), gccArgs, { env = gccEnv })
 				if code ~= 0 then
-					local msg = (stderr ~= "" and stderr) or (stdout ~= "" and stdout) or ("exited with code " .. code)
+					local msg = (stderr ~= "" and stderr) or ("exited with code " .. code)
 					return nil, "Failed to compile native module '" .. modname .. "': " .. msg
 				end
 			end
@@ -397,9 +397,9 @@ local function openRockspec(dir, rockspecPath)
 				if bin == ldeBin then
 					table.insert(argv, 1, "--lua")
 				end
-				local code, stdout, stderr = process.exec(bin, argv, { cwd = dir })
+				local code, _, stderr = process.exec(bin, argv, { cwd = dir })
 				if code ~= 0 then
-					local msg = (stderr ~= "" and stderr) or (stdout ~= "" and stdout) or ("exited with code " .. code)
+					local msg = (stderr ~= "" and stderr) or ("exited with code " .. code)
 					return nil, msg
 				end
 				return true

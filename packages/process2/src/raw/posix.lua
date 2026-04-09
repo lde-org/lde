@@ -1,4 +1,5 @@
 local ffi = require("ffi")
+local sb  = require("string.buffer")
 
 ffi.cdef([[
 	typedef int pid_t;
@@ -15,12 +16,16 @@ ffi.cdef([[
 	int   setenv(const char* name, const char* value, int overwrite);
 	int   chdir(const char* path);
 	void  _exit(int status);
+	struct pollfd { int fd; short events; short revents; };
+	int   poll(struct pollfd* fds, unsigned long nfds, int timeout);
 ]])
 
 local WNOHANG = 1
 local SIGTERM = 15
 local SIGKILL = 9
 local O_WRONLY = 1
+local POLLIN   = 1
+local POLLHUP  = 16
 
 ---@diagnostic disable: assign-type-mismatch # Ignore incessant ffi type cast annoyance
 
@@ -37,11 +42,8 @@ local IntBox = ffi.typeof("int[1]")
 ---@type fun(): process2.ffi.PipeFds
 local PipeFds = ffi.typeof("int[2]")
 
----@class process2.ffi.CharBuf: ffi.cdata*
----@field [0] number
-
----@type fun(size: number): process2.ffi.CharBuf
-local CharBuf = ffi.typeof("char[?]")
+---@type fun(size: number): ffi.cdata*
+local PollFds = ffi.typeof("struct pollfd[?]")
 
 ---@class process2.ffi.Argv: ffi.cdata*
 ---@field [0] string?
@@ -73,8 +75,6 @@ local function makeArgv(name, args)
 end
 
 --- Spawn a child process.
---- When both stdout and stderr are "pipe", stderr is merged into the stdout pipe
---- to avoid deadlocks from sequential blocking reads.
 ---@param name string
 ---@param args string[]
 ---@param opts { cwd: string?, env: table<string,string>?, stdin: string?, stdout: "pipe"|"inherit"|"null"?, stderr: "pipe"|"inherit"|"null"? }?
@@ -85,18 +85,13 @@ function M.spawn(name, args, opts)
 	local stderrMode  = opts.stderr or "pipe"
 	local hasStdin    = opts.stdin ~= nil
 
-	local mergeStderr = stdoutMode == "pipe" and stderrMode == "pipe"
-
 	local pIn         = PipeFds()
 	local pOut        = PipeFds()
 	local pErr        = PipeFds()
 
 	if hasStdin and ffi.C.pipe(pIn) ~= 0 then return nil, "pipe() failed" end
 	if stdoutMode == "pipe" and ffi.C.pipe(pOut) ~= 0 then return nil, "pipe() failed" end
-	if stderrMode == "pipe" and not mergeStderr
-		and ffi.C.pipe(pErr) ~= 0 then
-		return nil, "pipe() failed"
-	end
+	if stderrMode == "pipe" and ffi.C.pipe(pErr) ~= 0 then return nil, "pipe() failed" end
 
 	local pid = ffi.C.fork()
 	if pid < 0 then return nil, "fork() failed" end
@@ -110,9 +105,7 @@ function M.spawn(name, args, opts)
 		elseif stdoutMode == "null" then
 			local fd = ffi.C.open("/dev/null", O_WRONLY); ffi.C.dup2(fd, 1); ffi.C.close(fd)
 		end
-		if mergeStderr then
-			ffi.C.dup2(1, 2)
-		elseif stderrMode == "pipe" then
+		if stderrMode == "pipe" then
 			ffi.C.dup2(pErr[1], 2); ffi.C.close(pErr[0]); ffi.C.close(pErr[1])
 		elseif stderrMode == "null" then
 			local fd = ffi.C.open("/dev/null", O_WRONLY); ffi.C.dup2(fd, 2); ffi.C.close(fd)
@@ -125,7 +118,7 @@ function M.spawn(name, args, opts)
 
 	if hasStdin then ffi.C.close(pIn[0]) end
 	if stdoutMode == "pipe" then ffi.C.close(pOut[1]) end
-	if stderrMode == "pipe" and not mergeStderr then ffi.C.close(pErr[1]) end
+	if stderrMode == "pipe" then ffi.C.close(pErr[1]) end
 
 	if hasStdin then
 		ffi.C.write(pIn[1], opts.stdin, #opts.stdin)
@@ -135,21 +128,65 @@ function M.spawn(name, args, opts)
 	return {
 		pid      = tonumber(pid),
 		stdoutFd = stdoutMode == "pipe" and tonumber(pOut[0]) or nil,
-		stderrFd = stderrMode == "pipe" and not mergeStderr and tonumber(pErr[0]) or nil
+		stderrFd = stderrMode == "pipe" and tonumber(pErr[0]) or nil
 	}
 end
 
 ---@param fd number
 ---@return string
 function M.readFd(fd)
-	local buf, chunks = CharBuf(4096), {}
+	local out = sb.new()
 	while true do
-		local n = ffi.C.read(fd, buf, 4096)
-		if n <= 0 then break end
-		chunks[#chunks + 1] = ffi.string(buf, n)
+		local ptr, len = out:reserve(4096)
+		local n = ffi.C.read(fd, ptr, len)
+		if n > 0 then out:commit(n)
+		else out:commit(0); break
+		end
 	end
 	ffi.C.close(fd)
-	return table.concat(chunks)
+	return out:tostring()
+end
+
+--- Drain two fds concurrently using poll() to avoid deadlock.
+---@param outFd number
+---@param errFd number
+---@return string, string
+function M.readFds(outFd, errFd)
+	local outBuf, errBuf = sb.new(), sb.new()
+	local fds = PollFds(2)
+	local outDone, errDone = false, false
+	while not outDone or not errDone do
+		fds[0].fd = outDone and -1 or outFd
+		fds[0].events = POLLIN
+		fds[1].fd = errDone and -1 or errFd
+		fds[1].events = POLLIN
+		ffi.C.poll(fds, 2, -1)
+		if not outDone then
+			if bit.band(fds[0].revents, POLLIN) ~= 0 then
+				local ptr, len = outBuf:reserve(4096)
+				local n = ffi.C.read(outFd, ptr, len)
+				if n > 0 then outBuf:commit(n)
+				else outBuf:commit(0); outDone = true
+				end
+			elseif fds[0].revents ~= 0 then
+				outDone = true
+			end
+		end
+		if not errDone then
+			if bit.band(fds[1].revents, POLLIN) ~= 0 then
+				local ptr, len = errBuf:reserve(4096)
+				local n = ffi.C.read(errFd, ptr, len)
+				if n > 0 then errBuf:commit(n)
+				else errBuf:commit(0); errDone = true
+				end
+			elseif fds[1].revents ~= 0 then
+				errDone = true
+			end
+		end
+	end
+	ffi.C.close(outFd)
+	ffi.C.close(errFd)
+	return outBuf:tostring(), errBuf:tostring()
 end
 
 ---@param pid number

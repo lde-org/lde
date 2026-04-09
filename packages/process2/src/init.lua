@@ -3,7 +3,7 @@ local isWindows = jit.os == "Windows"
 ---@class process2.raw
 local raw = isWindows
 	and require("process2.raw.windows")
-	or  require("process2.raw.posix")
+	or require("process2.raw.posix")
 
 ---@alias process2.Stdio "pipe" | "inherit" | "null"
 
@@ -39,7 +39,10 @@ local function readOut(r)
 		local stderr = r.stderrHandle and raw.readHandle(r.stderrHandle) or nil
 		return stdout, stderr
 	else
-		-- posix merges stderr into stdout when both are piped (deadlock prevention)
+		if r.stdoutFd and r.stderrFd then
+			return raw.readFds(r.stdoutFd, r.stderrFd)
+		end
+
 		local stdout = r.stdoutFd and raw.readFd(r.stdoutFd) or nil
 		local stderr = r.stderrFd and raw.readFd(r.stderrFd) or nil
 		return stdout, stderr
@@ -70,7 +73,7 @@ function process2.spawn(name, args, opts)
 		env    = opts.env,
 		stdin  = opts.stdin,
 		stdout = opts.stdout or "null",
-		stderr = opts.stderr or "null",
+		stderr = opts.stderr or "null"
 	})
 	if not result then return nil, err end
 
@@ -105,7 +108,7 @@ function process2.exec(name, args, opts)
 		env    = opts.env,
 		stdin  = opts.stdin,
 		stdout = opts.stdout or "pipe",
-		stderr = opts.stderr or "pipe",
+		stderr = opts.stderr or "pipe"
 	})
 	if not result then return nil, nil, err end
 

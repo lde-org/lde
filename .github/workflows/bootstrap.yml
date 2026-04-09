@@ -32,10 +32,14 @@ jobs:
           #   artifact: luajit-macos-aarch64
           #   outfile: lde-macos-aarch64
           #   sea_cc: gcc
-          - os: macos-15-intel
-            artifact: luajit-macos-x86-64
-            outfile: lde-macos-x86-64
-            sea_cc: gcc
+          # - os: macos-15-intel
+          #   artifact: luajit-macos-x86-64
+          #   outfile: lde-macos-x86-64
+          #   sea_cc: gcc
+          - os: ubuntu-22.04
+            artifact: luajit-linux-x86-64-gnu
+            outfile: lde-linux-aarch64-android
+            android: true
 
     runs-on: ${{ matrix.os }}
 
@@ -73,11 +77,16 @@ jobs:
           $env:SEA_CC="${{ matrix.sea_cc }}"
           & "$env:GITHUB_WORKSPACE/${{ matrix.artifact }}/luajit.exe" ./src/init.lua compile --outfile ${{ matrix.outfile }}.exe
 
+      - name: Set up Android NDK compiler
+        if: matrix.android
+        run: |
+          echo "SEA_CC=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang" >> $GITHUB_ENV
+
       - name: Build lde (Unix)
         if: runner.os != 'Windows'
         run: |
           cd packages/lde
-          BOOTSTRAP=1 SEA_CC=${{ matrix.sea_cc }} $GITHUB_WORKSPACE/${{ matrix.artifact }}/luajit ./src/init.lua compile --outfile ${{ matrix.outfile }}
+          BOOTSTRAP=1 SEA_CC="${SEA_CC:-${{ matrix.sea_cc }}}" $GITHUB_WORKSPACE/${{ matrix.artifact }}/luajit ./src/init.lua compile --outfile ${{ matrix.outfile }}
 
       - name: Upload nightly release asset (Windows)
         if: runner.os == 'Windows'
