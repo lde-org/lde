@@ -375,9 +375,9 @@ int main(int argc, char** argv) {
 		-- compiler is a full path into mingw/bin; ensure subtools (as.exe etc) are found
 		execEnv = { PATH = path.dirname(compiler) .. ";" .. (env.var("PATH") or "") }
 	end
-	local code, _, stderr = process.exec(compiler, args, { stdin = code, env = execEnv })
+	local code, stdout, stderr = process.exec(compiler, args, { stdin = code, env = execEnv })
 	if code ~= 0 or string.find(stderr or "", "is not recognized as an internal", 1, true) then
-		local err = (stderr and stderr ~= "") and stderr or ""
+		local err = (stderr and stderr ~= "" and stderr) or (stdout and stdout ~= "" and stdout) or ""
 		error("Compilation failed: " .. err)
 	end
 
