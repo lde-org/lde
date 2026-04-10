@@ -11,27 +11,20 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # - os: ubuntu-22.04
+          #   outfile: lde-dev
+          # - os: ubuntu-22.04-arm
+          #   outfile: lde-dev
+          # - os: windows-latest
+          #   outfile: lde-dev.exe
+          # - os: windows-11-arm
+          #   outfile: lde-dev.exe
+          # - os: macos-15-intel
+          #   outfile: lde-dev
+          # - os: macos-15
+          #   outfile: lde-dev
           - os: ubuntu-22.04
             outfile: lde-dev
-            sea_cc: gcc
-          - os: ubuntu-22.04-arm
-            outfile: lde-dev
-            sea_cc: gcc
-          - os: windows-latest
-            outfile: lde-dev.exe
-            sea_cc: gcc
-          - os: windows-11-arm
-            outfile: lde-dev.exe
-            sea_cc: aarch64-w64-mingw32-clang
-          - os: macos-15-intel
-            outfile: lde-dev
-            sea_cc: gcc
-          - os: macos-15
-            outfile: lde-dev
-            sea_cc: gcc
-          - os: ubuntu-22.04
-            outfile: lde-dev
-            sea_cc: $ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang
             android: true
 
     runs-on: ${{ matrix.os }}
@@ -60,6 +53,28 @@ jobs:
         shell: pwsh
         run: echo "$env:GITHUB_WORKSPACE\llvm-mingw-20260311-ucrt-aarch64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
+      - name: Cache Android NDK
+        if: matrix.android && !env.ANDROID_NDK_ROOT
+        id: cache-android-ndk
+        uses: actions/cache@v5
+        with:
+          path: android-ndk-r27c
+          key: android-ndk-r27c
+
+      - name: Install Android NDK
+        if: matrix.android && !env.ANDROID_NDK_ROOT && steps.cache-android-ndk.outputs.cache-hit != 'true'
+        run: |
+          wget -q https://dl.google.com/android/repository/android-ndk-r27c-linux.zip
+          unzip -q android-ndk-r27c-linux.zip
+
+      - name: Set ANDROID_NDK_ROOT
+        if: matrix.android && !env.ANDROID_NDK_ROOT
+        run: echo "ANDROID_NDK_ROOT=$PWD/android-ndk-r27c" >> $GITHUB_ENV
+
+      - name: Set SEA_CC (Android)
+        if: matrix.android
+        run: echo "SEA_CC=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang" >> $GITHUB_ENV
+
       - name: Setup lde
         uses: lde-org/setup-lde@master
         with:
@@ -69,8 +84,6 @@ jobs:
         # lde's own tests invoke the lde binary directly (e.g. to test CLI flags),
         # so we must compile a fresh binary from source before running tests.
         # Using the pre-installed nightly binary would miss any CLI changes in this PR.
-        env:
-          SEA_CC: ${{ matrix.sea_cc }}
         run: |
           cd packages/lde
           lde compile --outfile ${{ matrix.outfile }}
@@ -79,14 +92,46 @@ jobs:
         if: "!matrix.android"
         run: ./packages/lde/${{ matrix.outfile }} test
 
+      - name: Clean targets (Android)
+        if: matrix.android
+        run: find packages -maxdepth 2 -name target -type d | xargs rm -rf
+
       - name: Setup QEMU (Android)
         if: matrix.android
-        run: docker run --rm --privileged aptman/qus -s -- -p aarch64
+        uses: docker/setup-qemu-action@v4
+        with:
+          platforms: arm64
+
+      - name: Cache Android test image
+        if: matrix.android
+        id: cache-android-image
+        uses: actions/cache@v5
+        with:
+          path: /tmp/termux-android.tar
+          key: termux-android-${{ hashFiles('docker/Dockerfile.android') }}
+
+      - name: Build Android test image
+        if: matrix.android && steps.cache-android-image.outputs.cache-hit != 'true'
+        run: |
+          docker rm -f termux-build 2>/dev/null || true
+          docker run --privileged --platform linux/arm64 --name termux-build \
+            -e DEBIAN_FRONTEND=noninteractive \
+            termux/termux-docker:aarch64 \
+            bash -c "apt update && apt upgrade -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold && apt install -y git clang curl zip make"
+          docker commit termux-build termux-android:latest
+          docker rm termux-build
+          docker save termux-android:latest -o /tmp/termux-android.tar
+
+      - name: Load Android test image
+        if: matrix.android && steps.cache-android-image.outputs.cache-hit == 'true'
+        run: docker load -i /tmp/termux-android.tar
 
       - name: Run tests (Android)
         if: matrix.android
         run: |
           docker run --rm --privileged \
+            --platform linux/arm64 \
             -v ${{ github.workspace }}:/workspace \
-            termux/termux-docker:aarch64 \
-            /workspace/packages/lde/${{ matrix.outfile }} test
+            -w /workspace \
+            termux-android:latest \
+            bash -c "/workspace/packages/lde/${{ matrix.outfile }} test"
