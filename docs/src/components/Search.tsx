@@ -111,8 +111,7 @@ export default function Search() {
 		<>
 			<button
 				onClick={() => setOpen(true)}
-				aria-label="Search docs"
-				class="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-black/20 dark:border-white/20 bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 transition text-sm text-black/50 dark:text-white/50"
+				class="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-black/20 dark:border-white/20 bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 transition text-sm text-black/70 dark:text-white/60"
 			>
 				<svg xmlns="http://www.w3.org/2000/svg" class="size-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
 					<circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />

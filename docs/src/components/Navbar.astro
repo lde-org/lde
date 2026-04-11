@@ -50,7 +50,7 @@ function isActive(href: string) {
 		<div class="flex items-center gap-0 md:gap-2">
 			<a
 				href="/download"
-				class="hidden md:inline-flex px-3 py-1.5 bg-blue-500/10 border border-blue-500/30 text-blue-500 text-sm font-medium rounded-lg backdrop-blur-md"
+				class="hidden md:inline-flex px-3 py-1.5 bg-blue-500/15 border border-blue-500/40 text-blue-600 dark:text-blue-400 text-sm font-medium rounded-lg backdrop-blur-md"
 			>
 				Download
 			</a>
@@ -58,6 +58,7 @@ function isActive(href: string) {
 				href="/discord"
 				target="_blank"
 				rel="noopener noreferrer"
+				aria-label="Discord"
 				class="hidden md:inline-flex opacity-60 hover:opacity-100 p-2 md:p-4 transition-opacity"
 			>
 				<Icon name="simple-icons:discord" class="size-5 md:size-6" />
@@ -66,6 +67,7 @@ function isActive(href: string) {
 				href={GITHUB_URL}
 				target="_blank"
 				rel="noopener noreferrer"
+				aria-label="GitHub"
 				class="hidden md:inline-flex opacity-60 hover:opacity-100 p-2 md:p-4 transition-opacity"
 			>
 				<Icon name="simple-icons:github" class="size-5 md:size-6" />
@@ -218,7 +220,7 @@ function isActive(href: string) {
 		>
 			<a
 				href="/download"
-				class="px-3 py-1.5 bg-blue-500/10 border border-blue-500/30 text-blue-500 text-sm font-medium rounded-lg"
+				class="px-3 py-1.5 bg-blue-500/15 border border-blue-500/40 text-blue-600 dark:text-blue-400 text-sm font-medium rounded-lg"
 			>
 				Download
 			</a>
@@ -226,6 +228,7 @@ function isActive(href: string) {
 				href="/discord"
 				target="_blank"
 				rel="noopener noreferrer"
+				aria-label="Discord"
 				class="opacity-60 hover:opacity-100 p-1 transition-opacity"
 			>
 				<Icon name="simple-icons:discord" class="size-5" />
@@ -234,6 +237,7 @@ function isActive(href: string) {
 				href={GITHUB_URL}
 				target="_blank"
 				rel="noopener noreferrer"
+				aria-label="GitHub"
 				class="opacity-60 hover:opacity-100 p-1 transition-opacity"
 			>
 				<Icon name="simple-icons:github" class="size-5" />

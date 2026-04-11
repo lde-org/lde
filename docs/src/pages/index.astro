@@ -59,6 +59,7 @@ const features = [
 ---
 
 <Layout>
+<main>
 	<!-- ─── HERO ─────────────────────────────────────────────────────────── -->
 	<section class="relative flex flex-col items-center justify-center overflow-hidden min-h-[calc(100vh-56px)] px-6 py-24">
 
@@ -217,18 +218,18 @@ const features = [
 				<table class="w-full text-sm">
 					<thead>
 						<tr class="border-b border-black/10 dark:border-white/10 bg-black/[0.03] dark:bg-white/[0.03]">
-							<th class="text-left px-6 py-4 font-medium text-black/40 dark:text-white/30 w-[40%]"></th>
-							<th class="text-left px-6 py-4 font-semibold text-blue-400">
+							<th scope="col" class="text-left px-6 py-4 font-medium text-black/40 dark:text-white/30 w-[40%]"></th>
+							<th scope="col" class="text-left px-6 py-4 font-semibold text-blue-400">
 								<img src="/lde-nospace.svg" class="h-5 inline mr-1.5 opacity-90" alt="" />lde
 							</th>
-							<th class="text-left px-6 py-4 font-medium text-black/70 dark:text-white/60">lux</th>
-							<th class="text-left px-6 py-4 font-medium text-black/70 dark:text-white/60">luarocks</th>
+							<th scope="col" class="text-left px-6 py-4 font-medium text-black/70 dark:text-white/60">lux</th>
+							<th scope="col" class="text-left px-6 py-4 font-medium text-black/70 dark:text-white/60">luarocks</th>
 						</tr>
 					</thead>
 					<tbody class="divide-y divide-black/[0.06] dark:divide-white/[0.06]">
 						{comparison.map(([feature, ...cols]) => (
 							<tr class="hover:bg-black/[0.015] dark:hover:bg-white/[0.015] transition-colors">
-								<td class="px-6 py-3.5 text-black/55 dark:text-white/45 text-sm">{feature}</td>
+								<th scope="row" class="px-6 py-3.5 text-black/55 dark:text-white/45 text-sm font-normal text-left">{feature}</th>
 								{cols.map((val, i) => {
 									const blue = i === 0;
 									const base = `px-6 py-3.5 ${blue ? "text-blue-400 font-medium" : "text-black/65 dark:text-white/55"}`;
@@ -344,6 +345,8 @@ const features = [
 			</div>
 		</div>
 	</section>
+
+</main>
 
 	<style>
 		.feature-card {

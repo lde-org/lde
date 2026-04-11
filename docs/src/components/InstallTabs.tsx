@@ -16,21 +16,21 @@ const tabs = [
 		label: "Linux & macOS",
 		labelShort: "Linux",
 		command: "curl -fsSL https://lde.sh/install | sh",
-		highlighted: <>curl -fsSL <span class="text-emerald-600 dark:text-emerald-300">https://lde.sh/install</span> <span class="text-black/30 dark:text-white/50">|</span> sh</>,
+		highlighted: <>curl -fsSL <span class="text-emerald-700 dark:text-emerald-300">https://lde.sh/install</span> <span class="text-black/50 dark:text-white/50">|</span> sh</>,
 	},
 	{
 		id: "windows",
 		label: "Windows",
 		labelShort: "Windows",
 		command: `powershell -c "irm https://lde.sh/install.ps1 | iex"`,
-		highlighted: <>powershell <span class="text-sky-600 dark:text-sky-300">-c</span> <span class="text-emerald-600 dark:text-emerald-300">"irm https://lde.sh/install.ps1 | iex"</span></>,
+		highlighted: <>powershell <span class="text-sky-600 dark:text-sky-300">-c</span> <span class="text-emerald-700 dark:text-emerald-300">"irm https://lde.sh/install.ps1 | iex"</span></>,
 	},
 	{
 		id: "android",
 		label: "Android",
 		labelShort: "Android",
 		command: "curl -fsSL https://lde.sh/install | sh",
-		highlighted: <>curl -fsSL <span class="text-emerald-600 dark:text-emerald-300">https://lde.sh/install</span> <span class="text-black/30 dark:text-white/50">|</span> sh</>,
+		highlighted: <>curl -fsSL <span class="text-emerald-700 dark:text-emerald-300">https://lde.sh/install</span> <span class="text-black/50 dark:text-white/50">|</span> sh</>,
 	},
 ] as const;
 
@@ -59,7 +59,7 @@ export default function InstallTabs() {
 								class={`px-3 py-2 cursor-pointer transition-colors text-sm border-b-2 -mb-px ${
 									isActive
 										? "border-blue-500 text-gray-800 dark:text-gray-200"
-										: "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+										: "border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
 								}`}
 							>
 								<span class="sm:hidden">{tab.labelShort}</span>
