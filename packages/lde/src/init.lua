@@ -95,6 +95,7 @@ local args = clap.parse({ ... })
 local treeOverride = args:option("tree")
 if treeOverride then
 	lde.global.setDir(treeOverride)
+	lde.global.init()
 end
 
 if args:flag("version") and args:count() == 0 then
@@ -164,7 +165,7 @@ local ok, err = xpcall(function()
 		return
 	end
 
-	if not noInitCommands[commandName] then
+	if not noInitCommands[commandName] and not treeOverride then
 		lde.global.init()
 	end
 
