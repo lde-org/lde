@@ -296,9 +296,9 @@ export default function DownloadPanel() {
 			{/* Panel */}
 			<div class="rounded-2xl border border-black/10 dark:border-white/10 overflow-hidden">
 				{/* Arch + nightly row */}
-				<div class="flex items-center gap-2 px-6 py-4 border-b border-black/8 dark:border-white/8 bg-black/[0.02] dark:bg-white/[0.02]">
-					<span class="text-xs text-black/40 dark:text-white/30 font-medium uppercase tracking-wide mr-2">
-						Architecture
+				<div class="flex flex-wrap items-center gap-2 px-6 py-4 border-b border-black/8 dark:border-white/8 bg-black/[0.02] dark:bg-white/[0.02]">
+					<span class="hidden sm:inline text-xs text-black/40 dark:text-white/30 font-medium uppercase tracking-wide mr-2">
+						Arch
 					</span>
 					{p.arches.map((a) => (
 						<button
@@ -337,11 +337,11 @@ export default function DownloadPanel() {
 									{m.icon}
 									{m.label}
 								</div>
-								<div class="flex items-center gap-2 px-4 py-3 rounded-lg bg-black/5 dark:bg-white/5 border border-black/8 dark:border-white/8 font-mono text-sm">
+								<div class="flex items-center gap-2 px-4 py-3 rounded-lg bg-black/5 dark:bg-white/5 border border-black/8 dark:border-white/8 font-mono text-sm min-w-0">
 									<span class="text-blue-400 select-none shrink-0">
 										$
 									</span>
-									<code class="text-gray-800 dark:text-white flex-1 overflow-x-auto whitespace-nowrap">
+									<code class="text-gray-800 dark:text-white flex-1 min-w-0 overflow-x-auto whitespace-nowrap">
 										{cmd}
 									</code>
 									<CopyButton text={cmd} />
@@ -357,7 +357,7 @@ export default function DownloadPanel() {
 				</div>
 
 				{/* Footer */}
-				<div class="px-6 py-4 border-t border-black/8 dark:border-white/8 flex items-center justify-between text-xs text-black/35 dark:text-white/30">
+				<div class="px-6 py-4 border-t border-black/8 dark:border-white/8 flex flex-wrap items-center justify-between gap-2 text-xs text-black/35 dark:text-white/30">
 					<span>
 						Already installed? Run{" "}
 						<code class="text-blue-400">lde upgrade</code>

@@ -78,14 +78,16 @@ export default function InstallTabs() {
 						<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
 					</a>
 				</div>
-				<div class="flex items-center px-4 py-3 bg-gray-50 dark:bg-gray-900 overflow-x-auto">
-					<span class="text-blue-500 dark:text-blue-400 mr-3 select-none font-mono text-sm shrink-0">
-						$
-					</span>
-					<code class="text-sm text-gray-800 dark:text-white font-mono whitespace-nowrap flex-1 text-left">
-						{activeTab.highlighted}
-					</code>
-					<div class="ml-auto shrink-0 pl-3">
+				<div class="flex items-center bg-gray-50 dark:bg-gray-900">
+					<div class="flex items-center px-4 py-3 overflow-x-auto flex-1 min-w-0">
+						<span class="text-blue-500 dark:text-blue-400 mr-3 select-none font-mono text-sm shrink-0">
+							$
+						</span>
+						<code class="text-sm text-gray-800 dark:text-white font-mono whitespace-nowrap flex-1 text-left">
+							{activeTab.highlighted}
+						</code>
+					</div>
+					<div class="shrink-0 pr-3">
 						<CopyButton getText={() => activeTab.command} />
 					</div>
 				</div>
