@@ -97,8 +97,6 @@ if treeOverride then
 	lde.global.setDir(treeOverride)
 end
 
-lde.global.init()
-
 if args:flag("version") and args:count() == 0 then
 	print(lde.global.currentVersion)
 	return
@@ -156,11 +154,18 @@ commands.uninstall = require("lde.commands.uninstall")
 commands.publish = require("lde.commands.publish")
 commands.repl = require("lde.commands.repl")
 
+-- Commands that don't need the global cache dirs initialized
+local noInitCommands = { help = true }
+
 local ok, err = xpcall(function()
 	local commandName = args:pop()
 	if not commandName then
 		commands.help(args)
 		return
+	end
+
+	if not noInitCommands[commandName] then
+		lde.global.init()
 	end
 
 	local commandHandler = commands[commandName]
