@@ -4,6 +4,12 @@ import InstallTabs from "../components/InstallTabs";
 import TerminalDemo from "../components/TerminalDemo";
 import { GITHUB_RELEASES_URL } from "../data/info";
 import BenchmarkChart from "../components/BenchmarkChart";
+import { getCollection } from "astro:content";
+
+const posts = (await getCollection("blog")).sort(
+	(a, b) => b.data.published.valueOf() - a.data.published.valueOf(),
+);
+const latestRelease = posts.find((p) => p.data.title.toLowerCase().startsWith("release"));
 
 const comparison = [
 	["Written in", "Lua", "Rust", "Teal"],
@@ -19,534 +25,335 @@ const comparison = [
 	["LuaRocks support", "wip", "wip", "y"],
 	["Lua build scripts", "build.lua", "rockspec", "rockspec"],
 ];
+
+const features = [
+	{
+		href: "/docs/runtime/getting-started/runtime",
+		icon: `<polyline points="4 17 10 11 4 5"></polyline><line x1="12" x2="20" y1="19" y2="19"></line>`,
+		title: "Runtime",
+		desc: "LuaJIT built-in, works cross-platform including Windows. Interactive REPL inside your project context.",
+		cmd: "lde ./file.lua",
+	},
+	{
+		href: "/docs/package-manager/getting-started/quick-start",
+		icon: `<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>`,
+		title: "Package Manager",
+		desc: "LuaRocks compatible. <code class=\"text-blue-400\">build.lua</code> scripts for preprocessing. Works with LÖVE and other runtimes.",
+		cmd: "lde add <package>",
+	},
+	{
+		href: "/docs/test-runner/getting-started/test-runner",
+		icon: `<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline>`,
+		title: "Test Runner",
+		desc: "Simple and minimal. Ships as <code class=\"text-blue-400\">lde-test</code> built-in to the lde runtime. Just <code class=\"text-blue-400\">require(\"lde-test\")</code>.",
+		cmd: "lde test",
+	},
+	{
+		href: "/docs/bundler/getting-started/single-file-apps",
+		icon: `<path d="M12 2L2 7l10 5 10-5-10-5z"></path><path d="M2 17l10 5 10-5"></path><path d="M2 12l10 5 10-5"></path>`,
+		title: "Bundler & Compiler",
+		desc: "Bundle into a single Lua file or compile to a standalone binary under 1mB. No Lua required on the target machine.",
+		cmd: "lde compile",
+	},
+];
 ---
 
 <Layout>
-	<!-- Full-width wrapper so the background isn't clipped to max-w -->
-	<div class="flex-1 relative flex flex-col min-h-[calc(100vh-56px)]">
-		<!-- Lunar background -->
-		<div
-			class="absolute inset-0 overflow-hidden pointer-events-none select-none opacity-100"
-			aria-hidden="true"
-		>
-			<svg
-				class="w-full h-full"
-				viewBox="0 0 1400 650"
-				preserveAspectRatio="xMidYMid slice"
-				xmlns="http://www.w3.org/2000/svg"
-			>
+	<!-- ─── HERO ─────────────────────────────────────────────────────────── -->
+	<section class="relative flex flex-col items-center justify-center overflow-hidden min-h-[calc(100vh-56px)] px-6 py-24">
+
+		<!-- Background glow blobs -->
+		<div class="absolute inset-0 pointer-events-none select-none" aria-hidden="true">
+			<!-- Top-center blue glow -->
+			<div class="absolute top-[-10%] left-1/2 -translate-x-1/2 w-[900px] h-[600px] rounded-full bg-blue-600/10 dark:bg-blue-500/15 blur-[120px]"></div>
+			<!-- Bottom accent -->
+			<div class="absolute bottom-0 left-1/4 w-[500px] h-[300px] rounded-full bg-indigo-600/8 dark:bg-indigo-500/10 blur-[100px]"></div>
+
+			<!-- Star field -->
+			<svg class="absolute inset-0 w-full h-full opacity-60 dark:opacity-100" viewBox="0 0 1400 800" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
 				<defs>
-					<!-- Two offset tiling patterns make the grid feel irregular -->
-					<pattern
-						id="stars-a"
-						width="97"
-						height="83"
-						patternUnits="userSpaceOnUse"
-					>
-						<circle cx="12" cy="18" r="0.7" fill="#64748b"></circle>
-						<circle cx="58" cy="8" r="0.5" fill="#64748b"></circle>
-						<circle cx="81" cy="47" r="0.8" fill="#64748b"></circle>
-						<circle cx="28" cy="65" r="0.6" fill="#64748b"></circle>
-						<circle cx="72" cy="71" r="0.5" fill="#64748b"></circle>
-						<circle cx="43" cy="38" r="0.4" fill="#64748b"></circle>
+					<pattern id="stars-a" width="97" height="83" patternUnits="userSpaceOnUse">
+						<circle cx="12" cy="18" r="0.8" fill="#94a3b8"></circle>
+						<circle cx="58" cy="8" r="0.6" fill="#94a3b8"></circle>
+						<circle cx="81" cy="47" r="0.9" fill="#94a3b8"></circle>
+						<circle cx="28" cy="65" r="0.7" fill="#94a3b8"></circle>
+						<circle cx="72" cy="71" r="0.6" fill="#94a3b8"></circle>
+						<circle cx="43" cy="38" r="0.5" fill="#94a3b8"></circle>
 					</pattern>
-					<pattern
-						id="stars-b"
-						width="113"
-						height="97"
-						patternUnits="userSpaceOnUse"
-						x="37"
-						y="25"
-					>
-						<circle cx="22" cy="44" r="0.6" fill="#64748b"></circle>
-						<circle cx="78" cy="12" r="0.8" fill="#64748b"></circle>
-						<circle cx="100" cy="73" r="0.5" fill="#64748b"
-						></circle>
-						<circle cx="47" cy="82" r="0.7" fill="#64748b"></circle>
-						<circle cx="91" cy="55" r="0.5" fill="#64748b"></circle>
-						<circle cx="15" cy="30" r="0.4" fill="#64748b"></circle>
-						<circle cx="55" cy="55" r="0.4" fill="#64748b"></circle>
+					<pattern id="stars-b" width="113" height="97" patternUnits="userSpaceOnUse" x="37" y="25">
+						<circle cx="22" cy="44" r="0.7" fill="#94a3b8"></circle>
+						<circle cx="78" cy="12" r="0.9" fill="#94a3b8"></circle>
+						<circle cx="100" cy="73" r="0.6" fill="#94a3b8"></circle>
+						<circle cx="47" cy="82" r="0.8" fill="#94a3b8"></circle>
+						<circle cx="91" cy="55" r="0.6" fill="#94a3b8"></circle>
+						<circle cx="15" cy="30" r="0.5" fill="#94a3b8"></circle>
+						<circle cx="55" cy="55" r="0.5" fill="#94a3b8"></circle>
 					</pattern>
 				</defs>
-
-				<!-- Star field -->
-				<rect width="1400" height="650" fill="url(#stars-a)" opacity="1"
-				></rect>
-				<rect
-					width="1400"
-					height="650"
-					fill="url(#stars-b)"
-					opacity="0.9"></rect>
-
-				<!-- A few brighter accent stars -->
-				<circle cx="148" cy="115" r="1.5" fill="#3b82f6" opacity="0.7"
-				></circle>
-				<circle cx="375" cy="72" r="1.2" fill="#3b82f6" opacity="0.6"
-				></circle>
-				<circle cx="595" cy="188" r="1.4" fill="#3b82f6" opacity="0.65"
-				></circle>
-				<circle cx="218" cy="478" r="1.3" fill="#3b82f6" opacity="0.6"
-				></circle>
-				<circle cx="472" cy="528" r="1.1" fill="#3b82f6" opacity="0.55"
-				></circle>
-				<circle cx="88" cy="355" r="1.2" fill="#3b82f6" opacity="0.55"
-				></circle>
-				<circle cx="1295" cy="195" r="1.4" fill="#3b82f6" opacity="0.6"
-				></circle>
-				<circle cx="1248" cy="548" r="1.3" fill="#3b82f6" opacity="0.65"
-				></circle>
-				<circle cx="732" cy="58" r="1.2" fill="#3b82f6" opacity="0.5"
-				></circle>
-				<circle cx="955" cy="598" r="1.4" fill="#3b82f6" opacity="0.55"
-				></circle>
+				<rect width="1400" height="800" fill="url(#stars-a)" opacity="0.5"></rect>
+				<rect width="1400" height="800" fill="url(#stars-b)" opacity="0.4"></rect>
+				<!-- Bright accent stars -->
+				<circle cx="148" cy="115" r="1.8" fill="#60a5fa" opacity="0.8"></circle>
+				<circle cx="375" cy="72" r="1.4" fill="#60a5fa" opacity="0.7"></circle>
+				<circle cx="595" cy="188" r="1.6" fill="#818cf8" opacity="0.75"></circle>
+				<circle cx="218" cy="478" r="1.5" fill="#60a5fa" opacity="0.7"></circle>
+				<circle cx="1295" cy="195" r="1.6" fill="#60a5fa" opacity="0.7"></circle>
+				<circle cx="1248" cy="548" r="1.5" fill="#818cf8" opacity="0.75"></circle>
+				<circle cx="732" cy="58" r="1.4" fill="#60a5fa" opacity="0.6"></circle>
+				<circle cx="955" cy="598" r="1.6" fill="#60a5fa" opacity="0.65"></circle>
+				<circle cx="88" cy="355" r="1.4" fill="#818cf8" opacity="0.65"></circle>
+				<circle cx="472" cy="528" r="1.3" fill="#60a5fa" opacity="0.6"></circle>
+				<circle cx="1100" cy="380" r="1.5" fill="#818cf8" opacity="0.6"></circle>
+				<circle cx="650" cy="700" r="1.4" fill="#60a5fa" opacity="0.55"></circle>
 			</svg>
 		</div>
 
-		<!-- Content -->
-		<div
-			class="flex flex-col flex-1 p-4 md:p-8 max-w-[90em] mx-auto justify-center w-full"
-		>
-			<div
-				class="p-4 md:p-8 flex flex-col lg:flex-row items-center justify-between gap-8 lg:gap-0"
-			>
-				<div class="flex flex-col">
-					<h1 class="text-4xl md:text-5xl font-semibold max-w-md">
-						Lua Done
-						<span class="easy-underline relative"> Easy </span>
-					</h1>
+		<!-- Hero content -->
+		<div class="relative z-10 flex flex-col lg:flex-row items-center justify-center gap-16 xl:gap-24 w-full max-w-7xl mx-auto">
 
-					<style>
-						.easy-underline::after {
-							content: "";
-							position: absolute;
-							bottom: -4px;
-							left: 0;
-							height: 4px;
-							width: 0;
-							background-color: #3b82f6;
-							animation: underline-slide-in 0.6s ease-out 0.3s
-								forwards;
-						}
+			<!-- Left: text + install -->
+			<div class="flex flex-col items-center lg:items-start text-center lg:text-left max-w-2xl w-full">
 
-						@keyframes underline-slide-in {
-							from {
-								width: 0;
-							}
-							to {
-								width: 100%;
-							}
-						}
-					</style>
-
-					<p class="my-6 md:my-8 text-lg max-w-lg">
-						Lde is an open-source project providing easy
-						accessibility to a Lua runtime alongside intuitive
-						package management for dependencies.
-					</p>
-
-					<div class="hidden lg:block">
-						<InstallTabs client:idle />
-					</div>
-
+				<!-- Badge -->
+				{latestRelease && (
 					<a
-						href={GITHUB_RELEASES_URL}
-						target="_blank"
-						rel="noopener noreferrer"
-						class="lg:hidden inline-flex items-center justify-center px-6 py-3 bg-blue-500/10 border border-blue-500/30 text-blue-500 font-medium rounded-lg backdrop-blur-md w-fit"
+						href={`/blog/${latestRelease.id}`}
+						class="mb-6 inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-blue-500/30 bg-blue-500/10 text-blue-400 text-xs font-medium hover:bg-blue-500/20 transition-colors"
 					>
-						Download
+						<span class="size-1.5 rounded-full bg-blue-400 animate-pulse"></span>
+						{latestRelease.data.title} is out
+						<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
 					</a>
-				</div>
+				)}
 
-				<div class="relative hidden lg:block mt-4">
-					<div
-						class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 size-[500px] rounded-full border border-slate-500/40 dark:border-slate-400/25 pointer-events-none"
-					>
-					</div>
-					<div
-						class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 size-[680px] rounded-full border border-slate-500/25 dark:border-slate-400/15 pointer-events-none"
-					>
-					</div>
-					<div
-						class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 size-[880px] rounded-full border border-slate-500/15 dark:border-slate-400/[0.08] pointer-events-none"
-					>
-					</div>
-					<div
-						class="absolute inset-0 bg-blue-500/30 dark:bg-blue-500/20 rounded-full blur-3xl scale-110 pointer-events-none z-0"
-					>
-					</div>
-					<div class="relative z-10">
-						<TerminalDemo client:idle />
-					</div>
+				<h1 class="text-5xl md:text-6xl xl:text-7xl font-bold tracking-tight leading-[1.05]">
+					Lua Done
+					<span class="relative inline-block">
+						<span class="relative z-10 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-400">Easy</span>
+						<span class="absolute inset-x-0 bottom-1 h-[3px] bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full"></span>
+					</span>
+				</h1>
+
+				<p class="mt-6 text-lg text-black/60 dark:text-white/55 leading-relaxed max-w-md">
+					A package manager, bundled LuaJIT runtime, test runner, and compiler that turns your programs into single executables in &lt; <span class="text-white/80 font-medium">1mB</span>.
+				</p>
+
+				<div class="mt-8 w-full">
+					<InstallTabs client:idle />
+				</div>
+			</div>
+
+			<!-- Right: terminal demo -->
+			<div class="relative hidden lg:flex items-center justify-center">
+				<!-- Orbital rings -->
+				<div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 size-[520px] rounded-full border border-slate-400/15 dark:border-slate-500/20 pointer-events-none"></div>
+				<div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 size-[700px] rounded-full border border-slate-400/8 dark:border-slate-500/12 pointer-events-none"></div>
+				<!-- Glow behind terminal -->
+				<div class="absolute inset-0 bg-blue-500/20 dark:bg-blue-500/15 rounded-full blur-3xl scale-75 pointer-events-none"></div>
+				<div class="relative z-10">
+					<TerminalDemo client:idle />
 				</div>
 			</div>
 		</div>
-	</div>
 
-	<div class="w-full border-t border-white/10 px-8 pt-24 pb-8">
+		<!-- Scroll hint -->
+		<div class="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 text-black/25 dark:text-white/20 animate-bounce">
+			<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+		</div>
+	</section>
+
+	<!-- ─── FEATURES ─────────────────────────────────────────────────────── -->
+	<section class="w-full border-t border-black/8 dark:border-white/8 px-6 py-24">
 		<div class="max-w-7xl mx-auto">
-			<h2
-				id="features"
-				class="text-5xl font-semibold text-center scroll-mt-20"
-			>
-				All in one
-			</h2>
-			<p
-				class="text-base text-black/50 dark:text-white/40 mt-2 text-center"
-			>
-				Everything you need to write, test, and ship Lua.
-			</p>
+			<div class="text-center mb-16">
+				<p class="text-blue-400 text-sm font-semibold uppercase tracking-widest mb-3">Everything included</p>
+				<h2 id="features" class="text-4xl md:text-5xl font-bold scroll-mt-20">One tool, all of Lua</h2>
+				<p class="mt-4 text-black/50 dark:text-white/40 text-lg max-w-xl mx-auto">
+					Write, test, and ship Lua without stitching together a dozen separate tools.
+				</p>
+			</div>
+
+			<div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+				{features.map((f, i) => (
+					<a
+						href={f.href}
+						class="feature-card group relative rounded-2xl border border-black/8 dark:border-white/8 bg-black/[0.02] dark:bg-white/[0.02] p-8 hover:border-blue-500/40 hover:bg-blue-500/[0.04] transition-all duration-300 flex flex-col gap-5 overflow-hidden"
+					>
+						<!-- Top shimmer on hover -->
+						<div class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-blue-500/70 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+
+						<div class="flex items-start gap-4">
+							<div class="shrink-0 size-11 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 group-hover:bg-blue-500/15 transition-colors">
+								<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" set:html={f.icon} />
+							</div>
+							<div class="min-w-0">
+								<h3 class="text-base font-semibold mb-1.5">{f.title}</h3>
+								<p class="text-sm text-black/50 dark:text-white/40 leading-relaxed" set:html={f.desc} />
+							</div>
+						</div>
+
+						<code class="mt-auto text-xs text-blue-400 bg-blue-500/10 border border-blue-500/15 px-3 py-2 rounded-lg w-fit font-mono">
+							$ {f.cmd}
+						</code>
+					</a>
+				))}
+			</div>
 		</div>
-	</div>
-	<div
-		class="w-full max-w-7xl mx-auto px-8 pb-24 grid grid-cols-1 md:grid-cols-2 gap-6"
-		id="features"
-	>
-		<a
-			href="/docs/runtime/getting-started/runtime"
-			class="feature-card group relative rounded-2xl border border-white/10 bg-white/5 dark:bg-white/[0.03] p-8 backdrop-blur-sm hover:border-blue-500/40 hover:bg-blue-500/5 transition-all duration-300 flex flex-col gap-6 overflow-hidden"
-		>
-			<div
-				class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-blue-500/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-			>
-			</div>
-			<div class="flex items-start gap-4">
-				<div
-					class="shrink-0 size-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400"
-				>
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						width="18"
-						height="18"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						><polyline points="4 17 10 11 4 5"></polyline><line
-							x1="12"
-							x2="20"
-							y1="19"
-							y2="19"></line></svg
-					>
-				</div>
-				<div>
-					<h2 class="text-base font-semibold mb-1">Runtime</h2>
-					<p
-						class="text-sm text-black/50 dark:text-white/40 leading-relaxed"
-					>
-						LuaJIT built-in, works cross-platform including Windows.
-						Interactive REPL inside your project context.
-					</p>
-				</div>
-			</div>
-			<code
-				class="mt-auto text-xs text-blue-400 bg-blue-500/10 border border-blue-500/15 px-3 py-2 rounded-lg w-fit"
-				>$ lde ./file.lua</code
-			>
-		</a>
+	</section>
 
-		<a
-			href="/docs/package-manager/getting-started/quick-start"
-			class="feature-card group relative rounded-2xl border border-white/10 bg-white/5 dark:bg-white/[0.03] p-8 backdrop-blur-sm hover:border-blue-500/40 hover:bg-blue-500/5 transition-all duration-300 flex flex-col gap-6 overflow-hidden"
-		>
-			<div
-				class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-blue-500/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-			>
+	<!-- ─── COMPARISON ───────────────────────────────────────────────────── -->
+	<section class="w-full border-t border-black/8 dark:border-white/8 px-6 py-24">
+		<div class="max-w-3xl mx-auto">
+			<div class="text-center mb-12">
+				<p class="text-blue-400 text-sm font-semibold uppercase tracking-widest mb-3">Comparison</p>
+				<h2 id="compare" class="text-4xl md:text-5xl font-bold scroll-mt-20">How does lde compare?</h2>
+				<p class="mt-4 text-black/50 dark:text-white/40">
+					Corrections welcome via <a class="underline text-blue-400 hover:text-blue-300 transition-colors" href="https://github.com/lde-org/lde/pulls">pull request</a>.
+				</p>
 			</div>
-			<div class="flex items-start gap-4">
-				<div
-					class="shrink-0 size-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400"
-				>
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						width="18"
-						height="18"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						><path
-							d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"
-						></path></svg
-					>
-				</div>
-				<div>
-					<h2 class="text-base font-semibold mb-1">
-						Package Manager
-					</h2>
-					<p
-						class="text-sm text-black/50 dark:text-white/40 leading-relaxed"
-					>
-						LuaRocks compatible. <code class="text-blue-400"
-							>build.lua</code
-						> scripts for preprocessing. Works with LÖVE and other runtimes.
-					</p>
-				</div>
-			</div>
-			<code
-				class="mt-auto text-xs text-blue-400 bg-blue-500/10 border border-blue-500/15 px-3 py-2 rounded-lg w-fit"
-				>$ lde add &lt;package&gt;</code
-			>
-		</a>
 
-		<a
-			href="/docs/test-runner/getting-started/test-runner"
-			class="feature-card group relative rounded-2xl border border-white/10 bg-white/5 dark:bg-white/[0.03] p-8 backdrop-blur-sm hover:border-blue-500/40 hover:bg-blue-500/5 transition-all duration-300 flex flex-col gap-6 overflow-hidden"
-		>
-			<div
-				class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-blue-500/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-			>
-			</div>
-			<div class="flex items-start gap-4">
-				<div
-					class="shrink-0 size-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400"
-				>
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						width="18"
-						height="18"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"
-						></path><polyline points="22 4 12 14.01 9 11.01"
-						></polyline></svg
-					>
-				</div>
-				<div>
-					<h2 class="text-base font-semibold mb-1">Test Runner</h2>
-					<p
-						class="text-sm text-black/50 dark:text-white/40 leading-relaxed"
-					>
-						Simple and minimal. Ships as <code class="text-blue-400"
-							>lde-test</code
-						> built-in to the lde runtime. Just <code
-							class="text-blue-400">require("lde-test")</code
-						>.
-					</p>
-				</div>
-			</div>
-			<code
-				class="mt-auto text-xs text-blue-400 bg-blue-500/10 border border-blue-500/15 px-3 py-2 rounded-lg w-fit"
-				>$ lde test</code
-			>
-		</a>
-
-		<a
-			href="/docs/bundler/getting-started/single-file-apps"
-			class="feature-card group relative rounded-2xl border border-white/10 bg-white/5 dark:bg-white/[0.03] p-8 backdrop-blur-sm hover:border-blue-500/40 hover:bg-blue-500/5 transition-all duration-300 flex flex-col gap-6 overflow-hidden"
-		>
-			<div
-				class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-blue-500/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-			>
-			</div>
-			<div class="flex items-start gap-4">
-				<div
-					class="shrink-0 size-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400"
-				>
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						width="18"
-						height="18"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						><path d="M12 2L2 7l10 5 10-5-10-5z"></path><path
-							d="M2 17l10 5 10-5"></path><path d="M2 12l10 5 10-5"
-						></path></svg
-					>
-				</div>
-				<div>
-					<h2 class="text-base font-semibold mb-1">
-						Bundler & Compiler
-					</h2>
-					<p
-						class="text-sm text-black/50 dark:text-white/40 leading-relaxed"
-					>
-						Bundle into a single Lua file or compile to a standalone
-						binary under 1mB. No Lua required on the target machine.
-					</p>
-				</div>
-			</div>
-			<code
-				class="mt-auto text-xs text-blue-400 bg-blue-500/10 border border-blue-500/15 px-3 py-2 rounded-lg w-fit"
-				>$ lde compile</code
-			>
-		</a>
-	</div>
-
-	<div class="w-full border-t border-black/10 dark:border-white/10">
-		<div class="max-w-3xl mx-auto px-8 py-16">
-			<h2
-				id="compare"
-				class="text-5xl font-semibold mb-2 text-center scroll-mt-20"
-			>
-				How does lde compare?
-			</h2>
-			<p
-				class="text-base text-black/50 dark:text-white/40 mb-8 text-center"
-			>
-				Corrections welcome via <a
-					class="underline text-blue-400"
-					href="https://github.com/lde-org/lde/pulls">pull request</a
-				>.
-			</p>
-			<div
-				class="overflow-x-auto rounded-2xl border border-black/10 dark:border-white/10"
-			>
-				<table class="w-full text-base">
+			{/* Desktop table */}
+			<div class="hidden sm:block overflow-x-auto rounded-2xl border border-black/10 dark:border-white/10">
+				<table class="w-full text-sm">
 					<thead>
-						<tr
-							class="border-b border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/[0.03]"
-						>
-							<th
-								class="text-left px-6 py-5 font-medium text-black/50 dark:text-white/40"
-							></th>
-							<th
-								class="text-left px-6 py-5 font-semibold text-blue-400"
-								><img
-									src="/lde-nospace.svg"
-									class="h-6 inline mr-2"
-									alt=""
-								/>lde</th
-							>
-							<th class="text-left px-6 py-5 font-medium">lux</th>
-							<th class="text-left px-6 py-5 font-medium"
-								>luarocks</th
-							>
+						<tr class="border-b border-black/10 dark:border-white/10 bg-black/[0.03] dark:bg-white/[0.03]">
+							<th class="text-left px-6 py-4 font-medium text-black/40 dark:text-white/30 w-[40%]"></th>
+							<th class="text-left px-6 py-4 font-semibold text-blue-400">
+								<img src="/lde-nospace.svg" class="h-5 inline mr-1.5 opacity-90" alt="" />lde
+							</th>
+							<th class="text-left px-6 py-4 font-medium text-black/70 dark:text-white/60">lux</th>
+							<th class="text-left px-6 py-4 font-medium text-black/70 dark:text-white/60">luarocks</th>
 						</tr>
 					</thead>
-					<tbody
-						class="divide-y divide-black/10 dark:divide-white/10"
-					>
-						{
-							comparison.map(([feature, ...cols]) => (
-								<tr class="hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors">
-									<td class="px-6 py-4 text-black/60 dark:text-white/50">
-										{feature}
-									</td>
-									{cols.map((val, i) => {
-										const blue = i === 0;
-										const base = `px-6 py-4 ${blue ? "text-blue-400 font-medium" : "text-black/70 dark:text-white/60"}`;
-										if (val === "y")
-											return (
-												<td class={base}>
-													<span class="text-green-400 font-bold">
-														✓
-													</span>
-												</td>
-											);
-										if (val === "n")
-											return (
-												<td class={base}>
-													<span class="text-red-400/70 font-bold">
-														✗
-													</span>
-												</td>
-											);
-										if (val === "wip")
-											return (
-												<td class={base}>
-													<span class="text-yellow-400 text-lg">
-														⚠
-													</span>
-												</td>
-											);
-										if (val.startsWith("y:"))
-											return (
-												<td class={base}>
-													<span class="text-green-400 font-bold">
-														✓
-													</span>{" "}
-													<span class="text-sm opacity-60">
-														({val.slice(2)})
-													</span>
-												</td>
-											);
-										return <td class={base}>{val}</td>;
-									})}
-								</tr>
-							))
-						}
+					<tbody class="divide-y divide-black/[0.06] dark:divide-white/[0.06]">
+						{comparison.map(([feature, ...cols]) => (
+							<tr class="hover:bg-black/[0.015] dark:hover:bg-white/[0.015] transition-colors">
+								<td class="px-6 py-3.5 text-black/55 dark:text-white/45 text-sm">{feature}</td>
+								{cols.map((val, i) => {
+									const blue = i === 0;
+									const base = `px-6 py-3.5 ${blue ? "text-blue-400 font-medium" : "text-black/65 dark:text-white/55"}`;
+									if (val === "y") return <td class={base}><span class="text-emerald-400 font-bold">✓</span></td>;
+									if (val === "n") return <td class={base}><span class="text-red-400/60 font-bold">✗</span></td>;
+									if (val === "wip") return <td class={base}><span class="text-amber-400 text-base">⚠</span></td>;
+									if (val.startsWith("y:")) return (
+										<td class={base}>
+											<span class="text-emerald-400 font-bold">✓</span>{" "}
+											<span class="text-xs opacity-50">({val.slice(2)})</span>
+										</td>
+									);
+									return <td class={base}>{val}</td>;
+								})}
+							</tr>
+						))}
 					</tbody>
 				</table>
 			</div>
-		</div>
-	</div>
 
-	<div class="w-full border-t border-black/10 dark:border-white/10">
-		<div class="max-w-3xl mx-auto px-8 py-16">
-			<h2
-				id="benchmarks"
-				class="text-5xl font-semibold mb-2 text-center scroll-mt-20"
-			>
-				Are we fast yet?
-			</h2>
-			<p
-				class="text-base text-black/50 dark:text-white/40 mb-10 text-center"
-			>
-				Averages over 5 runs on Linux x86-64. Lower is better.
-			</p>
+			{/* Mobile cards — one row per feature, lde highlighted */}
+			<div class="sm:hidden rounded-2xl border border-black/10 dark:border-white/10 overflow-hidden divide-y divide-black/[0.06] dark:divide-white/[0.06]">
+				{comparison.map(([feature, lde, lux, luarocks]) => {
+					const renderVal = (val: string, blue = false) => {
+						const cls = blue ? "text-blue-400 font-semibold" : "text-black/60 dark:text-white/50";
+						if (val === "y") return <span class="text-emerald-400 font-bold">✓</span>;
+						if (val === "n") return <span class="text-red-400/60 font-bold">✗</span>;
+						if (val === "wip") return <span class="text-amber-400">⚠</span>;
+						if (val.startsWith("y:")) return <><span class="text-emerald-400 font-bold">✓</span> <span class={`text-xs opacity-50`}>({val.slice(2)})</span></>;
+						return <span class={cls}>{val}</span>;
+					};
+					return (
+						<div class="px-4 py-3 bg-black/[0.01] dark:bg-white/[0.01]">
+							<p class="text-xs text-black/40 dark:text-white/30 mb-2">{feature}</p>
+							<div class="grid grid-cols-3 gap-2 text-sm">
+								<div class="flex flex-col gap-0.5">
+									<span class="text-[10px] text-blue-400 font-semibold uppercase tracking-wide">lde</span>
+									{renderVal(lde as string, true)}
+								</div>
+								<div class="flex flex-col gap-0.5">
+									<span class="text-[10px] text-black/30 dark:text-white/25 uppercase tracking-wide">lux</span>
+									{renderVal(lux as string)}
+								</div>
+								<div class="flex flex-col gap-0.5">
+									<span class="text-[10px] text-black/30 dark:text-white/25 uppercase tracking-wide">luarocks</span>
+									{renderVal(luarocks as string)}
+								</div>
+							</div>
+						</div>
+					);
+				})}
+			</div>
+		</div>
+	</section>
+
+	<!-- ─── BENCHMARKS ───────────────────────────────────────────────────── -->
+	<section class="w-full border-t border-black/8 dark:border-white/8 px-6 py-24">
+		<div class="max-w-3xl mx-auto">
+			<div class="text-center mb-12">
+				<p class="text-blue-400 text-sm font-semibold uppercase tracking-widest mb-3">Performance</p>
+				<h2 id="benchmarks" class="text-4xl md:text-5xl font-bold scroll-mt-20">Are we fast yet?</h2>
+				<p class="mt-4 text-black/50 dark:text-white/40">
+					Averages over 5 runs on Linux x86-64. Lower is better.
+				</p>
+			</div>
 			<BenchmarkChart client:idle />
 		</div>
-	</div>
+	</section>
 
-	<div
-		class="w-full border-t border-black/10 dark:border-white/10 min-h-[50vh] flex items-center justify-center"
-	>
-		<div class="py-24 w-full max-w-3xl px-8">
-			<h2
-				id="learn"
-				class="text-5xl font-semibold mb-3 text-center scroll-mt-20"
-			>
-				Learn more
-			</h2>
-			<p
-				class="text-base text-black/50 dark:text-white/40 mb-8 text-center"
-			>
-				Dive into the docs or read the latest from the blog.
-			</p>
-			<div class="flex gap-6 w-full">
+	<!-- ─── CTA ──────────────────────────────────────────────────────────── -->
+	<section class="w-full border-t border-black/8 dark:border-white/8 px-6 py-24">
+		<div class="max-w-3xl mx-auto">
+			<div class="text-center mb-12">
+				<p class="text-blue-400 text-sm font-semibold uppercase tracking-widest mb-3">Get started</p>
+				<h2 id="learn" class="text-4xl md:text-5xl font-bold scroll-mt-20">Ready to dive in?</h2>
+				<p class="mt-4 text-black/50 dark:text-white/40 text-lg">
+					Read the docs or catch up on the latest from the blog.
+				</p>
+			</div>
+
+			<div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
 				<a
 					href="/docs/general/getting-started/introduction"
-					class="flex-1 py-12 px-10 rounded-2xl border border-black/10 dark:border-white/10 bg-black/[0.03] dark:bg-white/[0.03] hover:border-blue-500/40 hover:bg-blue-500/5 transition-colors font-medium text-2xl flex flex-col gap-2"
+					class="group relative rounded-2xl border border-black/10 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.02] hover:border-blue-500/40 hover:bg-blue-500/[0.04] transition-all duration-300 p-8 flex flex-col gap-3 overflow-hidden"
 				>
-					Get started
-					<span
-						class="text-sm font-normal text-black/50 dark:text-white/40"
-						>Read the docs and set up your first project</span
-					>
+					<div class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-blue-500/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+					<div class="size-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 mb-1">
+						<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+					</div>
+					<span class="text-xl font-semibold">Documentation</span>
+					<span class="text-sm text-black/50 dark:text-white/40 leading-relaxed">Set up your first project and explore all features</span>
+					<span class="mt-2 text-blue-400 text-sm font-medium flex items-center gap-1.5 group-hover:gap-2.5 transition-all">
+						Read the docs
+						<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+					</span>
 				</a>
+
 				<a
 					href="/blog"
-					class="flex-1 py-12 px-10 rounded-2xl border border-black/10 dark:border-white/10 bg-black/[0.03] dark:bg-white/[0.03] hover:border-blue-500/40 hover:bg-blue-500/5 transition-colors font-medium text-2xl flex flex-col gap-2"
+					class="group relative rounded-2xl border border-black/10 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.02] hover:border-blue-500/40 hover:bg-blue-500/[0.04] transition-all duration-300 p-8 flex flex-col gap-3 overflow-hidden"
 				>
-					Blog
-					<span
-						class="text-sm font-normal text-black/50 dark:text-white/40"
-						>Release notes and updates</span
-					>
+					<div class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-blue-500/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+					<div class="size-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 mb-1">
+						<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 0-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8"/><path d="M15 18h-5"/><path d="M10 6h8v4h-8V6Z"/></svg>
+					</div>
+					<span class="text-xl font-semibold">Blog</span>
+					<span class="text-sm text-black/50 dark:text-white/40 leading-relaxed">Release notes, updates, and announcements</span>
+					<span class="mt-2 text-blue-400 text-sm font-medium flex items-center gap-1.5 group-hover:gap-2.5 transition-all">
+						Read the blog
+						<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+					</span>
 				</a>
 			</div>
 		</div>
-	</div>
+	</section>
+
 	<style>
 		.feature-card {
 			opacity: 0;
-			transform: translateY(24px);
+			transform: translateY(20px);
 			transition:
-				opacity 0.5s ease,
-				transform 0.5s ease;
+				opacity 0.45s ease,
+				transform 0.45s ease,
+				border-color 0.3s,
+				background-color 0.3s;
 		}
 		.feature-card.visible {
 			opacity: 1;
@@ -565,10 +372,10 @@ const comparison = [
 					}
 				});
 			},
-			{ threshold: 0.15 },
+			{ threshold: 0.1 },
 		);
 		cards.forEach((c, i) => {
-			(c as HTMLElement).style.transitionDelay = `${i * 80}ms`;
+			(c as HTMLElement).style.transitionDelay = `${i * 70}ms`;
 			observer.observe(c);
 		});
 	</script>
