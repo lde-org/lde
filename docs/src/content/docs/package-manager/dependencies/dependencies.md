@@ -20,6 +20,8 @@ An example list of dependencies:
 }
 ```
 
+Git dependencies are cloned with `--recurse-submodules`, so any submodules in the repository are automatically initialized and checked out.
+
 This can be automated with the `lde add` command. For git dependencies, do `lde add <name> --git <repo>` and for local dependencies, do `lde add --path <package>`.
 
 ## Removing a dependency
