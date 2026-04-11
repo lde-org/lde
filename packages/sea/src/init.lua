@@ -241,6 +241,18 @@ char lde_tmpdir[4096];
 	local libStartupStr  = libTmpDirInit .. table.concat(libStartup, "\n")
 	local libPreloadsStr = table.concat(libPreloads, "\n")
 
+	local tmpnameShim = util.dedent([[
+		do
+			local _ctr = 0
+			local _tmpdir = os.getenv("TMPDIR") or os.getenv("TEMP") or os.getenv("TMP") or "/tmp"
+			_tmpdir = _tmpdir:gsub("[\\/]+$", "")
+			os.tmpname = function()
+				_ctr = _ctr + 1
+				return _tmpdir .. "/lde_" .. tostring(os.clock() * 1000):gsub("%.", "") .. "_" .. _ctr .. ".tmp"
+			end
+		end
+	]])
+
 	if #ffiShimEntries > 0 then
 		source = util.dedent(string.format([[
 			do
@@ -263,6 +275,8 @@ char lde_tmpdir[4096];
 			end
 		]], table.concat(ffiShimEntries, ", "))) .. "\n" .. source
 	end
+
+	source = tmpnameShim .. "\n" .. source
 
 	filePreloads        = {
 		('luaL_loadbuffer(L, "%s", %d, "%s"); lua_setfield(L, -2, "%s");')

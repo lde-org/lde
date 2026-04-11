@@ -116,6 +116,9 @@ local function executeWith(compile, opts, scriptName)
 		end
 	end
 
+	local originalTmpname = os.tmpname
+	os.tmpname = env.tmpfile
+
 	local ok, result = pcall(function()
 		package.path = opts.packagePath or oldPath
 		package.cpath = opts.packageCPath or oldCPath
@@ -132,6 +135,7 @@ local function executeWith(compile, opts, scriptName)
 	if oldCwd then env.chdir(oldCwd) end
 
 	ffi.cdef = originalCdef
+	os.tmpname = originalTmpname
 	restore(package.loaded, savedLoaded)
 	restore(package.preload, savedPreload)
 	package.loaders = oldLoaders
