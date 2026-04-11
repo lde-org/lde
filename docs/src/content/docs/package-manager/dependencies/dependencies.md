@@ -32,4 +32,4 @@ You can use `lde install` to build all of your dependencies to a folder `./targe
 
 If you're just running a normal Lua project, you can simply use `lde run` which will configure lua automatically to resolve dependencies from your /target/ directory automatically.
 
-By default, `lde run` will use the [LDE Runtime](/docs/features/runtime), which you can read about more on its dedicated page.
+By default, `lde run` will use the [LDE Runtime](/docs/runtime/getting-started/runtime), which you can read about more on its dedicated page.

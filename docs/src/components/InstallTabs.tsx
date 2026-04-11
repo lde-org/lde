@@ -16,21 +16,21 @@ const tabs = [
 		label: "Linux & macOS",
 		labelShort: "Linux",
 		command: "curl -fsSL https://lde.sh/install | sh",
-		highlighted: <>curl -fsSL <span class="text-emerald-300">https://lde.sh/install</span> <span class="text-white/50">|</span> sh</>,
+		highlighted: <>curl -fsSL <span class="text-emerald-600 dark:text-emerald-300">https://lde.sh/install</span> <span class="text-black/30 dark:text-white/50">|</span> sh</>,
 	},
 	{
 		id: "windows",
 		label: "Windows",
 		labelShort: "Windows",
 		command: `powershell -c "irm https://lde.sh/install.ps1 | iex"`,
-		highlighted: <>powershell <span class="text-sky-300">-c</span> <span class="text-emerald-300">"irm https://lde.sh/install.ps1 | iex"</span></>,
+		highlighted: <>powershell <span class="text-sky-600 dark:text-sky-300">-c</span> <span class="text-emerald-600 dark:text-emerald-300">"irm https://lde.sh/install.ps1 | iex"</span></>,
 	},
 	{
 		id: "android",
 		label: "Android",
 		labelShort: "Android",
 		command: "curl -fsSL https://lde.sh/install | sh",
-		highlighted: <>curl -fsSL <span class="text-emerald-300">https://lde.sh/install</span> <span class="text-white/50">|</span> sh</>,
+		highlighted: <>curl -fsSL <span class="text-emerald-600 dark:text-emerald-300">https://lde.sh/install</span> <span class="text-black/30 dark:text-white/50">|</span> sh</>,
 	},
 ] as const;
 
@@ -82,7 +82,7 @@ export default function InstallTabs() {
 					<span class="text-blue-500 dark:text-blue-400 mr-3 select-none font-mono text-sm shrink-0">
 						$
 					</span>
-					<code class="text-sm text-white font-mono whitespace-nowrap flex-1 text-left">
+					<code class="text-sm text-gray-800 dark:text-white font-mono whitespace-nowrap flex-1 text-left">
 						{activeTab.highlighted}
 					</code>
 					<div class="ml-auto shrink-0 pl-3">

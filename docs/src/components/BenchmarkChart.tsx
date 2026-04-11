@@ -27,10 +27,10 @@ const benchmarks = [
 	},
 ];
 
-const COLORS: Record<string, { bar: string; text: string }> = {
-	lde:      { bar: "bg-blue-500",                     text: "text-blue-400" },
-	luarocks: { bar: "bg-slate-400 dark:bg-slate-500",  text: "text-slate-400 dark:text-slate-500" },
-	lx:       { bar: "bg-slate-300 dark:bg-slate-600",  text: "text-slate-400 dark:text-slate-500" },
+const COLORS: Record<string, { bar: string; text: string; label: string }> = {
+	lde:      { bar: "bg-blue-500",                     text: "text-blue-500 dark:text-blue-400",   label: "text-white/80" },
+	luarocks: { bar: "bg-slate-300/70 dark:bg-slate-500",  text: "text-slate-500 dark:text-slate-500", label: "text-black/50 dark:text-white/80" },
+	lx:       { bar: "bg-slate-200/80 dark:bg-slate-600",  text: "text-slate-500 dark:text-slate-500", label: "text-black/50 dark:text-white/80" },
 };
 
 
@@ -150,7 +150,7 @@ export default function BenchmarkChart() {
 									}}
 								>
 									{playing && (
-										<span class="text-xs font-semibold text-white/80 whitespace-nowrap">
+										<span class={`text-xs font-semibold whitespace-nowrap ${c.label}`}>
 											{r.time.toFixed(3)}s
 										</span>
 									)}

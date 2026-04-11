@@ -14,7 +14,7 @@
 
 It bundles a LuaJIT runtime, a test runner, and a compiler that turns your Lua programs into single executables under **1mB** — alongside a package registry with proper version locking and project-local isolation.
 
-To get started, [read the docs](https://lde.sh/docs/getting-started/introduction).
+To get started, [read the docs](https://lde.sh/docs/general/getting-started/introduction).
 
 ## Features
 

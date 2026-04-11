@@ -232,7 +232,7 @@ function CopyButton({ text }: { text: string }) {
 	return (
 		<button
 			type="button"
-			class="shrink-0 ml-2 text-white/30 hover:text-white/70 transition-colors"
+			class="cursor-pointer shrink-0 ml-2 text-black/30 dark:text-white/30 hover:text-black/70 dark:hover:text-white/70 transition-colors"
 			onClick={async () => {
 				await navigator.clipboard.writeText(text);
 				setCopied(true);
@@ -341,7 +341,7 @@ export default function DownloadPanel() {
 									<span class="text-blue-400 select-none shrink-0">
 										$
 									</span>
-									<code class="text-white flex-1 overflow-x-auto whitespace-nowrap">
+									<code class="text-gray-800 dark:text-white flex-1 overflow-x-auto whitespace-nowrap">
 										{cmd}
 									</code>
 									<CopyButton text={cmd} />

@@ -5,7 +5,7 @@ order: 2
 
 # Using an Alternate Lua Engine
 
-By default, LDE ships with the [LDE Runtime](/docs/features/runtime) which is based on LuaJIT.
+By default, LDE ships with the [LDE Runtime](/docs/runtime/getting-started/runtime) which is based on LuaJIT.
 
 But LDE supports usage of other Lua Engines, such as Lua 5.4
 

@@ -30,7 +30,7 @@ test.it('should handle tables', function()
 end)
 ```
 
-You can read more about it on its dedicated docs page: [Test Runner](/docs/features/test-runner).
+You can read more about it on its dedicated docs page: [Test Runner](/docs/test-runner/getting-started/test-runner).
 
 ## `lpm_modules` renamed to `target`
 

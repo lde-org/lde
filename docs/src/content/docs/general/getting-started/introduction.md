@@ -31,7 +31,7 @@ lde add rocks:luasocket
 
 ## Running Your Project
 
-LDE ships with a runtime. You can run your project's entrypoint with `lde run`. To use an external lua engine like Lua 5.4, [see this article](/docs/guides/using-other-lua).
+LDE ships with a runtime. You can run your project's entrypoint with `lde run`. To use an external lua engine like Lua 5.4, [see this article](/docs/runtime/guides/using-other-lua).
 
 ```sh
 lde run
@@ -79,4 +79,4 @@ LDE can **compile** your code into a single executable. Users don't need any dep
 
 ## Next Steps
 
-Head to [Installation](/docs/getting-started/installation) to get lde on your machine, or jump straight to the [Quick Start](/docs/getting-started/quick-start) if you've already installed it.
+Head to [Installation](/docs/general/getting-started/installation) to get lde on your machine, or jump straight to the [Quick Start](/docs/package-manager/getting-started/quick-start) if you've already installed it.

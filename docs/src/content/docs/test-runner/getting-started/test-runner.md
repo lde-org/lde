@@ -15,7 +15,7 @@ So why not Lua? That's why lde comes with a built-in test runner!
 
 This command is used to run a set of lua files you create inside of your `/tests/` folder. You can nest them in folders however you like.
 
-It will run all files matching `*.test.lua` in that folder using the [LDE runtime](/docs/features/runtime).
+It will run all files matching `*.test.lua` in that folder using the [LDE runtime](/docs/runtime/getting-started/runtime).
 
 But just running files isn't traditionally enough. Usually you write more than a single test per file.
 

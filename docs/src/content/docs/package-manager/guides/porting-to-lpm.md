@@ -26,8 +26,8 @@ Create a `build.lua` file and use all the tools lua provides at your disposal to
 
 For example, this can be as simple as an `os.execute("make")` and then an `os.rename` of your output binary into the output directory.
 
-For more info, read about [C Module Support](/docs/features/c-module-support).
+For more info, read about [C Module Support](/docs/package-manager/dependencies/c-module-support).
 
 ## Publishing to LDE
 
-Refer to the [Publishing to LDE](/docs/guides/publishing-to-lde) guide!
+Refer to the [Publishing to LDE](/docs/package-manager/guides/publishing-to-lpm) guide!
