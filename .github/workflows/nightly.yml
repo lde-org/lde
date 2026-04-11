@@ -19,22 +19,16 @@ jobs:
         include:
           - os: ubuntu-22.04
             outfile: lde-linux-x86-64
-            sea_cc: gcc
           - os: ubuntu-22.04-arm
             outfile: lde-linux-aarch64
-            sea_cc: gcc
           - os: windows-latest
             outfile: lde-windows-x86-64.exe
-            sea_cc: gcc
           - os: windows-11-arm
             outfile: lde-windows-aarch64.exe
-            sea_cc: clang
           - os: macos-15-intel
             outfile: lde-macos-x86-64
-            sea_cc: gcc
           - os: macos-15
             outfile: lde-macos-aarch64
-            sea_cc: gcc
           - os: ubuntu-22.04-arm
             outfile: lde-android-aarch64
             android: true
@@ -42,8 +36,7 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
 
       - name: Cache llvm-mingw (Windows ARM64)
         if: matrix.os == 'windows-11-arm'
@@ -53,17 +46,20 @@ jobs:
           path: llvm-mingw-20260311-ucrt-aarch64
           key: llvm-mingw-20260311-ucrt-aarch64
 
-      - name: Install llvm-mingw (Windows ARM64)
-        if: matrix.os == 'windows-11-arm' && steps.cache-llvm-mingw.outputs.cache-hit != 'true'
-        shell: pwsh
-        run: |
-          curl -L -o llvm-mingw.zip https://github.com/mstorsjo/llvm-mingw/releases/download/20260311/llvm-mingw-20260311-ucrt-aarch64.zip
-          Expand-Archive -Path llvm-mingw.zip -DestinationPath .
-
-      - name: Add llvm-mingw to PATH (Windows ARM64)
+      - name: Setup llvm-mingw (Windows ARM64)
         if: matrix.os == 'windows-11-arm'
         shell: pwsh
-        run: echo "$env:GITHUB_WORKSPACE\llvm-mingw-20260311-ucrt-aarch64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+        run: |
+          if ("${{ steps.cache-llvm-mingw.outputs.cache-hit }}" -ne "true") {
+            curl -L -o llvm-mingw.zip https://github.com/mstorsjo/llvm-mingw/releases/download/20260311/llvm-mingw-20260311-ucrt-aarch64.zip
+            Expand-Archive -Path llvm-mingw.zip -DestinationPath .
+          }
+          echo "$env:GITHUB_WORKSPACE\llvm-mingw-20260311-ucrt-aarch64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Set SEA_CC (Windows ARM64)
+        if: matrix.os == 'windows-11-arm'
+        shell: pwsh
+        run: echo "SEA_CC=aarch64-w64-mingw32-clang" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Cache Android NDK
         if: matrix.android
@@ -91,8 +87,6 @@ jobs:
           version: nightly
 
       - name: Build lde
-        env:
-          SEA_CC: ${{ matrix.sea_cc }}
         run: |
           cd packages/lde
           lde compile --outfile ${{ matrix.outfile }}
