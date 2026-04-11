@@ -12,9 +12,11 @@ local lde = require("lde-core")
 local releasesUrl = "https://api.github.com/repos/lde-org/lde/releases"
 
 local arch = jit.arch == "arm64" and "aarch64" or "x86-64"
+local isAndroid = env.var("ANDROID_ROOT") ~= nil
+
 local artifactNames = {
 	Windows = "lde-windows-" .. arch .. ".exe",
-	Linux = "lde-linux-" .. arch,
+	Linux = isAndroid and "lde-android-" .. arch or "lde-linux-" .. arch,
 	OSX = "lde-macos-" .. arch
 }
 

@@ -38,7 +38,7 @@ jobs:
           #   sea_cc: gcc
           - os: ubuntu-22.04
             artifact: luajit-linux-x86-64-gnu
-            outfile: lde-linux-aarch64-android
+            outfile: lde-android-aarch64
             android: true
 
     runs-on: ${{ matrix.os }}
