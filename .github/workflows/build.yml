@@ -27,6 +27,9 @@ jobs:
           - os: macos-15
             outfile: lde-macos-aarch64
             sea_cc: gcc
+          - os: ubuntu-22.04
+            outfile: lde-android-aarch64
+            android: true
 
     runs-on: ${{ matrix.os }}
 
@@ -58,6 +61,10 @@ jobs:
         uses: lde-org/setup-lde@master
         with:
           version: nightly
+
+      - name: Set SEA_CC (Android)
+        if: matrix.android
+        run: echo "SEA_CC=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang" >> $GITHUB_ENV
 
       - name: Build lde
         env:

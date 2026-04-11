@@ -35,9 +35,8 @@ jobs:
           - os: macos-15
             outfile: lde-macos-aarch64
             sea_cc: gcc
-          - os: ubuntu-22.04
+          - os: ubuntu-22.04-arm
             outfile: lde-android-aarch64
-            sea_cc: $ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang
             android: true
 
     runs-on: ${{ matrix.os }}
@@ -66,8 +65,28 @@ jobs:
         shell: pwsh
         run: echo "$env:GITHUB_WORKSPACE\llvm-mingw-20260311-ucrt-aarch64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
-      - name: Setup lde
-        uses: lde-org/setup-lde@master
+      - name: Cache Android NDK
+        if: matrix.android
+        id: cache-android-ndk
+        uses: actions/cache@v5
+        with:
+          path: android-ndk-r29
+          key: android-ndk-r29-aarch64
+
+      - name: Setup Android NDK
+        if: matrix.android
+        run: |
+          if [[ "${{ steps.cache-android-ndk.outputs.cache-hit }}" != "true" ]]; then
+            wget -q https://github.com/lzhiyong/termux-ndk/releases/download/android-ndk/android-ndk-r29-aarch64.7z
+            7z x android-ndk-r29-aarch64.7z -o. > /dev/null
+          fi
+          echo "ANDROID_NDK_ROOT=$PWD/android-ndk-r29" >> $GITHUB_ENV
+
+      - name: Set SEA_CC (Android)
+        if: matrix.android
+        run: echo "SEA_CC=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-aarch64/bin/aarch64-linux-android21-clang" >> $GITHUB_ENV
+
+      - uses: lde-org/setup-lde@master
         with:
           version: nightly
 
@@ -82,17 +101,43 @@ jobs:
         if: "!matrix.android"
         run: ./packages/lde/${{ matrix.outfile }} test
 
-      - name: Setup QEMU (Android)
+      - name: Fix workspace permissions (Android)
         if: matrix.android
-        run: docker run --rm --privileged aptman/qus -s -- -p aarch64
+        run: chmod -R a+rw ${{ github.workspace }}
+
+      - name: Cache Android test image
+        if: matrix.android
+        id: cache-android-image
+        uses: actions/cache@v5
+        with:
+          path: /tmp/termux-android.tar
+          key: termux-android-v1
+
+      - name: Setup Android test image
+        if: matrix.android
+        run: |
+          if [[ "${{ steps.cache-android-image.outputs.cache-hit }}" == "true" ]]; then
+            docker load -i /tmp/termux-android.tar
+          else
+            docker rm -f termux-build 2>/dev/null || true
+            docker run --privileged --platform linux/arm64 --name termux-build \
+              -e DEBIAN_FRONTEND=noninteractive \
+              termux/termux-docker:aarch64 \
+              bash -c "apt update && apt upgrade -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold && apt install -y git clang curl zip make"
+            docker commit termux-build termux-android:latest
+            docker rm termux-build
+            docker save termux-android:latest -o /tmp/termux-android.tar
+          fi
 
       - name: Run tests (Android)
         if: matrix.android
         run: |
           docker run --rm --privileged \
+            --platform linux/arm64 \
             -v ${{ github.workspace }}:/workspace \
-            termux/termux-docker:aarch64 \
-            /workspace/packages/lde/${{ matrix.outfile }} test
+            -w /workspace \
+            termux-android:latest \
+            bash -c "/workspace/packages/lde/${{ matrix.outfile }} test"
 
       - name: Upload nightly release asset
         uses: softprops/action-gh-release@v2
