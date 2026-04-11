@@ -1,4 +1,6 @@
-local ansi = require("ansi")
+local ansi      = require("ansi")
+local readline  = require("readline")
+local highlight = require("readline.highlight")
 
 local lde = require("lde-core")
 local run = require("lde-core.package.run")
@@ -24,11 +26,6 @@ local function repl(_args)
 	end
 
 	local buffer = ""
-
-	local function prompt()
-		io.write(ansi.format(buffer ~= "" and "{gray}...{reset} " or "{blue}>{reset} "))
-		io.flush()
-	end
 
 	local G = setmetatable({}, { __index = _G })
 	G._ENV = G
@@ -60,16 +57,20 @@ local function repl(_args)
 		return "{\n" .. table.concat(items, ",\n") .. "\n" .. pad .. "}"
 	end
 
+	-- Rewrite `local x, y = ...` to `x, y = ...` so variables persist in G across lines.
+	local function delocal(s)
+		return (s:gsub("^%s*local%s+([%a_][%w_%s,]-)%s*=", "%1 ="))
+	end
+
 	while true do
-		prompt()
-		local line = io.read("*l")
+		local prompt = ansi.format(buffer ~= "" and "{gray}...{reset} " or "{blue}>{reset} ")
+		local line = readline.read(prompt, highlight)
 
 		if line == nil or line == "exit()" or line == "quit()" then
-			if line == nil then print("") end
 			break
 		end
 
-		buffer = buffer == "" and line or (buffer .. "\n" .. line)
+		buffer = buffer == "" and delocal(line) or (buffer .. "\n" .. delocal(line))
 
 		local chunk, err = loadstring("return " .. buffer, "repl") or loadstring(buffer, "repl")
 
