@@ -12,13 +12,13 @@
 
 `lde` is a modern package manager and toolkit for Lua, written in Lua.
 
-It bundles a LuaJIT runtime, a test runner, and a compiler that turns your Lua programs into single executables under **1mB** — alongside a package registry with proper version locking and project-local isolation.
+It bundles a LuaJIT runtime, a test runner, and a compiler that turns your Lua programs into single executables <**1mB** alongside a package registry with proper version locking and project-local isolation.
 
 To get started, [read the docs](https://lde.sh/docs/general/getting-started/introduction).
 
 ## Features
 
-- `lde new` / `lde init` — scaffold a new project
+- `lde new` / `lde init` — Scaffold a new project
 - `lde run` — Run your project, installing dependencies automatically
 - `lde test` — Run tests with the built-in [`lde-test`](./packages/lde-test) framework
 - `lde compile` — Compile your project into a single distributable executable
