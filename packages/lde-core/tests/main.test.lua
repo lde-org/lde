@@ -292,12 +292,12 @@ test.it("git dep: installs root package, not a sub-package, when repo has lde.js
 	-- instead of the root package (e.g. "lde-test").
 	--
 	-- We pre-populate the real git cache dir so getOrInitGitRepo skips cloning.
-	local repoDir = lde.global.getGitRepoDir("my-root-pkg")
+	-- Pinning a fake commit in the dep skips the getCommitHash call entirely,
+	-- keeping the test self-contained (no real git repo needed).
+	local fakeCommit = "abc1234567890abcdef1234567890abcdef123456"
+	local repoDir = lde.global.getGitRepoDir("my-root-pkg", nil, fakeCommit)
 	fs.rmdir(repoDir)
 	fs.mkdir(repoDir)
-
-	-- Initialize the git repo so commit info can be fetched
-	git.init(repoDir, true)
 
 	-- Root lde.json
 	fs.write(path.join(repoDir, "lde.json"), json.encode({
@@ -320,7 +320,7 @@ test.it("git dep: installs root package, not a sub-package, when repo has lde.js
 	fs.mkdir(path.join(subDir, "src"))
 	fs.write(path.join(subDir, "src", "init.lua"), "return {}")
 
-	-- App that depends on the root package via git
+	-- App that depends on the root package via git (commit pinned so getCommitHash is skipped)
 	local appDir = path.join(tmpBase, "git-dep-app")
 	fs.mkdir(appDir)
 	fs.mkdir(path.join(appDir, "src"))
@@ -329,7 +329,7 @@ test.it("git dep: installs root package, not a sub-package, when repo has lde.js
 		name = "git-dep-app",
 		version = "0.1.0",
 		dependencies = {
-			["my-root-pkg"] = { git = "https://example.com/my-root-pkg.git" }
+			["my-root-pkg"] = { git = "https://example.com/my-root-pkg.git", commit = fakeCommit }
 		}
 	}))
 
