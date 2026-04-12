@@ -39,9 +39,14 @@ local function upgrade(args)
 		releaseUrl = releasesUrl .. "/tags/v" .. desiredVersion
 	end
 
-	local res, err = curl.get(releaseUrl)
+	local res, err = curl.get(releaseUrl, { headers = { ["User-Agent"] = "lde-upgrade" } })
 	if not res then
 		ansi.printf("{red}Failed to fetch latest release: %s", err)
+		return
+	end
+
+	if res.status ~= 200 then
+		ansi.printf("{red}Failed to fetch release info: HTTP %d", res.status)
 		return
 	end
 
