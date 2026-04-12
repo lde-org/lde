@@ -130,6 +130,10 @@ jobs:
           cd packages/lde
           lde compile --outfile ${{ matrix.outfile }}
 
+      - name: Fix workspace permissions (Android)
+        if: matrix.android
+        run: chmod -R a+rw ${{ github.workspace }}
+
       - name: Setup Android build image
         if: matrix.android
         run: |
