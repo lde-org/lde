@@ -9,7 +9,7 @@
 		"clap": { "path": "../clap" },
 		"fs": { "path": "../fs" },
 		"env": { "path": "../env" },
-		"http": { "path": "../http" },
+		"curl-sys": { "git": "https://github.com/lde-org/curl-sys" },
 		"semver": { "path": "../semver" },
 		"lde-core": { "path": "../lde-core" },
 		"winapi": {

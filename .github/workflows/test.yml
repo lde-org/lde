@@ -95,14 +95,34 @@ jobs:
         if: matrix.android
         run: echo "SEA_CC=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-aarch64/bin/aarch64-linux-android21-clang" >> $GITHUB_ENV
 
+      - name: Install macOS build deps
+        if: startsWith(matrix.os, 'macos')
+        run: brew install autoconf automake libtool
+
       - uses: lde-org/setup-lde@master
+        if: "!matrix.android"
         with:
           version: nightly
+
+      - name: Setup lde (Android)
+        if: matrix.android
+        uses: lde-org/setup-lde@master
+        with:
+          version: nightly
+          platform: Android
+          arch: aarch64
+
+      - name: Cache curl-sys build
+        uses: actions/cache@v5
+        with:
+          path: packages/*/target/curl-sys
+          key: curl-sys-${{ matrix.os }}-${{ runner.arch }}${{ matrix.android && '-android' || '' }}
 
       - name: Build lde
         # lde's own tests invoke the lde binary directly (e.g. to test CLI flags),
         # so we must compile a fresh binary from source before running tests.
         # Using the pre-installed nightly binary would miss any CLI changes in this PR.
+        if: "!matrix.android"
         run: |
           cd packages/lde
           lde compile --outfile ${{ env.OUTFILE }}
@@ -121,7 +141,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: /tmp/termux-android.tar
-          key: termux-android-v1
+          key: termux-android-v2
 
       - name: Setup Android test image
         if: matrix.android
@@ -133,7 +153,7 @@ jobs:
             docker run --privileged --platform linux/arm64 --name termux-build \
               -e DEBIAN_FRONTEND=noninteractive \
               termux/termux-docker:aarch64 \
-              bash -c "apt update && apt upgrade -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold && apt install -y git clang curl zip make"
+              bash -c "apt update && apt upgrade -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold && apt install -y git clang curl zip make cmake autoconf automake libtool openssl perl"
             docker commit termux-build termux-android:latest
             docker rm termux-build
             docker save termux-android:latest -o /tmp/termux-android.tar
@@ -145,6 +165,9 @@ jobs:
           docker run --rm --privileged \
             --platform linux/arm64 \
             -v ${{ github.workspace }}:/workspace \
+            -v $HOME/.lde/lde:/workspace/lde \
             -w /workspace \
+            -e ANDROID_NDK_ROOT=/workspace/android-ndk-r29 \
+            -e LD_LIBRARY_PATH=/data/data/com.termux/files/usr/lib \
             termux-android:latest \
-            bash -c "/workspace/packages/lde/${{ env.OUTFILE }} test"
+            bash -c "/workspace/lde --setup && cd /workspace/packages/lde && /workspace/lde compile --outfile /workspace/packages/lde/${{ env.OUTFILE }} && cd /workspace && /workspace/packages/lde/${{ env.OUTFILE }} test"

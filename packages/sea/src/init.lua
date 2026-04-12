@@ -6,6 +6,7 @@ local env = require("env")
 local fs = require("fs")
 local jit = require("jit")
 local Archive = require("archive")
+local curl = require("curl-sys")
 
 local util = require("util")
 
@@ -103,9 +104,9 @@ local function getLuajitPath(compiler)
 	)
 	local tarballPath = path.join(cacheDir, tarballName)
 
-	local code, _, stderr = process.exec("curl", { "-L", "-o", tarballPath, downloadUrl })
-	if code ~= 0 then
-		error("Failed to download LuaJIT from " .. downloadUrl .. ": " .. (stderr or ""))
+	local ok, dlErr = curl.download(downloadUrl, tarballPath)
+	if not ok then
+		error("Failed to download LuaJIT from " .. downloadUrl .. ": " .. (dlErr or ""))
 	end
 
 	local ok, err = Archive.new(tarballPath):extract(cacheDir)

@@ -1,17 +1,17 @@
 local test = require("lde-test")
 local rocked = require("rocked")
-local http = require("http")
+local curl = require("curl-sys")
 
 test.it("should be able to parse busted's rockspec", function()
-	local spec, err = http.get(
+	local res, err = curl.get(
 		"https://raw.githubusercontent.com/lunarmodules/busted/56e6d68204d1456afa77f1346bf4e050df65b629/rockspecs/busted-2.3.0-1.rockspec"
 	)
 
-	if not spec then
+	if not res then
 		error("Failed to GET busted rockspec: " .. err)
 	end
 
-	local ok, parsed = rocked.parse(spec)
+	local ok, parsed = rocked.parse(res.body)
 	if not ok then
 		error("Failed to parse rockspec: " .. parsed)
 	end

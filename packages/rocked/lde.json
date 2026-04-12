@@ -1,5 +1,7 @@
 {
 	"name": "rocked",
 	"version": "0.1.0",
-	"devDependencies": { "http": { "path": "../http" } }
+	"devDependencies": {
+		"curl-sys": { "git": "https://github.com/lde-org/curl-sys" }
+	}
 }

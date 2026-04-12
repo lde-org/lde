@@ -41,7 +41,7 @@ if os.getenv("BOOTSTRAP") then
 	end
 
 	local pathPackages = {
-		"ansi", "clap", "fs", "http", "env", "path", "json", "git", "luarocks",
+		"ansi", "clap", "fs", "env", "path", "json", "git", "luarocks",
 		"process2", "sea", "semver", "util", "lde-core", "lde-test", "rocked", "archive"
 	}
 

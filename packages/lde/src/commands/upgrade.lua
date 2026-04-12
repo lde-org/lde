@@ -1,11 +1,10 @@
-local http = require("http")
-local process = require("process2")
 local semver = require("semver")
 local json = require("json")
 local ansi = require("ansi")
 local path = require("path")
 local fs = require("fs")
 local env = require("env")
+local curl = require("curl-sys")
 
 local lde = require("lde-core")
 
@@ -40,13 +39,13 @@ local function upgrade(args)
 		releaseUrl = releasesUrl .. "/tags/v" .. desiredVersion
 	end
 
-	local out, err = http.get(releaseUrl)
-	if not out then
+	local res, err = curl.get(releaseUrl)
+	if not res then
 		ansi.printf("{red}Failed to fetch latest release: %s", err)
 		return
 	end
 
-	local releaseInfo = json.decode(out)
+	local releaseInfo = json.decode(res.body)
 	if not releaseInfo or not releaseInfo.tag_name or not releaseInfo.assets then
 		ansi.printf("{red}Invalid release information received")
 		return
@@ -99,15 +98,10 @@ local function upgrade(args)
 
 	ansi.printf("{green}==> Downloading {white}%s {green}from {cyan}%s", artifactName, downloadUrl)
 
-	-- Download directly to file to avoid output size limits in process.exec
-	local child, spawnErr = process.spawn("curl", { "-sL", "-o", tempNewLocation, downloadUrl })
-	if not child then
-		ansi.printf("{red}Failed to download binary: %s", spawnErr)
-		return
-	end
-	local downloadCode = child:wait()
-	if downloadCode ~= 0 then
-		ansi.printf("{red}Failed to download binary: curl exited with code %d", downloadCode)
+	-- Download directly to file
+	local dlOk, dlErr = curl.download(downloadUrl, tempNewLocation)
+	if not dlOk then
+		ansi.printf("{red}Failed to download binary: %s", dlErr)
 		return
 	end
 

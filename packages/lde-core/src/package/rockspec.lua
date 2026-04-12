@@ -4,10 +4,10 @@ local lde = require("lde-core")
 
 local fs = require("fs")
 local env = require("env")
-local http = require("http")
 local path = require("path")
 local process = require("process2")
 local util = require("util")
+local curl = require("curl-sys")
 
 ---@param dir string?
 ---@param rockspecPath string? # Path to the rockspec file; if nil, scanned from dir
@@ -41,12 +41,12 @@ local function openRockspec(dir, rockspecPath)
 		if fs.exists(cacheFile) then
 			content = fs.read(cacheFile)
 		else
-			local err
-			content, err = http.get(rockspecPath)
-			if not content then
+			local res, err = curl.get(rockspecPath)
+			if not res then
 				return nil, "Could not fetch rockspec: " .. rockspecPath .. ": " .. (err or "")
 			end
 
+			content = res.body
 			fs.write(cacheFile, content)
 		end
 	else -- Looks like a path
@@ -151,7 +151,8 @@ local function openRockspec(dir, rockspecPath)
 
 		if buildType == "make" then
 			if not process.exec("make", { "--version" }) then
-				return nil, "Package '" .. (spec.package or "?") .. "' requires 'make' to build, but it was not found." ..
+				return nil,
+					"Package '" .. (spec.package or "?") .. "' requires 'make' to build, but it was not found." ..
 					" Install make (e.g. build-essential on Debian/Ubuntu, Xcode Command Line Tools on macOS)."
 			end
 
@@ -444,8 +445,13 @@ local function openRockspec(dir, rockspecPath)
 			end
 		end
 
-		return lde.Package.Config.new({ name = spec.package, version = spec.version, bin = resolvedBin, dependencies =
-		deps })
+		return lde.Package.Config.new({
+			name = spec.package,
+			version = spec.version,
+			bin = resolvedBin,
+			dependencies =
+				deps
+		})
 	end
 
 	return pkg, nil

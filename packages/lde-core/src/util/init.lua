@@ -1,6 +1,5 @@
 local util = {}
 
-local http = require("http")
 local fs = require("fs")
 local path = require("path")
 local git = require("git")
@@ -9,7 +8,7 @@ local rocked = require("rocked")
 local ansi = require("ansi")
 local lde = require("lde-core")
 local luarocks = require("luarocks")
-local process = require("process2")
+local curl = require("curl-sys")
 local Archive = require("archive")
 
 local MANIFEST_URL = "https://luarocks.org/manifest"
@@ -34,14 +33,14 @@ local function getManifest()
 	end
 
 	local p = lde.verbose and ansi.progress("Fetching luarocks manifest") or nil
-	local content, err = http.get(MANIFEST_URL)
-	if not content then
+	local res, err = curl.get(MANIFEST_URL)
+	if not res then
 		if p then p:fail() end
 		return nil, "Failed to fetch manifest: " .. (err or "")
 	end
 
-	fs.write(cacheFile, content)
-	cachedManifest = luarocks.Manifest.new(content)
+	fs.write(cacheFile, res.body)
+	cachedManifest = luarocks.Manifest.new(res.body)
 	if p then p:done() end
 	return cachedManifest
 end
@@ -106,11 +105,12 @@ function util.openRockspecUrl(name, url, branch, commit)
 		content = fs.read(rockspecCacheFile)
 	end
 	if not content then
-		local fetchErr
-		content, fetchErr = http.get(url)
-		if not content then
+		local res, fetchErr = curl.get(url)
+		if not res then
 			return nil, nil, "Failed to fetch rockspec: " .. (fetchErr or "")
 		end
+
+		content = res.body
 		fs.write(rockspecCacheFile, content)
 	end
 

@@ -76,23 +76,24 @@ local function runTests(package)
 
 		local testObj = ldeTest.new()
 
-		local ok, err = runtime.executeFile(testFile, {
+		local ok, results = runtime.executeFile(testFile, {
 			packagePath = luaPath,
 			packageCPath = luaCPath,
 			preload = {
 				["lpm-test"] = function() return testObj end, -- Compat
-				["lde-test"] = function() return testObj end
-			}
+				["lde-test"] = function() return testObj end,
+				["lde-test.run"] = function() return testObj.run end
+			},
+			postexec = function() return testObj.run() end
 		})
 
 		if not ok then
 			files[#files + 1] = {
 				file = relativePath,
 				results = {},
-				error = err
+				error = results
 			}
 		else
-			local results = testObj.run()
 			local failCount = 0
 			local skipCount = 0
 			for _, r in ipairs(results) do

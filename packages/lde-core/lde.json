@@ -11,7 +11,7 @@
 		"fs": { "path": "../fs" },
 		"env": { "path": "../env" },
 		"util": { "path": "../util" },
-		"http": { "path": "../http" },
+		"curl-sys": { "git": "https://github.com/lde-org/curl-sys" },
 		"semver": { "path": "../semver" },
 		"lde-test": { "path": "../lde-test" },
 		"git": { "path": "../git" },
