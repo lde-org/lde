@@ -124,6 +124,12 @@ jobs:
           path: packages/*/target/deflate-sys
           key: deflate-sys-${{ matrix.os }}-${{ runner.arch }}${{ matrix.android && '-android' || '' }}
 
+      - name: Cache git2-sys build
+        uses: actions/cache@v5
+        with:
+          path: packages/*/target/git2-sys
+          key: git2-sys-${{ matrix.os }}-${{ runner.arch }}${{ matrix.android && '-android' || '' }}
+
       - name: Build lde
         # lde's own tests invoke the lde binary directly (e.g. to test CLI flags),
         # so we must compile a fresh binary from source before running tests.
