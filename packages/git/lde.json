@@ -2,5 +2,9 @@
 	"name": "git",
 	"description": "Provides git command execution in a nice API. Requires git cli to be available.",
 	"version": "0.1.0",
-	"dependencies": { "process2": { "path": "../process2" } }
+	"dependencies": {
+		"git2-sys": {
+			"git": "https://github.com/lde-org/git2-sys"
+		}
+	}
 }
