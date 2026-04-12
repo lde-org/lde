@@ -7,6 +7,7 @@
 		"path": { "path": "../path" },
 		"env": { "path": "../env" },
 		"util": { "path": "../util" },
-		"archive": { "path": "../archive" }
+		"archive": { "path": "../archive" },
+		"curl-sys": { "git": "https://github.com/lde-org/curl-sys" }
 	}
 }

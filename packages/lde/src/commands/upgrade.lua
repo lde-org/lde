@@ -1,4 +1,3 @@
-local process = require("process2")
 local semver = require("semver")
 local json = require("json")
 local ansi = require("ansi")
@@ -99,15 +98,10 @@ local function upgrade(args)
 
 	ansi.printf("{green}==> Downloading {white}%s {green}from {cyan}%s", artifactName, downloadUrl)
 
-	-- Download directly to file to avoid output size limits in process.exec
-	local child, spawnErr = process.spawn("curl", { "-sL", "-o", tempNewLocation, downloadUrl })
-	if not child then
-		ansi.printf("{red}Failed to download binary: %s", spawnErr)
-		return
-	end
-	local downloadCode = child:wait()
-	if downloadCode ~= 0 then
-		ansi.printf("{red}Failed to download binary: curl exited with code %d", downloadCode)
+	-- Download directly to file
+	local dlOk, dlErr = curl.download(downloadUrl, tempNewLocation)
+	if not dlOk then
+		ansi.printf("{red}Failed to download binary: %s", dlErr)
 		return
 	end
 

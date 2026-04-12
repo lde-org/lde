@@ -8,6 +8,7 @@ local lde = require("lde-core")
 local ansi = require("ansi")
 local env = require("env")
 local Archive = require("archive")
+local curl = require("curl-sys")
 
 local global = {}
 package.loaded[(...)] = global
@@ -218,10 +219,10 @@ function global.getOrInitArchive(url)
 
 		local archiveFile = archiveDir .. ".archive"
 
-		local code, _, stderr = process.exec("curl", { "-sL", "-o", archiveFile, url })
-		if code ~= 0 then
+		local ok, dlErr = curl.download(url, archiveFile)
+		if not ok then
 			if p then p:fail(label) end
-			error("Failed to download archive '" .. url .. "': " .. (stderr or ""))
+			error("Failed to download archive '" .. url .. "': " .. (dlErr or ""))
 		end
 
 		local code2, err2
@@ -364,20 +365,20 @@ function global.ensureMingw()
 	local sevenzPath = path.join(tmpDir, "7zr.exe")
 	local archivePath = path.join(tmpDir, "mingw.7z")
 
-	local code, _, stderr = process.exec("curl", { "-sL", "-o", sevenzPath, SEVENZ_URL })
-	if code ~= 0 then
+	local ok, dlErr = curl.download(SEVENZ_URL, sevenzPath)
+	if not ok then
 		fs.rmdir(tmpDir)
 		if p1 then p1:fail() end
-		error("Failed to download 7zr.exe: " .. (stderr or ""))
+		error("Failed to download 7zr.exe: " .. (dlErr or ""))
 	end
 	if p1 then p1:done() end
 
 	local p2 = lde.verbose and ansi.progress("Downloading MinGW toolchain") or nil
-	code, _, stderr = process.exec("curl", { "-sL", "-o", archivePath, MINGW_URL })
-	if code ~= 0 then
+	local ok2, dlErr2 = curl.download(MINGW_URL, archivePath)
+	if not ok2 then
 		fs.rmdir(tmpDir)
 		if p2 then p2:fail() end
-		error("Failed to download MinGW archive: " .. (stderr or ""))
+		error("Failed to download MinGW archive: " .. (dlErr2 or ""))
 	end
 	if p2 then p2:done() end
 
