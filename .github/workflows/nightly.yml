@@ -134,6 +134,12 @@ jobs:
           path: packages/*/target/deflate-sys
           key: deflate-sys-${{ matrix.os }}-${{ runner.arch }}${{ matrix.android && '-android' || '' }}
 
+      - name: Cache git2-sys build
+        uses: actions/cache@v5
+        with:
+          path: packages/*/target/git2-sys
+          key: git2-sys-${{ matrix.os }}-${{ runner.arch }}${{ matrix.android && '-android' || '' }}
+
       - name: Build lde
         if: "!matrix.android"
         run: |
@@ -182,6 +188,7 @@ jobs:
             -w /workspace \
             -e ANDROID_NDK_ROOT=/workspace/android-ndk-r29 \
             -e LD_LIBRARY_PATH=/data/data/com.termux/files/usr/lib \
+            -e TMPDIR=/data/data/com.termux/files/usr/tmp \
             termux-android:latest \
             bash -c "/workspace/lde --setup && cd /workspace/packages/lde && /workspace/lde compile --outfile /workspace/packages/lde/${{ matrix.outfile }} && cd /workspace && /workspace/packages/lde/${{ matrix.outfile }} test"
 

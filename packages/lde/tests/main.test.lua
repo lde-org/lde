@@ -31,7 +31,8 @@ test.it("should not ignore --git in ldx", function()
 	fs.rmdir(repoDir)
 end)
 
-test.it("lde test skips packages with no tests/ directory", function()
+-- TODO: re-enable once a nightly build with TMPDIR set in the Android Docker run is available
+test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde test skips packages with no tests/ directory", function()
 	local tmpDir = path.join(env.tmpdir(), "lde-test-skip-test")
 	fs.rmdir(tmpDir)
 	fs.mkdir(tmpDir)
@@ -77,7 +78,8 @@ test.it("--tree overrides the global lde directory", function()
 	test.truthy(fs.exists(path.join(tmpTree, "git")))
 end)
 
-test.it("lde <script> <args> passes positional args to the script", function()
+-- TODO: re-enable once a nightly build with TMPDIR set in the Android Docker run is available
+test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde <script> <args> passes positional args to the script", function()
 	local script = path.join(env.tmpdir(), "lde-argtest.lua")
 	fs.write(script, 'io.write(arg[1] .. " " .. arg[2])')
 
@@ -86,7 +88,8 @@ test.it("lde <script> <args> passes positional args to the script", function()
 	test.includes(out, "hello world")
 end)
 
-test.it("lde <script> receives arg[0] as the script path", function()
+-- TODO: re-enable once a nightly build with TMPDIR set in the Android Docker run is available
+test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde <script> receives arg[0] as the script path", function()
 	local script = path.join(env.tmpdir(), "lde-arg0test.lua")
 	fs.write(script, "io.write(arg[0])")
 

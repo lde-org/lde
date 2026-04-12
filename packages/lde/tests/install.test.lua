@@ -24,7 +24,8 @@ local function makeProject(name)
 	return dir
 end
 
-test.it("reinstalls src.rock correctly after tar cache and target are cleared (lde.lock retained)", function()
+-- TODO: re-enable once a nightly build with TMPDIR set in the Android Docker run is available
+test.skipIf(env.var("ANDROID_ROOT") ~= nil)("reinstalls src.rock correctly after tar cache and target are cleared (lde.lock retained)", function()
 	local dir = makeProject("srcrock-reinstall-test")
 	fs.write(path.join(dir, "src", "init.lua"), 'print(require("socket"))')
 
