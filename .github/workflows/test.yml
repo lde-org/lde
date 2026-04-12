@@ -137,7 +137,7 @@ jobs:
             docker run --privileged --platform linux/arm64 --name termux-build \
               -e DEBIAN_FRONTEND=noninteractive \
               termux/termux-docker:aarch64 \
-              bash -c "apt update && apt upgrade -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold && apt install -y git clang curl zip make openssl"
+              bash -c "apt update && apt upgrade -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold && apt install -y git clang curl zip make cmake autoconf automake libtool openssl perl"
             docker commit termux-build termux-android:latest
             docker rm termux-build
             docker save termux-android:latest -o /tmp/termux-android.tar
