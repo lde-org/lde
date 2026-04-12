@@ -95,6 +95,10 @@ jobs:
         if: matrix.android
         run: echo "SEA_CC=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-aarch64/bin/aarch64-linux-android21-clang" >> $GITHUB_ENV
 
+      - name: Install macOS build deps
+        if: startsWith(matrix.os, 'macos')
+        run: brew install autoconf automake libtool
+
       - uses: lde-org/setup-lde@master
         with:
           version: nightly
