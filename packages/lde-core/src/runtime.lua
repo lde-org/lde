@@ -28,6 +28,7 @@ local builtinModules = {
 ---@field packageCPath string?
 ---@field preload table<string, function>?
 ---@field cwd string?
+---@field postexec (fun(): any)?
 
 --- Clears non-builtin entries from a table, returning the saved contents.
 ---@param t table
@@ -122,13 +123,21 @@ local function executeWith(compile, opts, scriptName)
 	local ok, result = pcall(function()
 		package.path = opts.packagePath or oldPath
 		package.cpath = opts.packageCPath or oldCPath
+
+		local a, b, c, d, e, f
 		if opts.args then
 			arg = opts.args
 			arg[0] = scriptName
-			return chunk(unpack(opts.args))
+			a, b, c, d, e, f = chunk(unpack(opts.args))
 		else
-			return chunk()
+			a, b, c, d, e, f = chunk()
 		end
+
+		if opts.postexec then
+			return opts.postexec()
+		end
+
+		return a, b, c, d, e, f
 	end)
 
 	for k, v in pairs(oldEnvVars) do env.set(k, v) end

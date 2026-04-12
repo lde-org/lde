@@ -4,7 +4,6 @@ local fs = require("fs")
 local env = require("env")
 local path = require("path")
 local json = require("json")
-local process = require("process2")
 local git = require("git")
 
 local lde = require("lde-core")
@@ -17,6 +16,24 @@ fs.rmdir(tmpBase)
 --
 -- runtime.executeFile
 --
+
+test.it("runtime.executeFile postexec runs inside os.tmpname override", function()
+	fs.mkdir(tmpBase)
+	local scriptPath = path.join(tmpBase, "tmpname.lua")
+	fs.write(scriptPath, "")
+
+	local tmpnameResult
+	local ok = lde.runtime.executeFile(scriptPath, {
+		postexec = function()
+			tmpnameResult = os.tmpname()
+		end
+	})
+	test.truthy(ok)
+	test.truthy(tmpnameResult)
+	-- The overridden os.tmpname uses env.tmpdir(), not C tmpnam() which uses /tmp
+	local tmpdir = env.tmpdir()
+	test.truthy(tmpnameResult:sub(1, #tmpdir) == tmpdir, "tmpname should be under tmpdir, got: " .. tostring(tmpnameResult))
+end)
 
 test.it("runtime.executeFile runs a Lua script", function()
 	fs.mkdir(tmpBase)
