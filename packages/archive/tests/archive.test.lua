@@ -12,23 +12,6 @@ local function tmp(name)
 	return path.join(tmpBase, name)
 end
 
--- helpers to create real archives for testing
-local function makeZip(zipPath, content)
-	local dir = tmp("zip-src")
-	fs.mkdir(dir)
-	fs.write(path.join(dir, "hello.txt"), content)
-	local code = os.execute("cd " .. dir .. " && zip -q " .. zipPath .. " hello.txt")
-	return code == 0 or code == true
-end
-
-local function makeTar(tarPath, content)
-	local dir = tmp("tar-src")
-	fs.mkdir(dir)
-	fs.write(path.join(dir, "hello.txt"), content)
-	local code = os.execute("cd " .. dir .. " && tar -cf " .. tarPath .. " -C " .. dir .. " hello.txt")
-	return code == 0 or code == true
-end
-
 --
 -- Archive.new
 --
@@ -96,55 +79,75 @@ test.it("save encodes to .tar.gz and files are extractable", function()
 	test.equal(fs.read(path.join(outDir, "hello.txt")), "tar content")
 end)
 
---
--- tar extraction
---
-
 test.it("extracts a .tar archive", function()
 	local tarPath = tmp("test.tar")
 	local outDir = tmp("out-tar")
 	fs.mkdir(outDir)
 
-	local made = makeTar(tarPath, "tar content")
-	if not made then return end -- skip if tar not available
-
-	local a = Archive.new(tarPath)
-	local ok = a:extract(outDir)
+	local a = Archive.new({ ["hello.txt"] = "tar content" })
+	local ok = a:save(tarPath)
 	test.truthy(ok)
+
+	local b = Archive.new(tarPath)
+	local ok2 = b:extract(outDir)
+	test.truthy(ok2)
 	test.truthy(fs.exists(path.join(outDir, "hello.txt")))
 end)
 
---
--- zip extraction (linux only — mac/windows always use tar)
---
+test.it("extracts a .zip archive", function()
+	local zipPath = tmp("test2.zip")
+	local outDir = tmp("out-zip2")
+	fs.mkdir(outDir)
 
-if jit.os == "Linux" then
-	test.it("extracts a .zip archive using unzip on linux", function()
-		local zipPath = tmp("test.zip")
-		local outDir = tmp("out-zip")
-		fs.mkdir(outDir)
+	local a = Archive.new({ ["hello.txt"] = "zip content" })
+	local ok = a:save(zipPath)
+	test.truthy(ok)
 
-		local made = makeZip(zipPath, "zip content")
-		if not made then return end -- skip if zip not available
+	local b = Archive.new(zipPath)
+	local ok2 = b:extract(outDir)
+	test.truthy(ok2)
+	test.truthy(fs.exists(path.join(outDir, "hello.txt")))
+end)
 
-		local a = Archive.new(zipPath)
-		local ok = a:extract(outDir)
-		test.truthy(ok)
-		test.truthy(fs.exists(path.join(outDir, "hello.txt")))
-	end)
+test.it("stripComponents strips top-level dir from zip", function()
+	local zipPath = tmp("strip.zip")
+	local outDir = tmp("out-strip-zip")
+	fs.mkdir(outDir)
 
-	test.it("uses tar for non-zip on linux even without .tar extension", function()
-		-- a .tar renamed to .bin — magic bytes are not PK, so tar is used
-		local tarPath = tmp("test.tar")
-		local binPath = tmp("test.bin")
-		makeTar(tarPath, "bin content")
-		fs.copy(tarPath, binPath)
+	local a = Archive.new({ ["topdir/hello.txt"] = "stripped" })
+	a:save(zipPath)
 
-		local outDir = tmp("out-bin")
-		fs.mkdir(outDir)
+	local b = Archive.new(zipPath)
+	b:extract(outDir, { stripComponents = true })
+	test.equal(fs.read(path.join(outDir, "hello.txt")), "stripped")
+end)
 
-		local a = Archive.new(binPath)
-		local ok = a:extract(outDir)
-		test.truthy(ok)
-	end)
-end
+-- regression: zips with no explicit directory entries (e.g. .src.rock files)
+-- must still extract deeply nested files by creating parent dirs recursively
+test.it("extracts zip with deeply nested files and no explicit dir entries", function()
+	local zipPath = tmp("nested.zip")
+	local outDir  = tmp("out-nested")
+	fs.mkdir(outDir)
+
+	-- save creates file entries only, no dir entries — matches .src.rock behavior
+	local a = Archive.new({ ["a/b/c/deep.lua"] = "deep content" })
+	a:save(zipPath)
+
+	local b = Archive.new(zipPath)
+	local ok = b:extract(outDir)
+	test.truthy(ok)
+	test.equal(fs.read(path.join(outDir, "a/b/c/deep.lua")), "deep content")
+end)
+
+test.it("stripComponents strips top-level dir from tar.gz", function()
+	local tarPath = tmp("strip.tar.gz")
+	local outDir = tmp("out-strip-tar")
+	fs.mkdir(outDir)
+
+	local a = Archive.new({ ["topdir/hello.txt"] = "stripped" })
+	a:save(tarPath)
+
+	local b = Archive.new(tarPath)
+	b:extract(outDir, { stripComponents = true })
+	test.equal(fs.read(path.join(outDir, "hello.txt")), "stripped")
+end)
