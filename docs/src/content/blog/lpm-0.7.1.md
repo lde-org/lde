@@ -29,7 +29,7 @@ The install scripts now accept a `--nightly` flag to install the latest nightly 
 curl -fsSL https://lde.sh/install | sh -s -- --nightly
 
 # Windows
-irm https://lde.sh/install.ps1 | iex -Args --nightly
+iex "& {$(irm https://lde.sh/install.ps1)} --nightly"
 ```
 
 Nightly builds reflect the latest commits and may be unstable. Use `lpm upgrade` (without `--nightly`) to switch back to a stable release.

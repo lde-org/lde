@@ -265,7 +265,7 @@ export default function DownloadPanel() {
 		if (cmd.includes("| sh"))
 			return cmd.replace("| sh", "| sh -s -- --nightly");
 		if (cmd.includes("| iex"))
-			return cmd.replace("| iex", "| iex -Args --nightly");
+			return `iex "& {$(irm https://lde.sh/install.ps1)} --nightly"`;
 		return cmd;
 	}
 

@@ -88,11 +88,39 @@
 }
 
 .markdown pre {
-	@apply my-4 p-4 rounded-lg text-sm leading-relaxed overflow-x-auto bg-gray-50 border border-gray-200;
+	@apply my-4 rounded-lg text-sm leading-relaxed overflow-x-auto bg-gray-50 border border-gray-200;
+	padding: 2.5rem 1rem 1rem;
 
 	@variant dark {
 		@apply bg-gray-900/50 border-gray-700/50;
 	}
+}
+
+.markdown pre[data-language]::before {
+	content: attr(data-language);
+	display: block;
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	padding: 0.25rem 1rem;
+	font-size: 0.7rem;
+	font-family: ui-monospace, monospace;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	color: rgba(0,0,0,0.35);
+	border-bottom: 1px solid rgba(0,0,0,0.07);
+	background: rgba(0,0,0,0.02);
+}
+
+.dark .markdown pre[data-language]::before {
+	color: rgba(255,255,255,0.3);
+	border-bottom-color: rgba(255,255,255,0.06);
+	background: rgba(255,255,255,0.02);
+}
+
+.markdown pre[data-language] {
+	position: relative;
 }
 
 .markdown code:not(pre code) {

@@ -42,7 +42,7 @@ The install scripts now accept a `--version` flag to install a specific release:
 curl -fsSL https://lde.sh/install | sh -s -- --version 0.7.2
 
 # Windows
-irm https://lde.sh/install.ps1 | iex -Args --version, 0.7.2
+iex "& {$(irm https://lde.sh/install.ps1)} --version 0.7.2"
 ```
 
 ## New `lpm-test` assertions
