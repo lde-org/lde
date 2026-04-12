@@ -107,7 +107,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: packages/*/target/curl-sys
-          key: curl-sys-${{ matrix.os }}${{ matrix.android && '-android' || '' }}
+          key: curl-sys-${{ matrix.os }}-${{ runner.arch }}${{ matrix.android && '-android' || '' }}
 
       - name: Build lde
         # lde's own tests invoke the lde binary directly (e.g. to test CLI flags),
