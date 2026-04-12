@@ -7,6 +7,8 @@
 ---@field it fun(name: string, fn: fun())
 ---@field skip fun(name: string, fn: fun()?)
 ---@field skipIf fun(condition: boolean): fun(name: string, fn: fun())
+---@field afterEach fun(fn: fun())
+---@field afterAll fun(fn: fun())
 ---@field run fun(): lde.test.Result[]
 ---@field equal fun(a: any, b: any)
 ---@field notEqual fun(a: any, b: any)
@@ -173,6 +175,8 @@ end
 ---@return lde.test
 function M.new()
 	local callbacks = {}
+	local afterEachFns = {}
+	local afterAllFns = {}
 
 	local instance = {}
 
@@ -192,6 +196,14 @@ function M.new()
 		end
 	end
 
+	function instance.afterEach(fn)
+		table.insert(afterEachFns, fn)
+	end
+
+	function instance.afterAll(fn)
+		table.insert(afterAllFns, fn)
+	end
+
 	function instance.run()
 		---@type lde.test.Result[]
 		local results = {}
@@ -201,7 +213,18 @@ function M.new()
 				table.insert(results, { name = callback.name, ok = true, skipped = true })
 			else
 				local ok, err = pcall(callback.callback)
+				for _, fn in ipairs(afterEachFns) do
+					local aok, aerr = pcall(fn)
+					if not aok then ok, err = false, aerr end
+				end
 				table.insert(results, { name = callback.name, ok = ok, error = err })
+			end
+		end
+
+		for i, fn in ipairs(afterAllFns) do
+			local ok, err = pcall(fn)
+			if not ok then
+				table.insert(results, { name = "afterAll #" .. i, ok = false, error = err })
 			end
 		end
 
