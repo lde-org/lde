@@ -115,6 +115,11 @@ local function upgrade(args)
 		return
 	end
 
+	-- Remove any leftover .old binary from a previous upgrade (Windows rename fails if dest exists)
+	if fs.exists(tempOldLocation) then
+		fs.delete(tempOldLocation)
+	end
+
 	-- Move current executable to tmp (allows replacement even if running)
 	local moveOldSuccess, moveOldErr = fs.move(binLocation, tempOldLocation)
 	if not moveOldSuccess then
