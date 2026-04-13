@@ -5,8 +5,6 @@ published: 2026-03-15
 description: Adds registry dependency support to lpm install and lpx, a --nightly flag for install scripts, and Aarch64 macOS support.
 ---
 
-> **NOTE**: This article was made before [the rebrand to lde](https://github.com/lde-org/lde/issues/73). Just replace `lpm` with `lde`.
-
 > Upgrade to the latest version with `lpm upgrade`!
 
 ## Registry dependencies in `lpm install` and `lpx`

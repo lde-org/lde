@@ -36,6 +36,20 @@ const tocHeadings = headings.filter((h) => h.depth <= 3);
 				})
 			}
 		</p>
+		{
+			post.data.published < new Date("2026-03-27") && (
+				<div class="mb-8 rounded-lg border border-yellow-400/40 bg-yellow-50/60 dark:bg-yellow-900/20 px-4 py-3 text-sm text-yellow-800 dark:text-yellow-300">
+					<strong>Note:</strong> This article was written before{" "}
+					<a
+						href="https://github.com/lde-org/lde/issues/73"
+						class="underline hover:text-yellow-900 dark:hover:text-yellow-200"
+					>
+						the rename from lpm to lde
+					</a>
+					. References to <code>lpm</code> can be read as <code>lde</code>.
+				</div>
+			)
+		}
 		<main class="markdown">
 			<Content />
 		</main>

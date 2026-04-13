@@ -5,8 +5,6 @@ published: 2026-02-21
 description: Adds the bin field in lpm.json for custom entrypoints, bytecode output for lpm bundle, and several bug fixes around stdout/stderr handling and working directory behavior.
 ---
 
-> **NOTE**: This article was made before [the rebrand to lde](https://github.com/lde-org/lde/issues/73). Just replace `lpm` with `lde`.
-
 > Upgrade to the latest version with `lpm upgrade`!
 
 ## `bin` field in `lpm.json`

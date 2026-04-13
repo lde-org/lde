@@ -5,8 +5,6 @@ published: 2026-03-24
 description: Adds Windows ARM64 support, --help flag, lpm run for single files, new lpm-test assertions, and fixes for Windows upgrade permissions and UTF-8 output.
 ---
 
-> **NOTE**: This article was made before [the rebrand to lde](https://github.com/lde-org/lde/issues/73). Just replace `lpm` with `lde`.
-
 > Upgrade to the latest version with `lpm upgrade`!
 
 ## Windows ARM64 support

@@ -5,8 +5,6 @@ published: 2026-03-04
 description: Introduces lpm --setup for one-step environment configuration, the lpx convenience wrapper, and simplified install scripts that delegate setup to lpm itself.
 ---
 
-> **NOTE**: This article was made before [the rebrand to lde](https://github.com/lde-org/lde/issues/73). Just replace `lpm` with `lde`.
-
 > Upgrade to the latest version with `lpm upgrade`!
 
 ## `lpm --setup`

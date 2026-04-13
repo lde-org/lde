@@ -5,8 +5,6 @@ published: 2026-03-14
 description: Launches the lpm package registry with lpm publish, adds lockfile support for reproducible installs, and introduces registry dependencies via lpm add.
 ---
 
-> **NOTE**: This article was made before [the rebrand to lde](https://github.com/lde-org/lde/issues/73). Just replace `lpm` with `lde`.
-
 > Upgrade to the latest version with `lpm upgrade`!
 
 ## LPM Registry
