@@ -25,6 +25,17 @@ export default defineConfig({
 	markdown: {
 		shikiConfig: {
 			theme: "css-variables",
+			transformers: [
+				{
+					name: "meta-filename",
+					pre(node) {
+						const meta = this.options.meta?.__raw?.trim();
+						if (meta) {
+							node.properties["data-filename"] = meta;
+						}
+					},
+				},
+			],
 		},
 	},
 	integrations: [preact(), icon()],

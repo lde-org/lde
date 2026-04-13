@@ -19,7 +19,7 @@ Do file operations to this folder. Add .so file, modify files, all you need. Use
 
 Here's an example that builds [luafilesystem](https://github.com/lunarmodules/luafilesystem) and places it in your `target` directory, to be required as normal!
 
-```lua
+```lua build.lua
 local outDir = os.getenv("LDE_OUTPUT_DIR")
 local parentDir = outDir:match("^(.*)/[^/]+$")
 
@@ -33,7 +33,7 @@ os.execute("cp './src/lfs.so' '" .. parentDir .. "/lfs.so'")
 
 This example is used in the [hood](https://github.com/codebycruz/hood) graphics library to include C header files into ffi.cdefs.
 
-```lua
+```lua build.lua
 local separator = string.sub(package.config, 1, 1)
 local outDir = os.getenv("LDE_OUTPUT_DIR")
 

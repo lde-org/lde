@@ -11,8 +11,7 @@ Note that this is not relative require support. You must always use the full `te
 
 This is useful for sharing helpers or fixtures across multiple test files:
 
-```lua
--- tests/fixture.lua
+```lua tests/fixture.lua
 return {
 	makeUser = function(name)
 		return { name = name, active = true }
@@ -20,8 +19,7 @@ return {
 }
 ```
 
-```lua
--- tests/users.test.lua
+```lua tests/users.test.lua
 local test = require("lde-test")
 local fixture = require("tests.fixture")
 

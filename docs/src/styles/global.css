@@ -113,6 +113,12 @@
 	background: rgba(0,0,0,0.02);
 }
 
+.markdown pre[data-filename]::before {
+	content: attr(data-filename);
+	text-transform: none;
+	letter-spacing: 0;
+}
+
 .dark .markdown pre[data-language]::before {
 	color: rgba(255,255,255,0.3);
 	border-bottom-color: rgba(255,255,255,0.06);

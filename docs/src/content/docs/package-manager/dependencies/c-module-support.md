@@ -13,9 +13,7 @@ This works because LDE also adds an entry to your `package.cpath` which resolves
 
 ## Example
 
-> build.lua
-
-```lua
+```lua build.lua
 local outDir = os.getenv("LDE_OUTPUT_DIR")
 
 local pathSep = string.sub(package.config, 1, 1)
@@ -34,9 +32,7 @@ local inPath = join(scriptPath, "socket.c")
 os.execute("gcc -shared -fPIC -o " .. outPath .. " " .. inPath)
 ```
 
-> socket.c
-
-```c
+```c socket.c
 #include "lua.h"
 
 int luaopen_socket_core(lua_State *L) {
@@ -45,9 +41,7 @@ int luaopen_socket_core(lua_State *L) {
 }
 ```
 
-> src/init.lua
-
-```lua
+```lua src/init.lua
 local socket = require("socket.core")
 print("Here's the output: ", socket)
 -- Here's the output: Hello from C!
