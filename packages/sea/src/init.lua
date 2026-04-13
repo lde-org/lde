@@ -10,7 +10,7 @@ local curl = require("curl-sys")
 
 local util = require("util")
 
-local ljDistRepo = "codebycruz/lj-dist"
+local ljDistRepo = "lde-org/lj-dist"
 local ljDistTag = "latest"
 
 local function getPlatformArch()
@@ -242,7 +242,7 @@ char lde_tmpdir[4096];
 	local libStartupStr  = libTmpDirInit .. table.concat(libStartup, "\n")
 	local libPreloadsStr = table.concat(libPreloads, "\n")
 
-	local tmpnameShim = util.dedent([[
+	local tmpnameShim    = util.dedent([[
 		do
 			local _ctr = 0
 			local _tmpdir = os.getenv("TMPDIR") or os.getenv("TEMP") or os.getenv("TMP") or "/tmp"
@@ -277,7 +277,7 @@ char lde_tmpdir[4096];
 		]], table.concat(ffiShimEntries, ", "))) .. "\n" .. source
 	end
 
-	source = tmpnameShim .. "\n" .. source
+	source              = tmpnameShim .. "\n" .. source
 
 	filePreloads        = {
 		('luaL_loadbuffer(L, "%s", %d, "%s"); lua_setfield(L, -2, "%s");')
