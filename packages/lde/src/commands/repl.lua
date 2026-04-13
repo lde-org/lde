@@ -3,8 +3,8 @@ local readline  = require("readline")
 local highlight = require("readline.highlight")
 local env       = require("env")
 
-local lde = require("lde-core")
-local run = require("lde-core.package.run")
+local lde       = require("lde-core")
+local run       = require("lde-core.package.run")
 
 ---@param _args clap.Args
 local function repl(_args)
@@ -66,9 +66,58 @@ local function repl(_args)
 		return (s:gsub("^%s*local%s+([%a_][%w_%s,]-)%s*=", "%1 ="))
 	end
 
+	---@param line string
+	---@param pos number
+	local function complete(line, pos)
+		local before = line:sub(1, pos)
+		local word   = before:match("[%a_][%w_%.]*$")
+		if not word or word == "" then return nil end
+
+		local obj, prefix
+		local dot = word:find("%.[^%.]*$")
+		if dot then
+			local obj_path = word:sub(1, dot - 1)
+			prefix = word:sub(dot + 1)
+			obj = G
+			for part in obj_path:gmatch("[%a_][%w_]*") do
+				if type(obj) == "table" then
+					obj = obj[part]
+				else
+					return nil
+				end
+			end
+			if type(obj) ~= "table" then return nil end
+		else
+			prefix = word
+			obj    = nil
+		end
+
+		local candidates, seen = {}, {}
+		local function scan(t)
+			for k in pairs(t) do
+				if type(k) == "string" and not seen[k]
+					and k:sub(1, #prefix) == prefix and k ~= prefix then
+					seen[k] = true
+					candidates[#candidates + 1] = k
+				end
+			end
+		end
+
+		if obj then
+			scan(obj)
+		else
+			scan(G)
+			scan(_G)
+		end
+
+		if #candidates == 0 then return nil end
+		table.sort(candidates)
+		return candidates[1]:sub(#prefix + 1)
+	end
+
 	while true do
 		local prompt = ansi.format(buffer ~= "" and "{gray}...{reset} " or "{blue}>{reset} ")
-		local line = readline.read(prompt, highlight)
+		local line = readline.read(prompt, highlight, complete)
 
 		if line == nil or line == "exit()" or line == "quit()" then
 			break

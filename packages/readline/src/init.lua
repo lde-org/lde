@@ -7,7 +7,7 @@ local readline = {}
 
 local history = {}
 
----@param opts { prompt: string, readByte: fun(): string?, write: fun(s: string), history: string[], highlight: (fun(s:string):string)? }
+---@param opts { prompt: string, readByte: fun(): string?, write: fun(s: string), history: string[], highlight: (fun(s:string):string)?, complete: (fun(s:string, pos:integer):string?)? }
 ---@return string?
 function readline.edit(opts)
 	local prompt    = opts.prompt
@@ -15,11 +15,16 @@ function readline.edit(opts)
 	local write     = opts.write
 	local hist      = opts.history
 	local highlight = opts.highlight
+	local complete  = opts.complete
+
+	local ghost = nil
 
 	local function redraw(line, pos)
+		ghost = complete and pos == #line and complete(line, pos) or nil
 		local display = highlight and highlight(line) or line
-		write("\r" .. prompt .. display .. "\x1b[K")
-		local back = #line - pos
+		local suffix  = ghost and ("\27[2m" .. ghost .. "\27[0m") or ""
+		write("\r" .. prompt .. display .. suffix .. "\x1b[K")
+		local back = #line - pos + (ghost and #ghost or 0)
 		if back > 0 then write("\x1b[" .. back .. "D") end
 	end
 
@@ -111,6 +116,12 @@ function readline.edit(opts)
 			line = line:sub(1, pos); redraw(line, pos)
 		elseif ch == "\x15" then
 			line = line:sub(pos + 1); pos = 0; redraw(line, pos)
+		elseif ch == "\x09" then -- Tab: accept ghost completion
+			if ghost and #ghost > 0 then
+				line = line:sub(1, pos) .. ghost .. line:sub(pos + 1)
+				pos  = pos + #ghost
+				redraw(line, pos)
+			end
 		elseif ch >= " " then
 			line = line:sub(1, pos) .. ch .. line:sub(pos + 1)
 			pos  = pos + 1
@@ -120,8 +131,10 @@ function readline.edit(opts)
 end
 
 ---@param prompt string
+---@param highlight? fun(s:string):string
+---@param complete? fun(s:string, pos:integer):string?
 ---@return string?
-function readline.read(prompt, highlight)
+function readline.read(prompt, highlight, complete)
 	raw.enterRaw()
 	local out = readline.edit({
 		prompt    = prompt,
@@ -130,7 +143,8 @@ function readline.read(prompt, highlight)
 			io.write(s); io.flush()
 		end,
 		history   = history,
-		highlight = highlight
+		highlight = highlight,
+		complete  = complete,
 	})
 	raw.exitRaw()
 	return out
