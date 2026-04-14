@@ -40,7 +40,8 @@ local function run(args)
 				return
 			end
 
-			error("Failed to open package: " .. pkgErr)
+			ansi.printf("{red}%s\n", pkgErr)
+			return
 		end
 
 		pkg:build()

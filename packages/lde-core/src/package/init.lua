@@ -101,7 +101,12 @@ function Package.open(dir, rockspec)
 		return Package.openLDE(dir)
 	end
 
-	return Package.openRockspec(dir, rockspec)
+	local pkg, _ = Package.openRockspec(dir, rockspec)
+	if not pkg then
+		return nil, "No package found in directory: " .. dir
+	end
+
+	return pkg
 end
 
 ---@return lde.Package.Config
