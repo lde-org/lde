@@ -4,6 +4,8 @@ local profile = require("jit.profile")
 local ansi = require("ansi")
 local lde = require("lde-core")
 
+local PROFILER_MS_PER_SAMPLE = 1
+
 local originalCdef = ffi.cdef
 
 local builtinModules = {
@@ -120,7 +122,7 @@ local function printProfileReport(counts, vmstates, total, cwd, intervalMs)
 	io.write("\n")
 end
 
----@param intervalMs number?
+---@param intervalMs number
 ---@param scriptName string?
 ---@return (fun(): table<string, number>, table<string, number>, number, table<string, number>)?
 ---@return string? err
@@ -129,7 +131,7 @@ local function startProfiler(intervalMs, scriptName)
 	local vmstates = {}
 	local stacks = {}
 	local total = 0
-	local mode = "li" .. tostring(intervalMs or 10)
+	local mode = "li" .. tostring(intervalMs)
 
 	-- Internal lde function names to skip when falling back to name-based profiling
 	local skipNames = {
@@ -305,7 +307,7 @@ local function executeWith(compile, opts, scriptName)
 
 		local stopProfiler, profilerErr
 		if opts.profile or opts.flamegraph then
-			stopProfiler, profilerErr = startProfiler(10, scriptName)
+			stopProfiler, profilerErr = startProfiler(PROFILER_MS_PER_SAMPLE, scriptName)
 			if not stopProfiler then
 				error("Failed to start profiler: " .. tostring(profilerErr))
 			end
@@ -325,12 +327,12 @@ local function executeWith(compile, opts, scriptName)
 		if stopProfiler then
 			local counts, vmstates, total, stacks = stopProfiler()
 			if opts.profile and lde.verbose then
-				printProfileReport(counts, vmstates, total, env.cwd(), 10)
+				printProfileReport(counts, vmstates, total, env.cwd(), PROFILER_MS_PER_SAMPLE)
 			end
 
 			if opts.flamegraph then
 				local fgTitle = scriptName and scriptName:match("[^/\\]+$")
-				local ok, err = lde.flamegraph.write(stacks, total, 10, opts.flamegraph, fgTitle)
+				local ok, err = lde.flamegraph.write(stacks, total, PROFILER_MS_PER_SAMPLE, opts.flamegraph, fgTitle)
 
 				if lde.verbose then
 					if ok then
