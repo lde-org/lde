@@ -295,6 +295,23 @@ test.skipIf(condition)("name", function() end)
 
 Run tests: `lde test` (from a package dir, or from repo root to run all packages).
 
+## Running Lua Code for Inspection/Testing
+
+**Never use `luajit` directly.** Always use `lde` to run Lua so the correct runtime context, package paths, and built-in modules are available.
+
+```sh
+# Run a one-liner inside the lde context (from any package dir)
+lde -e "print(require('json').encode({x=1}))"
+
+# Run a specific file
+lde ./path/to/file.lua
+
+# Run a specific file with args
+lde ./path/to/file.lua -- arg1 arg2
+```
+
+`lde -e` runs the expression/statement with all installed deps available (same as `lde run` but inline). `lde ./file` runs a file directly using the current package's dep tree.
+
 ## Updating the `lde` Binary
 
 After making changes to any package source, rebuild the binary:
