@@ -33,7 +33,7 @@ function Args:option(desiredKey)
 			else
 				local key = string.sub(raw, 3)
 
-				if key == desiredKey and self.raw[i + 1] ~= nil then
+				if key == desiredKey and self.raw[i + 1] ~= nil and self.raw[i + 1] ~= "--" then
 					local _key = table.remove(self.raw, i)
 					return table.remove(self.raw, i), i - 2
 				elseif key == "" then
