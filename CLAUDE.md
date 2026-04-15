@@ -329,9 +329,11 @@ This outputs `packages/lde/lde` (or `lde.exe` on Windows). To install it globall
 
 **Important:** Tests in `packages/lde/tests/` run the actual `lde` CLI binary via `env.execPath()`. If those tests fail after source changes, recompile and replace the binary first.
 
-## Profiling `lde` test suite
+## Profiling `lde` code
 
-To profile the `lde` CLI while it runs the repo-wide multi-package test suite, run the `lde` package from inside `packages/lde` and pass the top-level command through after `--`:
+You can profile an lde package with `lde run --profile` with `--flamegraph` to additionally generate a flamegraph.
+
+To profile the entire test suite running this:
 
 ```sh
 cd packages/lde
