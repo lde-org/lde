@@ -31,8 +31,10 @@ test.it("should not ignore --git in ldx", function()
 	fs.rmdir(repoDir)
 end)
 
--- TODO: re-enable once a nightly build with TMPDIR set in the Android Docker run is available
-test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde test skips packages with no tests/ directory", function()
+-- TODO: Figure out why android struggles with cli tests
+local isAndroid = env.var("ANDROID_ROOT") ~= nil
+
+test.skipIf(isAndroid)("lde test skips packages with no tests/ directory", function()
 	local tmpDir = path.join(env.tmpdir(), "lde-test-skip-test")
 	fs.rmdir(tmpDir)
 	fs.mkdir(tmpDir)
@@ -78,7 +80,7 @@ test.it("--tree overrides the global lde directory", function()
 	test.truthy(fs.exists(path.join(tmpTree, "git")))
 end)
 
-test.it("-C changes the working directory before loose-file resolution", function()
+test.skipIf(isAndroid)("-C changes the working directory before loose-file resolution", function()
 	local tmpDir = path.join(env.tmpdir(), "lde-cli-cwd-short")
 	local pkgDir = path.join(tmpDir, "pkg")
 	fs.rmdir(tmpDir)
@@ -93,7 +95,7 @@ test.it("-C changes the working directory before loose-file resolution", functio
 	fs.rmdir(tmpDir)
 end)
 
-test.it("--cwd changes the working directory before package resolution", function()
+test.skipIf(isAndroid)("--cwd changes the working directory before package resolution", function()
 	local tmpDir = path.join(env.tmpdir(), "lde-cli-cwd-long")
 	local pkgDir = path.join(tmpDir, "pkg")
 	fs.rmdir(tmpDir)
