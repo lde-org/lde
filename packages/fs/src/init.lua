@@ -227,4 +227,11 @@ function fs.scan(cwd, glob, opts)
 	return entries
 end
 
+---@param dir string
+function fs.mkdirAll(dir)
+	if fs.isdir(dir) then return end
+	fs.mkdirAll(path.dirname(dir))
+	fs.mkdir(dir)
+end
+
 return fs

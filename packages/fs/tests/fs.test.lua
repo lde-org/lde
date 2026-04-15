@@ -489,6 +489,29 @@ test.it("delete returns false for non-existent file", function()
 end)
 
 --
+-- mkdirAll
+--
+
+test.it("mkdirAll creates nested directories", function()
+	local d = tmp("mkdirall-nested/a/b/c")
+	fs.mkdirAll(d)
+	test.truthy(fs.isdir(d))
+end)
+
+test.it("mkdirAll is idempotent on an existing directory", function()
+	local d = tmp("mkdirall-exist")
+	fs.mkdir(d)
+	fs.mkdirAll(d) -- should not error
+	test.truthy(fs.isdir(d))
+end)
+
+test.it("mkdirAll creates a single missing directory", function()
+	local d = tmp("mkdirall-single")
+	fs.mkdirAll(d)
+	test.truthy(fs.isdir(d))
+end)
+
+--
 -- mkdir edge cases
 --
 
