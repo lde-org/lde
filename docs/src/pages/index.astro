@@ -12,18 +12,18 @@ const posts = (await getCollection("blog")).sort(
 const latestRelease = posts.find((p) => p.data.title.toLowerCase().startsWith("release"));
 
 const comparison = [
-	["Written in", "Lua", "Rust", "Teal"],
-	["Project format", "JSON", "TOML/Lua", "Lua"],
-	["Add/remove deps", "y", "y", "n"],
-	["Built-in test runner", "y:lde-test", "y:busted", "n"],
-	["Ships with LuaJIT", "y", "n", "n"],
-	["Compile to executable", "y", "n", "n"],
-	["Git deps", "y", "y", "n"],
-	["Registry deps", "y:lde", "y:luarocks", "y:luarocks"],
-	["Custom Registry", "y", "n", "y"],
-	["Lockfile", "y", "y", "y"],
-	["LuaRocks support", "wip", "wip", "y"],
-	["Lua build scripts", "build.lua", "rockspec", "rockspec"],
+	{ feature: "Written in", href: "/docs/general/getting-started/introduction", values: ["Lua", "Rust", "Teal"] },
+	{ feature: "Project format", href: "/docs/package-manager/getting-started/project-structure", values: ["JSON", "TOML/Lua", "Lua"] },
+	{ feature: "Add/remove deps", href: "/docs/package-manager/getting-started/quick-start", values: ["y", "y", "n"] },
+	{ feature: "Built-in test runner", href: "/docs/test-runner/getting-started/test-runner", values: ["y:lde-test", "y:busted", "n"] },
+	{ feature: "Ships with LuaJIT", href: "/docs/runtime/getting-started/runtime", values: ["y", "n", "n"] },
+	{ feature: "Compile to executable", href: "/docs/bundler/guides/compiling", values: ["y", "n", "n"] },
+	{ feature: "Git deps", href: "/docs/package-manager/dependencies/dependencies", values: ["y", "y", "n"] },
+	{ feature: "Registry deps", href: "/docs/package-manager/dependencies/registry", values: ["y:lde", "y:luarocks", "y:luarocks"] },
+	{ feature: "Custom Registry", href: "/docs/package-manager/guides/custom-registry", values: ["y", "n", "y"] },
+	{ feature: "Lockfile", href: "/docs/package-manager/getting-started/project-structure", values: ["y", "y", "y"] },
+	{ feature: "LuaRocks support", href: "/docs/package-manager/dependencies/luarocks-support", values: ["wip", "wip", "y"] },
+	{ feature: "Lua build scripts", href: "/docs/package-manager/dependencies/build-scripts", values: ["build.lua", "rockspec", "rockspec"] },
 ];
 
 const features = [
@@ -214,56 +214,85 @@ const features = [
 			</div>
 
 			{/* Desktop table */}
-			<div class="hidden sm:block overflow-x-auto rounded-2xl border border-black/10 dark:border-white/10">
+			<div class="hidden sm:block overflow-x-auto">
+				<div>
 				<table class="w-full text-sm">
 					<thead>
-						<tr class="border-b border-black/10 dark:border-white/10 bg-black/[0.03] dark:bg-white/[0.03]">
-							<th scope="col" class="text-left px-6 py-4 font-medium text-black/40 dark:text-white/30 w-[40%]"></th>
+						<tr>
+							<th scope="col" class="text-left px-6 py-4 font-medium text-black/35 dark:text-white/25 w-[40%]"></th>
 							<th scope="col" class="text-left px-6 py-4 font-semibold text-blue-400">
-								<img src="/lde-nospace.svg" class="h-5 inline mr-1.5 opacity-90" alt="" />lde
+								<span class="inline-flex items-center gap-2 rounded-full px-3 py-1 text-[0.8125rem] ring-1 ring-blue-500/15">
+									<img src="/lde-nospace.svg" class="h-5 opacity-90" alt="" />
+									lde
+								</span>
 							</th>
-							<th scope="col" class="text-left px-6 py-4 font-medium text-black/70 dark:text-white/60">lux</th>
-							<th scope="col" class="text-left px-6 py-4 font-medium text-black/70 dark:text-white/60">luarocks</th>
+							<th scope="col" class="text-left px-6 py-4 font-medium text-black/60 dark:text-white/50">lux</th>
+							<th scope="col" class="text-left px-6 py-4 font-medium text-black/60 dark:text-white/50">luarocks</th>
 						</tr>
 					</thead>
-					<tbody class="divide-y divide-black/[0.06] dark:divide-white/[0.06]">
-						{comparison.map(([feature, ...cols]) => (
-							<tr class="hover:bg-black/[0.015] dark:hover:bg-white/[0.015] transition-colors">
-								<th scope="row" class="px-6 py-3.5 text-black/55 dark:text-white/45 text-sm font-normal text-left">{feature}</th>
+					<tbody>
+						{comparison.map(({ feature, href, values: cols }) => (
+							<tr class="border-t border-black/[0.05] dark:border-white/[0.06] transition-colors">
+								<th scope="row" class="px-6 py-4 text-sm font-medium text-left">
+									<a
+										href={href}
+										class="inline-flex items-center gap-1.5 text-black/70 dark:text-white/65 hover:text-blue-500 dark:hover:text-blue-400 transition-colors"
+									>
+										{feature}
+										<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" class="opacity-45">
+											<path d="M7 17 17 7"></path>
+											<path d="M7 7h10v10"></path>
+										</svg>
+									</a>
+								</th>
 								{cols.map((val, i) => {
 									const blue = i === 0;
-									const base = `px-6 py-3.5 ${blue ? "text-blue-400 font-medium" : "text-black/65 dark:text-white/55"}`;
-									if (val === "y") return <td class={base}><span class="text-emerald-400 font-bold">✓</span></td>;
-									if (val === "n") return <td class={base}><span class="text-red-400/60 font-bold">✗</span></td>;
-									if (val === "wip") return <td class={base}><span class="text-amber-400 text-base">⚠</span></td>;
+									const base = `px-6 py-4 align-middle ${blue ? "text-blue-400 font-medium" : "text-black/70 dark:text-white/55"}`;
+									if (val === "y") return <td class={base}><span class="inline-flex size-7 items-center justify-center rounded-full bg-emerald-500/14 text-emerald-700 dark:text-emerald-300 font-bold ring-1 ring-emerald-600/20 dark:ring-emerald-400/20">✓</span></td>;
+									if (val === "n") return <td class={base}><span class="inline-flex size-7 items-center justify-center rounded-full bg-red-500/12 text-red-700 dark:text-red-300 font-bold ring-1 ring-red-600/20 dark:ring-red-400/20">✗</span></td>;
+									if (val === "wip") return <td class={base}><span class="inline-flex min-w-11 items-center justify-center rounded-full bg-amber-500/18 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-300 ring-1 ring-amber-600/20 dark:ring-amber-400/20">WIP</span></td>;
 									if (val.startsWith("y:")) return (
 										<td class={base}>
-											<span class="text-emerald-400 font-bold">✓</span>{" "}
-											<span class="text-xs opacity-50">({val.slice(2)})</span>
+											<span class="inline-flex items-center gap-2 rounded-full bg-emerald-500/14 px-2.5 py-1 ring-1 ring-emerald-600/20 dark:ring-emerald-400/20">
+												<span class="text-emerald-700 dark:text-emerald-300 font-bold">✓</span>
+												<span class="text-xs text-emerald-800/80 dark:text-emerald-200/80">{val.slice(2)}</span>
+											</span>
 										</td>
 									);
-									return <td class={base}>{val}</td>;
+									return <td class={base}><span class={blue ? "text-blue-300" : ""}>{val}</span></td>;
 								})}
 							</tr>
 						))}
 					</tbody>
 				</table>
+				</div>
 			</div>
 
 			{/* Mobile cards — one row per feature, lde highlighted */}
 			<div class="sm:hidden rounded-2xl border border-black/10 dark:border-white/10 overflow-hidden divide-y divide-black/[0.06] dark:divide-white/[0.06]">
-				{comparison.map(([feature, lde, lux, luarocks]) => {
+				{comparison.map(({ feature, href, values: [lde, lux, luarocks] }) => {
 					const renderVal = (val: string, blue = false) => {
 						const cls = blue ? "text-blue-400 font-semibold" : "text-black/60 dark:text-white/50";
-						if (val === "y") return <span class="text-emerald-400 font-bold">✓</span>;
-						if (val === "n") return <span class="text-red-400/60 font-bold">✗</span>;
-						if (val === "wip") return <span class="text-amber-400">⚠</span>;
-						if (val.startsWith("y:")) return <><span class="text-emerald-400 font-bold">✓</span> <span class={`text-xs opacity-50`}>({val.slice(2)})</span></>;
+						if (val === "y") return <span class="inline-flex size-7 items-center justify-center rounded-full bg-emerald-500/14 text-emerald-700 dark:text-emerald-300 font-bold ring-1 ring-emerald-600/20 dark:ring-emerald-400/20">✓</span>;
+						if (val === "n") return <span class="inline-flex size-7 items-center justify-center rounded-full bg-red-500/12 text-red-700 dark:text-red-300 font-bold ring-1 ring-red-600/20 dark:ring-red-400/20">✗</span>;
+						if (val === "wip") return <span class="inline-flex min-w-11 items-center justify-center rounded-full bg-amber-500/18 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-300 ring-1 ring-amber-600/20 dark:ring-amber-400/20">WIP</span>;
+						if (val.startsWith("y:")) return <span class="inline-flex items-center gap-2 rounded-full bg-emerald-500/14 px-2.5 py-1 ring-1 ring-emerald-600/20 dark:ring-emerald-400/20"><span class="text-emerald-700 dark:text-emerald-300 font-bold">✓</span><span class="text-xs text-emerald-800/80 dark:text-emerald-200/80">{val.slice(2)}</span></span>;
 						return <span class={cls}>{val}</span>;
 					};
 					return (
 						<div class="px-4 py-3 bg-black/[0.01] dark:bg-white/[0.01]">
-							<p class="text-xs text-black/40 dark:text-white/30 mb-2">{feature}</p>
+							<p class="mb-2">
+								<a
+									href={href}
+									class="inline-flex items-center gap-1.5 text-xs text-black/45 dark:text-white/30 hover:text-blue-500 dark:hover:text-blue-400 transition-colors"
+								>
+									{feature}
+									<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" class="opacity-45">
+										<path d="M7 17 17 7"></path>
+										<path d="M7 7h10v10"></path>
+									</svg>
+								</a>
+							</p>
 							<div class="grid grid-cols-3 gap-2 text-sm">
 								<div class="flex flex-col gap-0.5">
 									<span class="text-[10px] text-blue-400 font-semibold uppercase tracking-wide">lde</span>
