@@ -339,8 +339,6 @@ putValue    = function(tape, v, indent, level, valueStyle)
 			tape:put("Infinity")
 		elseif v == -huge then
 			tape:put("-Infinity")
-		elseif v == floor(v) then
-			tape:put(string.format("%d", v))
 		else
 			tape:put(tostring(v))
 		end
@@ -784,17 +782,17 @@ local function materialise(doc, idx)
 		end
 		return arr
 	elseif ty == TY_OBJECT then
-		local obj  = {}
-		local keys = {}
+		local obj     = {}
+		local keys    = {}
 		keyStore[obj] = keys
 		local ki      = tok.child
 		while ki ~= 0 do
-			src_s    = doc.src; src_ptr = cast(u8p, src_s); src_len = #src_s
-			local k  = tokToString(doc.toks[ki])
-			local vi = doc.toks[ki].next
-			obj[k]   = materialise(doc, vi)
+			src_s           = doc.src; src_ptr = cast(u8p, src_s); src_len = #src_s
+			local k         = tokToString(doc.toks[ki])
+			local vi        = doc.toks[ki].next
+			obj[k]          = materialise(doc, vi)
 			keys[#keys + 1] = k
-			ki = doc.toks[vi].next
+			ki              = doc.toks[vi].next
 		end
 		return obj
 	end

@@ -25,14 +25,19 @@ end
 ---@param args string[]?
 ---@param vars table<string, string>?
 ---@param cwd string
-local function runFileWithLDE(package, scriptPath, args, vars, cwd)
+---@param profile boolean?
+---@param flamegraph string?
+local function runFileWithLDE(package, scriptPath, args, vars, cwd, profile, flamegraph)
 	local luaPath, luaCPath = getLuaPathsForPackage(package)
+
 	return runtime.executeFile(scriptPath, {
 		args = args,
 		env = vars,
 		cwd = cwd,
 		packagePath = luaPath,
-		packageCPath = luaCPath
+		packageCPath = luaCPath,
+		profile = profile,
+		flamegraph = flamegraph
 	})
 end
 
@@ -87,9 +92,11 @@ end
 ---@param args string[]?
 ---@param vars table<string, string>?
 ---@param cwd string?
+---@param profile boolean?
+---@param flamegraph string?
 ---@return boolean?
 ---@return string
-local function runFile(package, scriptPath, args, vars, cwd)
+local function runFile(package, scriptPath, args, vars, cwd, profile, flamegraph)
 	package:build()
 	local config = package:readConfig()
 
@@ -110,8 +117,12 @@ local function runFile(package, scriptPath, args, vars, cwd)
 	local engine = config.engine or "lde"
 	local ok, err
 	if engine == "lde" or engine == "lpm" --[[ compat ]] then
-		ok, err = runFileWithLDE(package, scriptPath, args, vars, cwd)
+		ok, err = runFileWithLDE(package, scriptPath, args, vars, cwd, profile, flamegraph)
 	else
+		if profile or flamegraph then
+			return nil, "Profiling is only supported when engine is 'lde'"
+		end
+
 		ok, err = runFileWithLuaCLI(package, scriptPath, args, vars, engine, cwd)
 	end
 

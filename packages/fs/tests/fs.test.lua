@@ -425,14 +425,13 @@ test.it("watch recursive detects creation in newly created subdirectory", functi
 	local sub = path.join(d, "newdir")
 	fs.mkdir(sub)
 
-	-- Drain the mkdir event and let the watcher register the new subdir
-	local deadline = os.clock() + 1
-	while os.clock() < deadline do w.poll() end
+	-- Block on the mkdir event so the watcher can register the new subdir
+	w.wait()
 
 	local before = #events
 	fs.write(path.join(sub, "file.txt"), "hi")
 
-	deadline = os.clock() + 1
+	local deadline = os.clock() + 1
 	while #events == before and os.clock() < deadline do
 		w.poll()
 	end

@@ -12,6 +12,9 @@ local function run(args)
 	local scriptArgs ---@type string[]
 	local name = nil ---@type string?
 	local watch = args:flag("watch")
+	local profile = args:flag("profile")
+	local flamegraph = args:option("flamegraph")
+	if not flamegraph and args:flag("flamegraph") then flamegraph = "profile.html" end
 
 	local dash, dashPos = args:flag("")
 	if dash then
@@ -32,7 +35,9 @@ local function run(args)
 					args = scriptArgs,
 					cwd = env.cwd(),
 					packagePath = "",
-					packageCPath = ""
+					packageCPath = "",
+					profile = profile,
+					flamegraph = flamegraph
 				})
 				if not ok then
 					error("Failed to run script: " .. (err or "Script exited with a non-zero exit code"))
@@ -52,7 +57,7 @@ local function run(args)
 		if name and scripts and scripts[name] then
 			ok, err = pkg:runScript(name)
 		else
-			ok, err = pkg:runFile(name, scriptArgs)
+			ok, err = pkg:runFile(name, scriptArgs, nil, nil, profile, flamegraph)
 		end
 
 		if not ok then
@@ -74,6 +79,8 @@ local function run(args)
 	ansi.printf("{cyan}Watching %s for changes...\n", watchDir)
 
 	local spawnArgs = { "run" }
+	if profile then spawnArgs[#spawnArgs + 1] = "--profile" end
+	if flamegraph then spawnArgs[#spawnArgs + 1] = "--flamegraph=" .. flamegraph end
 	if name then spawnArgs[#spawnArgs + 1] = name end
 	if #scriptArgs > 0 then
 		spawnArgs[#spawnArgs + 1] = "--"

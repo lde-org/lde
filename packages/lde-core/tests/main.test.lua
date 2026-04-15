@@ -72,6 +72,23 @@ test.it("runtime.executeFile supports preloaded modules", function()
 	test.truthy(ok)
 end)
 
+test.it("runtime.executeFile supports profiling", function()
+	fs.mkdir(tmpBase)
+	local scriptPath = path.join(tmpBase, "profile.lua")
+	fs.write(scriptPath, [[
+		local s = 0
+		for i = 1, 500000 do
+			s = s + i
+		end
+		return s
+	]])
+
+	local ok, err = lde.runtime.executeFile(scriptPath, {
+		profile = true
+	})
+	test.truthy(ok)
+end)
+
 test.it("runtime.executeFile isolates globals between runs", function()
 	fs.mkdir(tmpBase)
 	local script1 = path.join(tmpBase, "global1.lua")

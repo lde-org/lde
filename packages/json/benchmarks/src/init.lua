@@ -45,9 +45,9 @@ end
 
 -- ── fixtures ──────────────────────────────────────────────────────────────────
 
-local SMALL = '{"name":"Alice","age":30,"active":true}'
+local SMALL     = '{"name":"Alice","age":30,"active":true}'
 
-local MEDIUM = json.encode({
+local MEDIUM    = json.encode({
 	users = (function()
 		local t = {}
 		for i = 1, 20 do
@@ -57,7 +57,7 @@ local MEDIUM = json.encode({
 	end)()
 })
 
-local LARGE = json.encode((function()
+local LARGE     = json.encode((function()
 	local t = {}
 	for i = 1, 500 do
 		t[i] = { id = i, name = "item" .. i, value = i * 3.14, tags = { "a", "b", "c" } }
@@ -77,41 +77,41 @@ local JSON5_SRC = [[{
 	ports: [8080, 8443,],
 }]]
 
-local SMALL_T  = json.decode(SMALL)
-local MEDIUM_T = json.decode(MEDIUM)
-local LARGE_T  = json.decode(LARGE)
-local JSON5_T  = json.decode(JSON5_SRC)
+local SMALL_T   = json.decode(SMALL)
+local MEDIUM_T  = json.decode(MEDIUM)
+local LARGE_T   = json.decode(LARGE)
+local JSON5_T   = json.decode(JSON5_SRC)
 
 -- ── run ───────────────────────────────────────────────────────────────────────
 
 ansi.printf("\n{bold}json decode{reset}")
-bench("small object (~40 B)",    function() json.decode(SMALL)     end, 5000)
-bench("medium array (~20 objs)", function() json.decode(MEDIUM)    end, 500)
-bench("large array (~500 objs)", function() json.decode(LARGE)     end, 20)
-bench("json5 with comments",     function() json.decode(JSON5_SRC) end, 2000)
+bench("small object (~40 B)", function() json.decode(SMALL) end, 5000)
+bench("medium array (~20 objs)", function() json.decode(MEDIUM) end, 500)
+bench("large array (~500 objs)", function() json.decode(LARGE) end, 20)
+bench("json5 with comments", function() json.decode(JSON5_SRC) end, 2000)
 
 ansi.printf("\n{bold}json encode{reset}")
-bench("small object",            function() json.encode(SMALL_T)  end, 5000)
-bench("medium array",            function() json.encode(MEDIUM_T) end, 500)
-bench("large array",             function() json.encode(LARGE_T)  end, 20)
-bench("json5 round-trip",        function() json.encode(JSON5_T)  end, 2000)
+bench("small object", function() json.encode(SMALL_T) end, 5000)
+bench("medium array", function() json.encode(MEDIUM_T) end, 500)
+bench("large array", function() json.encode(LARGE_T) end, 20)
+bench("json5 round-trip", function() json.encode(JSON5_T) end, 2000)
 
 ansi.printf("\n{bold}json round-trip (decode + encode){reset}")
-bench("small",  function() json.encode(json.decode(SMALL))  end, 5000)
+bench("small", function() json.encode(json.decode(SMALL)) end, 5000)
 bench("medium", function() json.encode(json.decode(MEDIUM)) end, 500)
-bench("large",  function() json.encode(json.decode(LARGE))  end, 20)
+bench("large", function() json.encode(json.decode(LARGE)) end, 20)
 
 ansi.printf("\n{bold}json decodeDocument only (zero-alloc){reset}")
-bench("small",  function() json.decodeDocument(SMALL)  end, 5000)
+bench("small", function() json.decodeDocument(SMALL) end, 5000)
 bench("medium", function() json.decodeDocument(MEDIUM) end, 500)
-bench("large",  function() json.decode(LARGE)  end, 20)
+bench("large", function() json.decodeDocument(LARGE) end, 20)
 
 ansi.printf("\n{bold}cjson decode{reset}")
-bench("small object (~40 B)",    function() cjson.decode(SMALL)  end, 5000)
+bench("small object (~40 B)", function() cjson.decode(SMALL) end, 5000)
 bench("medium array (~20 objs)", function() cjson.decode(MEDIUM) end, 500)
-bench("large array (~500 objs)", function() cjson.decode(LARGE)  end, 20)
+bench("large array (~500 objs)", function() cjson.decode(LARGE) end, 20)
 
 ansi.printf("\n{bold}cjson encode{reset}")
-bench("small object",  function() cjson.encode(cjson.decode(SMALL))  end, 5000)
-bench("medium array",  function() cjson.encode(cjson.decode(MEDIUM)) end, 500)
-bench("large array",   function() cjson.encode(cjson.decode(LARGE))  end, 20)
+bench("small object", function() cjson.encode(cjson.decode(SMALL)) end, 5000)
+bench("medium array", function() cjson.encode(cjson.decode(MEDIUM)) end, 500)
+bench("large array", function() cjson.encode(cjson.decode(LARGE)) end, 20)

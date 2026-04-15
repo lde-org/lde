@@ -31,8 +31,10 @@ test.it("should not ignore --git in ldx", function()
 	fs.rmdir(repoDir)
 end)
 
--- TODO: re-enable once a nightly build with TMPDIR set in the Android Docker run is available
-test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde test skips packages with no tests/ directory", function()
+-- TODO: Figure out why android struggles with cli tests
+local isAndroid = env.var("ANDROID_ROOT") ~= nil
+
+test.skipIf(isAndroid)("lde test skips packages with no tests/ directory", function()
 	local tmpDir = path.join(env.tmpdir(), "lde-test-skip-test")
 	fs.rmdir(tmpDir)
 	fs.mkdir(tmpDir)
@@ -76,6 +78,53 @@ test.it("--tree overrides the global lde directory", function()
 
 	test.truthy(fs.exists(tmpTree))
 	test.truthy(fs.exists(path.join(tmpTree, "git")))
+end)
+
+test.skipIf(isAndroid)("-C changes the working directory before loose-file resolution", function()
+	local tmpDir = path.join(env.tmpdir(), "lde-cli-cwd-short")
+	local pkgDir = path.join(tmpDir, "pkg")
+	fs.rmdir(tmpDir)
+	fs.mkdir(tmpDir)
+	fs.mkdir(pkgDir)
+	fs.write(path.join(pkgDir, "hello.lua"), 'io.write("cwd-short")')
+
+	local ok, out = ldecli({ "-C", "pkg", "hello.lua" }, tmpDir)
+	test.truthy(ok)
+	test.includes(out, "cwd-short")
+
+	fs.rmdir(tmpDir)
+end)
+
+test.skipIf(isAndroid)("--cwd changes the working directory before package resolution", function()
+	local tmpDir = path.join(env.tmpdir(), "lde-cli-cwd-long")
+	local pkgDir = path.join(tmpDir, "pkg")
+	fs.rmdir(tmpDir)
+	fs.mkdir(tmpDir)
+	fs.mkdir(pkgDir)
+	fs.mkdir(path.join(pkgDir, "src"))
+	fs.write(path.join(pkgDir, "src", "init.lua"), 'io.write("cwd-long")')
+	fs.write(path.join(pkgDir, "lde.json"), json.encode({
+		name = "cwd-long",
+		version = "0.1.0"
+	}))
+
+	local ok, out = ldecli({ "--cwd", "pkg", "run" }, tmpDir)
+	test.truthy(ok)
+	test.includes(out, "cwd-long")
+
+	fs.rmdir(tmpDir)
+end)
+
+test.it("--cwd errors when the target directory does not exist", function()
+	local tmpDir = path.join(env.tmpdir(), "lde-cli-cwd-missing")
+	fs.rmdir(tmpDir)
+	fs.mkdir(tmpDir)
+
+	local ok, out = ldecli({ "--cwd", "missing", "--version" }, tmpDir)
+	test.falsy(ok)
+	test.includes(out, "Directory does not exist")
+
+	fs.rmdir(tmpDir)
 end)
 
 -- TODO: re-enable once a nightly build with TMPDIR set in the Android Docker run is available

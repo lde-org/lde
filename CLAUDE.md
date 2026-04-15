@@ -20,6 +20,7 @@ tests/          # Top-level integration test fixtures (e.g. some-package/)
 ```
 
 Each package has:
+
 - `src/` — source files (or `src/init.lua` as the entry point)
 - `lde.json` — package manifest
 - `lde.lock` — lockfile (auto-generated, commit this)
@@ -64,6 +65,7 @@ Each package has:
 `lde install` / `lde run` populate `target/` with symlinks (or copies for packages with a build script). Each dep is installed at `target/<alias>`.
 
 `package.path` is set to:
+
 ```
 target/?.lua
 target/?/init.lua
@@ -73,6 +75,7 @@ target/?.so  (or .dll / .dylib)
 So `require("json")` → `target/json/init.lua` → symlink to `packages/json/src/init.lua`.
 
 During `lde test`, `tests/` is also exposed as `target/tests`, so test files can do:
+
 ```lua
 local helper = require("tests.lib.something")  -- resolves to tests/lib/something.lua
 ```
@@ -88,6 +91,7 @@ local helper = require("tests.lib.something")  -- resolves to tests/lib/somethin
 ## Package API (`lde-core`)
 
 `require("lde-core")` returns a table with:
+
 - `lde.Package` — the Package class
 - `lde.Lockfile` — the Lockfile class
 - `lde.global` — global state/cache helpers
@@ -325,6 +329,19 @@ This outputs `packages/lde/lde` (or `lde.exe` on Windows). To install it globall
 
 **Important:** Tests in `packages/lde/tests/` run the actual `lde` CLI binary via `env.execPath()`. If those tests fail after source changes, recompile and replace the binary first.
 
+## Profiling `lde` code
+
+You can profile an lde package with `lde run --profile` with `--flamegraph` to additionally generate a flamegraph.
+
+To profile the entire test suite running this:
+
+```sh
+cd packages/lde
+lde run --profile --flamegraph -- -C ../.. test
+```
+
+This profiles the `lde` package entrypoint itself, not just an individual test file, and runs `lde test` as if it had been started from the repo root.
+
 ## Managing Dependencies
 
 Always use `lde add` / `lde remove` instead of manually editing `lde.json`. Manual edits leave `lde.lock` out of sync and can break installs.
@@ -382,9 +399,9 @@ The project was previously named `lpm`. You may see `lpm.json` or `lpm-test` ref
 
 **Windows:** The system GCC on `windows-latest` targets msvcrt, but lj-dist's `libluajit` is built against UCRT. This causes linker errors (`undefined reference to __imp_fseeko64` etc). CI downloads [llvm-mingw](https://github.com/mstorsjo/llvm-mingw) (a Clang/LLD MinGW-w64 toolchain targeting UCRT) and sets `SEA_CC`:
 
-| Runner | `SEA_CC` |
-|---|---|
-| `windows-latest` | `x86_64-w64-mingw32-clang` |
+| Runner           | `SEA_CC`                    |
+| ---------------- | --------------------------- |
+| `windows-latest` | `x86_64-w64-mingw32-clang`  |
 | `windows-11-arm` | `aarch64-w64-mingw32-clang` |
 
 **Android:** Android uses Bionic rather than glibc. The binary is compiled on the host using the Android NDK's clang (`aarch64-linux-android21-clang`), which links against Bionic. Tests run inside a Termux Docker container (`termux/termux-docker:aarch64` under QEMU on the ARM64 runner), which provides a matching Bionic environment.

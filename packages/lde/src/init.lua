@@ -77,6 +77,7 @@ local ansi = require("ansi")
 local clap = require("clap")
 local env = require("env")
 local fs = require("fs")
+local path = require("path")
 
 local lde = require("lde-core")
 
@@ -91,6 +92,20 @@ end
 lde.verbose = true
 
 local args = clap.parse({ ... })
+
+local cwdOverride = args:option("cwd") or args:short("C")
+if cwdOverride then
+	local requestedCwd = path.resolve(env.cwd(), cwdOverride)
+	if not fs.isdir(requestedCwd) then
+		ansi.printf("{red}Error: Directory does not exist: %s", requestedCwd)
+		os.exit(1)
+	end
+
+	if not env.chdir(requestedCwd) then
+		ansi.printf("{red}Error: Failed to change directory: %s", requestedCwd)
+		os.exit(1)
+	end
+end
 
 local treeOverride = args:option("tree")
 if treeOverride then
