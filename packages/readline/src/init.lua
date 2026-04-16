@@ -44,7 +44,7 @@ function readline.edit(opts)
 			write("\r\n")
 			return nil
 		elseif ch == "\r" or ch == "\n" then
-			write("\r\n")
+			write("\x1b[K\r\n")
 			if line ~= "" then hist[#hist + 1] = line end
 			return line
 		elseif ch == "\x1b" then
