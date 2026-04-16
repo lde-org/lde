@@ -16,12 +16,14 @@ Context.__index = Context
 ---@return ffix.c.Parser.Type
 function Context:rewriteType(t)
 	local name = t.name
+
 	local kw, base = name:match("^(%a+) ([%a_][%w_]*)$")
 	if kw == "struct" or kw == "enum" or kw == "union" then
 		name = kw .. " " .. (self.names[base] or base)
 	else
 		name = self.names[name] or name
 	end
+
 	return { qualifiers = t.qualifiers, name = name, pointer = t.pointer }
 end
 
@@ -115,11 +117,8 @@ function Context:load(lib)
 end
 
 ---@param pfx string
----@return ffix.Context
-local function newContext(pfx)
+function ffix.context(pfx)
 	return setmetatable({ pfx = pfx, names = {} }, Context)
 end
-
-ffix.context = newContext
 
 return ffix
