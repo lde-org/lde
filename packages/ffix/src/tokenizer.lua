@@ -3,6 +3,7 @@
 ---@field private len number
 ---@field private src string
 local Tokenizer = {}
+Tokenizer.__index = Tokenizer
 
 function Tokenizer.new()
 	return setmetatable({}, Tokenizer)
@@ -69,7 +70,7 @@ end
 
 ---@return ffix.c.Tokenizer.Token?
 function Tokenizer:next()
-	local ident = self:consume("^([%w_]+)")
+	local ident = self:consume("^([%a_][%w_]*)")
 	if ident then
 		if special[ident] then
 			return { variant = ident }
@@ -83,7 +84,7 @@ function Tokenizer:next()
 		return { variant = "number", number = tonumber(dec) }
 	end
 
-	local hex = self:consume("^0x(%d+)")
+	local hex = self:consume("^0x([%x]+)")
 	if hex then
 		return { variant = "number", number = tonumber(hex, 16) }
 	end
@@ -128,7 +129,7 @@ function Tokenizer:tokenize(src)
 
 	while true do
 		while self:skipWhitespace() or self:skipComments() do end
-		if self.ptr >= self.len then break end
+		if self.ptr > self.len then break end
 
 		local tok = self:next()
 		if not tok then
