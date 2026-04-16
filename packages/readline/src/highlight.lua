@@ -1,14 +1,7 @@
 -- Minimal Lua token highlighter.
 -- Returns a string with ANSI color codes applied.
--- Colors: Catppuccin Mocha
 
-local reset    = "\27[0m"
-local keyword  = "\27[38;2;203;166;247m" -- Mauve      keywords
-local str      = "\27[38;2;166;227;161m" -- Green      strings
-local num      = "\27[38;2;250;179;135m" -- Peach      numbers
-local comment  = "\27[38;2;88;91;112m"   -- Overlay0   comments
-local op       = "\27[38;2;137;180;250m" -- Blue        operators
-local ident    = "\27[38;2;205;214;244m" -- Text        identifiers
+local ansi = require("ansi")
 
 ---@format disable-next
 local keywords = {
@@ -31,7 +24,7 @@ local function highlight(line)
 
 		-- comment
 		if line:sub(i, i + 1) == "--" then
-			out[#out + 1] = comment .. line:sub(i) .. reset
+			out[#out + 1] = ansi.colorize("gray", line:sub(i))
 			break
 
 			-- string: single or double quoted (no multiline)
@@ -48,7 +41,7 @@ local function highlight(line)
 					j = j + 1
 				end
 			end
-			out[#out + 1] = str .. line:sub(i, j - 1) .. reset
+			out[#out + 1] = ansi.colorize("green", line:sub(i, j - 1))
 			i = j
 
 			-- number
@@ -61,7 +54,7 @@ local function highlight(line)
 			else
 				while j <= n and line:sub(j, j):match("[%d%.eExX_]") do j = j + 1 end
 			end
-			out[#out + 1] = num .. line:sub(i, j - 1) .. reset
+			out[#out + 1] = ansi.colorize("yellow", line:sub(i, j - 1))
 			i = j
 
 			-- identifier or keyword
@@ -69,12 +62,12 @@ local function highlight(line)
 			local j = i
 			while j <= n and line:sub(j, j):match("[%w_]") do j = j + 1 end
 			local word = line:sub(i, j - 1)
-			out[#out + 1] = (keywords[word] and keyword or ident) .. word .. reset
+			out[#out + 1] = keywords[word] and ansi.colorize("magenta", word) or word
 			i = j
 
 			-- operators / punctuation
 		elseif c:match("[%+%-%*/%%^#&|~<>=%(%)%[%]{}%;:,%.%%]") then
-			out[#out + 1] = op .. c .. reset
+			out[#out + 1] = ansi.colorize("blue", c)
 			i = i + 1
 		else
 			out[#out + 1] = c
