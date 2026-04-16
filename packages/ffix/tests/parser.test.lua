@@ -220,6 +220,32 @@ test.it("parses multiple declarations in sequence", function()
 	test.equal(nodes[3].kind, "fn_decl")
 end)
 
+-- __asm__ attribute
+
+test.it("fn_decl with __asm__", function()
+	test.match(parse("int mylib_add(int a, int b) __asm__(\"add\");"), {
+		{ kind = "fn_decl", name = "mylib_add", asm_name = "add" },
+	})
+end)
+
+test.it("fn_decl with asm (no underscores)", function()
+	test.match(parse("void mylib_free(void * ptr) asm(\"free\");"), {
+		{ kind = "fn_decl", name = "mylib_free", asm_name = "free" },
+	})
+end)
+
+test.it("extern_var with __asm__", function()
+	test.match(parse("extern int mylib_errno __asm__(\"errno\");"), {
+		{ kind = "extern_var", name = "mylib_errno", asm_name = "errno" },
+	})
+end)
+
+test.it("fn_decl without __asm__ has nil asm_name", function()
+	test.match(parse("int add(int a, int b);"), {
+		{ kind = "fn_decl", name = "add", asm_name = nil },
+	})
+end)
+
 -- error handling
 
 test.it("returns false on invalid input", function()

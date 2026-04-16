@@ -61,10 +61,14 @@ function Printer:node(node)
 			.. self:paramList(node.params) .. ");"
 
 	elseif k == "fn_decl" then
-		return self:typedName(node.ret, node.name) .. "(" .. self:paramList(node.params) .. ");"
+		local s = self:typedName(node.ret, node.name) .. "(" .. self:paramList(node.params) .. ")"
+		if node.asm_name then s = s .. " __asm__(\"" .. node.asm_name .. "\")" end
+		return s .. ";"
 
 	elseif k == "extern_var" then
-		return "extern " .. self:typedName(node.type, node.name) .. ";"
+		local s = "extern " .. self:typedName(node.type, node.name)
+		if node.asm_name then s = s .. " __asm__(\"" .. node.asm_name .. "\")" end
+		return s .. ";"
 	end
 
 	error("unknown node kind: " .. tostring(node.kind))

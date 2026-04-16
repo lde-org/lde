@@ -48,11 +48,13 @@ Parser.__index = Parser
 ---@field ret ffix.c.Parser.Type
 ---@field name string
 ---@field params ffix.c.Parser.Param[]
+---@field asm_name string?
 
 ---@class ffix.c.Parser.Node.ExternVar
 ---@field kind "extern_var"
 ---@field type ffix.c.Parser.Type
 ---@field name string
+---@field asm_name string?
 
 ---@alias ffix.c.Parser.Node
 --- | ffix.c.Parser.Node.TypedefAlias
@@ -222,6 +224,18 @@ function Parser:parseParams()
 	return params
 end
 
+---@return string?
+function Parser:parseAsmName()
+	local tok = self:peek()
+	if tok and tok.variant == "ident" and (tok.ident == "__asm__" or tok.ident == "asm") then
+		self:advance()
+		self:expect("(")
+		local str = self:expect("string")
+		self:expect(")")
+		return str.string
+	end
+end
+
 ---@return ffix.c.Parser.Node
 function Parser:parseDecl()
 	if self:consume("typedef") then
@@ -267,16 +281,18 @@ function Parser:parseDecl()
 	if self:consume("extern") then
 		local type = self:parseType()
 		local name = self:expect("ident")
+		local asm_name = self:parseAsmName()
 		self:expect(";")
-		return { kind = "extern_var", type = type, name = name.ident }
+		return { kind = "extern_var", type = type, name = name.ident, asm_name = asm_name }
 	end
 
 	local ret = self:parseType()
 	local name = self:expect("ident")
 	local params = self:parseParams()
+	local asm_name = self:parseAsmName()
 	self:expect(";")
 
-	return { kind = "fn_decl", ret = ret, name = name.ident, params = params }
+	return { kind = "fn_decl", ret = ret, name = name.ident, params = params, asm_name = asm_name }
 end
 
 ---@param tokens ffix.c.Tokenizer.Token[]

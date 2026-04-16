@@ -108,6 +108,20 @@ test.it("extern pointer", function()
 	test.equal(roundtrip("extern char * environ;"), "extern char *environ;")
 end)
 
+test.it("fn_decl with __asm__ roundtrips", function()
+	test.equal(
+		roundtrip("int mylib_add(int a, int b) __asm__(\"add\");"),
+		"int mylib_add(int a, int b) __asm__(\"add\");"
+	)
+end)
+
+test.it("extern_var with __asm__ roundtrips", function()
+	test.equal(
+		roundtrip("extern int mylib_errno __asm__(\"errno\");"),
+		"extern int mylib_errno __asm__(\"errno\");"
+	)
+end)
+
 test.it("multiple nodes", function()
 	test.equal(roundtrip("typedef int size_t;\nextern int errno;"), "typedef int size_t;\nextern int errno;")
 end)
