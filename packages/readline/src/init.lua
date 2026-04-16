@@ -17,10 +17,10 @@ function readline.edit(opts)
 	local highlight = opts.highlight
 	local complete  = opts.complete
 
-	local ghost = nil
+	local ghost     = nil
 
 	local function redraw(line, pos)
-		ghost = complete and pos == #line and complete(line, pos) or nil
+		ghost         = complete and pos == #line and complete(line, pos) or nil
 		local display = highlight and highlight(line) or line
 		local suffix  = ghost and ("\27[2m" .. ghost .. "\27[0m") or ""
 		write("\r" .. prompt .. display .. suffix .. "\x1b[K")
@@ -147,7 +147,7 @@ function readline.read(prompt, highlight, complete)
 		end,
 		history   = history,
 		highlight = highlight,
-		complete  = complete,
+		complete  = complete
 	})
 	raw.exitRaw()
 	return out
