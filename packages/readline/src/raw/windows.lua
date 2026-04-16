@@ -105,7 +105,7 @@ function readline.readByte()
 	while true do
 		if kernel32.ReadConsoleInputW(hIn, rec, 1, nread) == 0 then return nil end
 		local r = rec[0]
-		if r.EventType == KEY_EVENT and r.Event.KeyEvent.wVirtualKeyCode ~= 0 then
+		if r.EventType == KEY_EVENT and r.Event.KeyEvent.bKeyDown ~= 0 and r.Event.KeyEvent.wVirtualKeyCode ~= 0 then
 			local vk = tonumber(r.Event.KeyEvent.wVirtualKeyCode)
 
 			local ch = r.Event.KeyEvent.uChar.AsciiChar
