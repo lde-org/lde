@@ -32,6 +32,16 @@ function Printer:paramList(params)
 	return table.concat(parts, ", ")
 end
 
+---@param attrs ffix.c.Attr[]
+---@return string
+function Printer:attrsStr(attrs)
+	local parts = {}
+	for _, a in ipairs(attrs) do
+		parts[#parts + 1] = a.args and (a.name .. "(" .. a.args .. ")") or a.name
+	end
+	return "__attribute__((" .. table.concat(parts, ", ") .. "))"
+end
+
 ---@param node ffix.c.Parser.Node
 ---@return string
 function Printer:node(node)
@@ -41,9 +51,12 @@ function Printer:node(node)
 		return "typedef " .. self:typedName(node.type, node.name) .. ";"
 
 	elseif k == "typedef_struct" then
-		local lines = { "typedef struct" .. (node.tag and (" " .. node.tag) or "") .. " {" }
+		local attr_str = (node.attrs and #node.attrs > 0) and (" " .. self:attrsStr(node.attrs)) or ""
+		local lines = { "typedef struct" .. (node.tag and (" " .. node.tag) or "") .. attr_str .. " {" }
 		for _, f in ipairs(node.fields) do
-			lines[#lines + 1] = "\t" .. self:typedName(f.type, f.name) .. ";"
+			local arr = f.array_size and ("[" .. f.array_size .. "]") or ""
+			local fattr = (f.attrs and #f.attrs > 0) and (" " .. self:attrsStr(f.attrs)) or ""
+			lines[#lines + 1] = "\t" .. self:typedName(f.type, f.name) .. arr .. fattr .. ";"
 		end
 		lines[#lines + 1] = "} " .. node.name .. ";"
 		return table.concat(lines, "\n")
@@ -63,6 +76,7 @@ function Printer:node(node)
 	elseif k == "fn_decl" then
 		local s = self:typedName(node.ret, node.name) .. "(" .. self:paramList(node.params) .. ")"
 		if node.asm_name then s = s .. " __asm__(\"" .. node.asm_name .. "\")" end
+		if node.attrs and #node.attrs > 0 then s = s .. " " .. self:attrsStr(node.attrs) end
 		return s .. ";"
 
 	elseif k == "extern_var" then

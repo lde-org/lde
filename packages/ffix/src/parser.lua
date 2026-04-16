@@ -9,9 +9,15 @@ Parser.__index = Parser
 ---@field name string
 ---@field pointer number
 
+---@class ffix.c.Attr
+---@field name string
+---@field args string?
+
 ---@class ffix.c.Parser.Field
 ---@field type ffix.c.Parser.Type
 ---@field name string
+---@field array_size string?
+---@field attrs ffix.c.Attr[]?
 
 ---@class ffix.c.Parser.Variant
 ---@field name string
@@ -30,6 +36,7 @@ Parser.__index = Parser
 ---@field tag string?
 ---@field fields ffix.c.Parser.Field[]
 ---@field name string
+---@field attrs ffix.c.Attr[]?
 
 ---@class ffix.c.Parser.Node.TypedefEnum
 ---@field kind "typedef_enum"
@@ -49,6 +56,7 @@ Parser.__index = Parser
 ---@field name string
 ---@field params ffix.c.Parser.Param[]
 ---@field asm_name string?
+---@field attrs ffix.c.Attr[]?
 
 ---@class ffix.c.Parser.Node.ExternVar
 ---@field kind "extern_var"
@@ -188,11 +196,25 @@ function Parser:parseFields()
 	while not self:consume("}") do
 		local ftype = self:parseType()
 		local name = self:expect("ident")
+		local array_size
 		if self:consume("[") then
-			while not self:consume("]") do self:advance() end
+			local parts = {}
+			while not self:consume("]") do
+				local t = self:advance()
+				if t.variant == "ident" then
+					parts[#parts + 1] = t.ident
+				elseif t.variant == "number" then
+					local n = t.number
+					parts[#parts + 1] = n == math.floor(n) and tostring(math.floor(n)) or tostring(n)
+				else
+					parts[#parts + 1] = t.variant
+				end
+			end
+			array_size = table.concat(parts)
 		end
+		local attrs = self:parseAttrs()
 		self:expect(";")
-		fields[#fields + 1] = { type = ftype, name = name.ident }
+		fields[#fields + 1] = { type = ftype, name = name.ident, array_size = array_size, attrs = attrs }
 	end
 	return fields
 end
@@ -245,6 +267,56 @@ function Parser:parseAsmName()
 	end
 end
 
+---@return ffix.c.Attr[]?
+function Parser:parseAttrs()
+	local tok = self:peek()
+	if not (tok and tok.variant == "ident" and tok.ident == "__attribute__") then return nil end
+	self:advance()
+	self:expect("(")
+	self:expect("(")
+	local attrs = {}
+	while true do
+		if self:consume(")") then break end
+		local name_tok = self:advance()
+		local name = name_tok.variant == "ident" and name_tok.ident or name_tok.variant
+		local args
+		if self:consume("(") then
+			local parts = {}
+			local depth = 0
+			while true do
+				local t = self:peek()
+				if not t then error("unterminated __attribute__ args") end
+				if t.variant == ")" then
+					if depth == 0 then break end
+					depth = depth - 1
+					parts[#parts + 1] = ")"
+					self:advance()
+				elseif t.variant == "(" then
+					depth = depth + 1
+					parts[#parts + 1] = "("
+					self:advance()
+				elseif t.variant == "ident" then
+					parts[#parts + 1] = t.ident
+					self:advance()
+				elseif t.variant == "number" then
+					local n = t.number
+					parts[#parts + 1] = n == math.floor(n) and tostring(math.floor(n)) or tostring(n)
+					self:advance()
+				else
+					parts[#parts + 1] = t.variant
+					self:advance()
+				end
+			end
+			args = table.concat(parts)
+			self:expect(")")
+		end
+		attrs[#attrs + 1] = { name = name, args = args }
+		self:consume(",")
+	end
+	self:expect(")")
+	return attrs
+end
+
 ---@return ffix.c.Parser.Node
 function Parser:parseDecl()
 	if self:consume("typedef") then
@@ -252,12 +324,20 @@ function Parser:parseDecl()
 
 		if kw and (kw.variant == "struct" or kw.variant == "union") then
 			self:advance()
+			local pre_attrs = self:parseAttrs()
 			local tag_tok = self:consume("ident")
 			self:expect("{")
 			local fields = self:parseFields()
+			local post_attrs = self:parseAttrs()
 			local name = self:expect("ident")
 			self:expect(";")
-			return { kind = "typedef_struct", tag = tag_tok and tag_tok.ident, fields = fields, name = name.ident }
+			local attrs
+			if pre_attrs or post_attrs then
+				attrs = {}
+				if pre_attrs then for _, a in ipairs(pre_attrs) do attrs[#attrs + 1] = a end end
+				if post_attrs then for _, a in ipairs(post_attrs) do attrs[#attrs + 1] = a end end
+			end
+			return { kind = "typedef_struct", tag = tag_tok and tag_tok.ident, fields = fields, name = name.ident, attrs = attrs }
 		end
 
 		if kw and kw.variant == "enum" then
@@ -299,9 +379,10 @@ function Parser:parseDecl()
 	local name = self:expect("ident")
 	local params = self:parseParams()
 	local asm_name = self:parseAsmName()
+	local attrs = self:parseAttrs()
 	self:expect(";")
 
-	return { kind = "fn_decl", ret = ret, name = name.ident, params = params, asm_name = asm_name }
+	return { kind = "fn_decl", ret = ret, name = name.ident, params = params, asm_name = asm_name, attrs = attrs }
 end
 
 ---@param tokens ffix.c.Tokenizer.Token[]

@@ -34,6 +34,7 @@ function Context:rewriteParams(params)
 	for _, p in ipairs(params) do
 		out[#out + 1] = { type = self:rewriteType(p.type), name = p.name }
 	end
+
 	return out
 end
 
@@ -50,16 +51,16 @@ function Context:rewriteNode(node)
 	elseif k == "typedef_struct" then
 		local fields = {}
 		for _, f in ipairs(node.fields) do
-			fields[#fields + 1] = { type = self:rewriteType(f.type), name = f.name }
+			fields[#fields + 1] = { type = self:rewriteType(f.type), name = f.name, array_size = f.array_size, attrs = f.attrs }
 		end
 
-		return { kind = k, name = renamed, tag = node.tag and (self.names[node.tag] or node.tag), fields = fields }
+		return { kind = k, name = renamed, tag = node.tag and (self.names[node.tag] or node.tag), fields = fields, attrs = node.attrs }
 	elseif k == "typedef_enum" then
 		return { kind = k, name = renamed, tag = node.tag and (self.names[node.tag] or node.tag), variants = node.variants }
 	elseif k == "typedef_fnptr" then
 		return { kind = k, name = renamed, ret = self:rewriteType(node.ret), params = self:rewriteParams(node.params) }
 	elseif k == "fn_decl" then
-		return { kind = k, name = renamed, asm_name = node.name, ret = self:rewriteType(node.ret), params = self:rewriteParams(node.params) }
+		return { kind = k, name = renamed, asm_name = node.name, ret = self:rewriteType(node.ret), params = self:rewriteParams(node.params), attrs = node.attrs }
 	elseif k == "extern_var" then
 		return { kind = k, name = renamed, asm_name = node.name, type = self:rewriteType(node.type) }
 	end

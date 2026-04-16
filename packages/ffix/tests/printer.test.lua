@@ -125,3 +125,85 @@ end)
 test.it("multiple nodes", function()
 	test.equal(roundtrip("typedef int size_t;\nextern int errno;"), "typedef int size_t;\nextern int errno;")
 end)
+
+-- array sizes
+
+test.it("struct field with array size roundtrips", function()
+	test.equal(roundtrip("typedef struct { char buf[256]; } Buf;"), [[
+typedef struct {
+	char buf[256];
+} Buf;]])
+end)
+
+test.it("struct field with symbolic array size roundtrips", function()
+	test.equal(roundtrip("typedef struct { int data[MAX_SIZE]; } S;"), [[
+typedef struct {
+	int data[MAX_SIZE];
+} S;]])
+end)
+
+-- __attribute__
+
+test.it("struct __attribute__((packed)) before body roundtrips", function()
+	test.equal(roundtrip("typedef struct __attribute__((packed)) { int x; } S;"), [[
+typedef struct __attribute__((packed)) {
+	int x;
+} S;]])
+end)
+
+test.it("struct __attribute__((packed)) after body normalises to before body", function()
+	test.equal(roundtrip("typedef struct { int x; } __attribute__((packed)) S;"), [[
+typedef struct __attribute__((packed)) {
+	int x;
+} S;]])
+end)
+
+test.it("struct __attribute__((aligned(8))) roundtrips", function()
+	test.equal(roundtrip("typedef struct __attribute__((aligned(8))) { int x; } S;"), [[
+typedef struct __attribute__((aligned(8))) {
+	int x;
+} S;]])
+end)
+
+test.it("field __attribute__((aligned(4))) roundtrips", function()
+	test.equal(roundtrip("typedef struct { int x __attribute__((aligned(4))); } S;"), [[
+typedef struct {
+	int x __attribute__((aligned(4)));
+} S;]])
+end)
+
+test.it("field __attribute__((mode(__word__))) roundtrips", function()
+	test.equal(roundtrip("typedef struct { int x __attribute__((mode(__word__))); } S;"), [[
+typedef struct {
+	int x __attribute__((mode(__word__)));
+} S;]])
+end)
+
+test.it("field __attribute__((vector_size(16))) roundtrips", function()
+	test.equal(roundtrip("typedef struct { float v __attribute__((vector_size(16))); } S;"), [[
+typedef struct {
+	float v __attribute__((vector_size(16)));
+} S;]])
+end)
+
+test.it("field with array size and __attribute__ roundtrips", function()
+	test.equal(roundtrip("typedef struct { int arr[4] __attribute__((aligned(16))); } S;"), [[
+typedef struct {
+	int arr[4] __attribute__((aligned(16)));
+} S;]])
+end)
+
+test.it("fn_decl __attribute__((cdecl)) roundtrips", function()
+	test.equal(roundtrip("void foo(void) __attribute__((cdecl));"), "void foo(void) __attribute__((cdecl));")
+end)
+
+test.it("fn_decl __attribute__((stdcall)) roundtrips", function()
+	test.equal(roundtrip("int bar(int x) __attribute__((stdcall));"), "int bar(int x) __attribute__((stdcall));")
+end)
+
+test.it("fn_decl __asm__ and __attribute__ roundtrips", function()
+	test.equal(
+		roundtrip("void foo(void) __asm__(\"_foo\") __attribute__((cdecl));"),
+		"void foo(void) __asm__(\"_foo\") __attribute__((cdecl));"
+	)
+end)

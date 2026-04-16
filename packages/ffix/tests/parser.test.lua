@@ -246,6 +246,108 @@ test.it("fn_decl without __asm__ has nil asm_name", function()
 	})
 end)
 
+-- array sizes
+
+test.it("struct field array size is preserved", function()
+	test.match(parse("typedef struct { char buf[256]; } Buf;"), {
+		{ kind = "typedef_struct", fields = { { name = "buf", type = { name = "char" }, array_size = "256" } } },
+	})
+end)
+
+test.it("struct field symbolic array size is preserved", function()
+	test.match(parse("typedef struct { int data[MAX_SIZE]; } S;"), {
+		{ kind = "typedef_struct", fields = { { name = "data", array_size = "MAX_SIZE" } } },
+	})
+end)
+
+-- __attribute__
+
+test.it("struct field __attribute__((aligned(4)))", function()
+	test.match(parse("typedef struct { int x __attribute__((aligned(4))); } S;"), {
+		{ kind = "typedef_struct", fields = {
+			{ name = "x", attrs = { { name = "aligned", args = "4" } } },
+		} },
+	})
+end)
+
+test.it("struct field __attribute__((packed))", function()
+	test.match(parse("typedef struct { char c __attribute__((packed)); } S;"), {
+		{ kind = "typedef_struct", fields = {
+			{ name = "c", attrs = { { name = "packed", args = nil } } },
+		} },
+	})
+end)
+
+test.it("struct field __attribute__((mode(__word__)))", function()
+	test.match(parse("typedef struct { int x __attribute__((mode(__word__))); } S;"), {
+		{ kind = "typedef_struct", fields = {
+			{ name = "x", attrs = { { name = "mode", args = "__word__" } } },
+		} },
+	})
+end)
+
+test.it("struct field __attribute__((vector_size(16)))", function()
+	test.match(parse("typedef struct { float v __attribute__((vector_size(16))); } S;"), {
+		{ kind = "typedef_struct", fields = {
+			{ name = "v", attrs = { { name = "vector_size", args = "16" } } },
+		} },
+	})
+end)
+
+test.it("struct __attribute__((packed)) before body", function()
+	test.match(parse("typedef struct __attribute__((packed)) { int x; } S;"), {
+		{ kind = "typedef_struct", attrs = { { name = "packed" } } },
+	})
+end)
+
+test.it("struct __attribute__((packed)) after body", function()
+	test.match(parse("typedef struct { int x; } __attribute__((packed)) S;"), {
+		{ kind = "typedef_struct", attrs = { { name = "packed" } } },
+	})
+end)
+
+test.it("struct __attribute__((aligned(8))) before body", function()
+	test.match(parse("typedef struct __attribute__((aligned(8))) { int x; } S;"), {
+		{ kind = "typedef_struct", attrs = { { name = "aligned", args = "8" } } },
+	})
+end)
+
+test.it("fn_decl __attribute__((cdecl))", function()
+	test.match(parse("void foo(void) __attribute__((cdecl));"), {
+		{ kind = "fn_decl", name = "foo", attrs = { { name = "cdecl" } } },
+	})
+end)
+
+test.it("fn_decl __attribute__((stdcall))", function()
+	test.match(parse("int bar(int x) __attribute__((stdcall));"), {
+		{ kind = "fn_decl", name = "bar", attrs = { { name = "stdcall" } } },
+	})
+end)
+
+test.it("fn_decl __attribute__((fastcall))", function()
+	test.match(parse("void baz(void) __attribute__((fastcall));"), {
+		{ kind = "fn_decl", attrs = { { name = "fastcall" } } },
+	})
+end)
+
+test.it("fn_decl __attribute__((thiscall))", function()
+	test.match(parse("void qux(void) __attribute__((thiscall));"), {
+		{ kind = "fn_decl", attrs = { { name = "thiscall" } } },
+	})
+end)
+
+test.it("fn_decl with __asm__ and __attribute__ preserves both", function()
+	test.match(parse("void foo(void) __asm__(\"_foo\") __attribute__((cdecl));"), {
+		{ kind = "fn_decl", asm_name = "_foo", attrs = { { name = "cdecl" } } },
+	})
+end)
+
+test.it("field has no attrs when none present", function()
+	test.match(parse("typedef struct { int x; } S;"), {
+		{ kind = "typedef_struct", fields = { { name = "x", attrs = nil, array_size = nil } } },
+	})
+end)
+
 -- error handling
 
 test.it("returns false on invalid input", function()
