@@ -348,6 +348,39 @@ test.it("field has no attrs when none present", function()
 	})
 end)
 
+-- reference types
+
+test.it("typedef reference alias", function()
+	test.match(parse("typedef int & IntRef;"), {
+		{ kind = "typedef_alias", name = "IntRef", type = { name = "int", pointer = 0, reference = true } },
+	})
+end)
+
+test.it("function with reference param", function()
+	test.match(parse("void swap(int & a, int & b);"), {
+		{
+			kind = "fn_decl",
+			name = "swap",
+			params = {
+				{ name = "a", type = { name = "int", reference = true } },
+				{ name = "b", type = { name = "int", reference = true } },
+			},
+		},
+	})
+end)
+
+test.it("function returning reference", function()
+	test.match(parse("int & at(int idx);"), {
+		{ kind = "fn_decl", name = "at", ret = { name = "int", reference = true } },
+	})
+end)
+
+test.it("non-reference type has nil reference field", function()
+	test.match(parse("typedef int MyInt;"), {
+		{ kind = "typedef_alias", name = "MyInt", type = { reference = nil } },
+	})
+end)
+
 -- error handling
 
 test.it("returns false on invalid input", function()

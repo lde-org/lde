@@ -14,8 +14,8 @@ function Printer:typedName(t, name)
 	for _, q in ipairs(t.qualifiers) do parts[#parts + 1] = q end
 	parts[#parts + 1] = t.name
 	local base = table.concat(parts, " ")
-	local stars = string.rep("*", t.pointer)
-	if t.pointer > 0 then
+	local stars = string.rep("*", t.pointer) .. (t.reference and "&" or "")
+	if t.pointer > 0 or t.reference then
 		return base .. " " .. stars .. (name or "")
 	end
 	return name and (base .. " " .. name) or base

@@ -8,6 +8,7 @@ Parser.__index = Parser
 ---@field qualifiers string[]
 ---@field name string
 ---@field pointer number
+---@field reference boolean?
 
 ---@class ffix.c.Attr
 ---@field name string
@@ -187,7 +188,9 @@ function Parser:parseType()
 		end
 	end
 
-	return { qualifiers = quals, name = name, pointer = pointer }
+	local reference = self:consume("&") ~= nil
+
+	return { qualifiers = quals, name = name, pointer = pointer, reference = reference or nil }
 end
 
 ---@return ffix.c.Parser.Field[]

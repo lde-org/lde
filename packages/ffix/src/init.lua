@@ -24,7 +24,7 @@ function Context:rewriteType(t)
 		name = self.names[name] or name
 	end
 
-	return { qualifiers = t.qualifiers, name = name, pointer = t.pointer }
+	return { qualifiers = t.qualifiers, name = name, pointer = t.pointer, reference = t.reference }
 end
 
 ---@param params ffix.c.Parser.Param[]

@@ -207,3 +207,17 @@ test.it("fn_decl __asm__ and __attribute__ roundtrips", function()
 		"void foo(void) __asm__(\"_foo\") __attribute__((cdecl));"
 	)
 end)
+
+-- reference types
+
+test.it("typedef reference alias roundtrips", function()
+	test.equal(roundtrip("typedef int & IntRef;"), "typedef int &IntRef;")
+end)
+
+test.it("function with reference params roundtrips", function()
+	test.equal(roundtrip("void swap(int & a, int & b);"), "void swap(int &a, int &b);")
+end)
+
+test.it("function returning reference roundtrips", function()
+	test.equal(roundtrip("int & at(int idx);"), "int &at(int idx);")
+end)
