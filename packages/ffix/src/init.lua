@@ -9,6 +9,7 @@ local Printer = require("ffix.printer")
 ---@class ffix.Context
 ---@field private pfx string
 ---@field private names table<string, string>  -- original -> prefixed
+---@field C table  -- proxy for ffi.C; ctx.C.foo resolves to ffi.C[prefixed_name]
 local Context = {}
 Context.__index = Context
 
@@ -21,14 +22,20 @@ function Context:rewriteInlineType(t)
 		inline_tag = t.inline_tag,
 		inline_attrs = t.inline_attrs,
 		pointer = t.pointer,
-		reference = t.reference,
+		reference = t.reference
 	}
 	if t.inline_kind == "enum" then
 		result.inline_variants = t.inline_variants
 	else
 		local fields = {}
 		for _, f in ipairs(t.inline_fields) do
-			fields[#fields + 1] = { type = self:rewriteType(f.type), name = f.name, array_size = f.array_size, attrs = f.attrs }
+			fields[#fields + 1] = {
+				type = self:rewriteType(f.type),
+				name = f.name,
+				array_size = f.array_size,
+				attrs = f
+					.attrs
+			}
 		end
 		result.inline_fields = fields
 	end
@@ -144,9 +151,28 @@ function Context:load(lib)
 	return ffi.load(lib)
 end
 
+---@param typename string
+---@param mt table
+function Context:metatype(typename, mt)
+	return ffi.metatype(self.names[typename] or typename, mt)
+end
+
+---@param typename string
+function Context:istype(typename, obj)
+	return ffi.istype(self.names[typename] or typename, obj)
+end
+
 ---@param pfx string
 function ffix.context(pfx)
-	return setmetatable({ pfx = pfx, names = {} }, Context)
+	local ctx = setmetatable({ pfx = pfx, names = {} }, Context)
+
+	ctx.C = setmetatable({}, {
+		__index = function(_, k)
+			return ffi.C[ctx.names[k] or k]
+		end
+	})
+
+	return ctx
 end
 
 return ffix

@@ -97,3 +97,72 @@ test.it("multiple functions resolve independently", function()
 	test.equal(tonumber(ffi.C[c.names["strlen"]]("abc")), 3)
 	test.equal(tonumber(ffi.C[c.names["atoi"]]("123")), 123)
 end)
+
+-- ctx.C
+
+test.it("ctx.C.fn calls through to the real symbol", function()
+	local c = ctx()
+	c:cdef("unsigned long strlen(const char * s);")
+	test.equal(tonumber(c.C.strlen("hello")), 5)
+	test.equal(tonumber(c.C.strlen("")), 0)
+end)
+
+test.it("ctx.C resolves multiple functions independently", function()
+	local c = ctx()
+	c:cdef([[
+		unsigned long strlen(const char * s);
+		int atoi(const char * s);
+	]])
+	test.equal(tonumber(c.C.strlen("abc")), 3)
+	test.equal(tonumber(c.C.atoi("42")), 42)
+end)
+
+test.it("ctx.C from different contexts do not collide", function()
+	local c1 = ctx()
+	local c2 = ctx()
+	c1:cdef("unsigned long strlen(const char * s);")
+	c2:cdef("unsigned long strlen(const char * s);")
+	test.equal(tonumber(c1.C.strlen("hi")), 2)
+	test.equal(tonumber(c2.C.strlen("hello")), 5)
+end)
+
+-- metatype
+
+test.it("metatype registers methods accessible on new instances", function()
+	local c = ctx()
+	c:cdef("typedef struct { int x; int y; } Point;")
+	c:metatype("Point", {
+		__index = {
+			sum = function(self) return self.x + self.y end,
+		},
+	})
+	local p = c:new("Point", { x = 3, y = 4 })
+	test.equal(p:sum(), 7)
+end)
+
+test.it("metatype __tostring is called on tostring()", function()
+	local c = ctx()
+	c:cdef("typedef struct { int n; } Num;")
+	c:metatype("Num", {
+		__tostring = function(self) return "Num(" .. self.n .. ")" end,
+	})
+	local v = c:new("Num", { n = 99 })
+	test.equal(tostring(v), "Num(99)")
+end)
+
+-- istype
+
+test.it("istype returns true for matching ctype", function()
+	local c = ctx()
+	c:cdef("typedef struct { int x; } Vec;")
+	local v = c:new("Vec")
+	test.truthy(c:istype("Vec", v))
+end)
+
+test.it("istype returns false for non-matching ctype", function()
+	local c = ctx()
+	c:cdef("typedef struct { int x; } A;")
+	c:cdef("typedef struct { int x; } B;")
+	local a = c:new("A")
+	test.falsy(c:istype("B", a))
+end)
