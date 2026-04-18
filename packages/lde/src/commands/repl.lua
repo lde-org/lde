@@ -13,6 +13,30 @@ local function repl(_args)
 
 	local savedPath, savedCPath = package.path, package.cpath
 
+	local builtinModules = {
+		package = true, string = true, table = true, math = true, io = true,
+		os = true, debug = true, coroutine = true, bit = true, jit = true,
+		ffi = true, ["jit.opt"] = true, ["jit.util"] = true,
+		["jit.p"] = true, ["jit.profile"] = true, ["string.buffer"] = true
+	}
+
+	local function clearNonBuiltins(t)
+		local saved = {}
+		for k, v in pairs(t) do
+			saved[k] = v
+			if not builtinModules[k] then t[k] = nil end
+		end
+		return saved
+	end
+
+	local function restoreTable(t, saved)
+		for k in pairs(t) do t[k] = nil end
+		for k, v in pairs(saved) do t[k] = v end
+	end
+
+	local savedLoaded  = clearNonBuiltins(package.loaded)
+	local savedPreload = clearNonBuiltins(package.preload)
+
 	local pkg = lde.Package.open()
 	if pkg then
 		pkg:build()
@@ -147,6 +171,8 @@ local function repl(_args)
 	package.path = savedPath
 	package.cpath = savedCPath
 	os.tmpname = originalTmpname
+	restoreTable(package.loaded, savedLoaded)
+	restoreTable(package.preload, savedPreload)
 end
 
 return repl

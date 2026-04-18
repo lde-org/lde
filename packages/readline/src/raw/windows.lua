@@ -12,6 +12,8 @@ ffi.cdef([[
 	} COORD;
 
 	typedef struct {
+		BOOL bKeyDown;
+		WORD wRepeatCount;
 		WORD wVirtualKeyCode;
 		WORD wVirtualScanCode;
 		union { WCHAR UnicodeChar; char AsciiChar; } uChar;
@@ -103,8 +105,9 @@ function readline.readByte()
 	while true do
 		if kernel32.ReadConsoleInputW(hIn, rec, 1, nread) == 0 then return nil end
 		local r = rec[0]
-		if r.EventType == KEY_EVENT and r.Event.KeyEvent.wVirtualKeyCode ~= 0 then
+		if r.EventType == KEY_EVENT and r.Event.KeyEvent.bKeyDown ~= 0 and r.Event.KeyEvent.wVirtualKeyCode ~= 0 then
 			local vk = tonumber(r.Event.KeyEvent.wVirtualKeyCode)
+
 			local ch = r.Event.KeyEvent.uChar.AsciiChar
 			if vk == VK_LEFT then
 				return "\x1b[D"
@@ -124,8 +127,8 @@ function readline.readByte()
 				return "\x1b[3~"
 			elseif vk == VK_RETURN then
 				return "\r"
-			elseif ch ~= "\0" then
-				return ch
+			elseif ch ~= 0 then
+				return string.char(ch)
 			end
 		end
 	end
