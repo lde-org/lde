@@ -381,6 +381,77 @@ test.it("non-reference type has nil reference field", function()
 	})
 end)
 
+-- anonymous / inline struct, union, enum
+
+test.it("anonymous union field inside struct", function()
+	test.match(parse("typedef struct { union { int a; float b; }; int c; } Foo;"), {
+		{
+			kind = "typedef_struct",
+			name = "Foo",
+			fields = {
+				{ name = nil, type = { inline_kind = "union", inline_tag = nil, inline_fields = {
+					{ name = "a", type = { name = "int" } },
+					{ name = "b", type = { name = "float" } },
+				} } },
+				{ name = "c", type = { name = "int" } },
+			},
+		},
+	})
+end)
+
+test.it("named inline struct field", function()
+	test.match(parse("typedef struct { struct { int x; int y; } pos; } Entity;"), {
+		{
+			kind = "typedef_struct",
+			name = "Entity",
+			fields = {
+				{ name = "pos", type = { inline_kind = "struct", inline_tag = nil, inline_fields = {
+					{ name = "x", type = { name = "int" } },
+					{ name = "y", type = { name = "int" } },
+				} } },
+			},
+		},
+	})
+end)
+
+test.it("tagged inline union field", function()
+	test.match(parse("typedef struct { union Val { int i; float f; } val; } S;"), {
+		{
+			kind = "typedef_struct",
+			fields = {
+				{ name = "val", type = { inline_kind = "union", inline_tag = "Val" } },
+			},
+		},
+	})
+end)
+
+test.it("anonymous struct inside union", function()
+	test.match(parse("typedef union { struct { int x; int y; }; long long flat; } Vec2;"), {
+		{
+			kind = "typedef_struct",
+			name = "Vec2",
+			fields = {
+				{ name = nil, type = { inline_kind = "struct" } },
+				{ name = "flat", type = { name = "long" } },
+			},
+		},
+	})
+end)
+
+test.it("nested anonymous unions", function()
+	test.match(parse("typedef struct { union { struct { int x; int y; }; int arr[2]; }; } S;"), {
+		{
+			kind = "typedef_struct",
+			fields = {
+				{ name = nil, type = { inline_kind = "union", inline_fields = {
+					{ name = nil, type = { inline_kind = "struct" } },
+					{ name = "arr", type = { name = "int" }, array_size = "2" },
+				} } },
+			},
+		},
+	})
+end)
+
 -- error handling
 
 test.it("returns false on invalid input", function()

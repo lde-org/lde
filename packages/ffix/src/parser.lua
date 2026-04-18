@@ -6,7 +6,12 @@ Parser.__index = Parser
 
 ---@class ffix.c.Parser.Type
 ---@field qualifiers string[]
----@field name string
+---@field name string?
+---@field inline_kind ("struct"|"union"|"enum")?
+---@field inline_tag string?
+---@field inline_fields ffix.c.Parser.Field[]?
+---@field inline_variants ffix.c.Parser.Variant[]?
+---@field inline_attrs ffix.c.Attr[]?
 ---@field pointer number
 ---@field reference boolean?
 
@@ -16,7 +21,7 @@ Parser.__index = Parser
 
 ---@class ffix.c.Parser.Field
 ---@field type ffix.c.Parser.Type
----@field name string
+---@field name string?
 ---@field array_size string?
 ---@field attrs ffix.c.Attr[]?
 
@@ -132,8 +137,40 @@ function Parser:parseType()
 		elseif tok.variant == "struct" or tok.variant == "enum" or tok.variant == "union" then
 			local kw = tok.variant
 			self:advance()
-			local tag = self:expect("ident")
-			name = kw .. " " .. tag.ident
+			local tag_tok = self:consume("ident")
+			if self:peek() and self:peek().variant == "{" then
+				self:advance()
+				local inline_fields, inline_variants, inline_attrs
+				if kw == "enum" then
+					inline_variants = self:parseVariants()
+				else
+					inline_fields = self:parseFields()
+					inline_attrs = self:parseAttrs()
+				end
+				local pointer = 0
+				while self:consume("*") do
+					pointer = pointer + 1
+					while true do
+						local qtok = self:peek()
+						if qtok and (qtok.variant == "const" or qtok.variant == "volatile" or qtok.variant == "restrict") then
+							self:advance()
+						else break end
+					end
+				end
+				local reference = self:consume("&") ~= nil
+				return {
+					qualifiers = quals,
+					inline_kind = kw,
+					inline_tag = tag_tok and tag_tok.ident,
+					inline_fields = inline_fields,
+					inline_variants = inline_variants,
+					inline_attrs = inline_attrs,
+					pointer = pointer,
+					reference = reference or nil,
+				}
+			end
+			if not tag_tok then error("expected tag name or '{' after " .. kw) end
+			name = kw .. " " .. tag_tok.ident
 			break
 		elseif tok.variant == "ident" then
 			-- if we already have qualifiers (e.g. "unsigned long"), peek at the
@@ -198,7 +235,12 @@ function Parser:parseFields()
 	local fields = {}
 	while not self:consume("}") do
 		local ftype = self:parseType()
-		local name = self:expect("ident")
+		local name_tok
+		if ftype.inline_kind then
+			name_tok = self:consume("ident")
+		else
+			name_tok = self:expect("ident")
+		end
 		local array_size
 		if self:consume("[") then
 			local parts = {}
@@ -217,7 +259,7 @@ function Parser:parseFields()
 		end
 		local attrs = self:parseAttrs()
 		self:expect(";")
-		fields[#fields + 1] = { type = ftype, name = name.ident, array_size = array_size, attrs = attrs }
+		fields[#fields + 1] = { type = ftype, name = name_tok and name_tok.ident, array_size = array_size, attrs = attrs }
 	end
 	return fields
 end

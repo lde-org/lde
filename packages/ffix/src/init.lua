@@ -14,7 +14,34 @@ Context.__index = Context
 
 ---@param t ffix.c.Parser.Type
 ---@return ffix.c.Parser.Type
+function Context:rewriteInlineType(t)
+	local result = {
+		qualifiers = t.qualifiers,
+		inline_kind = t.inline_kind,
+		inline_tag = t.inline_tag,
+		inline_attrs = t.inline_attrs,
+		pointer = t.pointer,
+		reference = t.reference,
+	}
+	if t.inline_kind == "enum" then
+		result.inline_variants = t.inline_variants
+	else
+		local fields = {}
+		for _, f in ipairs(t.inline_fields) do
+			fields[#fields + 1] = { type = self:rewriteType(f.type), name = f.name, array_size = f.array_size, attrs = f.attrs }
+		end
+		result.inline_fields = fields
+	end
+	return result
+end
+
+---@param t ffix.c.Parser.Type
+---@return ffix.c.Parser.Type
 function Context:rewriteType(t)
+	if t.inline_kind then
+		return self:rewriteInlineType(t)
+	end
+
 	local name = t.name
 
 	local kw, base = name:match("^(%a+) ([%a_][%w_]*)$")

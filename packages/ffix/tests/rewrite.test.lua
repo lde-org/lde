@@ -96,3 +96,17 @@ test.it("struct field reference to tagged struct is rewritten", function()
 		"typedef struct mylib_Node {\n\tstruct mylib_Node *next;\n} mylib_Node;"
 	)
 end)
+
+test.it("anonymous union field inside struct is preserved through rewrite", function()
+	test.equal(
+		rewrite("mylib", "typedef struct { union { int a; float b; }; int c; } Foo;"),
+		"typedef struct {\n\tunion { int a; float b; };\n\tint c;\n} mylib_Foo;"
+	)
+end)
+
+test.it("named inline struct field with user type is rewritten", function()
+	test.equal(
+		rewrite("mylib", "typedef int MyInt;\ntypedef struct { struct { MyInt x; MyInt y; } pos; } Entity;"),
+		"typedef int mylib_MyInt;\ntypedef struct {\n\tstruct { mylib_MyInt x; mylib_MyInt y; } pos;\n} mylib_Entity;"
+	)
+end)

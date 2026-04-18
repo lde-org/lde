@@ -221,3 +221,34 @@ end)
 test.it("function returning reference roundtrips", function()
 	test.equal(roundtrip("int & at(int idx);"), "int &at(int idx);")
 end)
+
+-- anonymous / inline struct, union, enum
+
+test.it("anonymous union field inside struct", function()
+	test.equal(roundtrip("typedef struct { union { int a; float b; }; int c; } Foo;"), [[
+typedef struct {
+	union { int a; float b; };
+	int c;
+} Foo;]])
+end)
+
+test.it("named inline struct field", function()
+	test.equal(roundtrip("typedef struct { struct { int x; int y; } pos; } Entity;"), [[
+typedef struct {
+	struct { int x; int y; } pos;
+} Entity;]])
+end)
+
+test.it("tagged inline union field", function()
+	test.equal(roundtrip("typedef struct { union Val { int i; float f; } val; } S;"), [[
+typedef struct {
+	union Val { int i; float f; } val;
+} S;]])
+end)
+
+test.it("nested anonymous union inside struct", function()
+	test.equal(roundtrip("typedef struct { union { struct { int x; int y; }; int arr[2]; }; } S;"), [[
+typedef struct {
+	union { struct { int x; int y; }; int arr[2]; };
+} S;]])
+end)

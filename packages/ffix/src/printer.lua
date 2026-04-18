@@ -7,13 +7,39 @@ function Printer.new()
 end
 
 ---@param t ffix.c.Parser.Type
+---@return string
+function Printer:inlineType(t)
+	local kw = t.inline_kind
+	local tag_part = t.inline_tag and (" " .. t.inline_tag) or ""
+	local attr_str = (t.inline_attrs and #t.inline_attrs > 0) and (" " .. self:attrsStr(t.inline_attrs)) or ""
+	if kw == "enum" then
+		local parts = {}
+		for _, v in ipairs(t.inline_variants) do parts[#parts + 1] = v.name end
+		return "enum" .. tag_part .. " { " .. table.concat(parts, ", ") .. " }"
+	else
+		local parts = {}
+		for _, f in ipairs(t.inline_fields) do
+			local arr = f.array_size and ("[" .. f.array_size .. "]") or ""
+			local fattr = (f.attrs and #f.attrs > 0) and (" " .. self:attrsStr(f.attrs)) or ""
+			parts[#parts + 1] = self:typedName(f.type, f.name) .. arr .. fattr .. ";"
+		end
+		return kw .. tag_part .. attr_str .. " { " .. table.concat(parts, " ") .. " }"
+	end
+end
+
+---@param t ffix.c.Parser.Type
 ---@param name string?
 ---@return string
 function Printer:typedName(t, name)
-	local parts = {}
-	for _, q in ipairs(t.qualifiers) do parts[#parts + 1] = q end
-	parts[#parts + 1] = t.name
-	local base = table.concat(parts, " ")
+	local base
+	if t.inline_kind then
+		base = self:inlineType(t)
+	else
+		local parts = {}
+		for _, q in ipairs(t.qualifiers) do parts[#parts + 1] = q end
+		parts[#parts + 1] = t.name
+		base = table.concat(parts, " ")
+	end
 	local stars = string.rep("*", t.pointer) .. (t.reference and "&" or "")
 	if t.pointer > 0 or t.reference then
 		return base .. " " .. stars .. (name or "")
