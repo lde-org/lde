@@ -94,7 +94,7 @@ function Context:rewriteNode(node)
 	elseif k == "typedef_fnptr" then
 		return { kind = k, name = renamed, ret = self:rewriteType(node.ret), params = self:rewriteParams(node.params) }
 	elseif k == "fn_decl" then
-		return { kind = k, name = renamed, asm_name = node.name, ret = self:rewriteType(node.ret), params = self:rewriteParams(node.params), attrs = node.attrs }
+		return { kind = k, name = renamed, asm_name = node.asm_name or node.name, ret = self:rewriteType(node.ret), params = self:rewriteParams(node.params), attrs = node.attrs }
 	elseif k == "extern_var" then
 		return { kind = k, name = renamed, asm_name = node.name, type = self:rewriteType(node.type) }
 	end
