@@ -74,10 +74,6 @@ jobs:
         shell: pwsh
         run: echo "SEA_CC=aarch64-w64-mingw32-clang" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: Install macOS build deps
-        if: startsWith(matrix.os, 'macos')
-        run: brew install autoconf automake libtool
-
       - uses: lde-org/setup-lde@master
         with:
           version: nightly
