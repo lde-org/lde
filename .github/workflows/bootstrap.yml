@@ -36,8 +36,8 @@ jobs:
           #   artifact: luajit-macos-x86-64
           #   outfile: lde-macos-x86-64
           #   sea_cc: gcc
-          - os: ubuntu-22.04
-            artifact: luajit-linux-x86-64-gnu
+          - os: ubuntu-22.04-arm
+            artifact: luajit-linux-aarch64-gnu
             outfile: lde-android-aarch64
             android: true
 
@@ -86,10 +86,27 @@ jobs:
           $env:SEA_CC="${{ matrix.sea_cc }}"
           & "$env:GITHUB_WORKSPACE/${{ matrix.artifact }}/luajit.exe" ./src/init.lua compile --outfile ${{ matrix.outfile }}.exe
 
+      - name: Cache Android NDK
+        if: matrix.android
+        id: cache-android-ndk
+        uses: actions/cache@v5
+        with:
+          path: android-ndk-r29
+          key: android-ndk-r29-aarch64
+
+      - name: Setup Android NDK
+        if: matrix.android
+        run: |
+          if [[ "${{ steps.cache-android-ndk.outputs.cache-hit }}" != "true" ]]; then
+            wget -q https://github.com/lzhiyong/termux-ndk/releases/download/android-ndk/android-ndk-r29-aarch64.7z
+            7z x android-ndk-r29-aarch64.7z -o. > /dev/null
+          fi
+          echo "ANDROID_NDK_ROOT=$PWD/android-ndk-r29" >> $GITHUB_ENV
+
       - name: Set up Android NDK compiler
         if: matrix.android
         run: |
-          echo "SEA_CC=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang" >> $GITHUB_ENV
+          echo "SEA_CC=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-aarch64/bin/aarch64-linux-android21-clang" >> $GITHUB_ENV
 
       - name: Build lde (Unix)
         if: runner.os != 'Windows'
