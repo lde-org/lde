@@ -28,7 +28,7 @@ local function run(args)
 		scriptArgs = args:drain()
 	end
 
-	local function execute()
+	if not watch then
 		if not pkg then
 			if name and fs.exists(name) then
 				local ok, err = lde.runtime.executeFile(name, {
@@ -52,8 +52,8 @@ local function run(args)
 		pkg:build()
 		pkg:installDependencies()
 
-		local ok, err
 		local scripts = pkg:readConfig().scripts
+		local ok, err
 		if name and scripts and scripts[name] then
 			ok, err = pkg:runScript(name)
 		else
@@ -63,10 +63,6 @@ local function run(args)
 		if not ok then
 			error("Failed to run script: " .. err)
 		end
-	end
-
-	if not watch then
-		execute()
 		return
 	end
 
