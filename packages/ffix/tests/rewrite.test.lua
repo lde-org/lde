@@ -75,7 +75,7 @@ end)
 test.it("fn_decl preserves existing __asm__ as the asm target", function()
 	test.equal(
 		rewrite("mylib", "int mylib_add(int a, int b) __asm__(\"add\");"),
-		"int mylib_mylib_add(int a, int b) __asm__(\"mylib_add\");"
+		"int mylib_mylib_add(int a, int b) __asm__(\"add\");"
 	)
 end)
 
