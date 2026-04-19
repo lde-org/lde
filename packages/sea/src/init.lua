@@ -289,7 +289,7 @@ char lde_tmpdir[4096];
 			)
 	}
 
-	local stdintInclude = hasLibs and "#include <stdint.h>\n#include <string.h>\n#include <stdlib.h>" or "#include <stdlib.h>"
+	local stdintInclude = (hasLibs and "#include <stdint.h>\n#include <string.h>\n#include <stdlib.h>\n" or "") .. "#ifdef __ANDROID__\n#include <unistd.h>\n#endif\n"
 
 	-- lde_loadlib_loader: a C closure that calls package.loadlib(upvalue1, "*").
 	-- Only emitted when there are shared libs to avoid dead-code warnings.
