@@ -13,31 +13,18 @@ jobs:
       matrix:
         include:
           # - os: ubuntu-22.04
-          #   artifact: luajit-linux-x86-64-gnu
           #   outfile: lde-linux-x86-64
-          #   sea_cc: gcc
           # - os: ubuntu-22.04-arm
-          #   artifact: luajit-linux-aarch64-gnu
           #   outfile: lde-linux-aarch64
-          #   sea_cc: gcc
           # - os: windows-latest
-          #   artifact: luajit-windows-x86-64-gnu
           #   outfile: lde-windows-x86-64
-          #   sea_cc: gcc
           # - os: windows-11-arm
-          #   artifact: luajit-windows-aarch64-gnu
           #   outfile: lde-windows-aarch64
-          #   sea_cc: clang
           # - os: macos-15
-          #   artifact: luajit-macos-aarch64
           #   outfile: lde-macos-aarch64
-          #   sea_cc: gcc
           # - os: macos-15-intel
-          #   artifact: luajit-macos-x86-64
           #   outfile: lde-macos-x86-64
-          #   sea_cc: gcc
           - os: ubuntu-22.04-arm
-            artifact: luajit-linux-aarch64-gnu
             outfile: lde-android-aarch64
             android: true
 
@@ -47,89 +34,40 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      - name: Cache LuaJIT
-        id: cache-luajit
+      - name: Fix workspace permissions (Android)
+        if: matrix.android
+        run: chmod -R a+rw ${{ github.workspace }}
+
+      - name: Cache test image (Android)
+        if: matrix.android
+        id: cache-android-image
         uses: actions/cache@v5
         with:
-          path: ${{ matrix.artifact }}
-          key: ${{ matrix.artifact }}-latest
+          path: /tmp/termux-android.tar
+          key: termux-android-v3
 
-      - name: Download LuaJIT
-        if: steps.cache-luajit.outputs.cache-hit != 'true'
-        run: |
-          curl -L -o luajit.tar.gz https://github.com/lde-org/lj-dist/releases/download/latest/${{ matrix.artifact }}.tar.gz
-          tar -xzf luajit.tar.gz
-
-      - name: Add LuaJIT to PATH (Unix)
-        if: runner.os != 'Windows'
-        run: echo "$GITHUB_WORKSPACE/${{ matrix.artifact }}" >> $GITHUB_PATH
-
-      - name: Add LuaJIT to PATH (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: echo "$env:GITHUB_WORKSPACE\${{ matrix.artifact }}" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
-      - name: Install llvm-mingw (Windows ARM64)
-        if: matrix.os == 'windows-11-arm'
-        shell: pwsh
-        run: |
-          curl -L -o llvm-mingw.zip https://github.com/mstorsjo/llvm-mingw/releases/download/20260311/llvm-mingw-20260311-ucrt-aarch64.zip
-          Expand-Archive -Path llvm-mingw.zip -DestinationPath .
-          echo "$env:GITHUB_WORKSPACE\llvm-mingw-20260311-ucrt-aarch64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
-      - name: Build lde (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          cd packages/lde
-          $env:BOOTSTRAP=1
-          $env:SEA_CC="${{ matrix.sea_cc }}"
-          & "$env:GITHUB_WORKSPACE/${{ matrix.artifact }}/luajit.exe" ./src/init.lua compile --outfile ${{ matrix.outfile }}.exe
-
-      - name: Cache Android NDK
-        if: matrix.android
-        id: cache-android-ndk
-        uses: actions/cache@v5
-        with:
-          path: android-ndk-r29
-          key: android-ndk-r29-aarch64
-
-      - name: Setup Android NDK
+      - name: Build lde (Android)
         if: matrix.android
         run: |
-          if [[ "${{ steps.cache-android-ndk.outputs.cache-hit }}" != "true" ]]; then
-            wget -q https://github.com/lzhiyong/termux-ndk/releases/download/android-ndk/android-ndk-r29-aarch64.7z
-            7z x android-ndk-r29-aarch64.7z -o. > /dev/null
+          if [[ "${{ steps.cache-android-image.outputs.cache-hit }}" != "true" ]]; then
+            docker run --privileged --platform linux/arm64 \
+              --name termux-build termux/termux-docker:aarch64 \
+              bash -c "apt update && apt install -y luajit clang cmake ninja openssl git"
+            docker commit termux-build termux-android:latest
+            docker rm termux-build
+            docker save termux-android:latest -o /tmp/termux-android.tar
           fi
-          echo "ANDROID_NDK_ROOT=$PWD/android-ndk-r29" >> $GITHUB_ENV
 
-      - name: Set up Android NDK compiler
-        if: matrix.android
-        run: |
-          echo "SEA_CC=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-aarch64/bin/aarch64-linux-android21-clang" >> $GITHUB_ENV
+          docker load -i /tmp/termux-android.tar
 
-      - name: Build lde (Unix)
-        if: runner.os != 'Windows'
-        run: |
-          cd packages/lde
-          BOOTSTRAP=1 SEA_CC="${SEA_CC:-${{ matrix.sea_cc }}}" $GITHUB_WORKSPACE/${{ matrix.artifact }}/luajit ./src/init.lua compile --outfile ${{ matrix.outfile }}
+          docker run --rm --privileged --platform linux/arm64 \
+            -v ${{ github.workspace }}:/workspace \
+            -w /workspace \
+            -e LD_LIBRARY_PATH=/data/data/com.termux/files/usr/lib \
+            termux-android:latest \
+            bash -c "cd /workspace/packages/lde && BOOTSTRAP=1 luajit /workspace/packages/lde/src/init.lua compile --outfile /workspace/packages/lde/${{ matrix.outfile }}"
 
-      - name: Upload nightly release asset (Windows)
-        if: runner.os == 'Windows'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: nightly
-          name: Nightly Build
-          prerelease: true
-          body: |
-            Automated nightly build from master.
-            Commit: ${{ github.sha }}
-            Run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          files: packages/lde/${{ matrix.outfile }}.exe
-          fail_on_unmatched_files: true
-
-      - name: Upload nightly release asset (Unix)
-        if: runner.os != 'Windows'
+      - name: Upload nightly release asset
         uses: softprops/action-gh-release@v2
         with:
           tag_name: nightly
