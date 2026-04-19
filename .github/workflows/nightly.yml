@@ -156,7 +156,7 @@ jobs:
             bash -c "/workspace/lde --setup && cd /workspace/packages/lde && /workspace/lde compile --outfile /workspace/packages/lde/${{ matrix.outfile }} && cd /workspace && /workspace/packages/lde/${{ matrix.outfile }} test"
 
       - name: Upload nightly release asset
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: nightly
           name: Nightly Build

@@ -135,6 +135,6 @@ jobs:
             bash -c "/workspace/lde --setup && cd /workspace/packages/lde && /workspace/lde compile --outfile /workspace/packages/lde/${{ matrix.outfile }}"
 
       - name: Upload release asset
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: packages/lde/${{ matrix.outfile }}
