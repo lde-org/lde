@@ -165,7 +165,21 @@ end
 
 local evalCode = args:short("e")
 if evalCode then
-	require("lde.commands.eval")(evalCode)
+	local pkg = lde.Package.open()
+	local ok, result
+	if pkg then
+		pkg:installDependencies()
+		ok, result = pkg:runString(evalCode)
+	else
+		ok, result = lde.runtime.executeString(evalCode)
+	end
+
+	if not ok then
+		ansi.printf("{red}%s", tostring(result))
+	elseif result ~= nil then
+		print(tostring(result))
+	end
+
 	return
 end
 
@@ -232,7 +246,7 @@ local ok, err = xpcall(function()
 	local commandHandler = commands[commandName]
 
 	if commandHandler then
-		commandHandler(args)
+		return commandHandler(args)
 	else
 		-- Fall back to package scripts, then to a loose file if it exists
 		local pkg = lde.Package.open()
