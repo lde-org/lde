@@ -1,0 +1,254 @@
+local test = require("lde-test")
+local Tokenizer = require("ffix.tokenizer")
+local Parser = require("ffix.parser")
+local Printer = require("ffix.printer")
+
+local function roundtrip(src)
+	local tokens = Tokenizer.new():tokenize(src)
+	local ok, nodes = Parser.new():parse(tokens)
+	test.truthy(ok)
+	return Printer.new():print(nodes)
+end
+
+test.it("typedef alias", function()
+	test.equal(roundtrip("typedef int MyInt;"), "typedef int MyInt;")
+end)
+
+test.it("typedef pointer alias", function()
+	test.equal(roundtrip("typedef char * string_t;"), "typedef char *string_t;")
+end)
+
+test.it("typedef qualified alias", function()
+	test.equal(roundtrip("typedef const unsigned int uint_t;"), "typedef const unsigned int uint_t;")
+end)
+
+test.it("typedef double-pointer alias", function()
+	test.equal(roundtrip("typedef void ** handle_t;"), "typedef void **handle_t;")
+end)
+
+test.it("typedef struct anonymous", function()
+	test.equal(roundtrip("typedef struct { int x; int y; } Point;"), [[
+typedef struct {
+	int x;
+	int y;
+} Point;]])
+end)
+
+test.it("typedef struct with tag", function()
+	test.equal(roundtrip("typedef struct Node { int val; } Node;"), [[
+typedef struct Node {
+	int val;
+} Node;]])
+end)
+
+test.it("typedef struct pointer field", function()
+	test.equal(roundtrip("typedef struct { struct Node * next; } Node;"), [[
+typedef struct {
+	struct Node *next;
+} Node;]])
+end)
+
+test.it("typedef enum", function()
+	test.equal(roundtrip("typedef enum { RED, GREEN, BLUE, } Color;"), [[
+typedef enum {
+	RED,
+	GREEN,
+	BLUE,
+} Color;]])
+end)
+
+test.it("typedef enum with tag", function()
+	test.equal(roundtrip("typedef enum Dir { UP, DOWN, } Dir;"), [[
+typedef enum Dir {
+	UP,
+	DOWN,
+} Dir;]])
+end)
+
+test.it("typedef function pointer no params", function()
+	test.equal(roundtrip("typedef void (*Callback)(void);"), "typedef void (*Callback)(void);")
+end)
+
+test.it("typedef function pointer with params", function()
+	test.equal(
+		roundtrip("typedef int (*Comparator)(const void * a, const void * b);"),
+		"typedef int (*Comparator)(const void *a, const void *b);"
+	)
+end)
+
+test.it("typedef function pointer returning pointer", function()
+	test.equal(roundtrip("typedef char * (*Getter)(int key);"), "typedef char *(*Getter)(int key);")
+end)
+
+test.it("function declaration no params", function()
+	test.equal(roundtrip("void init(void);"), "void init(void);")
+end)
+
+test.it("function declaration named params", function()
+	test.equal(roundtrip("int add(int a, int b);"), "int add(int a, int b);")
+end)
+
+test.it("function declaration unnamed params", function()
+	test.equal(roundtrip("int add(int, int);"), "int add(int, int);")
+end)
+
+test.it("function returning pointer", function()
+	test.equal(roundtrip("char * strdup(const char * s);"), "char *strdup(const char *s);")
+end)
+
+test.it("function with void pointer param", function()
+	test.equal(roundtrip("void free(void * ptr);"), "void free(void *ptr);")
+end)
+
+test.it("extern variable", function()
+	test.equal(roundtrip("extern int errno;"), "extern int errno;")
+end)
+
+test.it("extern pointer", function()
+	test.equal(roundtrip("extern char * environ;"), "extern char *environ;")
+end)
+
+test.it("fn_decl with __asm__ roundtrips", function()
+	test.equal(
+		roundtrip("int mylib_add(int a, int b) __asm__(\"add\");"),
+		"int mylib_add(int a, int b) __asm__(\"add\");"
+	)
+end)
+
+test.it("extern_var with __asm__ roundtrips", function()
+	test.equal(
+		roundtrip("extern int mylib_errno __asm__(\"errno\");"),
+		"extern int mylib_errno __asm__(\"errno\");"
+	)
+end)
+
+test.it("multiple nodes", function()
+	test.equal(roundtrip("typedef int size_t;\nextern int errno;"), "typedef int size_t;\nextern int errno;")
+end)
+
+-- array sizes
+
+test.it("struct field with array size roundtrips", function()
+	test.equal(roundtrip("typedef struct { char buf[256]; } Buf;"), [[
+typedef struct {
+	char buf[256];
+} Buf;]])
+end)
+
+test.it("struct field with symbolic array size roundtrips", function()
+	test.equal(roundtrip("typedef struct { int data[MAX_SIZE]; } S;"), [[
+typedef struct {
+	int data[MAX_SIZE];
+} S;]])
+end)
+
+-- __attribute__
+
+test.it("struct __attribute__((packed)) before body roundtrips", function()
+	test.equal(roundtrip("typedef struct __attribute__((packed)) { int x; } S;"), [[
+typedef struct __attribute__((packed)) {
+	int x;
+} S;]])
+end)
+
+test.it("struct __attribute__((packed)) after body normalises to before body", function()
+	test.equal(roundtrip("typedef struct { int x; } __attribute__((packed)) S;"), [[
+typedef struct __attribute__((packed)) {
+	int x;
+} S;]])
+end)
+
+test.it("struct __attribute__((aligned(8))) roundtrips", function()
+	test.equal(roundtrip("typedef struct __attribute__((aligned(8))) { int x; } S;"), [[
+typedef struct __attribute__((aligned(8))) {
+	int x;
+} S;]])
+end)
+
+test.it("field __attribute__((aligned(4))) roundtrips", function()
+	test.equal(roundtrip("typedef struct { int x __attribute__((aligned(4))); } S;"), [[
+typedef struct {
+	int x __attribute__((aligned(4)));
+} S;]])
+end)
+
+test.it("field __attribute__((mode(__word__))) roundtrips", function()
+	test.equal(roundtrip("typedef struct { int x __attribute__((mode(__word__))); } S;"), [[
+typedef struct {
+	int x __attribute__((mode(__word__)));
+} S;]])
+end)
+
+test.it("field __attribute__((vector_size(16))) roundtrips", function()
+	test.equal(roundtrip("typedef struct { float v __attribute__((vector_size(16))); } S;"), [[
+typedef struct {
+	float v __attribute__((vector_size(16)));
+} S;]])
+end)
+
+test.it("field with array size and __attribute__ roundtrips", function()
+	test.equal(roundtrip("typedef struct { int arr[4] __attribute__((aligned(16))); } S;"), [[
+typedef struct {
+	int arr[4] __attribute__((aligned(16)));
+} S;]])
+end)
+
+test.it("fn_decl __attribute__((cdecl)) roundtrips", function()
+	test.equal(roundtrip("void foo(void) __attribute__((cdecl));"), "void foo(void) __attribute__((cdecl));")
+end)
+
+test.it("fn_decl __attribute__((stdcall)) roundtrips", function()
+	test.equal(roundtrip("int bar(int x) __attribute__((stdcall));"), "int bar(int x) __attribute__((stdcall));")
+end)
+
+test.it("fn_decl __asm__ and __attribute__ roundtrips", function()
+	test.equal(
+		roundtrip("void foo(void) __asm__(\"_foo\") __attribute__((cdecl));"),
+		"void foo(void) __asm__(\"_foo\") __attribute__((cdecl));"
+	)
+end)
+
+-- reference types
+
+test.it("typedef reference alias roundtrips", function()
+	test.equal(roundtrip("typedef int & IntRef;"), "typedef int &IntRef;")
+end)
+
+test.it("function with reference params roundtrips", function()
+	test.equal(roundtrip("void swap(int & a, int & b);"), "void swap(int &a, int &b);")
+end)
+
+test.it("function returning reference roundtrips", function()
+	test.equal(roundtrip("int & at(int idx);"), "int &at(int idx);")
+end)
+
+-- anonymous / inline struct, union, enum
+
+test.it("anonymous union field inside struct", function()
+	test.equal(roundtrip("typedef struct { union { int a; float b; }; int c; } Foo;"), [[
+typedef struct {
+	union { int a; float b; };
+	int c;
+} Foo;]])
+end)
+
+test.it("named inline struct field", function()
+	test.equal(roundtrip("typedef struct { struct { int x; int y; } pos; } Entity;"), [[
+typedef struct {
+	struct { int x; int y; } pos;
+} Entity;]])
+end)
+
+test.it("tagged inline union field", function()
+	test.equal(roundtrip("typedef struct { union Val { int i; float f; } val; } S;"), [[
+typedef struct {
+	union Val { int i; float f; } val;
+} S;]])
+end)
+
+test.it("nested anonymous union inside struct", function()
+	test.equal(roundtrip("typedef struct { union { struct { int x; int y; }; int arr[2]; }; } S;"), [[
+typedef struct {
+	union { struct { int x; int y; }; int arr[2]; };
+} S;]])
+end)
