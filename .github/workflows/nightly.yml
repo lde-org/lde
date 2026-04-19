@@ -152,7 +152,6 @@ jobs:
           docker run --rm --privileged --platform linux/arm64 \
             -v ${{ github.workspace }}:/workspace \
             -w /workspace \
-            -e LD_LIBRARY_PATH=/data/data/com.termux/files/usr/lib \
             termux-android:latest \
             bash -c "/workspace/lde --setup && cd /workspace/packages/lde && /workspace/lde compile --outfile /workspace/packages/lde/${{ matrix.outfile }} && cd /workspace && /workspace/packages/lde/${{ matrix.outfile }} test"
 
