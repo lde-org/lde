@@ -28,7 +28,10 @@ local function x(args)
 	end
 
 	local pkg, err = resolvePackage(args)
-	if not pkg then error(err) end
+	if not pkg then
+		ansi.printf("{red}Error: %s", err)
+		os.exit(1)
+	end
 
 	args:flag("") -- consume -- separator if present
 	executePackage(pkg, args:drain() or {}, userCwd)

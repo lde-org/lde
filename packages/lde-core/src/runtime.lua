@@ -301,59 +301,62 @@ local function executeWith(compile, opts, scriptName)
 	local originalTmpname = os.tmpname
 	os.tmpname = env.tmpfile
 
-	local ok, result = pcall(function()
-		package.path = opts.packagePath or oldPath
-		package.cpath = opts.packageCPath or oldCPath
+	package.path = opts.packagePath or oldPath
+	package.cpath = opts.packageCPath or oldCPath
 
-		local stopProfiler, profilerErr
-		if opts.profile or opts.flamegraph then
-			stopProfiler, profilerErr = startProfiler(PROFILER_MS_PER_SAMPLE, scriptName)
-			if not stopProfiler then
-				error("Failed to start profiler: " .. tostring(profilerErr))
-			end
+	local stopProfiler
+	if opts.profile or opts.flamegraph then
+		local profilerErr
+		stopProfiler, profilerErr = startProfiler(PROFILER_MS_PER_SAMPLE, scriptName)
+		if not stopProfiler then
+			for k, v in pairs(oldEnvVars) do env.set(k, v) end
+			if oldCwd then env.chdir(oldCwd) end
+			ffi.cdef = originalCdef
+			os.tmpname = originalTmpname
+			restore(package.loaded, savedLoaded)
+			restore(package.preload, savedPreload)
+			package.loaders = oldLoaders
+			package.path, package.cpath = oldPath, oldCPath
+			return false, "Failed to start profiler: " .. tostring(profilerErr)
 		end
+	end
 
-		local a, b, c, d, e, f
-		local runOk, runErr = xpcall(function()
-			if opts.args then
-				arg = opts.args
-				arg[0] = scriptName
-				a, b, c, d, e, f = chunk(unpack(opts.args))
-			else
-				a, b, c, d, e, f = chunk()
-			end
-		end, function(err) return err end)
-
-		if stopProfiler then
-			local counts, vmstates, total, stacks = stopProfiler()
-			if opts.profile and lde.verbose then
-				printProfileReport(counts, vmstates, total, env.cwd(), PROFILER_MS_PER_SAMPLE)
-			end
-
-			if opts.flamegraph then
-				local fgTitle = scriptName and scriptName:match("[^/\\]+$")
-				local ok, err = lde.flamegraph.write(stacks, total, PROFILER_MS_PER_SAMPLE, opts.flamegraph, fgTitle)
-
-				if lde.verbose then
-					if ok then
-						ansi.printf("{cyan}Flamegraph written to %s\n", opts.flamegraph)
-					else
-						ansi.printf("{red}Flamegraph error: %s\n", err or "unknown error")
-					end
+	local function finishProfiler()
+		if not stopProfiler then return end
+		local counts, vmstates, total, stacks = stopProfiler()
+		stopProfiler = nil
+		if opts.profile and lde.verbose then
+			printProfileReport(counts, vmstates, total, env.cwd(), PROFILER_MS_PER_SAMPLE)
+		end
+		if opts.flamegraph then
+			local fgTitle = scriptName and scriptName:match("[^/\\]+$")
+			local ok, err = lde.flamegraph.write(stacks, total, PROFILER_MS_PER_SAMPLE, opts.flamegraph, fgTitle)
+			if lde.verbose then
+				if ok then
+					ansi.printf("{cyan}Flamegraph written to %s", opts.flamegraph)
+				else
+					ansi.printf("{red}Flamegraph error: %s", err or "unknown error")
 				end
 			end
 		end
+	end
 
-		if not runOk then
-			error(runErr, 0)
-		end
+	if opts.args then
+		arg = opts.args
+		arg[0] = scriptName
+	end
 
-		if opts.postexec then
-			return opts.postexec()
-		end
+	local ok, a, b, c, d, e, f = pcall(chunk, unpack(opts.args or {}))
 
-		return a, b, c, d, e, f
-	end)
+	finishProfiler()
+
+	if ok and opts.postexec then
+		ok, a, b, c, d, e, f = pcall(opts.postexec)
+	end
+
+	if stopProfiler then
+		stopProfiler()
+	end
 
 	for k, v in pairs(oldEnvVars) do env.set(k, v) end
 	if oldCwd then env.chdir(oldCwd) end
@@ -365,7 +368,7 @@ local function executeWith(compile, opts, scriptName)
 	package.loaders = oldLoaders
 	package.path, package.cpath = oldPath, oldCPath
 
-	return ok, result
+	return ok, a, b, c, d, e, f
 end
 
 ---@param scriptPath string

@@ -28,7 +28,7 @@ local function run(args)
 		scriptArgs = args:drain()
 	end
 
-	local function execute()
+	if not watch then
 		if not pkg then
 			if name and fs.exists(name) then
 				local ok, err = lde.runtime.executeFile(name, {
@@ -39,21 +39,23 @@ local function run(args)
 					profile = profile,
 					flamegraph = flamegraph
 				})
+
 				if not ok then
 					error("Failed to run script: " .. (err or "Script exited with a non-zero exit code"))
 				end
+
 				return
 			end
 
-			ansi.printf("{red}%s\n", pkgErr)
+			ansi.printf("{red}%s", pkgErr)
 			return
 		end
 
 		pkg:build()
 		pkg:installDependencies()
 
-		local ok, err
 		local scripts = pkg:readConfig().scripts
+		local ok, err
 		if name and scripts and scripts[name] then
 			ok, err = pkg:runScript(name)
 		else
@@ -61,22 +63,21 @@ local function run(args)
 		end
 
 		if not ok then
-			error("Failed to run script: " .. err)
+			ansi.printf("{red}Error: %s", err or "Script exited with a non-zero exit code")
+			os.exit(1)
 		end
-	end
 
-	if not watch then
-		execute()
 		return
 	end
 
 	local watchDir = pkg and pkg:getSrcDir() or env.cwd()
 	local watcher = fs.watch(watchDir, function() end, { recursive = true })
 	if not watcher then
-		error("Failed to watch: " .. watchDir)
+		ansi.printf("{red}Failed to watch: %s", watchDir)
+		return
 	end
 
-	ansi.printf("{cyan}Watching %s for changes...\n", watchDir)
+	ansi.printf("{cyan}Watching %s for changes...", watchDir)
 
 	local spawnArgs = { "run" }
 	if profile then spawnArgs[#spawnArgs + 1] = "--profile" end
@@ -90,8 +91,9 @@ local function run(args)
 	local function spawnChild()
 		local child, err = process.spawn(env.execPath(), spawnArgs, { stdout = "inherit", stderr = "inherit" })
 		if not child then
-			ansi.printf("{red}Error: %s\n", tostring(err))
+			ansi.printf("{red}Error: %s", tostring(err))
 		end
+
 		return child
 	end
 
@@ -99,7 +101,7 @@ local function run(args)
 
 	while true do
 		watcher.wait()
-		ansi.printf("{cyan}Change detected, restarting...\n")
+		ansi.printf("{cyan}Change detected, restarting...")
 		if child then child:kill() end
 		child = spawnChild()
 	end

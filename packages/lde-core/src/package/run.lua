@@ -69,7 +69,7 @@ local function runFileWithLuaCLI(package, scriptPath, args, vars, engine, cwd)
 	if vars then for k, v in pairs(vars) do env[k] = v end end
 	local code, _, stderr = process.exec(engine, { scriptPath },
 		{ cwd = cwd, env = env, stdout = "inherit", stderr = "inherit" })
-	return code == 0 or nil, stderr
+	return code == 0, stderr or "Script exited with a non-zero exit code"
 end
 
 ---@param package lde.Package
@@ -84,7 +84,7 @@ local function runStringWithLuaCLI(package, code, args, vars, engine, cwd)
 	if vars then for k, v in pairs(vars) do env[k] = v end end
 	local exitCode, _, stderr = process.exec(engine, { "-e", code, unpack(args or {}) },
 		{ cwd = cwd, env = env, stdout = "inherit", stderr = "inherit" })
-	return exitCode == 0 or nil, stderr
+	return exitCode == 0, stderr or "Script exited with a non-zero exit code"
 end
 
 ---@param package lde.Package
@@ -115,18 +115,13 @@ local function runFile(package, scriptPath, args, vars, cwd, profile, flamegraph
 	cwd = cwd or package:getDir()
 
 	local engine = config.engine or "lde"
-	local ok, err
 	if engine == "lde" or engine == "lpm" --[[ compat ]] then
-		ok, err = runFileWithLDE(package, scriptPath, args, vars, cwd, profile, flamegraph)
-	else
-		if profile or flamegraph then
-			return nil, "Profiling is only supported when engine is 'lde'"
-		end
-
-		ok, err = runFileWithLuaCLI(package, scriptPath, args, vars, engine, cwd)
+		return runFileWithLDE(package, scriptPath, args, vars, cwd, profile, flamegraph)
 	end
-
-	return ok or nil, err or "Script exited with a non-zero exit code"
+	if profile or flamegraph then
+		return nil, "Profiling is only supported when engine is 'lde'"
+	end
+	return runFileWithLuaCLI(package, scriptPath, args, vars, engine, cwd)
 end
 
 ---@param package lde.Package
@@ -142,14 +137,10 @@ local function runString(package, code, args, vars, cwd)
 	cwd = cwd or package:getDir()
 
 	local engine = config.engine or "lde"
-	local ok, err
 	if engine == "lde" or engine == "lpm" --[[ compat ]] then
-		ok, err = runStringWithLDE(package, code, args, vars, cwd)
-	else
-		ok, err = runStringWithLuaCLI(package, code, args, vars, engine, cwd)
+		return runStringWithLDE(package, code, args, vars, cwd)
 	end
-
-	return ok or nil, err or "Script exited with a non-zero exit code"
+	return runStringWithLuaCLI(package, code, args, vars, engine, cwd)
 end
 
 return { runFile = runFile, runString = runString, getLuaPaths = getLuaPathsForPackage }

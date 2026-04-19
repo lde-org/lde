@@ -165,7 +165,21 @@ end
 
 local evalCode = args:short("e")
 if evalCode then
-	require("lde.commands.eval")(evalCode)
+	local pkg = lde.Package.open()
+	local ok, result
+	if pkg then
+		pkg:installDependencies()
+		ok, result = pkg:runString(evalCode)
+	else
+		ok, result = lde.runtime.executeString(evalCode)
+	end
+
+	if not ok then
+		ansi.printf("{red}%s", tostring(result))
+	elseif result ~= nil then
+		print(tostring(result))
+	end
+
 	return
 end
 
@@ -193,79 +207,64 @@ if args:flag("ensure-mingw") then
 	return
 end
 
-local commands = {}
-commands.help = require("lde.commands.help")
-commands.init = require("lde.commands.initialize")
-commands.new = require("lde.commands.new")
-commands.upgrade = require("lde.commands.upgrade")
-commands.add = require("lde.commands.add")
-commands.remove = require("lde.commands.remove")
-commands.run = require("lde.commands.run")
-commands.x = require("lde.commands.x")
-commands.install = require("lde.commands.install")
-commands.i = commands.install
-commands.sync = require("lde.commands.sync")
-commands.bundle = require("lde.commands.bundle")
-commands.compile = require("lde.commands.compile")
-commands.test = require("lde.commands.test")
-commands.tree = require("lde.commands.tree")
-commands.update = require("lde.commands.update")
-commands.outdated = require("lde.commands.outdated")
-commands.uninstall = require("lde.commands.uninstall")
-commands.publish = require("lde.commands.publish")
-commands.repl = require("lde.commands.repl")
+local commandFiles = {
+	help      = "lde.commands.help",
+	init      = "lde.commands.initialize",
+	new       = "lde.commands.new",
+	upgrade   = "lde.commands.upgrade",
+	add       = "lde.commands.add",
+	remove    = "lde.commands.remove",
+	run       = "lde.commands.run",
+	x         = "lde.commands.x",
+	install   = "lde.commands.install",
+	i         = "lde.commands.install",
+	sync      = "lde.commands.sync",
+	bundle    = "lde.commands.bundle",
+	compile   = "lde.commands.compile",
+	test      = "lde.commands.test",
+	tree      = "lde.commands.tree",
+	update    = "lde.commands.update",
+	outdated  = "lde.commands.outdated",
+	uninstall = "lde.commands.uninstall",
+	publish   = "lde.commands.publish",
+	repl      = "lde.commands.repl",
+}
 
 -- Commands that don't need the global cache dirs initialized
 local noInitCommands = { help = true }
 
-local ok, err = xpcall(function()
-	local commandName = args:pop()
-	if not commandName then
-		commands.help(args)
-		return
-	end
+local commandName = args:pop()
+if not commandName then
+	require("lde.commands.help")(args)
+	return
+end
 
-	if not noInitCommands[commandName] and not treeOverride then
-		lde.global.init()
-	end
+if not noInitCommands[commandName] and not treeOverride then
+	lde.global.init()
+end
 
-	local commandHandler = commands[commandName]
+local commandFile = commandFiles[commandName]
+if commandFile then
+	require(commandFile)(args)
+elseif fs.exists(commandName) then
+	-- TODO: Replace this hacky behavior
+	table.insert(args.raw, 1, commandName)
+	require("lde.commands.run")(args)
+else
+	local pkg = lde.Package.open()
+	local scripts = pkg and pkg:readConfig().scripts
 
-	if commandHandler then
-		commandHandler(args)
-	else
-		-- Fall back to package scripts, then to a loose file if it exists
-		local pkg = lde.Package.open()
-		local scripts = pkg and pkg:readConfig().scripts
+	if scripts and scripts[commandName] then
+		---@cast pkg -nil
 
-		if scripts and scripts[commandName] then
-			---@cast pkg -nil
+		pkg:build()
+		pkg:installDependencies()
 
-			pkg:build()
-			pkg:installDependencies()
-
-			local ok, err = pkg:runScript(commandName)
-			if not ok then
-				error("Script '" .. commandName .. "' failed: " .. err)
-			end
-		elseif fs.exists(commandName) then
-			-- TODO: Replace this hacky behavior
-			table.insert(args.raw, 1, commandName)
-			commands.run(args)
-		else
-			ansi.printf("{red}Unknown command: %s", tostring(commandName))
+		local ok, err = pkg:runScript(commandName)
+		if not ok then
+			error("Script '" .. commandName .. "' failed: " .. err)
 		end
+	else
+		ansi.printf("{red}Unknown command: %s", tostring(commandName))
 	end
-end, function(err)
-	return { msg = err, trace = debug.traceback(err, 2) }
-end)
-
-if not ok then ---@cast err { msg: string, trace: string }
-	ansi.printf("{red}Error: %s", tostring(err.msg))
-
-	if env.var("DEBUG") then
-		print(err.trace)
-	end
-
-	os.exit(1)
 end
