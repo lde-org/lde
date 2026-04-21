@@ -26,7 +26,7 @@
                 luajit
                 lua-language-server
 
-                # Packages necessary for tests
+                # Packages necessary for tests and building
                 cmake
                 curl
                 gnumake
