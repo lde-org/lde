@@ -116,11 +116,9 @@ test.it("runtime: ffi.cdef is isolated between executions", function()
 	]==])
 
 	local ok1, err1 = lde.runtime.executeFile(script1)
-	print(err1)
 	test.truthy(ok1, tostring(err1))
 
 	local ok2, err2 = lde.runtime.executeFile(script2)
-	print(err2)
 	test.truthy(ok2, tostring(err2))
 end)
 
@@ -143,11 +141,9 @@ test.it("runtime: ffi type defined in one execution is not visible in another", 
 	]])
 
 	local ok1, err1 = lde.runtime.executeFile(script1)
-	print("?", ok1, err1)
 	test.truthy(ok1, tostring(err1))
 
 	local ok2, err2 = lde.runtime.executeFile(script2)
-	print("?2", ok2, err2)
 	test.truthy(ok2, tostring(err2))
 end)
 
