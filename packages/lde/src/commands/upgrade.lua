@@ -101,14 +101,25 @@ local function upgrade(args)
 	local tempNewLocation = path.join(binDir, binName .. ".new")
 	local tempOldLocation = path.join(binDir, binName .. ".old")
 
-	ansi.printf("{green}==> Downloading {white}%s {green}from {cyan}%s", artifactName, downloadUrl)
+	local bar = ansi.ProgressBar("Downloading " .. artifactName)
 
 	-- Download directly to file
-	local dlOk, dlErr = curl.download(downloadUrl, tempNewLocation)
+	local dlOk, dlErr = curl.download(downloadUrl, tempNewLocation, {
+		progress = function(dltotal, dlnow)
+			local ratio = dltotal > 0 and (dlnow / dltotal) or nil
+			local info = dltotal > 0
+				and (ansi.formatBytes(dlnow) .. " / " .. ansi.formatBytes(dltotal))
+				or ansi.formatBytes(dlnow)
+			bar:update(ratio, info)
+		end
+	})
 	if not dlOk then
+		bar:fail("Downloading " .. artifactName)
 		ansi.printf("{red}Failed to download binary: %s", dlErr)
 		return
 	end
+
+	bar:done("Downloaded " .. artifactName)
 
 	if not fs.exists(tempNewLocation) then
 		ansi.printf("{red}Failed to download binary: file not created")

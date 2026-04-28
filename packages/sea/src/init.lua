@@ -7,6 +7,7 @@ local fs = require("fs")
 local jit = require("jit")
 local Archive = require("archive")
 local curl = require("curl-sys")
+local ansi = require("ansi")
 
 local util = require("util")
 
@@ -104,10 +105,21 @@ local function getLuajitPath(compiler)
 	)
 	local tarballPath = path.join(cacheDir, tarballName)
 
-	local ok, dlErr = curl.download(downloadUrl, tarballPath)
+	local bar = ansi.ProgressBar("Downloading " .. tarballName)
+	local ok, dlErr = curl.download(downloadUrl, tarballPath, {
+		progress = function(dltotal, dlnow)
+			local ratio = dltotal > 0 and (dlnow / dltotal) or nil
+			local info = dltotal > 0
+				and (ansi.formatBytes(dlnow) .. " / " .. ansi.formatBytes(dltotal))
+				or ansi.formatBytes(dlnow)
+			bar:update(ratio, info)
+		end
+	})
 	if not ok then
+		bar:fail("Downloading " .. tarballName)
 		error("Failed to download LuaJIT from " .. downloadUrl .. ": " .. (dlErr or ""))
 	end
+	bar:done("Downloaded " .. tarballName)
 
 	local ok, err = Archive.new(tarballPath):extract(cacheDir)
 	if not ok then

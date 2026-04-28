@@ -89,4 +89,95 @@ function ansi.progress(label)
 	}
 end
 
+-- ProgressBar: real-time progress bar with elapsed time.
+-- update(ratio, info) — ratio is 0–1 or nil (indeterminate); info is optional status text.
+-- done(msg) / fail(msg) — finalize with checkmark or cross.
+
+local BAR_WIDTH = 20
+
+local function formatElapsed(seconds)
+	if seconds < 1 then
+		return string.format("%.0fms", seconds * 1000)
+	elseif seconds < 60 then
+		return string.format("%.1fs", seconds)
+	else
+		local m = math.floor(seconds / 60)
+		local s = math.floor(seconds % 60)
+		return string.format("%dm%ds", m, s)
+	end
+end
+
+local function renderBar(ratio)
+	if not ratio then return nil end
+	local filled = math.floor(ratio * BAR_WIDTH)
+	if filled < 0 then filled = 0 end
+	if filled > BAR_WIDTH then filled = BAR_WIDTH end
+	if filled == BAR_WIDTH then
+		return "[" .. string.rep("=", BAR_WIDTH) .. "]"
+	else
+		local remaining = BAR_WIDTH - filled
+		return "[" .. string.rep("=", filled) .. ">" .. string.rep(" ", remaining - 1) .. "]"
+	end
+end
+
+---@class ansi.ProgressBar
+---@field update fun(self: ansi.ProgressBar, ratio: number?, info: string?)
+---@field done fun(self: ansi.ProgressBar, msg: string?)
+---@field fail fun(self: ansi.ProgressBar, msg: string?)
+
+---@param label string
+---@return ansi.ProgressBar
+function ansi.ProgressBar(label)
+	local startTime = os.clock()
+	local lastRendered = nil
+
+	local function render(ratio, info)
+		local barStr = renderBar(ratio)
+		local pct = ratio and string.format("%3d%%", math.floor(ratio * 100)) or nil
+		local elapsed = formatElapsed(os.clock() - startTime)
+
+		local key = (barStr or "") .. (pct or "") .. (info or "")
+		if key == lastRendered then return end
+		lastRendered = key
+
+		local line = ESC .. "2K\r" .. colors.gray .. "  - " .. colors.reset .. label
+		if barStr then
+			line = line .. " " .. barStr .. " " .. pct
+		end
+		if info then
+			line = line .. " " .. info
+		end
+		line = line .. " " .. colors.gray .. elapsed .. colors.reset
+		io.write(line)
+		io.flush()
+	end
+
+	render(nil, nil)
+
+	return {
+		update = function(_, ratio, info)
+			render(ratio, info)
+		end,
+		done = function(_, msg)
+			local elapsed = formatElapsed(os.clock() - startTime)
+			io.write(ESC .. "2K\r" .. colors.green .. "  ✓ " .. colors.reset .. (msg or label) .. " " .. colors.gray .. "(" .. elapsed .. ")" .. colors.reset .. "\n")
+			io.flush()
+		end,
+		fail = function(_, msg)
+			io.write(ESC .. "2K\r" .. colors.red .. "  ✗ " .. colors.reset .. (msg or label) .. "\n")
+			io.flush()
+		end,
+	}
+end
+
+-- Format a byte count for human display.
+---@param bytes number
+---@return string
+function ansi.formatBytes(bytes)
+	if bytes < 1024 then return string.format("%d B", bytes) end
+	if bytes < 1024 * 1024 then return string.format("%.1f KB", bytes / 1024) end
+	if bytes < 1024 * 1024 * 1024 then return string.format("%.1f MB", bytes / (1024 * 1024)) end
+	return string.format("%.2f GB", bytes / (1024 * 1024 * 1024))
+end
+
 return ansi

@@ -182,11 +182,12 @@ end
 ---@param repoUrl string
 ---@param branch string?
 ---@param commit string?
-function global.cloneDir(repoName, repoUrl, branch, commit)
+---@param progress fun(stats: table)?
+function global.cloneDir(repoName, repoUrl, branch, commit, progress)
 	local repoDir = global.getGitRepoDir(repoName, branch, commit)
-	local repo, err = git2.clone(repoUrl, repoDir, branch)
+	local repo, err = git2.clone(repoUrl, repoDir, branch, nil, progress)
 	if not repo then return nil, err end
-	repo:updateSubmodules()
+	repo:updateSubmodules(nil, progress)
 	if commit then
 		local ok, cerr = repo:checkout(commit)
 		if not ok then return nil, cerr end
@@ -201,14 +202,27 @@ end
 function global.getOrInitGitRepo(repoName, repoUrl, branch, commit)
 	local repoDir = global.getGitRepoDir(repoName, branch, commit)
 	if not fs.exists(repoDir) then
-		local p = lde.verbose and
-			ansi.progress("Cloning " .. repoName .. " " .. ansi.format("{gray}(" .. repoUrl .. ")")) or nil
-		local ok, err = global.cloneDir(repoName, repoUrl, branch, commit)
+		local progress
+		local bar = lde.verbose and ansi.ProgressBar("Cloning " .. repoName) or nil
+		if bar then
+			local totalObjs = 0
+			progress = function(stats)
+				if stats.total_objects > 0 then
+					totalObjs = stats.total_objects
+				end
+				local ratio = totalObjs > 0 and (stats.indexed_objects / totalObjs) or nil
+				local info = totalObjs > 0
+					and string.format("%d/%d objects", stats.indexed_objects, totalObjs)
+					or string.format("%d objects, %s", stats.received_objects, ansi.formatBytes(stats.received_bytes))
+				bar:update(ratio, info)
+			end
+		end
+		local ok, err = global.cloneDir(repoName, repoUrl, branch, commit, progress)
 		if not ok then
-			if p then p:fail("Cloning " .. repoName) end
+			if bar then bar:fail("Cloning " .. repoName) end
 			error("Failed to clone git repository: " .. err)
 		end
-		if p then p:done("Cloned " .. repoName) end
+		if bar then bar:done("Cloned " .. repoName) end
 	end
 
 	return repoDir
@@ -222,15 +236,28 @@ function global.getOrInitArchive(url)
 	local key = sanitize(url)
 	local archiveDir = path.join(global.getTarCacheDir(), key)
 	if not fs.exists(archiveDir) then
-		local label = "Downloading " .. (url:match("([^/]+)$") or url)
-		local p = lde.verbose and ansi.progress(label) or nil
+		local filename = url:match("([^/]+)$") or url
+		local bar = lde.verbose and ansi.ProgressBar("Downloading " .. filename) or nil
 		fs.mkdir(archiveDir)
 
 		local archiveFile = archiveDir .. ".archive"
 
-		local ok, dlErr = curl.download(url, archiveFile)
+		local dlOpts
+		if bar then
+			dlOpts = {
+				progress = function(dltotal, dlnow)
+					local ratio = dltotal > 0 and (dlnow / dltotal) or nil
+					local info = dltotal > 0
+						and (ansi.formatBytes(dlnow) .. " / " .. ansi.formatBytes(dltotal))
+						or ansi.formatBytes(dlnow)
+					bar:update(ratio, info)
+				end
+			}
+		end
+
+		local ok, dlErr = curl.download(url, archiveFile, dlOpts)
 		if not ok then
-			if p then p:fail(label) end
+			if bar then bar:fail("Downloading " .. filename) end
 			error("Failed to download archive '" .. url .. "': " .. (dlErr or ""))
 		end
 
@@ -249,12 +276,12 @@ function global.getOrInitArchive(url)
 		if code2 ~= 0 then
 			fs.rmdir(archiveDir)
 			fs.delete(archiveFile)
-			if p then p:fail(label) end
+			if bar then bar:fail("Downloading " .. filename) end
 			error("Failed to extract archive '" .. url .. "': " .. (err2 or ""))
 		end
 
 		fs.delete(archiveFile)
-		if p then p:done(label) end
+		if bar then bar:done("Downloaded " .. filename) end
 	end
 	return archiveDir
 end
@@ -367,7 +394,7 @@ function global.ensureMingw()
 	local code = process.exec("gcc", { "--version" })
 	if code == 0 then return end
 
-	local p1 = lde.verbose and ansi.progress("Downloading 7zr.exe") or nil
+	local p1 = lde.verbose and ansi.ProgressBar("Downloading 7zr.exe") or nil
 
 	local tmpDir = path.join(global.getDir(), "mingw-tmp")
 	fs.mkdir(tmpDir)
@@ -375,22 +402,46 @@ function global.ensureMingw()
 	local sevenzPath = path.join(tmpDir, "7zr.exe")
 	local archivePath = path.join(tmpDir, "mingw.7z")
 
-	local ok, dlErr = curl.download(SEVENZ_URL, sevenzPath)
+	local dlOpts1
+	if p1 then
+		dlOpts1 = {
+			progress = function(dltotal, dlnow)
+				local ratio = dltotal > 0 and (dlnow / dltotal) or nil
+				local info = dltotal > 0
+					and (ansi.formatBytes(dlnow) .. " / " .. ansi.formatBytes(dltotal))
+					or ansi.formatBytes(dlnow)
+				p1:update(ratio, info)
+			end
+		}
+	end
+	local ok, dlErr = curl.download(SEVENZ_URL, sevenzPath, dlOpts1)
 	if not ok then
 		fs.rmdir(tmpDir)
-		if p1 then p1:fail() end
+		if p1 then p1:fail("Downloading 7zr.exe") end
 		error("Failed to download 7zr.exe: " .. (dlErr or ""))
 	end
-	if p1 then p1:done() end
+	if p1 then p1:done("Downloaded 7zr.exe") end
 
-	local p2 = lde.verbose and ansi.progress("Downloading MinGW toolchain") or nil
-	local ok2, dlErr2 = curl.download(MINGW_URL, archivePath)
+	local p2 = lde.verbose and ansi.ProgressBar("Downloading MinGW toolchain") or nil
+	local dlOpts2
+	if p2 then
+		dlOpts2 = {
+			progress = function(dltotal, dlnow)
+				local ratio = dltotal > 0 and (dlnow / dltotal) or nil
+				local info = dltotal > 0
+					and (ansi.formatBytes(dlnow) .. " / " .. ansi.formatBytes(dltotal))
+					or ansi.formatBytes(dlnow)
+				p2:update(ratio, info)
+			end
+		}
+	end
+	local ok2, dlErr2 = curl.download(MINGW_URL, archivePath, dlOpts2)
 	if not ok2 then
 		fs.rmdir(tmpDir)
-		if p2 then p2:fail() end
+		if p2 then p2:fail("Downloading MinGW toolchain") end
 		error("Failed to download MinGW archive: " .. (dlErr2 or ""))
 	end
-	if p2 then p2:done() end
+	if p2 then p2:done("Downloaded MinGW toolchain") end
 
 	local p3 = lde.verbose and ansi.progress("Extracting MinGW toolchain") or nil
 	fs.mkdir(mingwDir)
