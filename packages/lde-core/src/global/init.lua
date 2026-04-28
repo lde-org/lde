@@ -383,27 +383,13 @@ function global.repoNameFromUrl(url)
 	return url:match("([^/]+)%.git$") or url:match("([^/]+)$")
 end
 
---- Clones or retrieves a cached git repo directory. Always resolves to a specific commit.
---- Checks existing cache entries first to avoid network where possible.
+--- Clones or retrieves a cached git repo directory. Always resolves to the latest commit.
 ---@param repoName string
 ---@param cloneUrl string
 ---@param branch string?
 ---@return string repoDir
 ---@return string commit
 function global.getOrCloneRepo(repoName, cloneUrl, branch)
-	-- Check for any existing cache entry for this repo name
-	local prefix = sanitize(repoName) .. "-"
-	local cacheDir = global.getGitCacheDir()
-	if fs.isdir(cacheDir) then
-		for entry in fs.readdir(cacheDir) do
-			if entry.type == "dir" and entry.name:sub(1, #prefix) == prefix then
-				local commit = entry.name:sub(#prefix + 1)
-				return path.join(cacheDir, entry.name), commit
-			end
-		end
-	end
-
-	-- No cache hit, resolve and download
 	local ref = branch and ("refs/heads/" .. branch) or "HEAD"
 	local commit, err = git2.lsRemote(cloneUrl, ref)
 	if not commit then
