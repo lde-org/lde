@@ -4,6 +4,7 @@
 	"dependencies": {
 		"curl-sys": { "git": "https://github.com/lde-org/curl-sys" },
 		"fs": { "git": "https://github.com/lde-org/fs" },
-		"path": { "git": "https://github.com/lde-org/path" }
+		"path": { "git": "https://github.com/lde-org/path" },
+		"archive": { "git": "https://github.com/lde-org/archive" }
 	}
 }
