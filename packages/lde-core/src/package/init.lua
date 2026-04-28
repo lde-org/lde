@@ -59,9 +59,14 @@ local function defaultBuildFn(pkg, outputDir)
 		return nil, "No build script found: " .. buildScriptPath
 	end
 
+	local buildMod = require("lde-build.build")
+	local buildInstance = buildMod.new(outputDir)
+
 	return pkg:runFile(buildScriptPath, nil, {
 		LDE_OUTPUT_DIR = outputDir,
 		LPM_OUTPUT_DIR = outputDir -- compat
+	}, nil, nil, nil, {
+		["lde-build"] = function() return buildInstance end
 	})
 end
 

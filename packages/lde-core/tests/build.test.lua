@@ -637,14 +637,105 @@ end)
 -- Regression: make build.variables / install_variables substitution + bin promotion
 --
 
-test.skipIf(jit.os == "Windows")(
-	"rockspec: make build.variables are substituted and passed to make", function()
-		local dir = path.join(tmpBase, "make-vars-rock")
-		fs.mkdir(dir)
-		-- Makefile that writes MY_INCDIR to built.txt on build, then copies it on install.
-		-- install must NOT depend on build (a phony dep would re-run build with install's vars,
-		-- overwriting built.txt with an empty MY_INCDIR since it only appears in build.variables).
-		fs.write(path.join(dir, "Makefile"), [[
+--
+-- lde-build exposed to build scripts via preload
+--
+
+test.it("build script can require('lde-build') and uses correct outDir", function()
+	local dir = path.join(tmpBase, "ldebuild-exposed")
+	fs.mkdir(dir)
+	fs.mkdir(path.join(dir, "src"))
+	fs.write(path.join(dir, "src", "init.lua"), 'return true')
+	fs.write(path.join(dir, "lde.json"), json.encode({
+		name = "ldebuild-exposed",
+		version = "0.1.0",
+		dependencies = {}
+	}))
+
+	-- build.lua that uses lde-build to write a file
+	fs.write(path.join(dir, "build.lua"), [[
+local build = require("lde-build")
+build:write("output.txt", "hello from lde-build")
+]])
+
+	local pkg = lde.Package.open(dir)
+	local outputDir = path.join(dir, "target", pkg:getName())
+	local ok, err = pkg:runBuildScript(outputDir)
+	test.truthy(ok, err)
+
+	local writtenPath = path.join(outputDir, "output.txt")
+	test.truthy(fs.exists(writtenPath))
+	test.equal(fs.read(writtenPath), "hello from lde-build")
+end)
+
+test.it("build script lde-build instance has correct outDir matching LDE_OUTPUT_DIR", function()
+	local dir = path.join(tmpBase, "ldebuild-outdir")
+	fs.mkdir(dir)
+	fs.mkdir(path.join(dir, "src"))
+	fs.write(path.join(dir, "src", "init.lua"), 'return true')
+	fs.write(path.join(dir, "lde.json"), json.encode({
+		name = "ldebuild-outdir",
+		version = "0.1.0",
+		dependencies = {}
+	}))
+
+	-- build.lua that checks outDir matches LDE_OUTPUT_DIR
+	fs.write(path.join(dir, "build.lua"), [[
+local build = require("lde-build")
+local outputDir = os.getenv("LDE_OUTPUT_DIR")
+assert(build.outDir == outputDir,
+"outDir mismatch: got " .. tostring(build.outDir) .. " expected " .. tostring(outputDir))
+]])
+
+	local pkg = lde.Package.open(dir)
+	local outputDir = path.join(dir, "target", pkg:getName())
+	local ok, err = pkg:runBuildScript(outputDir)
+	test.truthy(ok, err)
+end)
+
+test.it("build script lde-build fetch, write, sh, and read methods work", function()
+	local dir = path.join(tmpBase, "ldebuild-methods")
+	fs.mkdir(dir)
+	fs.mkdir(path.join(dir, "src"))
+	fs.write(path.join(dir, "src", "init.lua"), 'return true')
+	fs.write(path.join(dir, "lde.json"), json.encode({
+		name = "ldebuild-methods",
+		version = "0.1.0",
+		dependencies = {}
+	}))
+
+	-- build.lua that exercises fetch, write, sh, and read
+	fs.write(path.join(dir, "build.lua"), [[
+local build = require("lde-build")
+
+-- write and read
+build:write("hello.txt", "world")
+local content = build:read("hello.txt")
+assert(content == "world", "read/write mismatch: " .. content)
+
+-- sh should work (echo is available everywhere)
+build:sh("echo hello > " .. build.outDir .. "/shell.txt")
+local shellContent = build:read("shell.txt")
+assert(shellContent:match("hello"), "sh/read mismatch: " .. shellContent)
+]])
+
+	local pkg = lde.Package.open(dir)
+	local outputDir = path.join(dir, "target", pkg:getName())
+	local ok, err = pkg:runBuildScript(outputDir)
+	test.truthy(ok, err)
+
+	-- Verify end result
+	test.equal(fs.read(path.join(outputDir, "hello.txt")), "world")
+	test.truthy(fs.read(path.join(outputDir, "shell.txt")):match("hello"))
+end)
+
+test.skipIf(jit.os == "Windows")("rockspec: make build.variables are substituted and passed to make", function()
+	local dir = path.join(tmpBase, "make-vars-rock")
+	fs.mkdir(dir)
+	-- Makefile that writes MY_INCDIR to built.txt on build, then copies it on install.
+	-- install must NOT depend on build (a phony dep would re-run build with install's vars,
+	-- overwriting built.txt with an empty MY_INCDIR since it only appears in build.variables).
+	fs.write(path.join(dir, "Makefile"), [[
 build:
 	echo "$(MY_INCDIR)" > built.txt
 
@@ -655,7 +746,7 @@ install:
 	echo "#!/bin/sh" > $(PREFIX)/bin/myprog
 	chmod 755 $(PREFIX)/bin/myprog
 ]])
-		fs.write(path.join(dir, "make-vars-1.0-1.rockspec"), [[
+	fs.write(path.join(dir, "make-vars-1.0-1.rockspec"), [[
 package = "make-vars"
 version = "1.0-1"
 source = { url = "https://example.com" }
@@ -666,25 +757,25 @@ build = {
 }
 ]])
 
-		local pkg, err = lde.Package.openRockspec(dir)
-		test.truthy(pkg, err)
+	local pkg, err = lde.Package.openRockspec(dir)
+	test.truthy(pkg, err)
 
-		local outputDir = path.join(dir, "target", "make-vars")
-		local ok, berr = pkg:runBuildScript(outputDir)
-		test.truthy(ok, berr)
+	local outputDir = path.join(dir, "target", "make-vars")
+	local ok, berr = pkg:runBuildScript(outputDir)
+	test.truthy(ok, berr)
 
-		-- vars.txt must exist in modulesDir (= target/)
-		local modulesDir = path.join(dir, "target")
-		test.truthy(fs.exists(path.join(modulesDir, "vars.txt")))
+	-- vars.txt must exist in modulesDir (= target/)
+	local modulesDir = path.join(dir, "target")
+	test.truthy(fs.exists(path.join(modulesDir, "vars.txt")))
 
-		-- vars.txt must contain the LuaJIT include path (substituted from $(LUA_INCDIR))
-		local content = fs.read(path.join(modulesDir, "vars.txt")) or ""
-		test.truthy(content:find("luajit", 1, true) or content:find("include", 1, true))
+	-- vars.txt must contain the LuaJIT include path (substituted from $(LUA_INCDIR))
+	local content = fs.read(path.join(modulesDir, "vars.txt")) or ""
+	test.truthy(content:find("luajit", 1, true) or content:find("include", 1, true))
 
-		-- myprog binary must be promoted from target/bin/ into target/make-vars/
-		test.truthy(fs.exists(path.join(outputDir, "myprog")))
+	-- myprog binary must be promoted from target/bin/ into target/make-vars/
+	test.truthy(fs.exists(path.join(outputDir, "myprog")))
 
-		-- readConfig must discover the promoted bin
-		local cfg = pkg:readConfig()
-		test.equal(cfg.bin, "myprog")
-	end)
+	-- readConfig must discover the promoted bin
+	local cfg = pkg:readConfig()
+	test.equal(cfg.bin, "myprog")
+end)
