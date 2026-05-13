@@ -103,8 +103,7 @@ jobs:
         # Using the pre-installed nightly binary would miss any CLI changes in this PR.
         if: "!matrix.android"
         run: |
-          cd packages/lde
-          lde compile --outfile ${{ env.OUTFILE }}
+          lde -C ./packages/lde run -- compile --outfile ${{ env.OUTFILE }}
 
       - name: Run tests
         if: "!matrix.android"

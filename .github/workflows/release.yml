@@ -106,8 +106,7 @@ jobs:
       - name: Build lde
         if: "!matrix.android"
         run: |
-          cd packages/lde
-          lde compile --outfile ${{ matrix.outfile }}
+          lde -C ./packages/lde compile --outfile ${{ matrix.outfile }}
 
       - name: Fix workspace permissions (Android)
         if: matrix.android
@@ -128,7 +127,7 @@ jobs:
             -v ${{ github.workspace }}:/workspace \
             -w /workspace \
             termux-android:latest \
-            bash -c "/workspace/lde --setup && cd /workspace/packages/lde && /workspace/lde compile --outfile /workspace/packages/lde/${{ matrix.outfile }}"
+            bash -c "/workspace/lde --setup && /workspace/lde -C /workspace/packages/lde run -- compile --outfile /workspace/packages/lde/${{ matrix.outfile }}"
 
       - name: Upload release asset
         uses: softprops/action-gh-release@v3
