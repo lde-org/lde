@@ -409,6 +409,8 @@ int main(int argc, char** argv) {
 		args[#args + 1] = "-Wl,--export-dynamic" -- expose lua symbols for lua dependencies
 	elseif jit.os == "OSX" then
 		args[#args + 1] = "-Wl,-export_dynamic" -- expose lua symbols for lua dependencies
+	elseif jit.os == "Windows" then
+		args[#args + 1] = "-Wl,--export-all-symbols" -- expose lua symbols for lua dependencies
 	end
 	local execEnv
 	if jit.os == "Windows" and compiler ~= "gcc" then
