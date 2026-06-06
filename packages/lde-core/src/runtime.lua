@@ -1,6 +1,4 @@
 local env = require("env")
-local ffi = require("ffi")
-local ffix = require("ffix")
 local profile = require("jit.profile")
 local ansi = require("ansi")
 local lde = require("lde-core")
@@ -273,25 +271,7 @@ local function executeWith(compile, opts, scriptName)
 		end
 	end
 
-	-- Per-execution ffi isolation: route all ffi.cdef / ffi.new / etc. through
-	-- an ffix context so type names are prefixed and can't clash with lde's own defs.
-	local ffixCtx = ffix.context()
-	local ffiProxy = setmetatable({
-		cdef     = function(def) ffixCtx:cdef(def) end,
-		new      = function(t, ...) return ffixCtx:new(t, ...) end,
-		cast     = function(t, ...) return ffixCtx:cast(t, ...) end,
-		typeof   = function(t, ...) return ffixCtx:typeof(t, ...) end,
-		sizeof   = function(t, ...) return ffixCtx:sizeof(t, ...) end,
-		alignof  = function(t) return ffixCtx:alignof(t) end,
-		offsetof = function(t, field) return ffixCtx:offsetof(t, field) end,
-		metatype = function(t, mt) return ffixCtx:metatype(t, mt) end,
-		istype   = function(t, obj) return ffixCtx:istype(t, obj) end,
-		load     = function(lib, ...) return ffixCtx:load(lib, ...) end,
-		C        = ffixCtx.C
-	}, { __index = ffi })
-	package.loaded.ffi = ffiProxy
-
-	local newG = setmetatable({ ffi = ffiProxy }, { __index = _G })
+	local newG = setmetatable({}, { __index = _G })
 	setfenv(chunk, newG)
 	package.loaded._G = newG
 

@@ -19,7 +19,6 @@
 		"rocked": { "path": "../rocked" },
 		"luarocks": { "path": "../luarocks" },
 		"archive": { "git": "https://github.com/lde-org/archive" },
-		"ffix": { "git": "https://github.com/lde-org/ffix" },
 		"socket": { "git": "https://github.com/lde-org/socket" }
 	}
 }
