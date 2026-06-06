@@ -3,27 +3,24 @@ name: Bootstrap
 on:
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 jobs:
   build:
     strategy:
       fail-fast: false
       matrix:
         include:
-          # - os: ubuntu-22.04
-          #   outfile: lde-linux-x86-64
-          # - os: ubuntu-22.04-arm
-          #   outfile: lde-linux-aarch64
-          # - os: windows-latest
-          #   outfile: lde-windows-x86-64
-          # - os: windows-11-arm
-          #   outfile: lde-windows-aarch64
-          # - os: macos-15
-          #   outfile: lde-macos-aarch64
-          # - os: macos-15-intel
-          #   outfile: lde-macos-x86-64
+          - os: ubuntu-22.04
+            outfile: lde-linux-x86-64
+          - os: ubuntu-22.04-arm
+            outfile: lde-linux-aarch64
+          - os: windows-latest
+            outfile: lde-windows-x86-64.exe
+          - os: windows-11-arm
+            outfile: lde-windows-aarch64.exe
+          - os: macos-15-intel
+            outfile: lde-macos-x86-64
+          - os: macos-15
+            outfile: lde-macos-aarch64
           - os: ubuntu-22.04-arm
             outfile: lde-android-aarch64
             android: true
@@ -31,14 +28,78 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
+
+      - name: Cache llvm-mingw (Windows x86-64)
+        if: matrix.os == 'windows-latest'
+        id: cache-llvm-mingw-x64
+        uses: actions/cache@v5
+        with:
+          path: llvm-mingw-20260311-ucrt-x86_64
+          key: llvm-mingw-20260311-ucrt-x86_64
+
+      - name: Setup llvm-mingw (Windows x86-64)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          if ("${{ steps.cache-llvm-mingw-x64.outputs.cache-hit }}" -ne "true") {
+            curl -L -o llvm-mingw.zip https://github.com/mstorsjo/llvm-mingw/releases/download/20260311/llvm-mingw-20260311-ucrt-x86_64.zip
+            Expand-Archive -Path llvm-mingw.zip -DestinationPath .
+          }
+          echo "$env:GITHUB_WORKSPACE\llvm-mingw-20260311-ucrt-x86_64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Set SEA_CC (Windows x86-64)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: echo "SEA_CC=x86_64-w64-mingw32-clang" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Cache llvm-mingw (Windows ARM64)
+        if: matrix.os == 'windows-11-arm'
+        id: cache-llvm-mingw-arm64
+        uses: actions/cache@v5
+        with:
+          path: llvm-mingw-20260311-ucrt-aarch64
+          key: llvm-mingw-20260311-ucrt-aarch64
+
+      - name: Setup llvm-mingw (Windows ARM64)
+        if: matrix.os == 'windows-11-arm'
+        shell: pwsh
+        run: |
+          if ("${{ steps.cache-llvm-mingw-arm64.outputs.cache-hit }}" -ne "true") {
+            curl -L -o llvm-mingw.zip https://github.com/mstorsjo/llvm-mingw/releases/download/20260311/llvm-mingw-20260311-ucrt-aarch64.zip
+            Expand-Archive -Path llvm-mingw.zip -DestinationPath .
+          }
+          echo "$env:GITHUB_WORKSPACE\llvm-mingw-20260311-ucrt-aarch64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Set SEA_CC (Windows ARM64)
+        if: matrix.os == 'windows-11-arm'
+        shell: pwsh
+        run: echo "SEA_CC=aarch64-w64-mingw32-clang" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Install LuaJIT (Linux)
+        if: runner.os == 'Linux' && !matrix.android
+        run: sudo apt-get install -y luajit
+
+      - name: Install LuaJIT (macOS)
+        if: runner.os == 'macOS'
+        run: brew install luajit
+
+      - name: Install LuaJIT (Windows)
+        if: runner.os == 'Windows'
+        run: choco install luajit -y
+
+      - name: Build lde
+        if: "!matrix.android"
+        shell: bash
+        run: |
+          cd packages/lde
+          luajit ../../minilde.lua run -- compile --outfile ${{ matrix.outfile }}
 
       - name: Fix workspace permissions (Android)
         if: matrix.android
         run: chmod -R a+rw ${{ github.workspace }}
 
-      - name: Cache test image (Android)
+      - name: Cache Android image
         if: matrix.android
         id: cache-android-image
         uses: actions/cache@v5
@@ -64,17 +125,10 @@ jobs:
             -v ${{ github.workspace }}:/workspace \
             -w /workspace \
             termux-android:latest \
-            bash -c "cd /workspace/packages/lde && BOOTSTRAP=1 luajit /workspace/packages/lde/src/init.lua compile --outfile /workspace/packages/lde/${{ matrix.outfile }}"
+            bash -c "cd /workspace/packages/lde && luajit /workspace/minilde.lua run -- compile --outfile /workspace/packages/lde/${{ matrix.outfile }}"
 
-      - name: Upload nightly release asset
-        uses: softprops/action-gh-release@v3
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
         with:
-          tag_name: nightly
-          name: Nightly Build
-          prerelease: true
-          body: |
-            Automated nightly build from master.
-            Commit: ${{ github.sha }}
-            Run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          files: packages/lde/${{ matrix.outfile }}
-          fail_on_unmatched_files: true
+          name: ${{ matrix.outfile }}
+          path: packages/lde/${{ matrix.outfile }}
