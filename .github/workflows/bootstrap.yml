@@ -11,16 +11,22 @@ jobs:
         include:
           - os: ubuntu-22.04
             outfile: lde-linux-x86-64
+            luajit_tarball: luajit-linux-x86-64-gnu.tar.gz
           - os: ubuntu-22.04-arm
             outfile: lde-linux-aarch64
+            luajit_tarball: luajit-linux-aarch64-gnu.tar.gz
           - os: windows-latest
             outfile: lde-windows-x86-64.exe
+            luajit_tarball: luajit-windows-x86-64-gnu.tar.gz
           - os: windows-11-arm
             outfile: lde-windows-aarch64.exe
+            luajit_tarball: luajit-windows-aarch64-gnu.tar.gz
           - os: macos-15-intel
             outfile: lde-macos-x86-64
+            luajit_tarball: luajit-macos-x86-64.tar.gz
           - os: macos-15
             outfile: lde-macos-aarch64
+            luajit_tarball: luajit-macos-aarch64.tar.gz
           - os: ubuntu-22.04-arm
             outfile: lde-android-aarch64
             android: true
@@ -76,17 +82,28 @@ jobs:
         shell: pwsh
         run: echo "SEA_CC=aarch64-w64-mingw32-clang" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: Install LuaJIT (Linux)
-        if: runner.os == 'Linux' && !matrix.android
-        run: sudo apt-get install -y luajit
+      - name: Cache LuaJIT
+        if: "!matrix.android"
+        id: cache-luajit
+        uses: actions/cache@v5
+        with:
+          path: luajit-dist
+          key: ${{ matrix.luajit_tarball }}
 
-      - name: Install LuaJIT (macOS)
-        if: runner.os == 'macOS'
-        run: brew install luajit
+      - name: Install LuaJIT
+        if: "!matrix.android && steps.cache-luajit.outputs.cache-hit != 'true'"
+        shell: bash
+        run: |
+          curl -fL -o luajit.tar.gz \
+            "https://github.com/lde-org/lj-dist/releases/download/latest/${{ matrix.luajit_tarball }}"
+          mkdir luajit-dist
+          tar -xzf luajit.tar.gz -C luajit-dist --strip-components=1
+          rm luajit.tar.gz
 
-      - name: Install LuaJIT (Windows)
-        if: runner.os == 'Windows'
-        run: choco install luajit -y
+      - name: Add LuaJIT to PATH
+        if: "!matrix.android"
+        shell: bash
+        run: echo "$GITHUB_WORKSPACE/luajit-dist/bin" >> "$GITHUB_PATH"
 
       - name: Build lde
         if: "!matrix.android"
