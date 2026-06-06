@@ -103,7 +103,7 @@ jobs:
       - name: Add LuaJIT to PATH
         if: "!matrix.android"
         shell: bash
-        run: echo "$GITHUB_WORKSPACE/luajit-dist/bin" >> "$GITHUB_PATH"
+        run: echo "$GITHUB_WORKSPACE/luajit-dist" >> "$GITHUB_PATH"
 
       - name: Build lde
         if: "!matrix.android"
