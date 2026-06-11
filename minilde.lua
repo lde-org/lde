@@ -112,6 +112,7 @@ local ffi = require("ffi")
 local setenv ---@type fun(name: string, value: string)
 local chdir ---@type fun(dir: string)
 local getcwd ---@type fun(): string
+ffi.cdef [[void _exit(int status);]]
 if isWindows then
 	ffi.cdef [[int _putenv_s(const char *name, const char *value);]]
 	setenv = function(name, value) ffi.C._putenv_s(name, value) end
@@ -189,11 +190,15 @@ local function buildPackage(packagePath, targetDir)
 		if dep.path then
 			buildPackage(join(packagePath, dep.path), targetDir)
 		elseif dep.git then -- downloads to tmpLDEDir/<name> then build to target
-			local tarballUrl = dep.git .. "/archive/master.tar.gz"
-			os.execute("curl -s -L " .. tarballUrl .. " -o " .. join(tmpLDEDir, "tar", name))
-			mkdir(join(tmpLDEDir, "git", name))
-			os.execute("tar -xzf " .. join(tmpLDEDir, "tar", name) .. " --strip-components=1 -C " .. join(tmpLDEDir, "git", name))
-			buildPackage(join(tmpLDEDir, "git", name), targetDir)
+			local finalDir = join(tmpLDEDir, "git", name)
+			if not exists(finalDir) then
+				local tarballUrl = dep.git .. "/archive/master.tar.gz"
+				os.execute("curl -s -L " .. tarballUrl .. " -o " .. join(tmpLDEDir, "tar", name))
+				mkdir(finalDir)
+				os.execute("tar -xzf " .. join(tmpLDEDir, "tar", name) .. " --strip-components=1 -C " .. finalDir)
+			end
+
+			buildPackage(finalDir, targetDir)
 		else
 			error("Unknown dependency type: " .. name)
 		end
@@ -242,4 +247,7 @@ if pop() == "run" then
 	if chunk then
 		chunk(unpack(extraArgs))
 	end
+
+	-- TODO: Figure out why luajit cleanup causes a segfault without this
+	ffi.C._exit(0)
 end
