@@ -112,6 +112,7 @@ local ffi = require("ffi")
 local setenv ---@type fun(name: string, value: string)
 local chdir ---@type fun(dir: string)
 local getcwd ---@type fun(): string
+ffi.cdef [[void _exit(int status);]]
 if isWindows then
 	ffi.cdef [[int _putenv_s(const char *name, const char *value);]]
 	setenv = function(name, value) ffi.C._putenv_s(name, value) end
@@ -246,4 +247,7 @@ if pop() == "run" then
 	if chunk then
 		chunk(unpack(extraArgs))
 	end
+
+	-- TODO: Figure out why luajit cleanup causes a segfault without this
+	ffi.C._exit(0)
 end
