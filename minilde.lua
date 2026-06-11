@@ -189,11 +189,15 @@ local function buildPackage(packagePath, targetDir)
 		if dep.path then
 			buildPackage(join(packagePath, dep.path), targetDir)
 		elseif dep.git then -- downloads to tmpLDEDir/<name> then build to target
-			local tarballUrl = dep.git .. "/archive/master.tar.gz"
-			os.execute("curl -s -L " .. tarballUrl .. " -o " .. join(tmpLDEDir, "tar", name))
-			mkdir(join(tmpLDEDir, "git", name))
-			os.execute("tar -xzf " .. join(tmpLDEDir, "tar", name) .. " --strip-components=1 -C " .. join(tmpLDEDir, "git", name))
-			buildPackage(join(tmpLDEDir, "git", name), targetDir)
+			local finalDir = join(tmpLDEDir, "git", name)
+			if not exists(finalDir) then
+				local tarballUrl = dep.git .. "/archive/master.tar.gz"
+				os.execute("curl -s -L " .. tarballUrl .. " -o " .. join(tmpLDEDir, "tar", name))
+				mkdir(finalDir)
+				os.execute("tar -xzf " .. join(tmpLDEDir, "tar", name) .. " --strip-components=1 -C " .. finalDir)
+			end
+
+			buildPackage(finalDir, targetDir)
 		else
 			error("Unknown dependency type: " .. name)
 		end
