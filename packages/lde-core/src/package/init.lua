@@ -77,15 +77,6 @@ local function defaultBuildFn(pkg, outputDir)
 	env.set("LDE_OUTPUT_DIR", outputDir)
 	env.set("LPM_OUTPUT_DIR", outputDir)
 
-	-- On Windows, pass the import library path so native modules (e.g. lua-sys)
-	-- can link against the running executable's exported Lua symbols.
-	local ffi = require("ffi")
-	if ffi.os == "Windows" then
-		local exePath = env.execPath()
-		local implib  = exePath:gsub("%.exe$", "") .. ".a"
-		env.set("LDE_IMPLIB", implib)
-	end
-
 	-- Inject lde-build instance into the guest state
 	Instance.setup(state, outputDir)
 
@@ -98,7 +89,6 @@ local function defaultBuildFn(pkg, outputDir)
 	env.chdir(oldCwd)
 	env.set("LDE_OUTPUT_DIR", "")
 	env.set("LPM_OUTPUT_DIR", "")
-	env.set("LDE_IMPLIB", "")
 	state:close()
 
 	return ok, err
