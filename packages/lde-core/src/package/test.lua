@@ -2,6 +2,7 @@ local fs      = require("fs")
 local path    = require("path")
 local env     = require("env")
 local ffi     = require("ffi")
+local lua     = require("lua-sys")
 local runtime = require("lde-core.runtime")
 
 ---@class lde.TestFileResult
@@ -31,133 +32,130 @@ local function getLuaPathsForPackage(pkg)
 		path.join(modulesDir, "?.lua") .. ";"
 		.. path.join(modulesDir, "?", "init.lua") .. ";"
 	local luaCPath =
-		ffi.os == "Linux"   and path.join(modulesDir, "?.so")   .. ";"
-		or ffi.os == "Windows" and path.join(modulesDir, "?.dll") .. ";"
+		ffi.os == "Linux"    and path.join(modulesDir, "?.so")    .. ";"
+		or ffi.os == "Windows" and path.join(modulesDir, "?.dll")  .. ";"
 		or path.join(modulesDir, "?.dylib") .. ";"
 	return luaPath, luaCPath
 end
 
---- Build the lde-test API as a table of host callbacks.
---- `it(name, fn)` and friends push registrations into the returned tables;
---- `fn` values are guest-state callables returned by lua-sys.
+-- The lde-test source, loaded once at module load time.
+-- It's pure Lua with no external dependencies, so we inject it directly into
+-- any guest state. We find it either via package.path (installed as lde-test.test)
+-- or directly from the sibling lde-test package in the monorepo.
+local ldeTestSource = (function()
+	-- Preferred: find via the host's package.path (works in any install context)
+	local found = package.searchpath("lde-test.test", package.path)
+	if found then
+		local src = fs.read(found)
+		if src then return src end
+	end
+
+	-- Fallback: derive from this file's location in the monorepo.
+	-- This file: .../packages/lde-core/src/package/test.lua
+	-- lde-test:  .../packages/lde-test/src/test.lua
+	local thisFile = debug.getinfo(1, "S").source:sub(2)
+	-- Resolve symlinks: the source may be accessed via target/ symlink
+	local realFile = fs.realpath and fs.realpath(thisFile) or thisFile
+	local ldeCoreSrc  = path.dirname(path.dirname(realFile or thisFile))  -- .../lde-core/src
+	local packagesDir = path.dirname(path.dirname(ldeCoreSrc))            -- .../packages
+	local candidate   = path.join(packagesDir, "lde-test", "src", "test.lua")
+	local src = fs.read(candidate)
+	if src then return src end
+
+	error("lde-test source not found — ensure lde-test is installed (lde install in lde-core)")
+end)()
+
+--- Run a single test file in a fresh guest state.
+--- lde-test runs entirely in the guest; only reporter callbacks cross the boundary
+--- (they receive only primitive string arguments).
 ---
----@return table   testApi      the table that the guest gets as require("lde-test")
----@return table   registered   { name, fn, skipped }[]  populated when guest runs
----@return table   afterEachFns
----@return table   afterAllFns
-local function makeTestApi()
-	local registered   = {}
-	local afterEachFns = {}
-	local afterAllFns  = {}
+---@param testFile   string
+---@param luaPath    string
+---@param luaCPath   string
+---@param reporter   lde.TestReporter?
+---@return lde.TestFileResult
+local function runTestFile(testFile, luaPath, luaCPath, reporter)
+	local results   = {}
+	local handles   = {}   -- name → reporter handle (host-side opaque value)
 
-	local function deepEqualInner(a, b, p)
-		if a == b then return end
-		if type(a) ~= type(b) then
-			error("Expected " .. p .. " to be " .. type(b) .. ", got " .. type(a), 0)
-		end
-		if type(a) ~= "table" then
-			error("Expected " .. p .. " to equal " .. tostring(b) .. ", got " .. tostring(a), 0)
-		end
-		if getmetatable(a) ~= getmetatable(b) then
-			error("Expected " .. p .. " metatables to match", 0)
-		end
-		for k, v in pairs(b) do deepEqualInner(a[k], v, p .. "." .. tostring(k)) end
-		for k in pairs(a) do
-			if b[k] == nil then error("Unexpected key " .. p .. "." .. tostring(k), 0) end
+	-- Reporter callbacks: all args are primitives (strings), safe to cross boundary.
+	local onStart = reporter and reporter.onStart and function(name)
+		local handle = reporter.onStart(name)
+		handles[name] = handle
+	end or nil
+
+	local onPass = reporter and reporter.onPass and function(name)
+		reporter.onPass(name, handles[name])
+		handles[name] = nil
+	end or nil
+
+	local onFail = reporter and reporter.onFail and function(name, err)
+		reporter.onFail(name, err, handles[name])
+		handles[name] = nil
+	end or nil
+
+	local onSkip = reporter and reporter.onSkip and function(name)
+		reporter.onSkip(name)
+	end or nil
+
+	-- Collect results on the host side via a callback the guest calls per result.
+	local onResult = function(name, ok, skipped, err)
+		if skipped then
+			results[#results + 1] = { name = name, ok = true, skipped = true }
+		else
+			results[#results + 1] = { name = name, ok = ok == true, error = err }
 		end
 	end
 
-	local function matchInner(actual, expected, p)
-		for k, v in pairs(expected) do
-			local ap = p .. "." .. tostring(k)
-			if type(v) == "table" and type(actual[k]) == "table" then
-				matchInner(actual[k], v, ap)
-			elseif actual[k] ~= v then
-				error("Expected " .. ap .. " = " .. tostring(v) .. ", got " .. tostring(actual[k]), 0)
-			end
-		end
+	local source, readErr = fs.read(testFile)
+	if not source then
+		return { file = testFile, results = {}, error = "Could not read: " .. (readErr or "?") }
 	end
 
-	local testApi = {
-		it = function(name, fn)
-			registered[#registered + 1] = { name = name, fn = fn, skipped = false }
-		end,
-		skip = function(name, _fn)
-			registered[#registered + 1] = { name = name, fn = nil, skipped = true }
-		end,
-		skipIf = function(condition)
-			return function(name, fn)
-				registered[#registered + 1] = {
-					name    = name,
-					fn      = not condition and fn or nil,
-					skipped = condition == true,
-				}
-			end
-		end,
-		afterEach = function(fn) afterEachFns[#afterEachFns + 1] = fn end,
-		afterAll  = function(fn) afterAllFns[#afterAllFns + 1]  = fn end,
+	-- Wrap the test file: inject lde-test as a guest-local module, run the file,
+	-- then drive instance.run() with reporter callbacks that only pass primitives.
+	-- We use concatenation rather than string.format to avoid misinterpreting
+	-- % characters in ldeTestSource or the test file source as format directives.
+	local escapedSource = string.format("%q", source)
+	local wrapper = [[
+		local _lde_test_factory = (function()
+		]] .. ldeTestSource .. [[
+		end)()
+		local _lde_test_instance = _lde_test_factory.new()
+		package.preload["lde-test"] = function() return _lde_test_instance end
+		package.preload["lpm-test"] = function() return _lde_test_instance end
+		local _chunk = assert(loadstring(]] .. escapedSource .. [[, ]] .. string.format("%q", "@" .. testFile) .. [[))
+		_chunk()
+		local _reporter = {}
+		if _lde_on_start  then _reporter.onStart  = function(name)         _lde_on_start(name)        end end
+		if _lde_on_pass   then _reporter.onPass   = function(name, _)      _lde_on_pass(name)         end end
+		if _lde_on_fail   then _reporter.onFail   = function(name, err, _) _lde_on_fail(name, err)    end end
+		if _lde_on_skip   then _reporter.onSkip   = function(name)         _lde_on_skip(name)         end end
+		local _results = _lde_test_instance.run(_reporter)
+		for _, r in ipairs(_results) do
+			_lde_on_result(r.name, r.ok == true, r.skipped == true, r.error or "")
+		end
+	]]
 
-		-- Assertion helpers — executed on the host when called from guest fn
-		equal        = function(a, b) if a ~= b then error("Expected " .. tostring(a) .. " to equal " .. tostring(b), 2) end end,
-		notEqual     = function(a, b) if a == b then error("Expected " .. tostring(a) .. " not to equal " .. tostring(b), 2) end end,
-		truthy       = function(v)    if not v   then error("Expected truthy, got " .. tostring(v), 2) end end,
-		falsy        = function(v)    if v        then error("Expected falsy, got " .. tostring(v), 2) end end,
-		includes     = function(h, n) if not string.find(h, n, 1, true) then error("Expected string to include '" .. n .. "'", 2) end end,
-		greater      = function(a, b) if not (a > b)  then error("Expected " .. a .. " > " .. b, 2)  end end,
-		less         = function(a, b) if not (a < b)  then error("Expected " .. a .. " < " .. b, 2)  end end,
-		greaterEqual = function(a, b) if not (a >= b) then error("Expected " .. a .. " >= " .. b, 2) end end,
-		lessEqual    = function(a, b) if not (a <= b) then error("Expected " .. a .. " <= " .. b, 2) end end,
-		count        = function(tbl)  local n = 0; for _ in pairs(tbl) do n = n + 1 end; return n end,
-		deepEqual    = function(a, b) local ok, err = pcall(deepEqualInner, a, b, "<root>"); if not ok then error(err, 2) end end,
-		match        = function(actual, expected)
-			if type(actual) ~= "table" then error("Expected a table, got " .. type(actual), 2) end
-			local ok, err = pcall(matchInner, actual, expected, "<root>")
-			if not ok then error(err, 2) end
-		end,
+	local globals = {
+		_lde_on_result = onResult,
+		_lde_on_start  = onStart,
+		_lde_on_pass   = onPass,
+		_lde_on_fail   = onFail,
+		_lde_on_skip   = onSkip,
 	}
 
-	return testApi, registered, afterEachFns, afterAllFns
-end
+	local ok, err = runtime.executeString(wrapper, {
+		packagePath  = luaPath,
+		packageCPath = luaCPath,
+		globals      = globals,
+	})
 
---- Run all tests collected in `registered`, reporting incrementally.
----@param registered  table
----@param afterEachFns table
----@param afterAllFns  table
----@param reporter     lde.TestReporter?
----@return lde.test.Result[]
-local function runRegistered(registered, afterEachFns, afterAllFns, reporter)
-	local results = {}
-
-	for _, entry in ipairs(registered) do
-		if entry.skipped then
-			if reporter and reporter.onSkip then reporter.onSkip(entry.name) end
-			results[#results + 1] = { name = entry.name, ok = true, skipped = true }
-		else
-			local handle  = reporter and reporter.onStart and reporter.onStart(entry.name)
-			local ok, err = pcall(entry.fn)
-
-			for _, fn in ipairs(afterEachFns) do
-				local aok, aerr = pcall(fn)
-				if not aok then ok, err = false, aerr end
-			end
-
-			if ok then
-				if reporter and reporter.onPass then reporter.onPass(entry.name, handle) end
-			else
-				if reporter and reporter.onFail then reporter.onFail(entry.name, err, handle) end
-			end
-			results[#results + 1] = { name = entry.name, ok = ok, error = err }
-		end
+	if not ok then
+		return { file = testFile, results = {}, error = err }
 	end
 
-	for i, fn in ipairs(afterAllFns) do
-		local ok, err = pcall(fn)
-		if not ok then
-			results[#results + 1] = { name = "afterAll #" .. i, ok = false, error = err }
-		end
-	end
-
-	return results
+	return { file = testFile, results = results }
 end
 
 ---@param package  lde.Package
@@ -227,40 +225,20 @@ local function runTests(package, reporter, filters)
 
 		if reporter and reporter.onFileStart then reporter.onFileStart(relativePath) end
 
-		-- Fresh test API per file; registrations are captured in host closures
-		local testApi, registered, afterEachFns, afterAllFns = makeTestApi()
+		local fileResult = runTestFile(testFile, luaPath, luaCPath, reporter)
+		fileResult.file  = relativePath
 
-		-- Run the guest script; it calls test.it(...) which populates `registered`
-		local ok, err = runtime.executeFile(testFile, {
-			packagePath  = luaPath,
-			packageCPath = luaCPath,
-			preload      = {
-				["lpm-test"] = function() return testApi end,
-				["lde-test"] = function() return testApi end,
-			},
-		})
-
-		local fileResult
-		if not ok then
-			fileResult = { file = relativePath, results = {}, error = err }
-		else
-			-- Execute the collected test fns on the host, incrementally
-			local results = runRegistered(registered, afterEachFns, afterAllFns, reporter)
-
-			local failCount = 0
-			local skipCount = 0
-			for _, r in ipairs(results) do
-				if r.skipped then skipCount = skipCount + 1
-				elseif not r.ok then failCount = failCount + 1
-				end
+		local failCount = 0
+		local skipCount = 0
+		for _, r in ipairs(fileResult.results) do
+			if r.skipped then skipCount = skipCount + 1
+			elseif not r.ok then failCount = failCount + 1
 			end
-
-			totalTests    = totalTests    + #results - skipCount
-			totalFailures = totalFailures + failCount
-			totalSkipped  = totalSkipped  + skipCount
-
-			fileResult = { file = relativePath, results = results }
 		end
+
+		totalTests    = totalTests    + #fileResult.results - skipCount
+		totalFailures = totalFailures + failCount
+		totalSkipped  = totalSkipped  + skipCount
 
 		files[#files + 1] = fileResult
 

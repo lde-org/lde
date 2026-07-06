@@ -1,6 +1,7 @@
 local lua  = require("lua-sys")
 local env  = require("env")
 local fs   = require("fs")
+local path = require("path")
 local ansi = require("ansi")
 local lde  = require("lde-core")
 
@@ -208,18 +209,60 @@ local function executeSource(source, chunkName, opts)
 	if opts.packagePath  then pkg.path  = opts.packagePath  end
 	if opts.packageCPath then pkg.cpath = opts.packageCPath end
 
-	-- Register preload callbacks so guest can require() them
+	-- Register preload callbacks so guest can require() them.
+	-- Host functions that return only primitives work directly via dispatch_callback.
+	-- If a preload function returns a table of primitives, we wrap it to serialize
+	-- the result as a Lua literal that loads cleanly in the guest.
 	if opts.preload then
-		local preload = pkg.preload
 		for modname, loader in pairs(opts.preload) do
-			preload[modname] = loader
+			if type(loader) == "function" then
+				-- Wrap the loader: call it on the host, and if it returns a primitive
+				-- table, serialize it for the guest. If it returns a primitive scalar
+				-- or nothing, pass through directly.
+				local function serialize(val, depth)
+					depth = depth or 0
+					if depth > 10 then return "nil" end
+					local t = type(val)
+					if t == "nil"     then return "nil"
+					elseif t == "boolean" then return tostring(val)
+					elseif t == "number"  then return tostring(val)
+					elseif t == "string"  then return string.format("%q", val)
+					elseif t == "table"   then
+						local parts = {}
+						for k, v in pairs(val) do
+							local kstr = type(k) == "string"
+								and ("[" .. string.format("%q", k) .. "]")
+								or ("[" .. tostring(k) .. "]")
+							parts[#parts + 1] = kstr .. "=" .. serialize(v, depth + 1)
+						end
+						return "{" .. table.concat(parts, ",") .. "}"
+					else return "nil" end
+				end
+
+				-- Pre-call the loader on the host to see what it returns
+				local result = loader()
+				if type(result) == "table" then
+					-- Serialize once and register a guest-side loader via state:load
+					local serialized = serialize(result)
+					local registerPreload = state:load([[
+						function(name, src)
+							package.preload[name] = function() return load(src)() end
+						end
+					]])
+					registerPreload(modname, "return " .. serialized)
+				else
+					-- Scalar/nil return — re-wrap as a fresh function call
+					pkg.preload[modname] = function() return result end
+				end
+			end
 		end
 	end
 
-	-- Inject extra globals
+	-- Inject extra globals (primitives and functions only — host tables cannot
+	-- cross the state boundary; use preload with guest-built tables for those)
 	if opts.globals then
 		for k, v in pairs(opts.globals) do
-			g[k] = v
+			if v ~= nil then g[k] = v end
 		end
 	end
 
@@ -276,11 +319,17 @@ end
 ---@param scriptPath string
 ---@param opts lde.ExecuteOptions?
 local function executeFile(scriptPath, opts)
-	local source, err = fs.read(scriptPath)
-	if not source then
-		return false, "Failed to read " .. scriptPath .. ": " .. (err or "unknown error")
+	-- Resolve relative paths before reading, using opts.cwd if provided,
+	-- so that callers can pass e.g. "./scripts/foo.lua" with a cwd override.
+	local resolvedPath = scriptPath
+	if opts and opts.cwd and not path.isAbsolute(scriptPath) then
+		resolvedPath = path.join(opts.cwd, scriptPath)
 	end
-	return executeSource(source, scriptPath, opts)
+	local source, err = fs.read(resolvedPath)
+	if not source then
+		return false, "Failed to read " .. resolvedPath .. ": " .. (err or "unknown error")
+	end
+	return executeSource(source, resolvedPath, opts)
 end
 
 ---@param code string

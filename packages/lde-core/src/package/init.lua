@@ -59,14 +59,31 @@ local function defaultBuildFn(pkg, outputDir)
 		return nil, "No build script found: " .. buildScriptPath
 	end
 
-	local buildMod = require("lde-build.build")
-	local buildInstance = buildMod.new(outputDir)
+	-- lde-build and its dependencies (curl-sys, fs, path, archive) live in
+	-- lde-core's own target/. Find that directory by locating lde-build in
+	-- the host's package.path, then expose the same directory to the guest.
+	local ldeBuiltInitPath = package.searchpath("lde-build", package.path)
+	local ldeCoreTarget = ldeBuiltInitPath
+		and path.dirname(path.dirname(ldeBuiltInitPath))  -- .../target/lde-build/init.lua → .../target
+		or nil
 
-	return pkg:runFile(buildScriptPath, nil, {
-		LDE_OUTPUT_DIR = outputDir,
-		LPM_OUTPUT_DIR = outputDir -- compat
-	}, nil, nil, nil, {
-		["lde-build"] = function() return buildInstance end
+	local ffi = require("ffi")
+	local ext  = ffi.os == "Windows" and "dll" or ffi.os == "OSX" and "dylib" or "so"
+	local extraLuaPath = ldeCoreTarget and (
+		path.join(ldeCoreTarget, "?.lua") .. ";"
+		.. path.join(ldeCoreTarget, "?", "init.lua") .. ";"
+	) or ""
+	local extraCPath = ldeCoreTarget and (
+		path.join(ldeCoreTarget, "?." .. ext) .. ";"
+	) or ""
+
+	local pkgLuaPath, pkgLuaCPath = require("lde-core.package.run").getLuaPaths(pkg)
+
+	return require("lde-core.runtime").executeFile(buildScriptPath, {
+		env          = { LDE_OUTPUT_DIR = outputDir, LPM_OUTPUT_DIR = outputDir },
+		cwd          = pkg:getDir(),
+		packagePath  = extraLuaPath .. pkgLuaPath,
+		packageCPath = extraCPath   .. pkgLuaCPath,
 	})
 end
 
