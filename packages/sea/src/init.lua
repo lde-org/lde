@@ -223,7 +223,7 @@ function sea.compile(main, source, sharedLibs, compiler)
 		}
 	}]], id, id, id, id, id, lib.name, id, id)
 
-		local luaopenSym                    = "luaopen_" .. lib.name:gsub("%.", "_")
+		local luaopenSym                    = "luaopen_" .. lib.name:gsub("[%.-]", "_")
 		libPreloads[#libPreloads + 1]       = string.format([[
 	lua_pushstring(L, %sLibraryPath);
 	lua_pushstring(L, "%s");

@@ -1,48 +1,18 @@
-local env = require("env")
-local profile = require("jit.profile")
+local lua  = require("lua-sys")
+local env  = require("env")
+local fs   = require("fs")
 local ansi = require("ansi")
-local lde = require("lde-core")
+local lde  = require("lde-core")
 
 local PROFILER_MS_PER_SAMPLE = 1
 
-local builtinModules = {
-	package = true,
-	string = true,
-	table = true,
-	math = true,
-	io = true,
-	os = true,
-	debug = true,
-	coroutine = true,
-	bit = true,
-	jit = true,
-	ffi = true,
-	["jit.opt"] = true,
-	["jit.util"] = true,
-	["jit.p"] = true,
-	["jit.profile"] = true,
-	["string.buffer"] = true
-}
-
----@class lde.ExecuteOptions
----@field env table<string, string>?
----@field args string[]?
----@field globals table<string, any>?
----@field packagePath string?
----@field packageCPath string?
----@field preload table<string, function>?
----@field cwd string?
----@field postexec (fun(): any)?
----@field profile boolean?
----@field flamegraph string?
-
---- Prints a profile report after a profiled execution.
----@param counts table<string, number>
----@param vmstates table<string, number>
----@param total number
----@param cwd string?
----@param intervalMs number
-local function printProfileReport(counts, vmstates, total, cwd, intervalMs)
+--- Prints a fancy profile report: VM state bars + hotspot table.
+---@param counts   table<string, number>  stack → sample count
+---@param vmstates table<string, number>  vmstate char → sample count
+---@param stacks   table<string, number>  folded stack → sample count (for flamegraph)
+---@param total    number
+---@param cwd      string?
+local function printProfileReport(counts, vmstates, total, cwd)
 	local function wln(s) io.write(s .. "\n") end
 
 	if total == 0 then
@@ -50,16 +20,16 @@ local function printProfileReport(counts, vmstates, total, cwd, intervalMs)
 		return
 	end
 
-	local totalMs = total * intervalMs
+	local totalMs = total * PROFILER_MS_PER_SAMPLE
 	local function fmtTime(ms)
 		if ms < 1000 then return string.format("~%dms", ms) end
 		return string.format("~%.1fs", ms / 1000)
 	end
 
 	local BAR_WIDTH = 20
-	local vmColors  = { N = "green", I = "yellow", C = "cyan", G = "red", J = "magenta" }
-	local vmLabels  = { N = "JIT compiled", I = "Interpreted", C = "C code", G = "GC", J = "JIT compiler" }
-	local vmOrder   = { "N", "I", "C", "G", "J" }
+	local vmColors = { N = "green", I = "yellow", C = "cyan", G = "red", J = "magenta" }
+	local vmLabels = { N = "JIT compiled", I = "Interpreted", C = "C code", G = "GC", J = "JIT compiler" }
+	local vmOrder  = { "N", "I", "C", "G", "J" }
 
 	local function bar(n, color)
 		local filled = math.max(0, math.min(BAR_WIDTH, math.floor(n / total * BAR_WIDTH + 0.5)))
@@ -72,7 +42,6 @@ local function printProfileReport(counts, vmstates, total, cwd, intervalMs)
 		if cwd and loc:sub(1, #cwd + 1) == cwd .. "/" then
 			loc = loc:sub(#cwd + 2)
 		end
-		-- Strip target/<name>/ prefix (target dir contains symlinks to src/)
 		return (loc:gsub("^target/[^/]+/", ""))
 	end
 
@@ -80,7 +49,7 @@ local function printProfileReport(counts, vmstates, total, cwd, intervalMs)
 
 	io.write("\n")
 	wln(ansi.format("  {bold}Profile{reset} · {cyan}%s{reset} · {gray}%d samples @ %dms",
-		fmtTime(totalMs), total, intervalMs))
+		fmtTime(totalMs), total, PROFILER_MS_PER_SAMPLE))
 	wln("  " .. sep)
 	io.write("\n")
 
@@ -101,159 +70,122 @@ local function printProfileReport(counts, vmstates, total, cwd, intervalMs)
 	wln("  " .. sep)
 
 	local sorted = {}
-	for loc, count in pairs(counts) do
-		sorted[#sorted + 1] = { loc = loc, count = count }
-	end
+	for loc, count in pairs(counts) do sorted[#sorted + 1] = { loc = loc, count = count } end
 	table.sort(sorted, function(a, b) return a.count > b.count end)
 
 	for i = 1, math.min(#sorted, 20) do
-		local e = sorted[i]
-		local pct = e.count / total * 100
+		local e     = sorted[i]
+		local pct   = e.count / total * 100
 		local color = i == 1 and "red" or i <= 3 and "yellow" or "white"
 		wln("  "
 			.. ansi.colorize(color, string.format("%5.1f%%", pct))
-			.. "  " .. ansi.colorize("gray", string.format("%-7s", fmtTime(e.count * intervalMs)))
+			.. "  " .. ansi.colorize("gray", string.format("%-7s", fmtTime(e.count * PROFILER_MS_PER_SAMPLE)))
 			.. "  " .. relativize(e.loc))
 	end
 
 	io.write("\n")
 end
 
----@param intervalMs number
----@param scriptName string?
----@return (fun(): table<string, number>, table<string, number>, number, table<string, number>)?
----@return string? err
-local function startProfiler(intervalMs, scriptName)
-	local counts = {}
+--- Start the profiler using a custom callback so we get vmstate per tick.
+--- Returns a stop() function that returns counts, vmstates, stacks, total.
+---@param state lua.State
+---@return fun(): table, table, table, number
+local function startProfiler(state)
+	local counts   = {}
 	local vmstates = {}
-	local stacks = {}
-	local total = 0
-	local mode = "li" .. tostring(intervalMs)
+	local stacks   = {}
+	local total    = 0
 
-	-- Internal lde function names to skip when falling back to name-based profiling
-	local skipNames = {
-		commandHandler = true,
-		execute = true,
-		runFile = true,
-		runFileWithLDE = true,
-		executeWith = true,
-		startProfiler = true
+	-- Frames to skip when looking for a meaningful hotspot key.
+	-- These are lde internals or Lua builtins that appear at the top of every stack.
+	local skipFrames = {
+		["require"]    = true,
+		["pcall"]      = true,
+		["xpcall"]     = true,
+		["[string]"]   = true,
+		["chunk"]      = true,
 	}
 
-	local started, startErr = pcall(profile.start, mode, function(thread, samples, vmstate)
+	-- Strip the name:line suffix that luajit appends in "f;" mode (e.g. "foo:42" → "foo").
+	local function frameName(f)
+		return (f:gsub(":%d+$", ""))
+	end
+
+	lua.profiler.start(state, "fi" .. PROFILER_MS_PER_SAMPLE, function(stack, samples, vmstate)
 		total = total + samples
 		vmstates[vmstate] = (vmstates[vmstate] or 0) + samples
+		if vmstate == "G" or not stack or stack == "" then return end
 
-		if vmstate == "G" then return end
+		-- Accumulate the full stack for flamegraph (clean frame names).
+		local cleanParts = {}
+		for frame in stack:gmatch("([^;]+)") do
+			local name = frameName(frame)
+			if name ~= "" and name ~= "?" then
+				cleanParts[#cleanParts + 1] = name
+			end
+		end
+		local cleanStack = table.concat(cleanParts, ";")
+		if cleanStack ~= "" then
+			stacks[cleanStack] = (stacks[cleanStack] or 0) + samples
+		end
 
-		-- Hotspot key: try ZF (file:line) first. User code has a filesystem path
-		-- (contains /). This works for interpreted code; JIT-compiled frames are
-		-- invisible to F format, but those get caught by the f fallback below.
+		-- Hotspot key: first frame that isn't a generic builtin.
 		local key
-		local okF, locStack = pcall(profile.dumpstack, thread, "ZF;", -100)
-		if okF then
-			for frame in locStack:gmatch("([^;]+)") do
-				if frame:find("/", 1, true) then
-					key = frame -- last match = innermost user frame
-				end
+		for _, part in ipairs(cleanParts) do
+			if not skipFrames[part] then
+				key = part
+				break
 			end
 		end
-
-		-- Fallback for JIT code: f (function name) can see JIT-compiled functions
-		-- via JIT trace metadata even when F cannot.
-		if not key then
-			local okf, name = pcall(profile.dumpstack, thread, "f", 1)
-			if okf and name and name ~= "" and name ~= "?" and not skipNames[name] then
-				if name == "chunk" and scriptName then
-					name = scriptName:match("[^/\\]+$") or name
-				end
-				key = name
-			end
-		end
-
-		-- Flamegraph stack: use f; (function names) with full depth. Unlike ZF;,
-		-- f reads JIT trace metadata so it traverses both JIT and interpreted frames,
-		-- giving real call-chain depth regardless of vmstate.
-		local stackKey
-		local okFs, fnStack = pcall(profile.dumpstack, thread, "f;", -100)
-		if okFs and fnStack and fnStack ~= "" then
-			local parts = {}
-			for name in fnStack:gmatch("([^;]+)") do
-				-- Skip unknown frames, internal lde frames (lde:N, lde-core.x:N),
-				-- and C builtins that appear in the chain (pcall, xpcall).
-				if name ~= "?" and name ~= "chunk" and not skipNames[name] then
-					parts[#parts + 1] = name
-				end
-			end
-			if #parts > 0 then
-				stackKey = table.concat(parts, ";")
-			end
-		end
-
+		key = key or cleanParts[1]
 		if key then
 			counts[key] = (counts[key] or 0) + samples
 		end
-		if stackKey then
-			stacks[stackKey] = (stacks[stackKey] or 0) + samples
-		end
 	end)
 
-	if not started then
-		return nil, tostring(startErr)
-	end
-
 	return function()
-		pcall(profile.stop)
-		return counts, vmstates, total, stacks
+		lua.profiler.stop(state)
+		return counts, vmstates, stacks, total
 	end
 end
 
---- Clears non-builtin entries from a table, returning the saved contents.
----@param t table
----@return table saved
-local function clearNonBuiltins(t)
-	local saved = {}
-	for k, v in pairs(t) do
-		saved[k] = v
-		if not builtinModules[k] then
-			t[k] = nil
-		end
-	end
-	return saved
-end
+---@class lde.ExecuteOptions
+---@field env          table<string, string>?
+---@field args         string[]?
+---@field globals      table<string, any>?
+---@field packagePath  string?
+---@field packageCPath string?
+---@field preload      table<string, function>?
+---@field cwd          string?
+---@field postexec     (fun(): any)?
+---@field profile      boolean?
+---@field flamegraph   string?
 
---- Restores a table's contents from a saved snapshot.
----@param t table
----@param saved table
-local function restore(t, saved)
-	for k in pairs(t) do
-		t[k] = nil
-	end
-	for k, v in pairs(saved) do
-		t[k] = v
-	end
-end
-
----@param compile fun(): function?, string?
----@param opts lde.ExecuteOptions?
----@param scriptName string?
-local function executeWith(compile, opts, scriptName)
+--- Run Lua source inside a fresh lua-sys guest state.
+---
+--- The guest receives:
+---   • package.path / package.cpath pointing at the package's target/
+---   • arg[] populated from opts.args (arg[0] = chunkName)
+---   • opts.env entries applied to the host process environment (shared with guest)
+---   • opts.preload entries registered as package.preload host callbacks
+---   • opts.globals entries written into guest _G
+---
+---@param source    string  Lua source code to run
+---@param chunkName string  Label shown in error traces
+---@param opts      lde.ExecuteOptions?
+---@return boolean ok
+---@return any ...  error message on failure, return values on success
+local function executeSource(source, chunkName, opts)
 	opts = opts or {}
 
+	-- Change cwd on the host process (guest inherits the same OS environment)
 	local oldCwd
 	if opts.cwd then
 		oldCwd = env.cwd()
 		env.chdir(opts.cwd)
 	end
 
-	local chunk, err = compile()
-	if not chunk then
-		if oldCwd then env.chdir(oldCwd) end
-		return false, err or "Failed to compile"
-	end
-
-	local oldPath, oldCPath = package.path, package.cpath
-
+	-- Apply env vars; save originals for restore
 	local oldEnvVars = {}
 	if opts.env then
 		for k, v in pairs(opts.env) do
@@ -262,99 +194,81 @@ local function executeWith(compile, opts, scriptName)
 		end
 	end
 
-	local savedLoaded = clearNonBuiltins(package.loaded)
-	local savedPreload = clearNonBuiltins(package.preload)
+	local function cleanup()
+		for k, v in pairs(oldEnvVars) do env.set(k, v) end
+		if oldCwd then env.chdir(oldCwd) end
+	end
 
+	-- Fresh isolated state
+	local state = lua.new()
+	local g     = state:globals()
+
+	-- Set package.path / package.cpath
+	local pkg = g.package
+	if opts.packagePath  then pkg.path  = opts.packagePath  end
+	if opts.packageCPath then pkg.cpath = opts.packageCPath end
+
+	-- Register preload callbacks so guest can require() them
 	if opts.preload then
-		for k, v in pairs(opts.preload) do
-			package.preload[k] = v
+		local preload = pkg.preload
+		for modname, loader in pairs(opts.preload) do
+			preload[modname] = loader
 		end
 	end
 
-	local newG = setmetatable({}, { __index = _G })
-	setfenv(chunk, newG)
-	package.loaded._G = newG
-
-	local oldLoaders = package.loaders
-	local freshLoaders = {}
-	for i, loader in ipairs(oldLoaders) do
-		freshLoaders[i] = function(modname)
-			local result = loader(modname)
-			if type(result) == "function" then
-				pcall(setfenv, result, newG)
-			end
-			return result
+	-- Inject extra globals
+	if opts.globals then
+		for k, v in pairs(opts.globals) do
+			g[k] = v
 		end
 	end
-	package.loaders = freshLoaders
 
-	local originalTmpname = os.tmpname
-	os.tmpname = env.tmpfile
+	-- Populate arg[] before the script runs
+	local args = opts.args or {}
+	local setArgItem = state:load(
+		"function(i, v) if not arg then arg = {} end arg[i] = v end"
+	)
+	setArgItem(0, chunkName)
+	for i, v in ipairs(args) do
+		setArgItem(i, v)
+	end
 
-	package.path = opts.packagePath or oldPath
-	package.cpath = opts.packageCPath or oldCPath
-
+	-- Start profiler if requested
 	local stopProfiler
 	if opts.profile or opts.flamegraph then
-		local profilerErr
-		stopProfiler, profilerErr = startProfiler(PROFILER_MS_PER_SAMPLE, scriptName)
-		if not stopProfiler then
-			for k, v in pairs(oldEnvVars) do env.set(k, v) end
-			if oldCwd then env.chdir(oldCwd) end
-			os.tmpname = originalTmpname
-			restore(package.loaded, savedLoaded)
-			restore(package.preload, savedPreload)
-			package.loaders = oldLoaders
-			package.path, package.cpath = oldPath, oldCPath
-			return false, "Failed to start profiler: " .. tostring(profilerErr)
-		end
+		stopProfiler = startProfiler(state)
 	end
 
-	local function finishProfiler()
-		if not stopProfiler then return end
-		local counts, vmstates, total, stacks = stopProfiler()
-		stopProfiler = nil
+	-- Execute the script
+	local ok, a, b, c, d, e, f = pcall(state.load, state, source)
+
+	-- Collect profiling results
+	if stopProfiler then
+		local counts, vmstates, stacks, total = stopProfiler()
 		if opts.profile and lde.verbose then
-			printProfileReport(counts, vmstates, total, env.cwd(), PROFILER_MS_PER_SAMPLE)
+			printProfileReport(counts, vmstates, total, opts.cwd or env.cwd())
 		end
 		if opts.flamegraph then
-			local fgTitle = scriptName and scriptName:match("[^/\\]+$")
-			local ok, err = lde.flamegraph.write(stacks, total, PROFILER_MS_PER_SAMPLE, opts.flamegraph, fgTitle)
+			local title = chunkName and chunkName:match("[^/\\]+$")
+			local fgOk, fgErr = lde.flamegraph.write(
+				stacks, total, PROFILER_MS_PER_SAMPLE, opts.flamegraph, title)
 			if lde.verbose then
-				if ok then
+				if fgOk then
 					ansi.printf("{cyan}Flamegraph written to %s", opts.flamegraph)
 				else
-					ansi.printf("{red}Flamegraph error: %s", err or "unknown error")
+					ansi.printf("{red}Flamegraph error: %s", fgErr or "unknown error")
 				end
 			end
 		end
 	end
 
-	if opts.args then
-		arg = opts.args
-		arg[0] = scriptName
-	end
-
-	local ok, a, b, c, d, e, f = pcall(chunk, unpack(opts.args or {}))
-
-	finishProfiler()
-
+	-- postexec runs on the host after the guest chunk finishes
 	if ok and opts.postexec then
 		ok, a, b, c, d, e, f = pcall(opts.postexec)
 	end
 
-	if stopProfiler then
-		stopProfiler()
-	end
-
-	for k, v in pairs(oldEnvVars) do env.set(k, v) end
-	if oldCwd then env.chdir(oldCwd) end
-
-	os.tmpname = originalTmpname
-	restore(package.loaded, savedLoaded)
-	restore(package.preload, savedPreload)
-	package.loaders = oldLoaders
-	package.path, package.cpath = oldPath, oldCPath
+	state:close()
+	cleanup()
 
 	return ok, a, b, c, d, e, f
 end
@@ -362,18 +276,20 @@ end
 ---@param scriptPath string
 ---@param opts lde.ExecuteOptions?
 local function executeFile(scriptPath, opts)
-	return executeWith(function() return loadfile(scriptPath, "t") end, opts, scriptPath)
+	local source, err = fs.read(scriptPath)
+	if not source then
+		return false, "Failed to read " .. scriptPath .. ": " .. (err or "unknown error")
+	end
+	return executeSource(source, scriptPath, opts)
 end
 
 ---@param code string
 ---@param opts lde.ExecuteOptions?
 local function executeString(code, opts)
-	return executeWith(function()
-		return loadstring("return " .. code, "-e") or loadstring(code, "-e")
-	end, opts)
+	return executeSource(code, "-e", opts)
 end
 
 return {
-	executeFile = executeFile,
-	executeString = executeString
+	executeFile   = executeFile,
+	executeString = executeString,
 }
