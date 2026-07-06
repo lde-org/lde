@@ -162,7 +162,7 @@ local function buildPackage(packagePath, targetDir)
 			function build:fetch(url) return assert(readhandle(io.popen("curl -sL " .. url)), "failed to fetch " .. url) end
 			function build:write(rel, content) write(join(outputDir, rel), content) end
 			function build:read(rel) return read(join(outputDir, rel)) end
-			function build:extract(rel, dest) mkdir(join(outputDir, dest)); os.execute('tar -xzf "' .. join(outputDir, rel) .. '" -C "' .. join(outputDir, dest) .. '"') end
+			function build:extract(rel, dest) mkdir(join(outputDir, dest)); os.execute('tar --force-local -xzf "' .. join(outputDir, rel) .. '" -C "' .. join(outputDir, dest) .. '"') end
 			function build:copy(rel, dest) copy(join(outputDir, rel), join(outputDir, dest)) end
 			function build:delete(rel) rm(join(outputDir, rel)) end
 			function build:move(rel, dest) os.rename(join(outputDir, rel), join(outputDir, dest)) end
@@ -196,7 +196,8 @@ local function buildPackage(packagePath, targetDir)
 				local tarball = join(tmpLDEDir, "tar", name)
 				os.execute('curl -s -L "' .. tarballUrl .. '" -o "' .. tarball .. '"')
 				mkdir(finalDir)
-				os.execute('tar -xzf "' .. tarball .. '" --strip-components=1 -C "' .. finalDir .. '"')
+				-- --force-local prevents tar from treating drive letters (C:) as remote hosts
+				os.execute('tar --force-local -xzf "' .. tarball .. '" --strip-components=1 -C "' .. finalDir .. '"')
 			end
 
 			buildPackage(finalDir, targetDir)
