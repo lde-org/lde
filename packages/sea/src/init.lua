@@ -410,7 +410,12 @@ int main(int argc, char** argv) {
 	elseif jit.os == "OSX" then
 		args[#args + 1] = "-Wl,-export_dynamic" -- expose lua symbols for lua dependencies
 	elseif jit.os == "Windows" then
-		args[#args + 1] = "-Wl,--export-all-symbols" -- expose lua symbols for lua dependencies
+		-- Generate an import library (.a) alongside the exe so native dependencies
+		-- (e.g. lua-sys/bridge.dll) can link against the exe's exported lua symbols
+		-- at build time. --export-all-symbols re-exports all symbols from libluajit.a.
+		local implib = outPath:gsub("%.exe$", "") .. ".a"
+		args[#args + 1] = "-Wl,--export-all-symbols"
+		args[#args + 1] = "-Wl,--out-implib," .. implib
 	end
 	local execEnv
 	if jit.os == "Windows" and compiler ~= "gcc" then
