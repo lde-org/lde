@@ -231,6 +231,10 @@ if pop() == "run" then
 	package.path = join(cwd, "target", "?.lua") .. ";" ..
 		join(cwd, "target", "?", "init.lua") .. ";" ..
 		package.path
+	package.cpath = join(cwd, "target", "?.so") .. ";" ..
+		join(cwd, "target", "?.dll") .. ";" ..
+		join(cwd, "target", "?.dylib") .. ";" ..
+		package.cpath
 
 	local extraArgs = {}
 	local foundSep = false
