@@ -28,6 +28,16 @@ local function compile(args)
 		error("Failed to move executable: " .. moveErr)
 	end
 
+	-- On Windows, also copy the import library (.a) that was generated alongside
+	-- the exe so native dependencies (e.g. lua-sys) can link against it.
+	if jit.os == "Windows" then
+		local srcImplib  = executable:gsub("%.exe$", ""):gsub("%.out$", "") .. ".a"
+		local destImplib = outFile:gsub("%.exe$", "") .. ".a"
+		if fs.exists(srcImplib) then
+			fs.move(srcImplib, destImplib)
+		end
+	end
+
 	if jit.os ~= "Windows" then ---@cast fs fs.raw.posix
 		fs.chmod(outFile, tonumber("755", 8))
 	end
