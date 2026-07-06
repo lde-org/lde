@@ -158,7 +158,6 @@ end
 ---@field packageCPath string?
 ---@field preload      table<string, function>?
 ---@field cwd          string?
----@field postexec     (fun(): any)?
 ---@field profile      boolean?
 ---@field flamegraph   string?
 
@@ -303,11 +302,6 @@ local function executeSource(source, chunkName, opts)
 				end
 			end
 		end
-	end
-
-	-- postexec runs on the host after the guest chunk finishes
-	if ok and opts.postexec then
-		ok, a, b, c, d, e, f = pcall(opts.postexec)
 	end
 
 	state:close()

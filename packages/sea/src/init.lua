@@ -11,7 +11,7 @@ local ansi = require("ansi")
 
 local util = require("util")
 
-local ljDistRepo = "lde-org/lj-dist"
+local ljDistRepo = "lde-org/luajit"
 local ljDistTag = "latest"
 
 local function getPlatformArch()
