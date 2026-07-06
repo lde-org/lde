@@ -194,10 +194,14 @@ local function buildPackage(packagePath, targetDir)
 			if not exists(finalDir) then
 				local tarballUrl = dep.git .. "/archive/master.tar.gz"
 				local tarball = join(tmpLDEDir, "tar", name)
-				os.execute('curl -s -L "' .. tarballUrl .. '" -o "' .. tarball .. '"')
+				local curlOk = os.execute('curl -fsSL "' .. tarballUrl .. '" -o "' .. tarball .. '"')
+				assert(curlOk == 0 or curlOk == true,
+					"failed to download " .. tarballUrl)
 				mkdir(finalDir)
 				-- --force-local prevents tar from treating drive letters (C:) as remote hosts
-				os.execute('tar --force-local -xzf "' .. tarball .. '" --strip-components=1 -C "' .. finalDir .. '"')
+				local tarOk = os.execute('tar --force-local -xzf "' .. tarball .. '" --strip-components=1 -C "' .. finalDir .. '"')
+				assert(tarOk == 0 or tarOk == true,
+					"failed to extract tarball for " .. name .. " — repo may use submodules (not supported in bootstrap mode)")
 			end
 
 			buildPackage(finalDir, targetDir)
