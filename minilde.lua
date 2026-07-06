@@ -193,9 +193,10 @@ local function buildPackage(packagePath, targetDir)
 			local finalDir = join(tmpLDEDir, "git", name)
 			if not exists(finalDir) then
 				local tarballUrl = dep.git .. "/archive/master.tar.gz"
-				os.execute("curl -s -L " .. tarballUrl .. " -o " .. join(tmpLDEDir, "tar", name))
+				local tarball = join(tmpLDEDir, "tar", name)
+				os.execute('curl -s -L "' .. tarballUrl .. '" -o "' .. tarball .. '"')
 				mkdir(finalDir)
-				os.execute("tar -xzf " .. join(tmpLDEDir, "tar", name) .. " --strip-components=1 -C " .. finalDir)
+				os.execute('tar -xzf "' .. tarball .. '" --strip-components=1 -C "' .. finalDir .. '"')
 			end
 
 			buildPackage(finalDir, targetDir)
