@@ -59,32 +59,39 @@ local function defaultBuildFn(pkg, outputDir)
 		return nil, "No build script found: " .. buildScriptPath
 	end
 
-	-- lde-build and its dependencies (curl-sys, fs, path, archive) live in
-	-- lde-core's own target/. Find that directory by locating lde-build in
-	-- the host's package.path, then expose the same directory to the guest.
-	local ldeBuiltInitPath = package.searchpath("lde-build", package.path)
-	local ldeCoreTarget = ldeBuiltInitPath
-		and path.dirname(path.dirname(ldeBuiltInitPath))  -- .../target/lde-build/init.lua → .../target
-		or nil
+	local source = fs.read(buildScriptPath)
+	if not source then
+		return nil, "Could not read build script: " .. buildScriptPath
+	end
 
-	local ffi = require("ffi")
-	local ext  = ffi.os == "Windows" and "dll" or ffi.os == "OSX" and "dylib" or "so"
-	local extraLuaPath = ldeCoreTarget and (
-		path.join(ldeCoreTarget, "?.lua") .. ";"
-		.. path.join(ldeCoreTarget, "?", "init.lua") .. ";"
-	) or ""
-	local extraCPath = ldeCoreTarget and (
-		path.join(ldeCoreTarget, "?." .. ext) .. ";"
-	) or ""
+	local lua = require("lua-sys")
+	local Instance = require("lde-build.build")
 
-	local pkgLuaPath, pkgLuaCPath = require("lde-core.package.run").getLuaPaths(pkg)
+	local luaPath, luaCPath = require("lde-core.package.run").getLuaPaths(pkg)
+	local state = lua.new()
+	local g     = state:globals()
+	g.package.path  = luaPath
+	g.package.cpath = luaCPath
 
-	return require("lde-core.runtime").executeFile(buildScriptPath, {
-		env          = { LDE_OUTPUT_DIR = outputDir, LPM_OUTPUT_DIR = outputDir },
-		cwd          = pkg:getDir(),
-		packagePath  = extraLuaPath .. pkgLuaPath,
-		packageCPath = extraCPath   .. pkgLuaCPath,
-	})
+	-- Set LDE_OUTPUT_DIR so build scripts can read it via os.getenv
+	env.set("LDE_OUTPUT_DIR", outputDir)
+	env.set("LPM_OUTPUT_DIR", outputDir)
+
+	-- Inject lde-build instance into the guest state
+	Instance.setup(state, outputDir)
+
+	local cwd = pkg:getDir()
+	local oldCwd = env.cwd()
+	env.chdir(cwd)
+
+	local ok, err = pcall(state.load, state, source)
+
+	env.chdir(oldCwd)
+	env.set("LDE_OUTPUT_DIR", "")
+	env.set("LPM_OUTPUT_DIR", "")
+	state:close()
+
+	return ok, err
 end
 
 function Package:hasBuildScript()

@@ -38,123 +38,178 @@ local function getLuaPathsForPackage(pkg)
 	return luaPath, luaCPath
 end
 
--- The lde-test source, loaded once at module load time.
--- It's pure Lua with no external dependencies, so we inject it directly into
--- any guest state. We find it either via package.path (installed as lde-test.test)
--- or directly from the sibling lde-test package in the monorepo.
-local ldeTestSource = (function()
-	-- Preferred: find via the host's package.path (works in any install context)
-	local found = package.searchpath("lde-test.test", package.path)
-	if found then
-		local src = fs.read(found)
-		if src then return src end
+-- ─── lde-test guest setup ─────────────────────────────────────────────────
+--
+-- Inject lde-test into a guest state by loading the pure-Lua framework source
+-- directly via state:load(). No file I/O, no path resolution — works in
+-- development, compiled binaries, and any install context.
+--
+-- After this call:
+--   • require("lde-test") / require("lpm-test") returns an M.new() instance
+--   • _lde_test_run(on_result, on_start, on_pass, on_fail, on_skip) is a
+--     global callable the host invokes after the test file has executed
+--
+---@param state lua.State
+local function setupTestFramework(state)
+	-- lde-test.test source embedded as a string constant. This is the canonical
+	-- copy; update it when lde-test/src/test.lua changes.
+	-- It's pure Lua with zero dependencies — safe to load into any guest state.
+	local LDE_TEST_SOURCE = [==[
+local M = {}
+local function equal(a,b) if a~=b then error("Expected "..tostring(a).." to equal "..tostring(b),2) end end
+local function notEqual(a,b) if a==b then error("Expected "..tostring(a).." not to equal "..tostring(b),2) end end
+local function truthy(v) if not v then error("Expected value to be truthy, got "..tostring(v),2) end end
+local function falsy(v) if v then error("Expected value to be falsy, got "..tostring(v),2) end end
+local function includes(h,n) if not string.find(h,n,1,true) then error("Expected string to include '"..n.."'",2) end end
+local function greater(a,b) if not(a>b) then error("Expected "..tostring(a).." to be greater than "..tostring(b),2) end end
+local function less(a,b) if not(a<b) then error("Expected "..tostring(a).." to be less than "..tostring(b),2) end end
+local function greaterEqual(a,b) if not(a>=b) then error("Expected "..tostring(a).." to be greater than or equal to "..tostring(b),2) end end
+local function lessEqual(a,b) if not(a<=b) then error("Expected "..tostring(a).." to be less than or equal to "..tostring(b),2) end end
+local function count(t) local n=0; for _ in pairs(t) do n=n+1 end; return n end
+local function deepEqualInner(a,b,p)
+	if a==b then return end
+	if type(a)~=type(b) then error("Expected "..p.." to be "..type(b)..", got "..type(a),0) end
+	if type(a)~="table" then error("Expected "..p.." to equal "..tostring(b)..", got "..tostring(a),0) end
+	if getmetatable(a)~=getmetatable(b) then error("Expected "..p.." metatables to match",0) end
+	for k,v in pairs(b) do deepEqualInner(a[k],v,p.."."..tostring(k)) end
+	for k in pairs(a) do if b[k]==nil then error("Unexpected key "..p.."."..tostring(k),0) end end
+end
+local function deepEqual(a,b) local ok,err=pcall(deepEqualInner,a,b,"<root>"); if not ok then error(err,2) end end
+local function matchInner(actual,expected,p)
+	for k,v in pairs(expected) do
+		local ap=p.."."..tostring(k)
+		if type(v)=="table" and type(actual[k])=="table" then matchInner(actual[k],v,ap)
+		elseif actual[k]~=v then error("Expected "..ap.." to equal "..tostring(v)..", got "..tostring(actual[k]),0) end
 	end
+end
+local function match(actual,expected)
+	if type(actual)~="table" then error("Expected a table, got "..type(actual),2) end
+	local ok,err=pcall(matchInner,actual,expected,"<root>"); if not ok then error(err,2) end
+end
+function M.new()
+	local callbacks,afterEachFns,afterAllFns={},{},{}
+	local instance={}
+	function instance.it(name,fn) table.insert(callbacks,{name=name,callback=fn}) end
+	function instance.skip(name,_fn) table.insert(callbacks,{name=name,skipped=true}) end
+	function instance.skipIf(condition)
+		return function(name,fn)
+			table.insert(callbacks,condition and {name=name,skipped=true} or {name=name,callback=fn})
+		end
+	end
+	function instance.afterEach(fn) table.insert(afterEachFns,fn) end
+	function instance.afterAll(fn) table.insert(afterAllFns,fn) end
+	function instance.run(reporter)
+		local results={}; reporter=reporter or {}
+		for _,cb in ipairs(callbacks) do
+			if cb.skipped then
+				if reporter.onSkip then reporter.onSkip(cb.name) end
+				table.insert(results,{name=cb.name,ok=true,skipped=true})
+			else
+				local handle=reporter.onStart and reporter.onStart(cb.name)
+				local ok,err=pcall(cb.callback)
+				for _,fn in ipairs(afterEachFns) do local aok,aerr=pcall(fn); if not aok then ok,err=false,aerr end end
+				if ok and reporter.onPass then reporter.onPass(cb.name,handle)
+				elseif not ok and reporter.onFail then reporter.onFail(cb.name,err,handle) end
+				table.insert(results,{name=cb.name,ok=ok,error=err})
+			end
+		end
+		for i,fn in ipairs(afterAllFns) do
+			local ok,err=pcall(fn); if not ok then table.insert(results,{name="afterAll #"..i,ok=false,error=err}) end
+		end
+		return results
+	end
+	instance.equal=equal; instance.notEqual=notEqual; instance.truthy=truthy; instance.falsy=falsy
+	instance.includes=includes; instance.greater=greater; instance.less=less
+	instance.greaterEqual=greaterEqual; instance.lessEqual=lessEqual
+	instance.count=count; instance.deepEqual=deepEqual; instance.match=match
+	return instance
+end
+return M
+]==]
 
-	-- Fallback: derive from this file's location in the monorepo.
-	-- This file: .../packages/lde-core/src/package/test.lua
-	-- lde-test:  .../packages/lde-test/src/test.lua
-	local thisFile = debug.getinfo(1, "S").source:sub(2)
-	-- Resolve symlinks: the source may be accessed via target/ symlink
-	local realFile = fs.realpath and fs.realpath(thisFile) or thisFile
-	local ldeCoreSrc  = path.dirname(path.dirname(realFile or thisFile))  -- .../lde-core/src
-	local packagesDir = path.dirname(path.dirname(ldeCoreSrc))            -- .../packages
-	local candidate   = path.join(packagesDir, "lde-test", "src", "test.lua")
-	local src = fs.read(candidate)
-	if src then return src end
-
-	error("lde-test source not found — ensure lde-test is installed (lde install in lde-core)")
-end)()
+	state:load(string.format([[
+		local _factory = assert(load(%q, "@lde-test.test"))()
+		local _instance = _factory.new()
+		package.preload["lde-test"] = function() return _instance end
+		package.preload["lpm-test"] = function() return _instance end
+		_lde_test_run = function()
+			local reporter = {}
+			if _lde_on_start then reporter.onStart = function(name)         _lde_on_start(name)        end end
+			if _lde_on_pass  then reporter.onPass  = function(name, _)      _lde_on_pass(name)         end end
+			if _lde_on_fail  then reporter.onFail  = function(name, err, _) _lde_on_fail(name, err)    end end
+			if _lde_on_skip  then reporter.onSkip  = function(name)         _lde_on_skip(name)         end end
+			for _, r in ipairs(_instance.run(reporter)) do
+				_lde_on_result(r.name, r.ok == true, r.skipped == true, r.error or "")
+			end
+		end
+	]], LDE_TEST_SOURCE))
+end
 
 --- Run a single test file in a fresh guest state.
---- lde-test runs entirely in the guest; only reporter callbacks cross the boundary
---- (they receive only primitive string arguments).
----
 ---@param testFile   string
 ---@param luaPath    string
 ---@param luaCPath   string
 ---@param reporter   lde.TestReporter?
 ---@return lde.TestFileResult
 local function runTestFile(testFile, luaPath, luaCPath, reporter)
-	local results   = {}
-	local handles   = {}   -- name → reporter handle (host-side opaque value)
+	local results = {}
+	local handles = {}
 
-	-- Reporter callbacks: all args are primitives (strings), safe to cross boundary.
+	local onResult = function(name, ok, skipped, err)
+		if skipped then
+			results[#results + 1] = { name = name, ok = true,      skipped = true }
+		else
+			results[#results + 1] = { name = name, ok = ok == true, error  = err   }
+		end
+	end
 	local onStart = reporter and reporter.onStart and function(name)
-		local handle = reporter.onStart(name)
-		handles[name] = handle
+		handles[name] = reporter.onStart(name)
 	end or nil
-
 	local onPass = reporter and reporter.onPass and function(name)
-		reporter.onPass(name, handles[name])
-		handles[name] = nil
+		reporter.onPass(name, handles[name]); handles[name] = nil
 	end or nil
-
 	local onFail = reporter and reporter.onFail and function(name, err)
-		reporter.onFail(name, err, handles[name])
-		handles[name] = nil
+		reporter.onFail(name, err, handles[name]); handles[name] = nil
 	end or nil
-
 	local onSkip = reporter and reporter.onSkip and function(name)
 		reporter.onSkip(name)
 	end or nil
-
-	-- Collect results on the host side via a callback the guest calls per result.
-	local onResult = function(name, ok, skipped, err)
-		if skipped then
-			results[#results + 1] = { name = name, ok = true, skipped = true }
-		else
-			results[#results + 1] = { name = name, ok = ok == true, error = err }
-		end
-	end
 
 	local source, readErr = fs.read(testFile)
 	if not source then
 		return { file = testFile, results = {}, error = "Could not read: " .. (readErr or "?") }
 	end
 
-	-- Wrap the test file: inject lde-test as a guest-local module, run the file,
-	-- then drive instance.run() with reporter callbacks that only pass primitives.
-	-- We use concatenation rather than string.format to avoid misinterpreting
-	-- % characters in ldeTestSource or the test file source as format directives.
-	local escapedSource = string.format("%q", source)
-	local wrapper = [[
-		local _lde_test_factory = (function()
-		]] .. ldeTestSource .. [[
-		end)()
-		local _lde_test_instance = _lde_test_factory.new()
-		package.preload["lde-test"] = function() return _lde_test_instance end
-		package.preload["lpm-test"] = function() return _lde_test_instance end
-		local _chunk = assert(loadstring(]] .. escapedSource .. [[, ]] .. string.format("%q", "@" .. testFile) .. [[))
-		_chunk()
-		local _reporter = {}
-		if _lde_on_start  then _reporter.onStart  = function(name)         _lde_on_start(name)        end end
-		if _lde_on_pass   then _reporter.onPass   = function(name, _)      _lde_on_pass(name)         end end
-		if _lde_on_fail   then _reporter.onFail   = function(name, err, _) _lde_on_fail(name, err)    end end
-		if _lde_on_skip   then _reporter.onSkip   = function(name)         _lde_on_skip(name)         end end
-		local _results = _lde_test_instance.run(_reporter)
-		for _, r in ipairs(_results) do
-			_lde_on_result(r.name, r.ok == true, r.skipped == true, r.error or "")
-		end
-	]]
+	-- Build the guest state manually so we can call setupTestFramework before
+	-- loading the test file source.
+	local state = lua.new()
+	local g     = state:globals()
+	local pkg   = g.package
+	pkg.path    = luaPath
+	pkg.cpath   = luaCPath
 
-	local globals = {
-		_lde_on_result = onResult,
-		_lde_on_start  = onStart,
-		_lde_on_pass   = onPass,
-		_lde_on_fail   = onFail,
-		_lde_on_skip   = onSkip,
-	}
+	-- Inject lde-test framework entirely within the guest
+	setupTestFramework(state)
 
-	local ok, err = runtime.executeString(wrapper, {
-		packagePath  = luaPath,
-		packageCPath = luaCPath,
-		globals      = globals,
-	})
+	-- Inject reporter callbacks as guest globals (primitives only cross boundary)
+	g._lde_on_result = onResult
+	if onStart then g._lde_on_start = onStart end
+	if onPass  then g._lde_on_pass  = onPass  end
+	if onFail  then g._lde_on_fail  = onFail  end
+	if onSkip  then g._lde_on_skip  = onSkip  end
+
+	-- Run the test file source, then invoke _lde_test_run
+	local ok, err = pcall(state.load, state, source)
+	if ok then
+		local runFn = g._lde_test_run
+		ok, err = pcall(runFn)
+	end
+
+	state:close()
 
 	if not ok then
 		return { file = testFile, results = {}, error = err }
 	end
-
 	return { file = testFile, results = results }
 end
 
