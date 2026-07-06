@@ -141,4 +141,4 @@ jobs:
             -v ${{ github.workspace }}:/workspace \
             -w /workspace \
             termux-android:latest \
-            bash -c "/workspace/lde --setup && cd /workspace/packages/lde && /workspace/lde compile --outfile /workspace/packages/lde/${{ env.OUTFILE }} && cd /workspace && /workspace/packages/lde/${{ env.OUTFILE }} test"
+            bash -c "/workspace/lde --setup && /workspace/lde -C /workspace/packages/lde run -- compile --outfile /workspace/packages/lde/${{ env.OUTFILE }} && cd /workspace && /workspace/packages/lde/${{ env.OUTFILE }} test"
