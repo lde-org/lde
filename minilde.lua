@@ -223,11 +223,20 @@ local function build()
 end
 
 if #args == 0 then
-	print("Usage: minilde <command>")
+	print("Usage: minilde [-C <dir>] <command>")
 	print("Commands:")
 	print("  run: build and run the package")
 
 	return
+end
+
+-- -C <dir>: change working directory before doing anything
+if args[1] == "-C" then
+	table.remove(args, 1)
+	local dir = assert(table.remove(args, 1), "minilde: -C requires a directory argument")
+	pcall(ffi.cdef, isWindows and "int _chdir(const char *path);" or "int chdir(const char *path);")
+	local chdir = isWindows and ffi.C._chdir or ffi.C.chdir
+	assert(chdir(dir) == 0, "minilde: -C: cannot chdir to '" .. dir .. "'")
 end
 
 if pop() == "run" then
