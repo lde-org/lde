@@ -20,6 +20,10 @@ local function buildPackage(package, destinationPath)
 	if not fs.isdir(target) then fs.mkdir(target) end
 
 	if package:hasBuildScript() then
+		-- If a symlink exists from a previous no-build-script run, remove it
+		-- before the build script tries to write into destinationPath as a dir.
+		if fs.islink(destinationPath) then fs.delete(destinationPath) end
+
 		-- Check stamp before showing progress so already-built packages are silent
 		local stampFile = path.join(destinationPath, ".lde-built")
 		local alreadyDone = alreadyBuilt[destinationPath] or fs.exists(stampFile)
@@ -32,6 +36,11 @@ local function buildPackage(package, destinationPath)
 		if p then p:done("Built " .. package:getName()) end
 		alreadyBuilt[destinationPath] = true
 	else
+		-- If a real directory exists from a previous build-script run, remove it
+		-- before creating the symlink.
+		if fs.isdir(destinationPath) and not fs.islink(destinationPath) then
+			fs.rmdir(destinationPath)
+		end
 		fs.mklink(package:getSrcDir(), destinationPath)
 	end
 
