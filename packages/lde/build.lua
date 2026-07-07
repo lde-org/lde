@@ -7,17 +7,17 @@ local build = require("lde-build")
 
 local BASE_VERSION = "0.9.1"
 
--- Try to get the short commit hash via git.
+-- Use io.popen so this works in both lde-build and minilde contexts without
+-- needing the process package.
 local hash
 do
-	local ok, code, stdout = pcall(function()
-		local process = require("process")
-		local c, out, _ = process.exec("git", { "rev-parse", "--short=7", "HEAD" })
-		return c, out
-	end)
-
-	if ok and code == 0 and stdout and #stdout:gsub("%s", "") > 0 then
-		hash = stdout:gsub("%s+", "")
+	local handle = io.popen("git rev-parse --short=7 HEAD 2>/dev/null")
+	if handle then
+		local out = handle:read("*l")
+		handle:close()
+		if out and out:match("^%x+$") then
+			hash = out
+		end
 	end
 end
 
