@@ -162,8 +162,14 @@ local function runTestFile(testFile, luaPath, luaCPath, reporter)
 			results[#results + 1] = { name = name, ok = ok == true, error  = err   }
 		end
 	end
+	-- Handles are kept entirely on the host side — the bridge cannot return
+	-- compound values (tables) from host callbacks back into the guest.
+	-- onStart fires from the host wrapper; its handle is stored in `handles`
+	-- here and retrieved when onPass/onFail fire (also host-side wrappers).
+	-- Only primitives (name string, ok boolean, err string) cross the boundary.
 	local onStart = reporter and reporter.onStart and function(name)
 		handles[name] = reporter.onStart(name)
+		-- return nothing — no compound value crosses to guest
 	end or nil
 	local onPass = reporter and reporter.onPass and function(name)
 		reporter.onPass(name, handles[name]); handles[name] = nil
@@ -198,8 +204,11 @@ local function runTestFile(testFile, luaPath, luaCPath, reporter)
 	if onFail  then g._lde_on_fail  = onFail  end
 	if onSkip  then g._lde_on_skip  = onSkip  end
 
-	-- Run the test file source, then invoke _lde_test_run
-	local ok, err = pcall(state.load, state, source)
+	-- Run the test file source with the real file path as chunk name so that
+	-- debug.getinfo(1,"S").source inside the guest returns the correct path.
+	-- This is required by packages like git2-sys that locate native libraries
+	-- relative to their own source file at load time.
+	local ok, err = pcall(state.load, state, source, "@" .. testFile)
 	if ok then
 		local runFn = g._lde_test_run
 		ok, err = pcall(runFn)

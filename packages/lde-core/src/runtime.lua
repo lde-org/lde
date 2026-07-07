@@ -156,7 +156,7 @@ end
 ---@field globals      table<string, any>?
 ---@field packagePath  string?
 ---@field packageCPath string?
----@field preload      table<string, function>?
+---@field preload      table<string, function>?  modules injected into package.loaded before execution
 ---@field cwd          string?
 ---@field profile      boolean?
 ---@field flamegraph   string?
@@ -208,72 +208,30 @@ local function executeSource(source, chunkName, opts)
 	if opts.packagePath  then pkg.path  = opts.packagePath  end
 	if opts.packageCPath then pkg.cpath = opts.packageCPath end
 
-	-- Register preload callbacks so guest can require() them.
-	-- Host functions that return only primitives work directly via dispatch_callback.
-	-- If a preload function returns a table of primitives, we wrap it to serialize
-	-- the result as a Lua literal that loads cleanly in the guest.
+	-- Inject preloaded modules directly into package.loaded so require() returns
+	-- them immediately — no loader function or cross-boundary callback needed.
 	if opts.preload then
+		local loaded = pkg.loaded
 		for modname, loader in pairs(opts.preload) do
 			if type(loader) == "function" then
-				-- Wrap the loader: call it on the host, and if it returns a primitive
-				-- table, serialize it for the guest. If it returns a primitive scalar
-				-- or nothing, pass through directly.
-				local function serialize(val, depth)
-					depth = depth or 0
-					if depth > 10 then return "nil" end
-					local t = type(val)
-					if t == "nil"     then return "nil"
-					elseif t == "boolean" then return tostring(val)
-					elseif t == "number"  then return tostring(val)
-					elseif t == "string"  then return string.format("%q", val)
-					elseif t == "table"   then
-						local parts = {}
-						for k, v in pairs(val) do
-							local kstr = type(k) == "string"
-								and ("[" .. string.format("%q", k) .. "]")
-								or ("[" .. tostring(k) .. "]")
-							parts[#parts + 1] = kstr .. "=" .. serialize(v, depth + 1)
-						end
-						return "{" .. table.concat(parts, ",") .. "}"
-					else return "nil" end
-				end
-
-				-- Pre-call the loader on the host to see what it returns
-				local result = loader()
-				if type(result) == "table" then
-					-- Serialize once and register a guest-side loader via state:load
-					local serialized = serialize(result)
-					local registerPreload = state:load([[
-						function(name, src)
-							package.preload[name] = function() return load(src)() end
-						end
-					]])
-					registerPreload(modname, "return " .. serialized)
-				else
-					-- Scalar/nil return — re-wrap as a fresh function call
-					pkg.preload[modname] = function() return result end
-				end
+				loaded[modname] = loader()
 			end
 		end
 	end
 
-	-- Inject extra globals (primitives and functions only — host tables cannot
-	-- cross the state boundary; use preload with guest-built tables for those)
+	-- Inject extra globals. toLua handles all types including plain host tables.
 	if opts.globals then
 		for k, v in pairs(opts.globals) do
 			if v ~= nil then g[k] = v end
 		end
 	end
 
-	-- Populate arg[] before the script runs
+	-- Populate arg[]. toLua coerces the table automatically.
 	local args = opts.args or {}
-	local setArgItem = state:load(
-		"function(i, v) if not arg then arg = {} end arg[i] = v end"
-	)
-	setArgItem(0, chunkName)
-	for i, v in ipairs(args) do
-		setArgItem(i, v)
-	end
+	local argTbl = state:table()
+	argTbl[0] = chunkName
+	for i, v in ipairs(args) do argTbl[i] = v end
+	g.arg = argTbl
 
 	-- Start profiler if requested
 	local stopProfiler
