@@ -14,7 +14,10 @@ local global = {}
 package.loaded[(...)] = global
 
 global.getConfig = require("lde-core.global.config")
-global.currentVersion = "0.9.1"
+global.currentVersion = (function()
+	local ok, v = pcall(require, "lde.version")
+	return ok and v or "0.9.1"
+end)()
 
 ---@class lde.Portfile
 ---@field name string
