@@ -136,7 +136,13 @@ This means multiple `lde run` calls in the same process don't pollute each other
 
 ## Bootstrap Mode
 
-`lde` can be built with `BOOTSTRAP=1` using stock LuaJIT (no existing `lde` binary required). In this mode, `packages/lde/src/init.lua` manually creates symlinks in `target/` for all dependencies instead of using the normal install flow.
+`lde` can be bootstrapped using stock LuaJIT (no existing `lde` binary required) via `minilde.lua`:
+
+```sh
+luajit minilde.lua -C packages/lde run -- compile
+```
+
+`minilde.lua` supports `-C <dir>` to change working directory before running, and `run -- <args>` to build and execute the package's entry point. After bootstrapping, copy the resulting binary to `~/.lde/lde`.
 
 ## Naming
 
