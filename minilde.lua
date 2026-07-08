@@ -171,6 +171,11 @@ local function buildPackage(packagePath, targetDir)
 				local res = os.execute(cmd)
 				assert(res == 0 or res == true, "failed to execute " .. cmd)
 			end
+			function build:cc(args)
+				local cmd = table.concat(args, " ")
+				local res = os.execute(cmd)
+				assert(res == 0 or res == true, "cc failed: " .. cmd)
+			end
 		end
 
 		package.loaded["lde-build"] = setmetatable({ outDir = outputDir }, build)
