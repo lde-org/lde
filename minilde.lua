@@ -11,6 +11,21 @@ end
 
 local isWindows = separator == '\\'
 
+-- On Windows, os.execute uses cmd.exe which doesn't understand Unix commands.
+-- Use _spawnlp to invoke bash directly, bypassing cmd.exe entirely.
+-- _P_WAIT = 2 (suspends caller until child exits, returns child exit code).
+local function sh(cmd)
+	if isWindows then
+		local ffi = require("ffi")
+		pcall(ffi.cdef, [[int _spawnlp(int mode, const char *cmdname, const char *arg0, ...);]])
+		-- bash uses forward slashes; convert backslashes in the command string
+		cmd = cmd:gsub("\\", "/")
+		local _P_WAIT = 2
+		return ffi.C._spawnlp(_P_WAIT, "bash", "bash", "-c", cmd, ffi.cast("char *", nil))
+	end
+	return os.execute(cmd)
+end
+
 ---@param path string
 local function exists(path)
 	local ok, _, code = os.rename(path, path)
@@ -24,16 +39,13 @@ end
 ---@param dir string
 local function mkdir(dir)
 	if exists(dir) then return end
-	os.execute(isWindows and ('mkdir "' .. dir .. '"') or ('mkdir -p "' .. dir .. '"'))
+	sh('mkdir -p "' .. dir .. '"')
 end
 
 ---@type fun(src: string, dest: string)
 local function mklink(src, dest)
 	if exists(dest) then return end
-	os.execute(
-		isWindows and ('mklink /D "' .. dest .. '" "' .. src .. '"')
-		or ("ln -sf '" .. src .. "' '" .. dest .. "'")
-	)
+	sh("ln -sf '" .. src .. "' '" .. dest .. "'")
 end
 
 ---@type fun(handle: file*?): string?
@@ -59,24 +71,13 @@ end
 
 ---@type fun(path: string)
 local function rm(path)
-	os.execute(isWindows and ('rmdir /S /Q "' .. path .. '"') or ('rm -rf "' .. path .. '"'))
+	sh('rm -rf "' .. path .. '"')
 end
 
 ---@type fun(src: string, dest: string) # Recursive copy
 local function copy(src, dest)
 	if not exists(src) then return end
-
-	if isWindows then
-		-- robocopy handles both files and directories; exit codes 0-7 are success
-		local isDir = os.execute('if exist "' .. src .. '\\" (exit 0) else (exit 1)') == 0
-		if isDir then
-			os.execute('robocopy /E /NFL /NDL /NJH /NJS /nc /ns /np "' .. src .. '" "' .. dest .. '" > NUL')
-		else
-			os.execute('copy /Y "' .. src .. '" "' .. dest .. '" > NUL')
-		end
-	else
-		os.execute('cp -rL "' .. src .. '" "' .. dest .. '"')
-	end
+	sh('cp -rL "' .. src .. '" "' .. dest .. '"')
 end
 
 ---@type fun(b: string): any? # Tiny json decoder with very basic support for what we will use in lde.json files
@@ -166,22 +167,33 @@ local function buildPackage(packagePath, targetDir)
 
 		---@format disable-next
 		do
-			function build:fetch(url) return assert(readhandle(io.popen("curl -sL " .. url)), "failed to fetch " .. url) end
+			function build:fetch(url)
+				local tmp = join(tmpLDEDir, "fetch-" .. tostring(os.time()))
+				sh('curl -fsSL "' .. url .. '" -o "' .. tmp .. '"')
+				local content = assert(read(tmp), "failed to read fetched file from " .. tmp)
+				sh('rm -f "' .. tmp .. '"')
+				return content
+			end
 			function build:write(rel, content) write(join(outputDir, rel), content) end
 			function build:read(rel) return read(join(outputDir, rel)) end
-			function build:extract(rel, dest) mkdir(join(outputDir, dest)); os.execute('tar ' .. (ffi.os == "Windows" and "--force-local " or "") .. '-xzf "' .. join(outputDir, rel) .. '" -C "' .. join(outputDir, dest) .. '"') end
+			function build:extract(rel, dest)
+				mkdir(join(outputDir, dest))
+				local src = join(outputDir, rel)
+				local dst = join(outputDir, dest)
+				sh('tar -xzf "' .. src .. '" -C "' .. dst .. '"')
+			end
 			function build:copy(rel, dest) copy(join(outputDir, rel), join(outputDir, dest)) end
 			function build:delete(rel) rm(join(outputDir, rel)) end
 			function build:move(rel, dest) os.rename(join(outputDir, rel), join(outputDir, dest)) end
 			function build:exists(rel) return exists(join(outputDir, rel)) end
 			function build:sh(cmd)
-				local res = os.execute(cmd)
+				local res = sh(cmd)
 				assert(res == 0 or res == true, "failed to execute " .. cmd)
 			end
 			function build:cc(args)
 				local compiler = os.getenv("SEA_CC") or os.getenv("CC") or "gcc"
 				local cmd = compiler .. " " .. table.concat(args, " ")
-				local res = os.execute(cmd)
+				local res = sh(cmd)
 				assert(res == 0 or res == true, "cc failed: " .. cmd)
 			end
 		end
@@ -207,12 +219,13 @@ local function buildPackage(packagePath, targetDir)
 			if not exists(finalDir) then
 				local tarballUrl = dep.git .. "/archive/master.tar.gz"
 				local tarball = join(tmpLDEDir, "tar", name)
-				local curlOk = os.execute('curl -fsSL "' .. tarballUrl .. '" -o "' .. tarball .. '"')
+				local curlOk = sh('curl -fsSL "' .. tarballUrl .. '" -o "' .. tarball .. '"')
 				assert(curlOk == 0 or curlOk == true,
 					"failed to download " .. tarballUrl)
 				mkdir(finalDir)
-				-- --force-local prevents tar from treating drive letters (C:) as remote hosts on Windows
-				local tarOk = os.execute('tar ' .. (ffi.os == "Windows" and "--force-local " or "") .. '-xzf "' .. tarball .. '" --strip-components=1 -C "' .. finalDir .. '"')
+				-- On Windows, bsdtar misparses drive letters (C:) as remote hosts.
+				-- Use pushd to cd into the dest dir so neither -f nor -C see a drive letter path.
+				local tarOk = sh('tar -xzf "' .. tarball .. '" --strip-components=1 -C "' .. finalDir .. '"')
 				assert(tarOk == 0 or tarOk == true,
 					"failed to extract tarball for " .. name .. " — repo may use submodules (not supported in bootstrap mode)")
 			end

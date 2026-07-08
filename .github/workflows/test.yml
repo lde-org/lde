@@ -102,11 +102,13 @@ jobs:
         # so we must compile a fresh binary from source before running tests.
         # Using the pre-installed nightly binary would miss any CLI changes in this PR.
         if: "!matrix.android"
+        shell: bash
         run: |
           lde -C ./packages/lde run -- compile --outfile ${{ env.OUTFILE }}
 
       - name: Run tests
         if: "!matrix.android"
+        shell: bash
         run: ./packages/lde/${{ env.OUTFILE }} test
 
       - name: Fix workspace permissions (Android)
