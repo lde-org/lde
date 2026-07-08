@@ -46,12 +46,12 @@ end
 
 ---@type fun(path: string): string?
 local function read(path)
-	return readhandle(io.open(path, "r"))
+	return readhandle(io.open(path, "rb"))
 end
 
 ---@type fun(path: string, content: string)
 local function write(path, content)
-	local file = io.open(path, "w")
+	local file = io.open(path, "wb")
 	if not file then return end
 	file:write(content)
 	file:close()
@@ -66,10 +66,17 @@ end
 local function copy(src, dest)
 	if not exists(src) then return end
 
-	os.execute(
-		isWindows and ('xcopy /E /I /Y "' .. src .. '" "' .. dest .. '"')
-		or ('cp -rL "' .. src .. '" "' .. dest .. '"')
-	)
+	if isWindows then
+		-- robocopy handles both files and directories; exit codes 0-7 are success
+		local isDir = os.execute('if exist "' .. src .. '\\" (exit 0) else (exit 1)') == 0
+		if isDir then
+			os.execute('robocopy /E /NFL /NDL /NJH /NJS /nc /ns /np "' .. src .. '" "' .. dest .. '" > NUL')
+		else
+			os.execute('copy /Y "' .. src .. '" "' .. dest .. '" > NUL')
+		end
+	else
+		os.execute('cp -rL "' .. src .. '" "' .. dest .. '"')
+	end
 end
 
 ---@type fun(b: string): any? # Tiny json decoder with very basic support for what we will use in lde.json files
@@ -162,7 +169,7 @@ local function buildPackage(packagePath, targetDir)
 			function build:fetch(url) return assert(readhandle(io.popen("curl -sL " .. url)), "failed to fetch " .. url) end
 			function build:write(rel, content) write(join(outputDir, rel), content) end
 			function build:read(rel) return read(join(outputDir, rel)) end
-			function build:extract(rel, dest) mkdir(join(outputDir, dest)); os.execute('tar --force-local -xzf "' .. join(outputDir, rel) .. '" -C "' .. join(outputDir, dest) .. '"') end
+			function build:extract(rel, dest) mkdir(join(outputDir, dest)); os.execute('tar ' .. (ffi.os == "Windows" and "--force-local " or "") .. '-xzf "' .. join(outputDir, rel) .. '" -C "' .. join(outputDir, dest) .. '"') end
 			function build:copy(rel, dest) copy(join(outputDir, rel), join(outputDir, dest)) end
 			function build:delete(rel) rm(join(outputDir, rel)) end
 			function build:move(rel, dest) os.rename(join(outputDir, rel), join(outputDir, dest)) end
@@ -204,8 +211,8 @@ local function buildPackage(packagePath, targetDir)
 				assert(curlOk == 0 or curlOk == true,
 					"failed to download " .. tarballUrl)
 				mkdir(finalDir)
-				-- --force-local prevents tar from treating drive letters (C:) as remote hosts
-				local tarOk = os.execute('tar --force-local -xzf "' .. tarball .. '" --strip-components=1 -C "' .. finalDir .. '"')
+				-- --force-local prevents tar from treating drive letters (C:) as remote hosts on Windows
+				local tarOk = os.execute('tar ' .. (ffi.os == "Windows" and "--force-local " or "") .. '-xzf "' .. tarball .. '" --strip-components=1 -C "' .. finalDir .. '"')
 				assert(tarOk == 0 or tarOk == true,
 					"failed to extract tarball for " .. name .. " — repo may use submodules (not supported in bootstrap mode)")
 			end
