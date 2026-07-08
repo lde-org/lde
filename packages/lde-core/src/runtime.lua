@@ -239,8 +239,9 @@ local function executeSource(source, chunkName, opts)
 		stopProfiler = startProfiler(state)
 	end
 
-	-- Execute the script
-	local ok, a, b, c, d, e, f = pcall(state.load, state, source)
+	-- Execute the script, passing args as varargs so { ... } in the script works
+	local chunk = state:load(source, chunkName)
+	local ok, a, b, c, d, e, f = pcall(chunk.eval, chunk, unpack(args))
 
 	-- Collect profiling results
 	if stopProfiler then

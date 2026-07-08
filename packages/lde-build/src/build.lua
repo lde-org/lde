@@ -147,7 +147,7 @@ function Instance.setup(state, outputDir, gccBin)
 	g._lde_build_sh      = function(cmd)            inst:sh(cmd)               end
 	g._lde_build_cc      = function(...)            return inst:cc({...})      end
 
-	state:load([[
+	state:eval([[
 		local _build = {
 			outDir   = _lde_build_outDir,
 			gccBin   = _lde_build_gccBin,

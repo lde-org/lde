@@ -127,7 +127,7 @@ end
 return M
 ]==]
 
-	state:load(string.format([[
+	state:eval(string.format([[
 		local _factory = assert(load(%q, "@lde-test.test"))()
 		local _instance = _factory.new()
 		package.preload["lde-test"] = function() return _instance end
