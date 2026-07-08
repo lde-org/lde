@@ -172,7 +172,8 @@ local function buildPackage(packagePath, targetDir)
 				assert(res == 0 or res == true, "failed to execute " .. cmd)
 			end
 			function build:cc(args)
-				local cmd = table.concat(args, " ")
+				local compiler = os.getenv("SEA_CC") or os.getenv("CC") or "gcc"
+				local cmd = compiler .. " " .. table.concat(args, " ")
 				local res = os.execute(cmd)
 				assert(res == 0 or res == true, "cc failed: " .. cmd)
 			end
