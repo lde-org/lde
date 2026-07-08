@@ -145,7 +145,7 @@ function Instance.setup(state, outputDir, gccBin)
 	g._lde_build_move    = function(rel, dest)      inst:move(rel, dest)        end
 	g._lde_build_exists  = function(rel)            return inst:exists(rel)     end
 	g._lde_build_sh      = function(cmd)            inst:sh(cmd)               end
-	g._lde_build_cc      = function(args)           return inst:cc(args)       end
+	g._lde_build_cc      = function(...)            return inst:cc({...})      end
 
 	state:load([[
 		local _build = {
@@ -160,7 +160,7 @@ function Instance.setup(state, outputDir, gccBin)
 			move     = function(self, rel, dest)  _lde_build_move(rel, dest)           end,
 			exists   = function(self, rel)        return _lde_build_exists(rel)        end,
 			sh       = function(self, cmd)        _lde_build_sh(cmd)                   end,
-			cc       = function(self, args)       return _lde_build_cc(args)           end,
+			cc       = function(self, args)       return _lde_build_cc(unpack(args))           end,
 		}
 		package.preload["lde-build"] = function() return _build end
 		package.preload["lpm-build"] = function() return _build end
