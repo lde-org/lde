@@ -208,7 +208,7 @@ local function runTestFile(testFile, luaPath, luaCPath, reporter)
 	-- debug.getinfo(1,"S").source inside the guest returns the correct path.
 	-- This is required by packages like git2-sys that locate native libraries
 	-- relative to their own source file at load time.
-	local ok, err = pcall(state.load, state, source, "@" .. testFile)
+	local ok, err = pcall(state.eval, state, source, "@" .. testFile)
 	if ok then
 		local runFn = g._lde_test_run
 		ok, err = pcall(runFn)
