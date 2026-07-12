@@ -97,7 +97,7 @@ local function defaultBuildFn(pkg, outputDir)
 	local oldCwd = env.cwd()
 	env.chdir(cwd)
 
-	local ok, err = pcall(state.load, state, source)
+	local ok, err = pcall(state.eval, state, source)
 
 	env.chdir(oldCwd)
 	env.set("LDE_OUTPUT_DIR", "")
