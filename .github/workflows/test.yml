@@ -102,11 +102,13 @@ jobs:
         # so we must compile a fresh binary from source before running tests.
         # Using the pre-installed nightly binary would miss any CLI changes in this PR.
         if: "!matrix.android"
+        shell: bash
         run: |
           lde -C ./packages/lde run -- compile --outfile ${{ env.OUTFILE }}
 
       - name: Run tests
         if: "!matrix.android"
+        shell: bash
         run: ./packages/lde/${{ env.OUTFILE }} test
 
       - name: Fix workspace permissions (Android)
@@ -141,4 +143,4 @@ jobs:
             -v ${{ github.workspace }}:/workspace \
             -w /workspace \
             termux-android:latest \
-            bash -c "/workspace/lde --setup && cd /workspace/packages/lde && /workspace/lde compile --outfile /workspace/packages/lde/${{ env.OUTFILE }} && cd /workspace && /workspace/packages/lde/${{ env.OUTFILE }} test"
+            bash -c "/workspace/lde --setup && /workspace/lde -C /workspace/packages/lde run -- compile --outfile /workspace/packages/lde/${{ env.OUTFILE }} && cd /workspace && /workspace/packages/lde/${{ env.OUTFILE }} test"

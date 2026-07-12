@@ -59,15 +59,54 @@ local function defaultBuildFn(pkg, outputDir)
 		return nil, "No build script found: " .. buildScriptPath
 	end
 
-	local buildMod = require("lde-build.build")
-	local buildInstance = buildMod.new(outputDir)
+	local source = fs.read(buildScriptPath)
+	if not source then
+		return nil, "Could not read build script: " .. buildScriptPath
+	end
 
-	return pkg:runFile(buildScriptPath, nil, {
-		LDE_OUTPUT_DIR = outputDir,
-		LPM_OUTPUT_DIR = outputDir -- compat
-	}, nil, nil, nil, {
-		["lde-build"] = function() return buildInstance end
-	})
+	local lua = require("lua-sys")
+	local Instance = require("lde-build.build")
+
+	local luaPath, luaCPath = require("lde-core.package.run").getLuaPaths(pkg)
+	local state = lua.new()
+	local g     = state:globals()
+	g.package.path  = luaPath
+	g.package.cpath = luaCPath
+
+	-- Set LDE_OUTPUT_DIR so build scripts can read it via os.getenv
+	env.set("LDE_OUTPUT_DIR", outputDir)
+	env.set("LPM_OUTPUT_DIR", outputDir)
+
+	-- Expose the gcc binary and, on Windows, prepend its directory to PATH so
+	-- child processes spawned by build:sh() (cmake, ninja, etc.) can find it.
+	local gccBin = global.getGCCBin()
+	local oldCC  = env.var("CC") or ""
+	local oldPATH = env.var("PATH") or ""
+	env.set("CC", gccBin)
+	if jit.os == "Windows" then
+		local mingwBinDir = path.dirname(gccBin)
+		if not oldPATH:find(mingwBinDir, 1, true) then
+			env.set("PATH", mingwBinDir .. ";" .. oldPATH)
+		end
+	end
+
+	-- Inject lde-build instance into the guest state
+	Instance.setup(state, outputDir, gccBin)
+
+	local cwd = pkg:getDir()
+	local oldCwd = env.cwd()
+	env.chdir(cwd)
+
+	local ok, err = pcall(state.eval, state, source)
+
+	env.chdir(oldCwd)
+	env.set("LDE_OUTPUT_DIR", "")
+	env.set("LPM_OUTPUT_DIR", "")
+	env.set("CC", oldCC)
+	if jit.os == "Windows" then env.set("PATH", oldPATH) end
+	state:close()
+
+	return ok, err
 end
 
 function Package:hasBuildScript()

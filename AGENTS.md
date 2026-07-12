@@ -92,6 +92,17 @@ Lockfile is `lde.lock`. The `target/` directory is the build output — never co
 - **Build script**: if `build.lua` exists at the package root, it's executed with `LDE_OUTPUT_DIR` set to the output path. Otherwise, `src/` is symlinked directly into `target/<name>`.
 - `target/.installed` stores an FNV1a hash of `lde.lock` as a fast-path cache — if it matches, install is skipped entirely.
 
+## Clearing Caches
+
+If you see stale build artifacts, broken symlinks, or unexpected module-not-found errors, clear all local caches and reinstall from scratch:
+
+```sh
+# From the repo root — removes all package targets, lockfiles, and the git dep cache
+rm -rf ./packages/*/target ./packages/*/lde.lock ~/.lde/git
+```
+
+This is required after changes that switch a package between having/not having a `build.lua` (symlink ↔ real directory), after updating `lde` itself to a version with a different runtime, or after any change to a native dependency (lua-sys, git2-sys, curl-sys, deflate-sys).
+
 ## Updating the `lde` Binary
 
 After making changes to any package source, rebuild the binary:
@@ -136,7 +147,13 @@ This means multiple `lde run` calls in the same process don't pollute each other
 
 ## Bootstrap Mode
 
-`lde` can be built with `BOOTSTRAP=1` using stock LuaJIT (no existing `lde` binary required). In this mode, `packages/lde/src/init.lua` manually creates symlinks in `target/` for all dependencies instead of using the normal install flow.
+`lde` can be bootstrapped using stock LuaJIT (no existing `lde` binary required) via `minilde.lua`:
+
+```sh
+luajit minilde.lua -C packages/lde run -- compile
+```
+
+`minilde.lua` supports `-C <dir>` to change working directory before running, and `run -- <args>` to build and execute the package's entry point. After bootstrapping, copy the resulting binary to `~/.lde/lde`.
 
 ## Naming
 

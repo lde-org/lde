@@ -11,7 +11,7 @@ local ansi = require("ansi")
 
 local util = require("util")
 
-local ljDistRepo = "lde-org/lj-dist"
+local ljDistRepo = "lde-org/luajit"
 local ljDistTag = "latest"
 
 local function getPlatformArch()
@@ -223,7 +223,7 @@ function sea.compile(main, source, sharedLibs, compiler)
 		}
 	}]], id, id, id, id, id, lib.name, id, id)
 
-		local luaopenSym                    = "luaopen_" .. lib.name:gsub("%.", "_")
+		local luaopenSym                    = "luaopen_" .. lib.name:gsub("[%.-]", "_")
 		libPreloads[#libPreloads + 1]       = string.format([[
 	lua_pushstring(L, %sLibraryPath);
 	lua_pushstring(L, "%s");
@@ -409,6 +409,8 @@ int main(int argc, char** argv) {
 		args[#args + 1] = "-Wl,--export-dynamic" -- expose lua symbols for lua dependencies
 	elseif jit.os == "OSX" then
 		args[#args + 1] = "-Wl,-export_dynamic" -- expose lua symbols for lua dependencies
+	elseif jit.os == "Windows" then
+		args[#args + 1] = "-Wl,--export-all-symbols"
 	end
 	local execEnv
 	if jit.os == "Windows" and compiler ~= "gcc" then

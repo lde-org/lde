@@ -95,7 +95,7 @@ jobs:
         shell: bash
         run: |
           curl -fL -o luajit.tar.gz \
-            "https://github.com/lde-org/lj-dist/releases/download/latest/${{ matrix.luajit_tarball }}"
+            "https://github.com/lde-org/luajit/releases/download/latest/${{ matrix.luajit_tarball }}"
           mkdir luajit-dist
           tar -xzf luajit.tar.gz -C luajit-dist --strip-components=1
           rm luajit.tar.gz

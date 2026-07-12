@@ -11,6 +11,21 @@ end
 
 local isWindows = separator == '\\'
 
+-- On Windows, os.execute uses cmd.exe which doesn't understand Unix commands.
+-- Use _spawnlp to invoke bash directly, bypassing cmd.exe entirely.
+-- _P_WAIT = 2 (suspends caller until child exits, returns child exit code).
+local function sh(cmd)
+	if isWindows then
+		local ffi = require("ffi")
+		pcall(ffi.cdef, [[int _spawnlp(int mode, const char *cmdname, const char *arg0, ...);]])
+		-- bash uses forward slashes; convert backslashes in the command string
+		cmd = cmd:gsub("\\", "/")
+		local _P_WAIT = 2
+		return ffi.C._spawnlp(_P_WAIT, "bash", "bash", "-c", cmd, ffi.cast("char *", nil))
+	end
+	return os.execute(cmd)
+end
+
 ---@param path string
 local function exists(path)
 	local ok, _, code = os.rename(path, path)
@@ -24,16 +39,13 @@ end
 ---@param dir string
 local function mkdir(dir)
 	if exists(dir) then return end
-	os.execute(isWindows and ('mkdir "' .. dir .. '"') or ('mkdir -p "' .. dir .. '"'))
+	sh('mkdir -p "' .. dir .. '"')
 end
 
 ---@type fun(src: string, dest: string)
 local function mklink(src, dest)
 	if exists(dest) then return end
-	os.execute(
-		isWindows and ('mklink /D "' .. dest .. '" "' .. src .. '"')
-		or ("ln -sf '" .. src .. "' '" .. dest .. "'")
-	)
+	sh("ln -sf '" .. src .. "' '" .. dest .. "'")
 end
 
 ---@type fun(handle: file*?): string?
@@ -46,12 +58,12 @@ end
 
 ---@type fun(path: string): string?
 local function read(path)
-	return readhandle(io.open(path, "r"))
+	return readhandle(io.open(path, "rb"))
 end
 
 ---@type fun(path: string, content: string)
 local function write(path, content)
-	local file = io.open(path, "w")
+	local file = io.open(path, "wb")
 	if not file then return end
 	file:write(content)
 	file:close()
@@ -59,17 +71,13 @@ end
 
 ---@type fun(path: string)
 local function rm(path)
-	os.execute(isWindows and ('rmdir /S /Q "' .. path .. '"') or ('rm -rf "' .. path .. '"'))
+	sh('rm -rf "' .. path .. '"')
 end
 
 ---@type fun(src: string, dest: string) # Recursive copy
 local function copy(src, dest)
 	if not exists(src) then return end
-
-	os.execute(
-		isWindows and ('xcopy /E /I /Y "' .. src .. '" "' .. dest .. '"')
-		or ('cp -rL "' .. src .. '" "' .. dest .. '"')
-	)
+	sh('cp -rL "' .. src .. '" "' .. dest .. '"')
 end
 
 ---@type fun(b: string): any? # Tiny json decoder with very basic support for what we will use in lde.json files
@@ -159,17 +167,34 @@ local function buildPackage(packagePath, targetDir)
 
 		---@format disable-next
 		do
-			function build:fetch(url) return assert(readhandle(io.popen("curl -sL " .. url)), "failed to fetch " .. url) end
+			function build:fetch(url)
+				local tmp = join(tmpLDEDir, "fetch-" .. tostring(os.time()))
+				sh('curl -fsSL "' .. url .. '" -o "' .. tmp .. '"')
+				local content = assert(read(tmp), "failed to read fetched file from " .. tmp)
+				sh('rm -f "' .. tmp .. '"')
+				return content
+			end
 			function build:write(rel, content) write(join(outputDir, rel), content) end
 			function build:read(rel) return read(join(outputDir, rel)) end
-			function build:extract(rel, dest) mkdir(join(outputDir, dest)); os.execute('tar -xzf "' .. join(outputDir, rel) .. '" -C "' .. join(outputDir, dest) .. '"') end
+			function build:extract(rel, dest)
+				mkdir(join(outputDir, dest))
+				local src = join(outputDir, rel)
+				local dst = join(outputDir, dest)
+				sh('tar -xzf "' .. src .. '" -C "' .. dst .. '"')
+			end
 			function build:copy(rel, dest) copy(join(outputDir, rel), join(outputDir, dest)) end
 			function build:delete(rel) rm(join(outputDir, rel)) end
 			function build:move(rel, dest) os.rename(join(outputDir, rel), join(outputDir, dest)) end
 			function build:exists(rel) return exists(join(outputDir, rel)) end
 			function build:sh(cmd)
-				local res = os.execute(cmd)
+				local res = sh(cmd)
 				assert(res == 0 or res == true, "failed to execute " .. cmd)
+			end
+			function build:cc(args)
+				local compiler = os.getenv("SEA_CC") or os.getenv("CC") or "gcc"
+				local cmd = compiler .. " " .. table.concat(args, " ")
+				local res = sh(cmd)
+				assert(res == 0 or res == true, "cc failed: " .. cmd)
 			end
 		end
 
@@ -193,9 +218,16 @@ local function buildPackage(packagePath, targetDir)
 			local finalDir = join(tmpLDEDir, "git", name)
 			if not exists(finalDir) then
 				local tarballUrl = dep.git .. "/archive/master.tar.gz"
-				os.execute("curl -s -L " .. tarballUrl .. " -o " .. join(tmpLDEDir, "tar", name))
+				local tarball = join(tmpLDEDir, "tar", name)
+				local curlOk = sh('curl -fsSL "' .. tarballUrl .. '" -o "' .. tarball .. '"')
+				assert(curlOk == 0 or curlOk == true,
+					"failed to download " .. tarballUrl)
 				mkdir(finalDir)
-				os.execute("tar -xzf " .. join(tmpLDEDir, "tar", name) .. " --strip-components=1 -C " .. finalDir)
+				-- On Windows, bsdtar misparses drive letters (C:) as remote hosts.
+				-- Use pushd to cd into the dest dir so neither -f nor -C see a drive letter path.
+				local tarOk = sh('tar -xzf "' .. tarball .. '" --strip-components=1 -C "' .. finalDir .. '"')
+				assert(tarOk == 0 or tarOk == true,
+					"failed to extract tarball for " .. name .. " — repo may use submodules (not supported in bootstrap mode)")
 			end
 
 			buildPackage(finalDir, targetDir)
@@ -217,11 +249,20 @@ local function build()
 end
 
 if #args == 0 then
-	print("Usage: minilde <command>")
+	print("Usage: minilde [-C <dir>] <command>")
 	print("Commands:")
 	print("  run: build and run the package")
 
 	return
+end
+
+-- -C <dir>: change working directory before doing anything
+if args[1] == "-C" then
+	table.remove(args, 1)
+	local dir = assert(table.remove(args, 1), "minilde: -C requires a directory argument")
+	pcall(ffi.cdef, isWindows and "int _chdir(const char *path);" or "int chdir(const char *path);")
+	local chdir = isWindows and ffi.C._chdir or ffi.C.chdir
+	assert(chdir(dir) == 0, "minilde: -C: cannot chdir to '" .. dir .. "'")
 end
 
 if pop() == "run" then
@@ -231,6 +272,10 @@ if pop() == "run" then
 	package.path = join(cwd, "target", "?.lua") .. ";" ..
 		join(cwd, "target", "?", "init.lua") .. ";" ..
 		package.path
+	package.cpath = join(cwd, "target", "?.so") .. ";" ..
+		join(cwd, "target", "?.dll") .. ";" ..
+		join(cwd, "target", "?.dylib") .. ";" ..
+		package.cpath
 
 	local extraArgs = {}
 	local foundSep = false
