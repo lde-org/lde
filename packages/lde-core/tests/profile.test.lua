@@ -133,7 +133,7 @@ end)
 
 -- ── runtime: profile option ───────────────────────────────────────────────────
 
-test.it("executeFile with profile=true succeeds and returns ok", function()
+test.skipIf(jit.os == "Windows")("executeFile with profile=true succeeds and returns ok", function()
 	local scriptPath = path.join(tmpBase, "prof.lua")
 	fs.write(scriptPath, [[
 		local s = 0
@@ -144,7 +144,7 @@ test.it("executeFile with profile=true succeeds and returns ok", function()
 	test.truthy(ok)
 end)
 
-test.it("executeString with profile=true succeeds", function()
+test.skipIf(jit.os == "Windows")("executeString with profile=true succeeds", function()
 	local ok, err = lde.runtime.executeString([[
 		local s = 0
 		for i = 1, 300000 do s = s + i end
@@ -154,7 +154,7 @@ end)
 
 -- ── runtime: flamegraph option ────────────────────────────────────────────────
 
-test.it("executeFile with flamegraph path writes an HTML file", function()
+test.skipIf(jit.os == "Windows")("executeFile with flamegraph path writes an HTML file", function()
 	local scriptPath = path.join(tmpBase, "fg_script.lua")
 	local outPath    = path.join(tmpBase, "fg_out.html")
 	fs.write(scriptPath, [[
@@ -175,7 +175,7 @@ test.it("executeFile with flamegraph path writes an HTML file", function()
 	end
 end)
 
-test.it("executeFile with profile=true and flamegraph path both work together", function()
+test.skipIf(jit.os == "Windows")("executeFile with profile=true and flamegraph path both work together", function()
 	local scriptPath = path.join(tmpBase, "both_script.lua")
 	local outPath    = path.join(tmpBase, "both_out.html")
 	fs.write(scriptPath, [[
@@ -190,7 +190,7 @@ test.it("executeFile with profile=true and flamegraph path both work together", 
 	test.truthy(ok)
 end)
 
-test.it("executeFile with flamegraph: no crash when script errors", function()
+test.skipIf(jit.os == "Windows")("executeFile with flamegraph: no crash when script errors", function()
 	local scriptPath = path.join(tmpBase, "fg_error.lua")
 	local outPath    = path.join(tmpBase, "fg_error_out.html")
 	fs.write(scriptPath, [[

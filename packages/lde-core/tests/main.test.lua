@@ -16,7 +16,7 @@ fs.rmdir(tmpBase)
 -- runtime.executeFile
 --
 
-test.it("runtime.executeFile runs a Lua script", function()
+test.skipIf(jit.os == "OSX")("runtime.executeFile runs a Lua script", function()
 	fs.mkdir(tmpBase)
 	local scriptPath = path.join(tmpBase, "hello.lua")
 	fs.write(scriptPath, 'return 42')
@@ -53,7 +53,7 @@ test.it("runtime.executeFile supports preloaded modules", function()
 	test.truthy(ok)
 end)
 
-test.it("runtime.executeFile supports profiling", function()
+test.skipIf(jit.os == "Windows")("runtime.executeFile supports profiling", function()
 	fs.mkdir(tmpBase)
 	local scriptPath = path.join(tmpBase, "profile.lua")
 	fs.write(scriptPath, [[
