@@ -475,14 +475,30 @@ function global.writeWrapper(toolName, packageDir, packageName)
 	end
 end
 
-local MINGW_URL = "https://github.com/lde-org/mingw-dist/releases/download/latest/mingw-windows-x86-64.7z"
-local SEVENZ_URL = "https://github.com/lde-org/mingw-dist/releases/download/latest/7zr.exe"
+local TOOLCHAIN_BASE = "https://github.com/lde-org/toolchain-dist/releases/download/latest"
 
---- Ensures a MinGW toolchain exists at ~/.lde/mingw (Windows only).
---- Downloads 7zr.exe temporarily to extract the .7z archive.
-function global.ensureMingw()
+--- Ensures a toolchain exists at ~/.lde/mingw (Windows only).
+--- Downloads a 7z extractor temporarily to extract the .7z archive.
+--- Supports x86-64 and aarch64 (ARM64) Windows.
+---@param opts? { arch?: string } # override jit.arch for cross-compilation
+function global.ensureMingw(opts)
 	if jit.os ~= "Windows" then return end
-	if jit.arch ~= "x64" then return end
+
+	local arch = (opts and opts.arch) or jit.arch
+	-- Map LuaJIT arch to URL arch names
+	local urlArch, sevenZArch
+	if arch == "x64" then
+		urlArch = "x86-64"
+		sevenZArch = "x86_64"
+	elseif arch == "arm64" then
+		urlArch = "aarch64"
+		sevenZArch = "aarch64"
+	else
+		error("Unsupported architecture for toolchain: " .. arch)
+	end
+
+	local TOOLCHAIN_URL = TOOLCHAIN_BASE .. "/toolchain-windows-" .. urlArch .. ".7z"
+	local SEVENZ_URL = TOOLCHAIN_BASE .. "/7z-" .. sevenZArch .. ".exe"
 
 	local mingwDir = global.getMingwDir()
 	if fs.exists(path.join(mingwDir, "bin", "gcc.exe")) then return end
@@ -491,13 +507,13 @@ function global.ensureMingw()
 	local code = process.exec("gcc", { "--version" })
 	if code == 0 then return end
 
-	local p1 = lde.verbose and ansi.progress("Downloading 7zr.exe") or nil
+	local p1 = lde.verbose and ansi.progress("Downloading 7z extractor") or nil
 
 	local tmpDir = path.join(global.getDir(), "mingw-tmp")
 	fs.mkdir(tmpDir)
 
-	local sevenzPath = path.join(tmpDir, "7zr.exe")
-	local archivePath = path.join(tmpDir, "mingw.7z")
+	local sevenzPath = path.join(tmpDir, "7z.exe")
+	local archivePath = path.join(tmpDir, "toolchain.7z")
 
 	local dlOpts1
 	if p1 then
@@ -514,43 +530,43 @@ function global.ensureMingw()
 	local ok, dlErr = curl.download(SEVENZ_URL, sevenzPath, dlOpts1)
 	if not ok then
 		fs.rmdir(tmpDir)
-		if p1 then p1:fail("Downloading 7zr.exe") end
-		error("Failed to download 7zr.exe: " .. (dlErr or ""))
+		if p1 then p1:fail("Downloading 7z extractor") end
+		error("Failed to download 7z extractor: " .. (dlErr or ""))
 	end
-	if p1 then p1:done("Downloaded 7zr.exe") end
+	if p1 then p1:done("Downloaded 7z extractor") end
 
-	local p2 = lde.verbose and ansi.progress("Downloading MinGW toolchain") or nil
+	local p2 = lde.verbose and ansi.progress("Downloading toolchain") or nil
 	local dlOpts2
 	if p2 then
 		dlOpts2 = {
 			progress = function(dltotal, dlnow)
 				local ratio = dltotal > 0 and (dlnow / dltotal) or nil
 				local info = dltotal > 0
-					and (ansi.formatBytes(dlnow) .. " / " .. ansi.formatBytes(dltotal))
-					or ansi.formatBytes(dlnow)
+				and (ansi.formatBytes(dlnow) .. " / " .. ansi.formatBytes(dltotal))
+				or ansi.formatBytes(dlnow)
 				p2:update(ratio, info)
 			end
 		}
 	end
-	local ok2, dlErr2 = curl.download(MINGW_URL, archivePath, dlOpts2)
+	local ok2, dlErr2 = curl.download(TOOLCHAIN_URL, archivePath, dlOpts2)
 	if not ok2 then
 		fs.rmdir(tmpDir)
-		if p2 then p2:fail("Downloading MinGW toolchain") end
-		error("Failed to download MinGW archive: " .. (dlErr2 or ""))
+		if p2 then p2:fail("Downloading toolchain") end
+		error("Failed to download toolchain archive: " .. (dlErr2 or ""))
 	end
-	if p2 then p2:done("Downloaded MinGW toolchain") end
+	if p2 then p2:done("Downloaded toolchain") end
 
-	local p3 = lde.verbose and ansi.progress("Extracting MinGW toolchain") or nil
+	local p3 = lde.verbose and ansi.progress("Extracting toolchain") or nil
 	fs.mkdir(mingwDir)
 	code, _, stderr = process.exec(sevenzPath, { "x", archivePath, "-o" .. mingwDir, "-y" })
 	fs.rmdir(tmpDir)
 	if code ~= 0 then
 		fs.rmdir(mingwDir)
 		if p3 then p3:fail() end
-		error("Failed to extract MinGW archive: " .. (stderr or ""))
+		error("Failed to extract toolchain archive: " .. (stderr or ""))
 	end
 
-	-- The 7z contains a single top-level folder (mingw64); flatten it
+	-- The 7z contains a single top-level folder (toolchain); flatten it
 	local entries = fs.readdir(mingwDir)
 	local first = entries and entries()
 	if first and first.type == "dir" then
@@ -561,7 +577,7 @@ function global.ensureMingw()
 		fs.move(finalDir, mingwDir)
 	end
 
-	if p3 then p3:done("Extracted MinGW toolchain") end
+	if p3 then p3:done("Extracted toolchain") end
 end
 
 function global.init()
