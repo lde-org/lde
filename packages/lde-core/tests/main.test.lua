@@ -53,7 +53,7 @@ test.it("runtime.executeFile supports preloaded modules", function()
 	test.truthy(ok)
 end)
 
-test.skipIf(jit.os == "Windows")("runtime.executeFile supports profiling", function()
+test.it("runtime.executeFile supports profiling", function()
 	fs.mkdir(tmpBase)
 	local scriptPath = path.join(tmpBase, "profile.lua")
 	fs.write(scriptPath, [[
