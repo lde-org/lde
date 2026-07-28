@@ -400,8 +400,21 @@ int main(int argc, char** argv) {
 		"-I" .. includePath,
 		"-xc", "-",
 		"-o", outPath,
-		"-xnone", path.join(libPath, "libluajit.a")
+		"-xnone",
 	}
+
+	if jit.os == "Windows" then
+		-- Wrap libluajit.a in --whole-archive: link in ALL of its object
+		-- files, not just the ones lde itself references. Symbols only ever
+		-- called by C modules at runtime (e.g. luaJIT_profile_*) must be
+		-- physically present in the exe for --export-all-symbols below to
+		-- be able to export them.
+		args[#args + 1] = "-Wl,--whole-archive"
+		args[#args + 1] = path.join(libPath, "libluajit.a")
+		args[#args + 1] = "-Wl,--no-whole-archive"
+	else
+		args[#args + 1] = path.join(libPath, "libluajit.a")
+	end
 
 	if jit.os == "Linux" then
 		args[#args + 1] = "-lm"
@@ -410,6 +423,9 @@ int main(int argc, char** argv) {
 	elseif jit.os == "OSX" then
 		args[#args + 1] = "-Wl,-export_dynamic" -- expose lua symbols for lua dependencies
 	elseif jit.os == "Windows" then
+		-- Export lua symbols so C modules can resolve them from the process
+		-- image (GetModuleHandle(NULL) + GetProcAddress), matching the
+		-- --export-dynamic behavior on Linux/macOS.
 		args[#args + 1] = "-Wl,--export-all-symbols"
 	end
 	local execEnv
