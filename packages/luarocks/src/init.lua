@@ -11,6 +11,78 @@ local luarocks = {}
 ---@class luarocks.Manifest.Entry
 ---@field arch "rockspec" | "src" | string
 
+--- Byte helpers for locating package blocks in the manifest without invoking
+--- the Lua pattern engine (which is ~100x slower than a plain search over the
+--- multi-megabyte manifest).
+
+---@param b integer?
+---@return boolean
+local function isWordByte(b)
+	return b ~= nil and ((b >= 48 and b <= 57) or (b >= 65 and b <= 90) or (b >= 97 and b <= 122) or b == 95)
+end
+
+--- Skip whitespace (space, tab, newline, CR) starting at 1-based index i.
+---@param raw string
+---@param i integer
+---@return integer
+local function skipWS(raw, i)
+	local c = string.byte(raw, i)
+	while c == 32 or c == 9 or c == 10 or c == 13 do
+		i = i + 1
+		c = string.byte(raw, i)
+	end
+	return i
+end
+
+--- Given a position right after a key literal, verify it is followed by
+--- optional whitespace, "=", optional whitespace, "{". Returns the 1-based
+--- index of "{" or nil.
+---@param raw string
+---@param i integer
+---@return integer?
+local function keyEqBrace(raw, i)
+	i = skipWS(raw, i)
+	if string.byte(raw, i) ~= 61 then return nil end -- "="
+	i = skipWS(raw, i + 1)
+	if string.byte(raw, i) ~= 123 then return nil end -- "{"
+	return i
+end
+
+--- Find an unquoted identifier key: `name = {`.
+---@param raw string
+---@param name string
+---@return integer? bracePos
+local function findIdentKey(raw, name)
+	local pos = 1
+	local nlen = #name
+	while true do
+		local start = raw:find(name, pos, true)
+		if not start then return nil end
+		-- standalone identifier: previous and next byte are not word chars
+		if not isWordByte(string.byte(raw, start - 1)) and not isWordByte(string.byte(raw, start + nlen)) then
+			local brace = keyEqBrace(raw, start + nlen)
+			if brace then return brace end
+		end
+		pos = start + 1
+	end
+end
+
+--- Find a quoted key: `["name"] = {`.
+---@param raw string
+---@param name string
+---@return integer? bracePos
+local function findQuotedKey(raw, name)
+	local lit = '["' .. name .. '"]'
+	local pos = 1
+	while true do
+		local start = raw:find(lit, pos, true)
+		if not start then return nil end
+		local brace = keyEqBrace(raw, start + #lit)
+		if brace then return brace end
+		pos = start + 1
+	end
+end
+
 ---@class luarocks.Manifest
 ---@field _raw string
 local Manifest = {}
@@ -29,20 +101,13 @@ function Manifest:package(name)
 	if self._cache[name] ~= nil then return self._cache[name] or nil end
 
 	local raw = self._raw
-	local escaped = name:gsub("([%-%.%+%*%?%[%]%^%$%(%)%%])", "%%%1")
-	-- Try quoted key: ["name"] = {
-	local start = raw:find('%["' .. escaped .. '"%]%s*=%s*{')
-	-- Fall back to unquoted ident key with frontier pattern: name = {
-	if not start then
-		start = raw:find('%f[%w_]' .. escaped .. '%f[^%w_]%s*=%s*{')
-	end
-	if not start then
-		self._cache[name] = false; return nil
-	end
-
-	local braceStart = raw:find('{', start, true)
+	-- Find the package block with a plain (non-pattern) search. The published
+	-- manifest uses unquoted identifier keys ("busted = {"); a quoted form is
+	-- kept as a fallback for other serializers.
+	local braceStart = findIdentKey(raw, name) or findQuotedKey(raw, name)
 	if not braceStart then
-		self._cache[name] = false; return nil
+		self._cache[name] = false
+		return nil
 	end
 
 	-- Use memchr to scan for { and } to find the matching close brace
@@ -307,8 +372,26 @@ end
 ---@return "src"|"rockspec"|nil arch
 ---@return string? err
 function luarocks.getUrl(manifest, name, constraint)
+	local _, rockspecUrl, srcUrl, err = luarocks.getBest(manifest, name, constraint)
+	if not rockspecUrl and not srcUrl then return nil, nil, err end
+	if srcUrl then return srcUrl, "src" end
+	return rockspecUrl, "rockspec"
+end
+
+--- Resolves the best (constraint-satisfying) version of a package and the
+--- metadata + content artifacts to fetch for it. Both URLs belong to the same
+--- version, so graph resolution (rockspec) and content download (.src.rock)
+--- can never disagree on which version they target.
+---@param manifest luarocks.Manifest
+---@param name string
+---@param constraint string?
+---@return string? version
+---@return string? rockspecUrl  -- https://luarocks.org/<name>-<ver>.rockspec (nil if no rockspec entry)
+---@return string? srcUrl       -- https://luarocks.org/<name>-<ver>.src.rock (nil if no src entry)
+---@return string? err
+function luarocks.getBest(manifest, name, constraint)
 	local versions, err = manifest:package(name)
-	if not versions then return nil, nil, "Package not found in luarocks registry: " .. name end
+	if not versions then return nil, nil, nil, err end
 
 	-- Collect all versions that satisfy the constraint
 	local sorted = {}
@@ -336,24 +419,24 @@ function luarocks.getUrl(manifest, name, constraint)
 		end
 
 		local entries = versions[v]
-		if not entries then goto continue end
+		if entries then
+			local hasSrc, hasRockspec = false, false
+			for _, entry in ipairs(entries) do
+				if entry.arch == "src" then hasSrc = true end
+				if entry.arch == "rockspec" then hasRockspec = true end
+			end
 
-		local hasSrc, hasRockspec = false, false
-		for _, entry in ipairs(entries) do
-			if entry.arch == "src" then hasSrc = true end
-			if entry.arch == "rockspec" then hasRockspec = true end
-		end
-
-		if hasSrc then
-			return string.format("%s/%s-%s.src.rock", ROCKSPEC_BASE, name, v), "src"
-		elseif hasRockspec then
-			return string.format("%s/%s-%s.rockspec", ROCKSPEC_BASE, name, v), "rockspec"
+			local rockspecUrl = hasRockspec and string.format("%s/%s-%s.rockspec", ROCKSPEC_BASE, name, v) or nil
+			local srcUrl = hasSrc and string.format("%s/%s-%s.src.rock", ROCKSPEC_BASE, name, v) or nil
+			if rockspecUrl or srcUrl then
+				return v, rockspecUrl, srcUrl, nil
+			end
 		end
 
 		::continue::
 	end
 
-	return nil, nil, "No version of '" .. name .. "'" .. (constraint and (" satisfies: " .. constraint) or " found")
+	return nil, nil, nil, "No version of '" .. name .. "'" .. (constraint and (" satisfies: " .. constraint) or " found")
 end
 
 luarocks.Manifest = Manifest

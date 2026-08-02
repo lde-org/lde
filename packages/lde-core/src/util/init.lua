@@ -138,11 +138,14 @@ function util.openRockspecUrl(name, url, branch, commit)
 	return pkg, lockEntry, err
 end
 
---- Resolves a luarocks package name/version to a Package via the luarocks registry.
+--- Resolves a luarocks package name/version to its source URL + arch without
+--- downloading anything. Uses the persisted URL cache when possible.
 ---@param name string
 ---@param version string?
----@return lde.Package?, lde.Lockfile.Dependency?, string?
-function util.openLuarocksPackage(name, version)
+---@return string? url
+---@return "src"|"rockspec"|nil arch
+---@return string? err
+function util.resolveLuarocksSource(name, version)
 	-- For unversioned lookups, check the URL cache first to skip manifest scan
 	local cache = loadUrlCache()
 	local cacheKey = name .. (version and ("@" .. version) or "")
@@ -166,6 +169,59 @@ function util.openLuarocksPackage(name, version)
 			saveUrlCache()
 		end
 	end
+
+	return url, arch
+end
+
+--- Resolves the best version of a luarocks package plus the rockspec (metadata)
+--- and .src.rock (content) URLs for that exact version. Uses the persisted URL
+--- cache when possible; falls back to a manifest scan otherwise.
+---@param name string
+---@param constraint string?
+---@return string? version
+---@return string? rockspecUrl
+---@return string? srcUrl
+---@return string? err
+function util.resolveLuarocksBest(name, constraint)
+	-- URL cache fast path (unversioned lookups only)
+	local cache = loadUrlCache()
+	local cachedEntry = (not constraint) and cache[name] or nil
+	if cachedEntry then
+		local url = type(cachedEntry) == "table" and cachedEntry.url or cachedEntry
+		local arch = type(cachedEntry) == "table" and cachedEntry.arch or "rockspec"
+		local suffix = arch == "src" and "%.src%.rock$" or "%.rockspec$"
+		local version = url:match("^.*/" .. name:gsub("([%-%.%+%*%?%[%]%^%$%(%)%%])", "%%%1") .. "%-([^/]+)" .. suffix)
+		if version then
+			local rockspecUrl = url:gsub("%.src%.rock$", ".rockspec")
+			if arch == "src" then
+				return version, rockspecUrl, url
+			end
+			return version, url, nil
+		end
+	end
+
+	local manifest, err = getManifest()
+	if not manifest then return nil, nil, nil, err end
+
+	local v, rockspecUrl, srcUrl, uerr = luarocks.getBest(manifest, name, constraint)
+	if not v then return nil, nil, nil, uerr end
+
+	-- Cache unversioned resolutions for future invocations
+	if not constraint then
+		cache[name] = { url = srcUrl or rockspecUrl, arch = srcUrl and "src" or "rockspec" }
+		saveUrlCache()
+	end
+
+	return v, rockspecUrl, srcUrl, nil
+end
+
+--- Resolves a luarocks package name/version to a Package via the luarocks registry.
+---@param name string
+---@param version string?
+---@return lde.Package?, lde.Lockfile.Dependency?, string?
+function util.openLuarocksPackage(name, version)
+	local url, arch, uerr = util.resolveLuarocksSource(name, version)
+	if not url then return nil, nil, uerr end
 
 	if arch == "src" then
 		local archiveDir = lde.global.getOrInitArchive(url)
@@ -216,6 +272,77 @@ end
 ---@return luarocks.Manifest?, string?
 function util.getManifest()
 	return getManifest()
+end
+
+--- Cache file path for a rockspec URL.
+---@param url string
+---@return string
+function util.rockspecCacheFile(url)
+	return path.join(lde.global.getRockspecCacheDir(), (url:gsub("[^%w]", "_")))
+end
+
+--- Finds a named package inside a directory (monorepo support: lde.json can
+--- live anywhere in the tree). Checks the directory itself, then scans for
+--- lde.json / lpm.json config files.
+---@param dir string
+---@param packageName string
+---@param rockspec string?
+---@return lde.Package?
+---@return string?
+function util.findNamedPackage(dir, packageName, rockspec)
+	local pkg = lde.Package.open(dir, rockspec)
+	if pkg and pkg:getName() == packageName then return pkg, nil end
+
+	for _, config in ipairs(fs.scan(dir, "**" .. path.separator .. "lde.json")) do
+		pkg = lde.Package.open(path.join(dir, path.dirname(config)))
+		if pkg and pkg:getName() == packageName then return pkg, nil end
+	end
+
+	-- Compatibility
+	for _, config in ipairs(fs.scan(dir, "**" .. path.separator .. "lpm.json")) do
+		pkg = lde.Package.open(path.join(dir, path.dirname(config)))
+		if pkg and pkg:getName() == packageName then return pkg, nil end
+	end
+
+	return nil, "No lde.json with name '" .. packageName .. "' found in: " .. dir
+end
+
+--- Opens the package inside an extracted .src.rock archive: finds the rockspec,
+--- a source subdir, and any nested archive (extracting it if needed).
+---@param archiveDir string
+---@param url string
+---@return lde.Package?, string?
+function util.openSrcRock(archiveDir, url)
+	local rockspecPath, srcDir, nestedArchive
+	local iter = fs.readdir(archiveDir)
+	if iter then
+		for entry in iter do
+			if entry.type == "file" and entry.name:match("%.rockspec$") then
+				rockspecPath = path.join(archiveDir, entry.name)
+			elseif entry.type == "dir" and not srcDir then
+				srcDir = path.join(archiveDir, entry.name)
+			elseif entry.type == "file" and (entry.name:match("%.zip$") or entry.name:match("%.tar%.[gbx]z2?$")) then
+				nestedArchive = path.join(archiveDir, entry.name)
+			end
+		end
+	end
+	if not rockspecPath then
+		return nil, "No rockspec found in src rock for '" .. (url or "?") .. "'"
+	end
+
+	-- If no subdir was found but a nested archive was, extract it now.
+	if not srcDir and nestedArchive then
+		srcDir = nestedArchive:gsub("%.tar%.[gbx]z2?$", ""):gsub("%.zip$", "")
+		if not fs.isdir(srcDir) then
+			fs.mkdir(srcDir)
+			local ok2, err2 = Archive.new(nestedArchive):extract(srcDir, { stripComponents = true })
+			if not ok2 then
+				return nil, "Failed to extract nested archive in src rock: " .. (err2 or "")
+			end
+		end
+	end
+
+	return lde.Package.openRockspec(srcDir or archiveDir, rockspecPath)
 end
 
 return util

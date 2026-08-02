@@ -310,13 +310,59 @@ function global.getOrInitGitRepo(repoName, repoUrl, branch, commit)
 	return repoDir, commit
 end
 
+--- Phase 1 of cached git-repo materialization: resolve the commit (lsRemote if
+--- needed) and compute where the repo tarball must be downloaded to.
+--- The tarball itself is not downloaded here — callers enqueue it into the
+--- parallel download session (or fall back to `getOrInitGitRepo`).
+---@param repoName string
+---@param repoUrl string
+---@param branch string?
+---@param commit string?
+---@return table plan  -- { dir, commit, tarballUrl?, archiveFile?, clone? }
+function global.planGitRepo(repoName, repoUrl, branch, commit)
+	if not commit then
+		local ref = branch and ("refs/heads/" .. branch) or "HEAD"
+		local sha, err = git2.lsRemote(repoUrl, ref)
+		if not sha then
+			error("Failed to resolve '" .. ref .. "' for " .. repoUrl .. ": " .. (err or ""))
+		end
+		commit = sha
+	end
+
+	local repoDir = global.getGitRepoDir(repoName, commit)
+	local plan = { dir = repoDir, commit = commit }
+
+	if not fs.exists(repoDir) then
+		local hostType = isRecognizedGitHost(repoUrl)
+		if hostType then
+			plan.tarballUrl = buildTarballUrl(repoUrl, commit, hostType)
+			plan.archiveFile = repoDir .. ".archive"
+		else
+			-- unrecognized host: git clone directly (not parallelizable via curl)
+			plan.clone = { repoName = repoName, repoUrl = repoUrl, commit = commit }
+		end
+	end
+
+	return plan
+end
+
+--- Extract a downloaded git tarball into its repo cache dir.
+---@param archiveFile string
+---@param repoDir string
+---@return boolean? ok
+---@return string? err
+function global.extractGitTarball(archiveFile, repoDir)
+	local ok, err = Archive.new(archiveFile):extract(repoDir, { stripComponents = true })
+	fs.delete(archiveFile)
+	return ok, err
+end
+
 --- Downloads and extracts an archive URL (.zip, .tar.gz, .tar.bz2, etc.) into the cache.
 --- Uses `tar -xf` which auto-detects format on all platforms (bsdtar on Windows 10+).
 ---@param url string
 ---@return string dir
 function global.getOrInitArchive(url)
-	local key = sanitize(url)
-	local archiveDir = path.join(global.getTarCacheDir(), key)
+	local archiveDir = global.getArchiveDir(url)
 	if not fs.exists(archiveDir) then
 		local filename = url:match("([^/]+)$") or url
 		local bar = lde.verbose and ansi.progress("Downloading " .. filename) or nil
@@ -343,29 +389,45 @@ function global.getOrInitArchive(url)
 			error("Failed to download archive '" .. url .. "': " .. (dlErr or ""))
 		end
 
-		local code2, err2
-		if url:match("%.src%.rock$") then
-			-- .src.rock is a zip with no single top-level dir; extract directly
-			local ok
-			ok, err2 = Archive.new(archiveFile):extract(archiveDir)
-			code2 = ok and 0 or 1
-		else
-			local ok
-			ok, err2 = Archive.new(archiveFile):extract(archiveDir, { stripComponents = true })
-			code2 = ok and 0 or 1
-		end
-
-		if code2 ~= 0 then
-			fs.rmdir(archiveDir)
-			fs.delete(archiveFile)
+		local ok2, err2 = global.extractArchive(url, archiveFile, archiveDir)
+		if not ok2 then
 			if bar then bar:fail("Downloading " .. filename) end
 			error("Failed to extract archive '" .. url .. "': " .. (err2 or ""))
 		end
 
-		fs.delete(archiveFile)
 		if bar then bar:done("Downloaded " .. filename) end
 	end
 	return archiveDir
+end
+
+--- Cache directory an archive URL extracts into.
+---@param url string
+---@return string
+function global.getArchiveDir(url)
+	return path.join(global.getTarCacheDir(), sanitize(url))
+end
+
+--- Extract a downloaded archive file into its cache directory.
+---@param url string
+---@param archiveFile string
+---@param archiveDir string
+---@return boolean? ok
+---@return string? err
+function global.extractArchive(url, archiveFile, archiveDir)
+	if not fs.exists(archiveFile) then
+		return nil, "missing downloaded archive: " .. archiveFile
+	end
+
+	local ok, err2
+	if url:match("%.src%.rock$") then
+		-- .src.rock is a zip with no single top-level dir; extract directly
+		ok, err2 = Archive.new(archiveFile):extract(archiveDir)
+	else
+		ok, err2 = Archive.new(archiveFile):extract(archiveDir, { stripComponents = true })
+	end
+
+	fs.delete(archiveFile)
+	return ok, err2
 end
 
 --- Parses a GitHub /tree/<branch> URL into a clone URL and branch.
