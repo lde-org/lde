@@ -87,6 +87,31 @@ test.it("installDependencies uses the lockfile commit to skip re-cloning", funct
 	test.equal(commit1, commit2)
 end)
 
+test.it("updateDependencies pins a newer git commit in the lockfile", function()
+	local dir = makeProjectWithGitDep("git-update-pins")
+	local pkg = lde.Package.open(dir)
+	pkg:installDependencies()
+
+	-- Simulate a stale lockfile pointing at a commit that is no longer HEAD.
+	local lockPath = path.join(dir, "lde.lock")
+	local lock = json.decode(fs.read(lockPath))
+	lock.dependencies[FIXTURE_NAME].commit = "0000000000000000000000000000000000000000"
+	fs.write(lockPath, json.encode(lock))
+
+	local results = pkg:updateDependencies()
+	test.truthy(results[FIXTURE_NAME].updated)
+
+	local newCommit = json.decode(fs.read(lockPath)).dependencies[FIXTURE_NAME].commit
+	test.truthy(newCommit:match("^%x+$"))
+	test.equal(#newCommit, 40)
+	-- the fake stale hash must have been replaced by the real remote HEAD
+	test.notEqual(newCommit, "0000000000000000000000000000000000000000")
+
+	-- A second update sees the now-pinned commit as up to date.
+	local results2 = pkg:updateDependencies()
+	test.falsy(results2[FIXTURE_NAME].updated)
+end)
+
 test.it("installDependencies respects a pinned commit in lde.json", function()
 	-- Get the current HEAD commit first via an unpinned install
 	local refDir = makeProjectWithGitDep("git-pin-ref")

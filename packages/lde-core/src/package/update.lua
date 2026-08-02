@@ -7,12 +7,14 @@ local luarocks = require("luarocks")
 local global = require("lde-core.global")
 local util = require("lde-core.util")
 
---- Checks a git dependency for newer commits via ls-remote.
+--- Checks a git dependency for newer commits via ls-remote and pins any
+--- newer commit in the lockfile.
+---@param package lde.Package
 ---@param name string
 ---@param depInfo lde.Package.Config.GitDependency
 ---@return boolean updated
 ---@return string message
-local function updateGitDependency(name, depInfo)
+local function updateGitDependency(package, name, depInfo)
 	local ref = depInfo.branch and ("refs/heads/" .. depInfo.branch) or "HEAD"
 	local latestCommit, err = git2.lsRemote(depInfo.git, ref)
 	if not latestCommit then
@@ -21,6 +23,16 @@ local function updateGitDependency(name, depInfo)
 
 	if depInfo.commit and latestCommit == depInfo.commit then
 		return false, "already up to date (" .. latestCommit:sub(1, 7) .. ")"
+	end
+
+	-- Pin the new commit in the lockfile so the next install uses it.
+	-- (Registry/luarocks updates write to lde.json instead; git commits only
+	-- live in the lockfile, which is what getDependencies() reports from.)
+	local lockfile = package:readLockfile()
+	local locked = lockfile and lockfile:getDependency(name)
+	if locked and locked.commit then
+		locked.commit = latestCommit
+		lockfile:save()
 	end
 
 	local msg = depInfo.commit
@@ -125,7 +137,7 @@ local function updateDependencies(package, dependencies)
 		if depInfo.version then ---@cast depInfo lde.Package.Config.RegistryDependency
 			updated, message = updateRegistryDependency(package, name, depInfo)
 		elseif depInfo.git then ---@cast depInfo lde.Package.Config.GitDependency
-			updated, message = updateGitDependency(name, depInfo)
+			updated, message = updateGitDependency(package, name, depInfo)
 		elseif depInfo.luarocks then
 			updated, message = updateLuarocksDependency(package, name, depInfo)
 		else
