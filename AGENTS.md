@@ -91,6 +91,7 @@ Lockfile is `lde.lock`. The `target/` directory is the build output — never co
 - `lde run` / `lde test` both call `pkg:build()` + `pkg:installDependencies()` automatically.
 - **Build script**: if `build.lua` exists at the package root, it's executed with `LDE_OUTPUT_DIR` set to the output path. Otherwise, `src/` is symlinked directly into `target/<name>`.
 - `target/.installed` stores an FNV1a hash of `lde.lock` as a fast-path cache — if it matches, install is skipped entirely.
+- `target/<name>/.lde-build-stamp` stores the size, mtime, and FNV1a hash of every build input (`src/**`, `lde.json`, `build.lua`) from the last build. Build scripts are skipped when the stored hashes still match; a file is only re-hashed if its size or mtime changed.
 
 ## Clearing Caches
 

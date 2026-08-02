@@ -80,6 +80,104 @@ test.it("Package:build is idempotent (can be called twice)", function()
 end)
 
 --
+-- Package:build input invalidation (build.lua packages)
+--
+
+test.it("build script is skipped when src/, lde.json, and build.lua are unchanged", function()
+	local dir = makePackageWithSrc("build-skip-unchanged", {
+		["init.lua"] = 'return 1'
+	})
+
+	-- Each run appends a marker; if the script were re-run the marker would grow.
+	fs.write(path.join(dir, "build.lua"), [[
+local f = assert(io.open("build-count.txt", "a"))
+f:write("x")
+f:close()
+]])
+
+	local pkg = lde.Package.open(dir)
+	pkg:build()
+	pkg:build()
+	pkg:build()
+
+	test.equal(fs.read(path.join(dir, "build-count.txt")), "x")
+	-- the stamp records the input state inside the output dir
+	test.truthy(fs.exists(path.join(dir, "target", pkg:getName(), ".lde-build-stamp")))
+end)
+
+test.it("build script is re-run when a src file changes", function()
+	local dir = makePackageWithSrc("build-rerun-src", {
+		["init.lua"] = 'return 1'
+	})
+
+	fs.write(path.join(dir, "build.lua"), [[
+local f = assert(io.open("build-count-src.txt", "a"))
+f:write("x")
+f:close()
+]])
+
+	local pkg = lde.Package.open(dir)
+	pkg:build()
+	-- Different size so the mtime/size fast path can't mask the change.
+	fs.write(path.join(dir, "src", "init.lua"), 'return 123456')
+	pkg:build()
+
+	test.equal(fs.read(path.join(dir, "build-count-src.txt")), "xx")
+end)
+
+test.it("build script is re-run when lde.json changes", function()
+	local dir = makePackageWithSrc("build-rerun-config", {
+		["init.lua"] = 'return 1'
+	})
+
+	fs.write(path.join(dir, "build.lua"), [[
+local f = assert(io.open("build-count-config.txt", "a"))
+f:write("x")
+f:close()
+]])
+
+	local pkg = lde.Package.open(dir)
+	pkg:build()
+
+	-- Rewrite with a clearly larger config so the mtime/size fast path can't mask it.
+	fs.write(path.join(dir, "lde.json"), json.encode({
+		name        = "build-rerun-config",
+		version     = "0.20.0",
+		description = "a longer config to change the file size",
+		dependencies = {}
+	}))
+	pkg:build()
+
+	test.equal(fs.read(path.join(dir, "build-count-config.txt")), "xx")
+end)
+
+test.it("build script is re-run when build.lua itself changes", function()
+	local dir = makePackageWithSrc("build-rerun-script", {
+		["init.lua"] = 'return 1'
+	})
+
+	fs.write(path.join(dir, "build.lua"), [[
+local f = assert(io.open("build-count-script.txt", "a"))
+f:write("x")
+f:close()
+]])
+
+	local pkg = lde.Package.open(dir)
+	pkg:build()
+
+	-- Longer script: changes the size so the mtime/size fast path can't mask it.
+	fs.write(path.join(dir, "build.lua"), [[
+local f = assert(io.open("build-count-script.txt", "a"))
+f:write("y")
+f:close()
+-- extra line to change the file size
+]])
+	pkg:build()
+
+	test.equal(fs.read(path.join(dir, "build-count-script.txt")), "xy")
+end)
+
+--
 -- Package:installDependencies with path dependencies
 --
 
