@@ -23,19 +23,19 @@ function isActive(href: string) {
 ---
 
 <nav
-	class={`sticky top-0 z-50 bg-white dark:bg-gray-950 px-4 md:px-6 flex flex-col items-center justify-start border-b border-black/10 dark:border-white/10${hasTabs ? " min-h-[6rem]" : ""}`}
+	class={`sticky top-0 z-50 bg-white/85 dark:bg-gray-950/85 backdrop-blur-md px-4 md:px-6 flex flex-col items-center justify-start border-b border-black/10 dark:border-white/10${hasTabs ? " min-h-[7rem]" : ""}`}
 >
-	<div class="flex flex-row items-center h-14 w-full max-w-[90em]">
+	<div class="flex flex-row items-center h-[4.5rem] w-full max-w-[90em]">
 		<a
 			href="/"
-			class="font-semibold text-2xl p-2 md:p-4 flex items-center gap-2"
+			class="font-semibold text-2xl tracking-tight p-2 md:p-4 flex items-center gap-2.5"
 		>
-			<img src="/lde.svg" alt="lde logo" class="size-8 object-contain" />
+			<img src="/lde.svg" alt="lde logo" class="size-9 object-contain" />
 			lde
 		</a>
 
 		<!-- Desktop nav links -->
-		<div class="hidden md:flex ml-16 h-full flex-row items-center gap-4">
+		<div class="hidden md:flex ml-16 h-full flex-row items-center gap-5">
 			{
 				entries.map((entry) => (
 					<a
@@ -55,7 +55,7 @@ function isActive(href: string) {
 		<div class="flex items-center gap-0 md:gap-2">
 			<a
 				href="/download"
-				class="hidden md:inline-flex px-3 py-1.5 bg-blue-500/15 border border-blue-500/40 text-blue-600 dark:text-blue-400 text-sm font-medium rounded-lg backdrop-blur-md"
+				class="hidden md:inline-flex px-4 py-2 bg-blue-500/15 border border-blue-500/40 text-blue-600 dark:text-blue-400 text-sm font-medium rounded-lg backdrop-blur-md"
 			>
 				Download
 			</a>
@@ -66,7 +66,7 @@ function isActive(href: string) {
 				aria-label="Discord"
 				class="hidden md:inline-flex opacity-60 hover:opacity-100 p-2 md:p-4 transition-opacity"
 			>
-				<Icon name="simple-icons:discord" class="size-5 md:size-6" />
+				<Icon name="simple-icons:discord" class="size-6" />
 			</a>
 			<a
 				href={GITHUB_URL}
@@ -75,7 +75,7 @@ function isActive(href: string) {
 				aria-label="GitHub"
 				class="hidden md:inline-flex opacity-60 hover:opacity-100 p-2 md:p-4 transition-opacity"
 			>
-				<Icon name="simple-icons:github" class="size-5 md:size-6" />
+				<Icon name="simple-icons:github" class="size-6" />
 			</a>
 			<button
 				id="theme-toggle"
@@ -83,7 +83,7 @@ function isActive(href: string) {
 				class="opacity-60 hover:opacity-100 p-2 md:p-4 transition-opacity cursor-pointer"
 			>
 				<svg
-					class="icon-moon size-5 md:size-6"
+					class="icon-moon size-6"
 					xmlns="http://www.w3.org/2000/svg"
 					viewBox="0 0 24 24"
 					fill="currentColor"
@@ -92,7 +92,7 @@ function isActive(href: string) {
 					></path>
 				</svg>
 				<svg
-					class="icon-sun size-5 md:size-6 hidden"
+					class="icon-sun size-6 hidden"
 					xmlns="http://www.w3.org/2000/svg"
 					viewBox="0 0 24 24"
 					fill="currentColor"
@@ -225,7 +225,7 @@ function isActive(href: string) {
 		>
 			<a
 				href="/download"
-				class="px-3 py-1.5 bg-blue-500/15 border border-blue-500/40 text-blue-600 dark:text-blue-400 text-sm font-medium rounded-lg"
+				class="px-4 py-2 bg-blue-500/15 border border-blue-500/40 text-blue-600 dark:text-blue-400 text-sm font-medium rounded-lg"
 			>
 				Download
 			</a>

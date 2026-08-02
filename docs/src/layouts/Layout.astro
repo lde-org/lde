@@ -70,12 +70,12 @@ const ogImage = `${SITE_URL}/og/${ogSlug}.png`;
 		/>
 	</head>
 	<body
-		class="relative overflow-x-hidden bg-white dark:bg-gray-950 text-black dark:text-white flex flex-col min-h-screen lg:min-w-fit"
+		class="relative overflow-x-hidden antialiased bg-white dark:bg-gray-950 text-black dark:text-white flex flex-col min-h-screen lg:min-w-fit"
 	>
 		<!-- Ambient page glow (hidden on index which has its own hero fx) -->
 		{!hideGlow && (
 			<div class="absolute inset-x-0 top-0 pointer-events-none select-none" aria-hidden="true">
-				<div class="absolute top-[-400px] left-1/2 -translate-x-1/2 w-[800px] h-[800px] rounded-full bg-blue-500/[0.07] dark:bg-blue-500/[0.09] blur-[80px]"></div>
+				<div class="absolute top-[-400px] left-1/2 -translate-x-1/2 w-[800px] h-[800px] rounded-full bg-blue-500/[0.07] dark:bg-blue-500/[0.09] blur-[60px]"></div>
 			</div>
 		)}
 		<Navbar hasTabs={hasTabs}><slot name="tabs" slot="default" /></Navbar>

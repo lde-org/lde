@@ -116,7 +116,7 @@ export default function TerminalDemo() {
 	}
 
 	return (
-		<div class="w-[560px] rounded-xl border border-black/10 dark:border-white/10 bg-gray-100 dark:bg-[#0a0a0f] overflow-hidden shadow-2xl font-mono text-sm">
+		<div class="w-[560px] rounded-xl border border-black/10 dark:border-white/10 bg-gray-100 dark:bg-[#0a0a0f] overflow-hidden shadow-xl shadow-black/10 dark:shadow-black/60 font-mono text-sm">
 			{/* Title bar */}
 			<div class="flex items-center gap-1.5 px-4 py-3 border-b border-black/10 dark:border-white/10 bg-gray-200 dark:bg-[#111118]">
 				<span class="size-3 rounded-full bg-red-500/70" />

@@ -53,6 +53,12 @@
 	background: rgba(128, 128, 128, 0.55);
 }
 
+html {
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+	text-rendering: optimizeLegibility;
+}
+
 .markdown {
 	@apply leading-7;
 }

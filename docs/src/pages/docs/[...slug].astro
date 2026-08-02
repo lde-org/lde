@@ -118,7 +118,13 @@ const sidebarItems = buildSidebar(activeTab);
 	<DocsTabs slot="tabs" tabs={tabs} activeTab={activeTab} />
 
 	<div class="flex w-full lg:w-7xl mx-auto">
-		<div class="hidden lg:flex flex-col self-start sticky top-[6.5rem] max-h-[calc(100vh-6.5rem)] overflow-y-auto shrink-0 pl-4 md:pl-8 pr-3 pt-3">
+		{/*
+			Sticky offset must equal the navbar's rendered height
+			(4.5rem main row + 2.5rem tabs + 1px border = calc(7rem + 1px)).
+			Matching the natural in-flow position means sticky never
+			repositions the sidebar on load, which avoids a 1-frame flash.
+		*/}
+		<div class="hidden lg:flex flex-col self-start sticky top-[calc(7rem+1px)] max-h-[calc(100vh-7rem-1px)] overflow-y-auto shrink-0 pl-4 md:pl-8 pr-3 pt-3">
 			<SidebarTree items={sidebarItems} />
 			<div class="shrink-0 h-8"></div>
 		</div>

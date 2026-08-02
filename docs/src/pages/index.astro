@@ -61,14 +61,14 @@ const features = [
 <Layout hideGlow>
 <main>
 	<!-- ─── HERO ─────────────────────────────────────────────────────────── -->
-	<section class="relative flex flex-col items-center justify-center overflow-hidden min-h-[calc(100vh-56px)] px-6 py-24">
+	<section class="relative flex flex-col items-center justify-center overflow-hidden min-h-[calc(100vh-72px)] px-6 py-24">
 
 		<!-- Background glow blobs -->
 		<div class="absolute inset-0 pointer-events-none select-none" aria-hidden="true">
 			<!-- Top-center blue glow -->
-			<div class="absolute top-[-10%] left-1/2 -translate-x-1/2 w-[900px] h-[600px] rounded-full bg-blue-600/10 dark:bg-blue-500/15 blur-[120px]"></div>
+			<div class="absolute top-[-10%] left-1/2 -translate-x-1/2 w-[900px] h-[600px] rounded-full bg-blue-600/10 dark:bg-blue-500/15 blur-[80px]"></div>
 			<!-- Bottom accent -->
-			<div class="absolute bottom-0 left-1/4 w-[500px] h-[300px] rounded-full bg-indigo-600/8 dark:bg-indigo-500/10 blur-[100px]"></div>
+			<div class="absolute bottom-0 left-1/4 w-[500px] h-[300px] rounded-full bg-indigo-600/8 dark:bg-indigo-500/10 blur-[70px]"></div>
 
 			<!-- Star field -->
 			<svg class="absolute inset-0 w-full h-full opacity-60 dark:opacity-100" viewBox="0 0 1400 800" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
@@ -150,7 +150,7 @@ const features = [
 				<div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 size-[520px] rounded-full border border-slate-400/15 dark:border-slate-500/20 pointer-events-none"></div>
 				<div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 size-[700px] rounded-full border border-slate-400/8 dark:border-slate-500/12 pointer-events-none"></div>
 				<!-- Glow behind terminal -->
-				<div class="absolute inset-0 bg-blue-500/20 dark:bg-blue-500/15 rounded-full blur-3xl scale-75 pointer-events-none"></div>
+				<div class="absolute inset-0 bg-blue-500/15 dark:bg-blue-500/12 rounded-full blur-2xl scale-75 pointer-events-none"></div>
 				<div class="relative z-10">
 					<TerminalDemo client:idle />
 				</div>
@@ -168,7 +168,7 @@ const features = [
 		<div class="max-w-7xl mx-auto">
 			<div class="text-center mb-16">
 				<p class="text-blue-400 text-sm font-semibold uppercase tracking-widest mb-3">Everything included</p>
-				<h2 id="features" class="text-4xl md:text-5xl font-bold scroll-mt-20">One tool, all of Lua</h2>
+				<h2 id="features" class="text-4xl md:text-5xl font-bold tracking-tight scroll-mt-20">One tool, all of Lua</h2>
 				<p class="mt-4 text-black/50 dark:text-white/40 text-lg max-w-xl mx-auto">
 					Write, test, and ship Lua in a single simple install.
 				</p>
@@ -207,7 +207,7 @@ const features = [
 		<div class="max-w-3xl mx-auto">
 			<div class="text-center mb-12">
 				<p class="text-blue-400 text-sm font-semibold uppercase tracking-widest mb-3">Comparison</p>
-				<h2 id="compare" class="text-4xl md:text-5xl font-bold scroll-mt-20">How does lde compare?</h2>
+				<h2 id="compare" class="text-4xl md:text-5xl font-bold tracking-tight scroll-mt-20">How does lde compare?</h2>
 				<p class="mt-4 text-black/50 dark:text-white/40">
 					Corrections welcome via <a class="underline text-blue-400 hover:text-blue-300 transition-colors" href="https://github.com/lde-org/lde/pulls">pull request</a>.
 				</p>
@@ -319,7 +319,7 @@ const features = [
 		<div class="max-w-3xl mx-auto">
 			<div class="text-center mb-12">
 				<p class="text-blue-400 text-sm font-semibold uppercase tracking-widest mb-3">Performance</p>
-				<h2 id="benchmarks" class="text-4xl md:text-5xl font-bold scroll-mt-20">Are we fast yet?</h2>
+				<h2 id="benchmarks" class="text-4xl md:text-5xl font-bold tracking-tight scroll-mt-20">Are we fast yet?</h2>
 				<p class="mt-4 text-black/50 dark:text-white/40">
 					Averages over 5 runs on Linux x86-64. Lower is better.
 				</p>
@@ -333,7 +333,7 @@ const features = [
 		<div class="max-w-5xl mx-auto">
 			<div class="text-center mb-12">
 				<p class="text-blue-400 text-sm font-semibold uppercase tracking-widest mb-3">Get started</p>
-				<h2 id="learn" class="text-4xl md:text-5xl font-bold scroll-mt-20">Ready to dive in?</h2>
+				<h2 id="learn" class="text-4xl md:text-5xl font-bold tracking-tight scroll-mt-20">Ready to dive in?</h2>
 				<p class="mt-4 text-black/50 dark:text-white/40 text-lg">
 					Read the docs or catch up on the latest from the blog.
 				</p>
