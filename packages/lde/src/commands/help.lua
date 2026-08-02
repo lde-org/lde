@@ -1,5 +1,7 @@
 local ansi = require("ansi")
-local lde  = require("lde-core")
+
+local ok, currentVersion = pcall(require, "lde.version")
+currentVersion = ok and currentVersion or "0.9.2"
 
 ---@param _args clap.Args
 local function help(_args)
@@ -27,7 +29,7 @@ local function help(_args)
 		{ cmd = "bundle",    ex = nil,           color = "magenta", desc = "Bundle current project into a single lua file" }
 	}
 
-	ansi.printf("{blue}{bold}lde{reset} is a package manager for Lua, written in Lua. {gray}(%s)\n", lde.global.currentVersion)
+	ansi.printf("{blue}{bold}lde{reset} is a package manager for Lua, written in Lua. {gray}(%s)\n", currentVersion)
 	ansi.printf("{bold}Usage:{reset} lde <command> {magenta}[options]")
 	ansi.printf("\n{bold}Commands:{reset}")
 	for _, command in ipairs(commands) do

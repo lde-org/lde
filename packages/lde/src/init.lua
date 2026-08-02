@@ -4,8 +4,6 @@ local env = require("env")
 local fs = require("fs")
 local path = require("path")
 
-local lde = require("lde-core")
-
 -- Enable UTF-8 console output on Windows
 if jit.os == "Windows" then
 	local ok, win32 = pcall(require, "winapi")
@@ -13,8 +11,6 @@ if jit.os == "Windows" then
 		win32.kernel32.setConsoleOutputCP(win32.kernel32.ConsoleCP.UTF8)
 	end
 end
-
-lde.verbose = true
 
 local args = clap.parse({ ... })
 
@@ -32,18 +28,52 @@ if cwdOverride then
 	end
 end
 
+-- Fast paths that avoid loading lde-core (whose module graph pulls in
+-- git2-sys, curl-sys, json, etc.) — this is what dominates CLI startup.
+
 local treeOverride = args:option("tree")
 if treeOverride then
+	local lde = require("lde-core")
+	lde.verbose = true
 	lde.global.setDir(treeOverride)
 	lde.global.init()
 end
 
 if args:flag("version") and args:count() == 0 then
-	print(lde.global.currentVersion)
+	local ok, v = pcall(require, "lde.version")
+	print(ok and v or "0.9.2")
 	return
 end
 
 local evalCode = args:short("e")
+local luaFile = args:flag("lua") and args:pop()
+
+if args:count() == 0 and args:flag("help") then
+	require("lde.commands.help")(args)
+	return
+end
+
+if args:flag("update-path") or args:flag("setup") then
+	require("lde.setup")()
+	return
+end
+
+if args:flag("ensure-mingw") then
+	local lde = require("lde-core")
+	lde.verbose = true
+	lde.global.ensureMingw()
+	return
+end
+
+local commandName = args:pop()
+if (not commandName or commandName == "help") and not evalCode and not luaFile then
+	require("lde.commands.help")(args)
+	return
+end
+
+local lde = require("lde-core")
+lde.verbose = true
+
 if evalCode then
 	local pkg = lde.Package.open()
 	local ok, result
@@ -63,27 +93,11 @@ if evalCode then
 	return
 end
 
-local luaFile = args:flag("lua") and args:pop()
 if luaFile then
 	local ok, err = lde.runtime.executeFile(luaFile, { args = args:drain(), cwd = env.cwd() })
 	if not ok then
 		ansi.printf("{red}Error: %s", tostring(err)); os.exit(1)
 	end
-	return
-end
-
-if args:count() == 0 and args:flag("help") then
-	require("lde.commands.help")(args)
-	return
-end
-
-if args:flag("update-path") or args:flag("setup") then
-	require("lde.setup")()
-	return
-end
-
-if args:flag("ensure-mingw") then
-	lde.global.ensureMingw()
 	return
 end
 
@@ -112,12 +126,6 @@ local commandFiles = {
 
 -- Commands that don't need the global cache dirs initialized
 local noInitCommands = { help = true }
-
-local commandName = args:pop()
-if not commandName then
-	require("lde.commands.help")(args)
-	return
-end
 
 if not noInitCommands[commandName] and not treeOverride then
 	lde.global.init()
