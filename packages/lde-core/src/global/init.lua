@@ -318,7 +318,7 @@ end
 ---@param repoUrl string
 ---@param branch string?
 ---@param commit string?
----@return table plan  -- { dir, commit, tarballUrl?, archiveFile?, clone? }
+---@return lde.install.GitPlan
 function global.planGitRepo(repoName, repoUrl, branch, commit)
 	if not commit then
 		local ref = branch and ("refs/heads/" .. branch) or "HEAD"

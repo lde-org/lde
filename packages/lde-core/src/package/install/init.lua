@@ -57,7 +57,11 @@ local function depSourceKey(alias, depInfo, relativeTo)
 	if depInfo.path then
 		return "path:" .. path.resolve(relativeTo, path.normalize(depInfo.path))
 	elseif depInfo.git then
-		return "git:" .. depInfo.git .. "@" .. (depInfo.commit or "")
+		-- The commit is a deterministic resolution detail (lsRemote HEAD or lockfile
+		-- pin), so the source identity is the URL alone — a re-request of the same
+		-- repo from a different parent must not false-conflict on an unresolved
+		-- vs resolved commit.
+		return "git:" .. depInfo.git
 	elseif depInfo.archive then
 		return "archive:" .. depInfo.archive
 	elseif depInfo.luarocks then
@@ -85,18 +89,47 @@ end
 --   4. materialize + open — extract, open the package, emit its lock entry
 --
 -- Per-kind behavior lives in `handlers` below; the node itself only carries
--- data. Node fields:
---   alias, depInfo, kind, relativeTo, sourceKey
---   metadata       (luarocks) rockspec fetch needed before deps are known
---   rockspecUrl/rockspecFile, version, srcUrl, spec
---   expandAfter    deps only knowable after content downloads (git/archive/
---                  pinned deps, or luarocks versions without a published rockspec)
---   gitPlan, repoName, deps, pkg, expandDir, _content, _fallbackGit
+-- data.
+
+---@class lde.install.ContentPlan
+---@field kind "src"|"git"|"archive"|"clone"
+---@field url string?  -- download source (nil for the git-clone fallback)
+---@field file string? -- local cache file to download into (nil for clone)
+---@field dir string?  -- extraction target (nil for clone / cached git)
+
+---@class lde.install.GitPlan
+---@field dir string
+---@field commit string
+---@field tarballUrl string?
+---@field archiveFile string?
+---@field url string? -- normalized source URL (set on luarocks fallback plans)
+---@field clone { repoName: string, repoUrl: string, commit: string }?
+
+---@class lde.install.Node
+---@field alias string -- key in the parent's dependencies table
+---@field depInfo lde.Package.Config.Dependency
+---@field kind "path"|"git"|"archive"|"luarocks"
+---@field sourceKey string -- identity used for conflict detection
+---@field dir string? -- path deps: resolved directory
+---@field repoName string? -- git/registry: package name to find inside the repo
+---@field metadata boolean? -- luarocks: fetch the published rockspec for deps
+---@field rockspecUrl string?
+---@field rockspecFile string?
+---@field version string?
+---@field srcUrl string? -- preferred content artifact (.src.rock)
+---@field spec rocked.raw.Output?
+---@field expandAfter boolean? -- deps only knowable after content downloads
+---@field gitPlan lde.install.GitPlan?
+---@field deps table<string, lde.Package.Config.Dependency>?
+---@field pkg lde.Package?
+---@field expandDir string? -- relativeTo base for the node's children
+---@field _content lde.install.ContentPlan?
+---@field _fallbackGit lde.install.GitPlan?
 
 --- Resolve a luarocks dependency to its version + metadata/content URLs.
 ---@param alias string
 ---@param depInfo lde.Package.Config.LuarocksDependency
----@return table node
+---@return lde.install.Node
 local function makeLuarocksNode(alias, depInfo)
 	local name = depInfo.name or depInfo.luarocks -- the luarocks package name (alias may differ)
 	local version, rockspecUrl, srcUrl, err = lde.util.resolveLuarocksBest(name, depInfo.version)
@@ -108,7 +141,6 @@ local function makeLuarocksNode(alias, depInfo)
 		alias = alias,
 		depInfo = depInfo,
 		kind = "luarocks",
-		relativeTo = "",
 		name = name,
 		version = version,
 		sourceKey = "luarocks:" .. name .. "@" .. version,
@@ -125,7 +157,7 @@ end
 ---@param depInfo lde.Package.Config.Dependency
 ---@param relativeTo string
 ---@param ctx lde.install.Context
----@return table node
+---@return lde.install.Node
 local function makeNode(alias, depInfo, relativeTo, ctx)
 	depInfo = applyLock(ctx, alias, depInfo)
 
@@ -135,7 +167,6 @@ local function makeNode(alias, depInfo, relativeTo, ctx)
 			alias = alias,
 			depInfo = depInfo,
 			kind = "path",
-			relativeTo = relativeTo,
 			dir = dir,
 			sourceKey = "path:" .. dir,
 		}
@@ -145,8 +176,7 @@ local function makeNode(alias, depInfo, relativeTo, ctx)
 			alias = alias,
 			depInfo = depInfo,
 			kind = "git",
-			relativeTo = relativeTo,
-			sourceKey = "git:" .. depInfo.git .. "@" .. (gitPlan.commit or ""),
+			sourceKey = "git:" .. depInfo.git,
 			repoName = alias,
 			gitPlan = gitPlan,
 			expandAfter = true, -- monorepo: lde.json location unknown until extracted
@@ -156,7 +186,6 @@ local function makeNode(alias, depInfo, relativeTo, ctx)
 			alias = alias,
 			depInfo = depInfo,
 			kind = "archive",
-			relativeTo = relativeTo,
 			sourceKey = "archive:" .. depInfo.archive,
 			expandAfter = true, -- deps only known from the extracted content
 		}
@@ -176,8 +205,7 @@ local function makeNode(alias, depInfo, relativeTo, ctx)
 			alias = alias,
 			depInfo = depInfo,
 			kind = "git",
-			relativeTo = relativeTo,
-			sourceKey = "git:" .. portfile.git .. "@" .. commit,
+			sourceKey = "git:" .. portfile.git,
 			repoName = packageName,
 			gitPlan = gitPlan,
 			expandAfter = true,
@@ -188,62 +216,89 @@ local function makeNode(alias, depInfo, relativeTo, ctx)
 end
 
 -- ── Per-kind behavior ─────────────────────────────────────────────────────
----@type table<string, table>
+---@class lde.install.Handler
+---@field content fun(node: lde.install.Node): lde.install.ContentPlan?
+---@field materialize fun(node: lde.install.Node, content: lde.install.ContentPlan)
+---@field consume fun(node: lde.install.Node)
+---@field open fun(node: lde.install.Node)
+---@field lock fun(node: lde.install.Node): lde.Lockfile.Dependency
+
+---@type table<string, lde.install.Handler>
 local handlers = {}
 
 --- Shared helpers dispatching on node.kind.
-local function h(n) return handlers[n.kind] end
-local function content(n) return h(n).content(n) end
+---@param node lde.install.Node
+---@return lde.install.Handler
+local function h(node)
+	return handlers[node.kind]
+end
+
+---@param node lde.install.Node
+---@return lde.install.ContentPlan?
+local function content(node)
+	return h(node).content(node)
+end
 
 --- Make the node's dependency list available (idempotent).
-local function consume(n)
-	if n.deps then return end
-	h(n).consume(n)
+---@param node lde.install.Node
+local function consume(node)
+	if node.deps then return end
+	h(node).consume(node)
 end
 
 --- Extract the node's downloaded content (after the batch drained).
-local function materialize(n)
-	h(n).materialize(n, content(n))
+---@param node lde.install.Node
+local function materialize(node)
+	local c = content(node)
+	assert(c, "no content plan for '" .. node.alias .. "'")
+	h(node).materialize(node, c)
 end
 
 --- Open the node's package (requires content materialized).
-local function open(n)
-	if n.pkg then return n.pkg end
-	h(n).open(n)
-	return n.pkg
+---@param node lde.install.Node
+---@return lde.Package
+local function open(node)
+	if node.pkg then return node.pkg end
+	h(node).open(node)
+	---@cast node.pkg lde.Package
+	return node.pkg
 end
 
 --- Emit the lockfile entry for this node.
-local function lock(n)
-	return h(n).lock(n)
+---@param node lde.install.Node
+---@return lde.Lockfile.Dependency
+local function lock(node)
+	return h(node).lock(node)
 end
 
 --- Standard consume for content-based kinds: open the package, read its deps.
-local function consumeFromPkg(n)
-	open(n)
-	n.deps = n.pkg:readConfig().dependencies or {}
+---@param node lde.install.Node
+local function consumeFromPkg(node)
+	local pkg = open(node)
+	node.deps = pkg:readConfig().dependencies or {}
 end
 
 --- Expand a node's deps into the graph; returns newly created nodes.
----@param n table
+---@param node lde.install.Node
 ---@param ctx lde.install.Context
----@param graph table
----@param order table
----@return table[]
-local function expand(n, ctx, graph, order)
+---@param graph table<string, lde.install.Node>
+---@param order lde.install.Node[]
+---@return lde.install.Node[]
+local function expand(node, ctx, graph, order)
+	---@type lde.install.Node[]
 	local newNodes = {}
-	for alias, depInfo in pairs(n.deps or {}) do
+	for alias, depInfo in pairs(node.deps or {}) do
 		if not graph[alias] then
-			local node = makeNode(alias, depInfo, n.expandDir or ctx.relativeTo, ctx)
-			graph[alias] = node
-			order[#order + 1] = node
-			newNodes[#newNodes + 1] = node
+			local newNode = makeNode(alias, depInfo, node.expandDir or ctx.relativeTo, ctx)
+			graph[alias] = newNode
+			order[#order + 1] = newNode
+			newNodes[#newNodes + 1] = newNode
 		else
 			-- Same alias requested again from a different place: verify the
 			-- sources match (e.g. two different path deps under one name).
 			local effective = applyLock(ctx, alias, depInfo)
 			local existingKey = graph[alias].sourceKey
-			local newKey = depSourceKey(alias, effective, n.expandDir or ctx.relativeTo)
+			local newKey = depSourceKey(alias, effective, node.expandDir or ctx.relativeTo)
 			if existingKey ~= newKey then
 				error("Conflicting sources for dependency '" .. alias .. "':\n  " .. existingKey .. "\n  " .. newKey)
 			end
@@ -256,6 +311,7 @@ end
 handlers.path = {
 	content = function() return nil end,
 	materialize = function() end,
+	---@param n lde.install.Node
 	open = function(n)
 		local pkg, err = lde.Package.open(n.dir, n.depInfo.rockspec)
 		if not pkg then
@@ -264,9 +320,12 @@ handlers.path = {
 		n.pkg = pkg
 		n.expandDir = pkg:getDir()
 	end,
+	---@param n lde.install.Node
 	consume = function(n)
 		consumeFromPkg(n)
 	end,
+	---@param n lde.install.Node
+	---@return lde.Lockfile.Dependency
 	lock = function(n)
 		return { path = n.depInfo.path, name = n.depInfo.name, rockspec = n.depInfo.rockspec }
 	end,
@@ -274,8 +333,10 @@ handlers.path = {
 
 --- git (and registry): tarball content, package/deps found after extraction.
 handlers.git = {
+	---@param n lde.install.Node
+	---@return lde.install.ContentPlan?
 	content = function(n)
-		local g = n.gitPlan
+		local g = n.gitPlan --[[@as lde.install.GitPlan]]
 		if g.tarballUrl then
 			return { url = g.tarballUrl, file = g.archiveFile, dir = g.dir, kind = "git" }
 		elseif g.clone then
@@ -283,30 +344,39 @@ handlers.git = {
 		end
 		return nil -- already cached
 	end,
+	---@param n lde.install.Node
+	---@param c lde.install.ContentPlan
 	materialize = function(n, c)
 		if c.kind == "clone" then
-			local ok, err = lde.global.cloneDir(n.gitPlan.clone.repoName, n.gitPlan.clone.repoUrl, n.gitPlan.clone.commit)
+			local clone = n.gitPlan --[[@as lde.install.GitPlan]].clone --[[@as { repoName: string, repoUrl: string, commit: string }]]
+			local ok, err = lde.global.cloneDir(clone.repoName, clone.repoUrl, clone.commit)
 			if not ok then error("Failed to clone git repository: " .. (err or "unknown error")) end
 			return
 		end
-		local res = download.result(c.file)
+		local res = download.result(c.file --[[@as string]])
 		if res and not res.ok then error("Failed to download " .. c.url .. ": " .. (res.err or "")) end
-		local ok, err = lde.global.extractGitTarball(c.file, c.dir)
+		local ok, err = lde.global.extractGitTarball(c.file --[[@as string]], c.dir --[[@as string]])
 		if not ok then error("Failed to extract " .. n.repoName .. ": " .. (err or "")) end
 	end,
+	---@param n lde.install.Node
 	open = function(n)
-		local pkg, err = lde.util.findNamedPackage(n.gitPlan.dir, n.repoName, n.depInfo.rockspec)
+		local gitPlan = n.gitPlan --[[@as lde.install.GitPlan]]
+		local pkg, err = lde.util.findNamedPackage(gitPlan.dir, n.repoName, n.depInfo.rockspec)
 		if not pkg then error(err or "No package found in git repository") end
 		n.pkg = pkg
 		n.expandDir = pkg:getDir()
 	end,
+	---@param n lde.install.Node
 	consume = function(n)
 		consumeFromPkg(n)
 	end,
+	---@param n lde.install.Node
+	---@return lde.Lockfile.Dependency
 	lock = function(n)
+		local gitPlan = n.gitPlan --[[@as lde.install.GitPlan]]
 		return {
 			git = n.depInfo.git,
-			commit = n.gitPlan.commit,
+			commit = gitPlan.commit,
 			branch = n.depInfo.branch,
 			name = n.depInfo.name,
 			rockspec = n.depInfo.rockspec,
@@ -316,28 +386,33 @@ handlers.git = {
 
 --- archive: URL downloads into the tar cache, then the rockspec is found inside.
 handlers.archive = {
+	---@param n lde.install.Node
+	---@return lde.install.ContentPlan
 	content = function(n)
 		local dir = lde.global.getArchiveDir(n.depInfo.archive)
 		return { url = n.depInfo.archive, file = dir .. ".archive", dir = dir, kind = "archive" }
 	end,
+	---@param n lde.install.Node
+	---@param c lde.install.ContentPlan
 	materialize = function(n, c)
-		local res = download.result(c.file)
+		local res = download.result(c.file --[[@as string]])
 		if res and not res.ok then error("Failed to download archive '" .. c.url .. "': " .. (res.err or "")) end
-		local ok, err = lde.global.extractArchive(c.url, c.file, c.dir)
+		local ok, err = lde.global.extractArchive(c.url --[[@as string]], c.file --[[@as string]], c.dir --[[@as string]])
 		if not ok then error("Failed to extract archive '" .. c.url .. "': " .. (err or "")) end
 	end,
+	---@param n lde.install.Node
 	open = function(n)
-		local c = content(n)
+		local c = content(n) --[[@as lde.install.ContentPlan]]
 		-- .src.rock archives contain a rockspec + possibly a source subdir
 		local pkgDir, rockspecPath = c.dir, n.depInfo.rockspec
 		if n.depInfo.archive:match("%.src%.rock$") and not n.depInfo.rockspec then
-			local iter = fs.readdir(c.dir)
+			local iter = fs.readdir(c.dir --[[@as string]])
 			if iter then
 				for entry in iter do
 					if entry.type == "file" and entry.name:match("%.rockspec$") then
-						rockspecPath = path.join(c.dir, entry.name)
+						rockspecPath = path.join(c.dir --[[@as string]], entry.name)
 					elseif entry.type == "dir" and pkgDir == c.dir then
-						pkgDir = path.join(c.dir, entry.name)
+						pkgDir = path.join(c.dir --[[@as string]], entry.name)
 					end
 				end
 			end
@@ -347,9 +422,12 @@ handlers.archive = {
 		n.pkg = pkg
 		n.expandDir = pkg:getDir()
 	end,
+	---@param n lde.install.Node
 	consume = function(n)
 		consumeFromPkg(n)
 	end,
+	---@param n lde.install.Node
+	---@return lde.Lockfile.Dependency
 	lock = function(n)
 		return { archive = n.depInfo.archive, name = n.depInfo.name, rockspec = n.depInfo.rockspec }
 	end,
@@ -358,6 +436,8 @@ handlers.archive = {
 --- luarocks: metadata is the published rockspec; content prefers the .src.rock
 --- and falls back to the rockspec's own source artifact.
 handlers.luarocks = {
+	---@param n lde.install.Node
+	---@return lde.install.ContentPlan?
 	content = function(n)
 		if n._content then return n._content end
 
@@ -376,13 +456,14 @@ handlers.luarocks = {
 		local sourceUrl = source.url
 		if sourceUrl:match("^git") then
 			sourceUrl = lde.util.normalizeGitUrl(sourceUrl)
-			n._fallbackGit = lde.global.planGitRepo(n.name, sourceUrl, source.branch or source.tag, nil)
-			n._fallbackGit.url = sourceUrl
-			if n._fallbackGit.tarballUrl then
+			local fallback = lde.global.planGitRepo(n.name, sourceUrl, source.branch or source.tag, nil)
+			fallback.url = sourceUrl
+			n._fallbackGit = fallback
+			if fallback.tarballUrl then
 				n._content = {
-					url = n._fallbackGit.tarballUrl,
-					file = n._fallbackGit.archiveFile,
-					dir = n._fallbackGit.dir,
+					url = fallback.tarballUrl,
+					file = fallback.archiveFile,
+					dir = fallback.dir,
 					kind = "git",
 				}
 			else
@@ -394,18 +475,22 @@ handlers.luarocks = {
 		end
 		return n._content
 	end,
+	---@param n lde.install.Node
+	---@param c lde.install.ContentPlan
 	materialize = function(n, c)
 		if c.kind == "clone" then
-			local ok, err = lde.global.cloneDir(
-				n._fallbackGit.clone.repoName, n._fallbackGit.clone.repoUrl, n._fallbackGit.clone.commit)
+			local fallback = n._fallbackGit --[[@as lde.install.GitPlan]]
+			local clone = fallback.clone --[[@as { repoName: string, repoUrl: string, commit: string }]]
+			local ok, err = lde.global.cloneDir(clone.repoName, clone.repoUrl, clone.commit)
 			if not ok then error("Failed to clone git repository: " .. (err or "unknown error")) end
 			return
 		end
-		local res = download.result(c.file)
+		local res = download.result(c.file --[[@as string]])
 		if res and not res.ok then error("Failed to download " .. c.url .. ": " .. (res.err or "")) end
-		local ok, err = lde.global.extractArchive(c.url, c.file, c.dir)
+		local ok, err = lde.global.extractArchive(c.url --[[@as string]], c.file --[[@as string]], c.dir --[[@as string]])
 		if not ok then error("Failed to extract '" .. (c.url or c.dir) .. "': " .. (err or "")) end
 	end,
+	---@param n lde.install.Node
 	consume = function(n)
 		if n.rockspecFile and fs.exists(n.rockspecFile) then
 			local content = fs.read(n.rockspecFile)
@@ -429,25 +514,29 @@ handlers.luarocks = {
 			error("Missing rockspec for '" .. n.alias .. "': " .. tostring(n.rockspecUrl))
 		end
 	end,
+	---@param n lde.install.Node
 	open = function(n)
-		local c = content(n)
+		local c = content(n) --[[@as lde.install.ContentPlan]]
 		local pkg, err
 		if c.kind == "src" then
-			pkg, err = lde.util.openSrcRock(c.dir, c.url)
+			pkg, err = lde.util.openSrcRock(c.dir --[[@as string]], c.url --[[@as string]])
 		else
-			pkg, err = lde.Package.openRockspec(c.dir, n.rockspecUrl)
+			pkg, err = lde.Package.openRockspec(c.dir --[[@as string]], n.rockspecUrl)
 		end
 		if not pkg then error("Failed to load '" .. n.name .. "': " .. (err or "")) end
 		n.pkg = pkg
 		n.expandDir = pkg:getDir()
 	end,
+	---@param n lde.install.Node
+	---@return lde.Lockfile.Dependency
 	lock = function(n)
-		local c = content(n)
+		local c = content(n) --[[@as lde.install.ContentPlan]]
 		if c.kind == "src" then
 			return { archive = n.srcUrl }
 		end
 		if c.kind == "git" or c.kind == "clone" then
-			return { git = n._fallbackGit.url, commit = n._fallbackGit.commit, rockspec = n.rockspecUrl }
+			local fallback = n._fallbackGit --[[@as lde.install.GitPlan]]
+			return { git = fallback.url, commit = fallback.commit, rockspec = n.rockspecUrl }
 		end
 		return { archive = c.url, rockspec = n.rockspecUrl }
 	end,
@@ -465,10 +554,16 @@ handlers.luarocks = {
 ---@param dependencies table<string, lde.Package.Config.Dependency>
 ---@param ctx lde.install.Context
 local function collectDependencies(dependencies, ctx)
+	---@type table<string, lde.install.Node>
 	local graph = {} -- alias -> node
+	---@type lde.install.Node[]
 	local order = {} -- nodes in discovery order
 
+	---@param deps table<string, lde.Package.Config.Dependency>
+	---@param relativeTo string
+	---@return lde.install.Node[]
 	local function addDeps(deps, relativeTo)
+		---@type lde.install.Node[]
 		local newNodes = {}
 		for alias, depInfo in pairs(deps) do
 			if not graph[alias] then
@@ -491,20 +586,22 @@ local function collectDependencies(dependencies, ctx)
 	end
 
 	-- ── Phase 1: graph walk (metadata-only) ────────────────────────────────
+	---@type lde.install.Node[]
 	local frontier = addDeps(dependencies, ctx.relativeTo)
 
 	while #frontier > 0 do
+		---@type lde.install.Node[]
 		local nextFrontier = {}
+		---@type lde.install.Node[]
 		local metaBatch = {}
+		---@type lde.install.Node[]
 		local contentBatch = {}
 
 		for _, node in ipairs(frontier) do
-			local hnd = h(node)
-
-			if hnd.metadata then
+			if node.metadata then
 				-- Fetch the published rockspec (tiny) to discover deps.
-				if not fs.exists(node.rockspecFile) then
-					download.prefetch(node.rockspecUrl, node.rockspecFile)
+				if not fs.exists(node.rockspecFile --[[@as string]]) then
+					download.prefetch(node.rockspecUrl --[[@as string]], node.rockspecFile --[[@as string]])
 				end
 				metaBatch[#metaBatch + 1] = node
 			elseif not node.expandAfter and not content(node) then
@@ -518,9 +615,17 @@ local function collectDependencies(dependencies, ctx)
 			if node.expandAfter then
 				-- Git deps / pinned archives: content is needed to expand.
 				local c = content(node)
-				if c and not fs.exists(c.dir) then
-					download.prefetch(c.url, c.file)
+				if (c and c.dir and not fs.exists(c.dir)) or (c and c.kind == "clone") then
+					if c.kind ~= "clone" then
+						download.prefetch(c.url --[[@as string]], c.file --[[@as string]])
+					end
 					contentBatch[#contentBatch + 1] = node
+				else
+					-- Content already cached: consume + expand without downloading.
+					consume(node)
+					for _, child in ipairs(expand(node, ctx, graph, order)) do
+						nextFrontier[#nextFrontier + 1] = child
+					end
 				end
 			end
 		end
@@ -546,11 +651,14 @@ local function collectDependencies(dependencies, ctx)
 	end
 
 	-- ── Phase 2: download all remaining content in one parallel batch ──────
+	---@type lde.install.Node[]
 	local contentNodes = {}
 	for _, node in ipairs(order) do
 		local c = content(node)
-		if c and not fs.exists(c.dir) then
-			download.prefetch(c.url, c.file)
+		if (c and c.dir and not fs.exists(c.dir)) or (c and c.kind == "clone") then
+			if c.kind ~= "clone" then
+				download.prefetch(c.url --[[@as string]], c.file --[[@as string]])
+			end
 			contentNodes[#contentNodes + 1] = node
 		end
 	end
