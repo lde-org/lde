@@ -11,6 +11,13 @@ on:
 permissions:
   contents: write
 
+# Build on the newest macOS runner but target an older minimum OS so the
+# nightly binary (and every embedded dylib) runs on macOS 14+ too — without
+# this, dyld refuses to load them with "built for macOS 15.0 which is newer
+# than running OS".
+env:
+  MACOSX_DEPLOYMENT_TARGET: "14.0"
+
 jobs:
   build:
     strategy:

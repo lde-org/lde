@@ -1,5 +1,10 @@
 name: Build
 
+# Target an older minimum OS on the newest runner so the binaries also run on
+# macOS 14+ (see nightly.yml for details).
+env:
+  MACOSX_DEPLOYMENT_TARGET: "14.0"
+
 on:
   workflow_dispatch:
 

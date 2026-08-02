@@ -1,5 +1,11 @@
 name: Test
 
+# Build on the newest macOS runner but target an older minimum OS so the
+# binary (and every embedded dylib) also runs on macOS 14+ (dyld otherwise
+# refuses them: "built for macOS 15.0 which is newer than running OS").
+env:
+  MACOSX_DEPLOYMENT_TARGET: "14.0"
+
 on:
   pull_request:
     paths:
