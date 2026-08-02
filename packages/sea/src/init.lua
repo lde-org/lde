@@ -163,7 +163,7 @@ local function safeIdent(name)
 end
 
 ---@param main string # name used as the chunk label
----@param source string # bundled lua source (output of bundlePackage)
+---@param source string # bundled lua (source or LuaJIT bytecode, as returned by bundlePackage); bytecode is linked as a raw .incbin blob
 ---@param sharedLibs? { name: string, content: string }[]
 ---@param compiler? string # path to compiler binary; defaults to SEA_CC env var or "gcc"
 ---@return string
@@ -266,8 +266,9 @@ char lde_tmpdir[4096];
 		end
 	]])
 
+	local ffiShim = ""
 	if #ffiShimEntries > 0 then
-		source = util.dedent(string.format([[
+		ffiShim = util.dedent(string.format([[
 			do
 				local _ffi = require("ffi")
 				local _tmpdir
@@ -276,30 +277,77 @@ char lde_tmpdir[4096];
 				else
 					_tmpdir = os.getenv("TMPDIR") or "/tmp"
 				end
-				_tmpdir = _tmpdir:gsub("[\\/]+$", "")
+				_tmpdir = _tmpdir:gsub("[\\\\/]+$", "")
 				local _names = {%s}
 				local _map = {}
 				for k, v in pairs(_names) do _map[k] = _tmpdir .. "/" .. v end
 				local _orig = _ffi.load
 				_ffi.load = function(name, ...)
-					local remap = _map[name] or _map[name:match("[^/\\]+$")]
+					local remap = _map[name] or _map[name:match("[^/\\\\]+$")]
 					return _orig(remap or name, ...)
 				end
 			end
-		]], table.concat(ffiShimEntries, ", "))) .. "\n" .. source
+		]], table.concat(ffiShimEntries, ", ")))
 	end
 
-	source              = tmpnameShim .. "\n" .. source
+	-- Patches os.tmpname and remaps ffi.load to the embedded shared libs.
+	-- Kept as its own chunk (instead of being prepended to the bundle) so it
+	-- works for both source and bytecode bundles.
+	local shimSource = tmpnameShim .. "\n" .. ffiShim
+	local shimStartup = ""
+	if shimSource ~= "" then
+		shimStartup = string.format(
+			'luaL_loadbuffer(L, "%s", %d, "@shim"); if (lua_pcall(L, 0, 0, 0) != LUA_OK) { fprintf(stderr, "%%s\\n", lua_tostring(L, -1)); return 1; }',
+			shimSource:gsub(".", CEscapes),
+			#shimSource
+		)
+	end
 
-	filePreloads        = {
-		('luaL_loadbuffer(L, "%s", %d, "%s"); lua_setfield(L, -2, "%s");')
-			:format(
-				source:gsub(".", CEscapes),
-				#source,
-				"@" .. main:gsub(".", CEscapes),
-				main:gsub(".", CEscapes)
-			)
-	}
+	local isBytecode  = source:sub(1, 3) == "\27LJ"
+	local bundleDecls = ""
+	if isBytecode then
+		-- LuaJIT bytecode contains NUL bytes, so it can't live in a C string
+		-- literal. Link it as a raw blob with .incbin instead: 1:1 size (smaller
+		-- than the source it replaces) and zero runtime decode cost. The path is
+		-- content-addressed so recompiles of unchanged code reuse the file.
+		local hash   = util.fnv1a(source)
+		local bcPath = path.join(env.tmpdir(), "lde-bundle-" .. hash .. ".bc")
+		if not fs.exists(bcPath) then
+			fs.write(bcPath, source)
+			if not fs.exists(bcPath) then
+				error("Failed to write bundle bytecode to " .. bcPath)
+			end
+		end
+
+		-- Forward slashes keep the path valid in .incbin on Windows; the asm
+		-- symbol name differs on macOS (Mach-O prefixes C symbols with _).
+		local asmPath = bcPath:gsub("\\", "/"):gsub('"', '\\"')
+		bundleDecls = string.format([[
+
+#if defined(__APPLE__)
+__asm__(".globl _lde_bundle_start\n_lde_bundle_start:\n.incbin \"%s\"\n.globl _lde_bundle_end\n_lde_bundle_end:\n");
+#else
+__asm__(".globl lde_bundle_start\nlde_bundle_start:\n.incbin \"%s\"\n.globl lde_bundle_end\nlde_bundle_end:\n");
+#endif
+extern const unsigned char lde_bundle_start[];
+extern const unsigned char lde_bundle_end[];
+]], asmPath, asmPath)
+
+		filePreloads = {
+			('luaL_loadbuffer(L, (const char*)lde_bundle_start, (size_t)(lde_bundle_end - lde_bundle_start), "@%s"); lua_setfield(L, -2, "%s");')
+				:format(main:gsub(".", CEscapes), main:gsub(".", CEscapes))
+		}
+	else
+		filePreloads = {
+			('luaL_loadbuffer(L, "%s", %d, "@%s"); lua_setfield(L, -2, "%s");')
+				:format(
+					source:gsub(".", CEscapes),
+					#source,
+					main:gsub(".", CEscapes),
+					main:gsub(".", CEscapes)
+				)
+		}
+	end
 
 	local stdintInclude = (hasLibs and "#include <stdint.h>\n#include <string.h>\n#include <stdlib.h>\n" or "") .. "#ifdef __ANDROID__\n#include <unistd.h>\n#endif\n"
 
@@ -333,7 +381,7 @@ static int lde_loadlib_loader(lua_State* L) {
 #include "lauxlib.h"
 #include "lualib.h"
 
-]] .. libDeclsStr .. [[
+	]] .. libDeclsStr .. bundleDecls .. [[
 
 ]] .. loadlibHelper .. [[
 
@@ -352,6 +400,8 @@ int main(int argc, char** argv) {
 
 	lua_State* L = luaL_newstate();
 	luaL_openlibs(L);
+
+	]] .. shimStartup .. [[
 
 	lua_getglobal(L, "package");
 	lua_getfield(L, -1, "preload");
