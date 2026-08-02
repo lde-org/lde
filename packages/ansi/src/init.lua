@@ -231,4 +231,17 @@ function ansi.formatBytes(bytes)
 	return string.format("%.2f GB", bytes / (1024 * 1024 * 1024))
 end
 
+-- Monotonic wall-clock timestamp in seconds (Windows QPC / clock_gettime).
+---@return number
+function ansi.now()
+	return now()
+end
+
+-- Formats seconds as a compact human duration ("140ms", "1.25s", "1m05s").
+---@param seconds number
+---@return string
+function ansi.formatElapsed(seconds)
+	return formatElapsed(seconds)
+end
+
 return ansi

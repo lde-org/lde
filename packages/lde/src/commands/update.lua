@@ -4,17 +4,44 @@ local lde = require("lde-core")
 
 ---@param results table<string, { updated: boolean, message: string }>
 local function printResults(results)
-	for name, result in pairs(results) do
+	local names = {}
+	for name in pairs(results) do
+		names[#names + 1] = name
+	end
+	table.sort(names)
+
+	for _, name in ipairs(names) do
+		local result = results[name]
 		if result.updated then
 			ansi.printf("{green}  %s: %s", name, result.message)
-		else
-			ansi.printf("{gray}  %s: %s", name, result.message)
 		end
 	end
 end
 
+---@param results table<string, { updated: boolean, message: string }>
+---@param elapsed number
+local function printSummary(results, elapsed)
+	local total = 0
+	local updated = 0
+	for _, result in pairs(results) do
+		total = total + 1
+		if result.updated then updated = updated + 1 end
+	end
+
+	local status = updated == 0 and "no changes" or (updated .. " updated")
+	if updated > 0 then
+		io.write("\n")
+	end
+
+	local installWord = total == 1 and "install" or "installs"
+	local packageWord = total == 1 and "package" or "packages"
+	ansi.printf("{gray}Checked %d %s across %d %s (%s) [%s]",
+		total, installWord, total, packageWord, status, ansi.formatElapsed(elapsed))
+end
+
 ---@param args clap.Args
 local function update(args)
+	local startTime = ansi.now()
 	local pkg, err = lde.Package.open()
 	if not pkg then
 		ansi.printf("{red}%s", err)
@@ -35,6 +62,7 @@ local function update(args)
 
 		local results = pkg:updateDependencies({ [name] = depInfo })
 		printResults(results)
+		printSummary(results, ansi.now() - startTime)
 	else
 		local results = pkg:updateDependencies()
 		local devResults = pkg:updateDevDependencies()
@@ -44,6 +72,7 @@ local function update(args)
 		end
 
 		printResults(results)
+		printSummary(results, ansi.now() - startTime)
 	end
 end
 
