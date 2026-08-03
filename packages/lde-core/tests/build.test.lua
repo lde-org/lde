@@ -585,6 +585,22 @@ test.it("runTests can require tests.fixture with build script", function()
 	test.equal(results.error, nil)
 end)
 
+test.it("runTests fails when a test file registers no tests", function()
+	local dir = makePackageWithSrc("runtests-empty", { ["init.lua"] = 'return true' })
+
+	local testsDir = path.join(dir, "tests")
+	fs.mkdir(testsDir)
+	fs.write(path.join(testsDir, "empty.test.lua"), 'local t = require("lde-test")')
+
+	local pkg = lde.Package.open(dir)
+	local results = pkg:runTests()
+
+	test.equal(results.failures, 1)
+	test.equal(results.total, 1)
+	test.equal(#results.files, 1)
+	test.equal(results.files[1].error, "No tests were registered")
+end)
+
 --
 -- runTests: file filter globs
 --

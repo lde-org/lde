@@ -219,6 +219,11 @@ local function runTestFile(testFile, luaPath, luaCPath, reporter)
 	if not ok then
 		return { file = testFile, results = {}, error = err }
 	end
+	-- A file that ran cleanly but registered no tests (no it/skip calls)
+	-- means the suite silently does nothing — treat it as a failure.
+	if #results == 0 then
+		return { file = testFile, results = {}, error = "No tests were registered" }
+	end
 	return { file = testFile, results = results }
 end
 
