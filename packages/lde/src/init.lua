@@ -1,12 +1,9 @@
-local clap = require("clap")
-
--- Enable UTF-8 console output on Windows
-if jit.os == "Windows" then
-	local ok, win32 = pcall(require, "winapi")
-	if ok then
-		win32.kernel32.setConsoleOutputCP(win32.kernel32.ConsoleCP.UTF8)
-	end
+if select("#", ...) == 0 then
+	require("lde.commands.help")()
+	return
 end
+
+local clap = require("clap")
 
 local args = clap.parse({ ... })
 
@@ -63,8 +60,16 @@ local evalCode = args:short("e")
 local luaFile = args:flag("lua") and args:pop()
 
 if args:flag("help") and args:count() == 0 and not evalCode and not luaFile then
-	require("lde.commands.help")(args)
+	require("lde.commands.help")()
 	return
+end
+
+-- Enable UTF-8 console output on Windows, needed for test output
+if jit.os == "Windows" then
+	local ok, win32 = pcall(require, "winapi")
+	if ok then
+		win32.kernel32.setConsoleOutputCP(win32.kernel32.ConsoleCP.UTF8)
+	end
 end
 
 local ansi, env, fs, path = applyOverrides()

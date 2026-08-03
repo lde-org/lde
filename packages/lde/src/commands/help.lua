@@ -3,8 +3,7 @@ local ansi = require("ansi")
 local ok, currentVersion = pcall(require, "lde.version")
 currentVersion = ok and currentVersion or "0.9.2"
 
----@param _args clap.Args
-local function help(_args)
+local function help()
 	local commands = {
 		{ cmd = "run",       ex = nil,           color = "green",   desc = "Execute a project" },
 		{ cmd = "x",         ex = "--git <url>", color = "green",   desc = "Run a package from a git repo or path" },
@@ -32,6 +31,7 @@ local function help(_args)
 	ansi.printf("{blue}{bold}lde{reset} is a package manager for Lua, written in Lua. {gray}(%s)\n", currentVersion)
 	ansi.printf("{bold}Usage:{reset} lde <command> {magenta}[options]")
 	ansi.printf("\n{bold}Commands:{reset}")
+
 	for _, command in ipairs(commands) do
 		if not command.cmd then -- Separator
 			print("")
