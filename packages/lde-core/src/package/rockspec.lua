@@ -9,6 +9,116 @@ local process = require("process")
 local util = require("util")
 local curl = require("curl-sys")
 
+--- LuaRocks accepts a plain string or a list for a native module's
+--- sources/libraries/libdirs/incdirs/defines (lzlib uses `libraries = "z"`),
+--- and a build-level default (build.libraries etc.) applies to every module
+--- unless the module overrides it. Normalize both into per-module lists.
+---@class lde.rockspec.NativeModuleSpec
+---@field sources string|string[]
+---@field libraries string|string[]?
+---@field libdirs string|string[]?
+---@field incdirs string|string[]?
+---@field defines string|string[]?
+
+---@class lde.rockspec.NativeModuleDefaults
+---@field libraries string|string[]?
+---@field libdirs string|string[]?
+---@field incdirs string|string[]?
+---@field defines string|string[]?
+
+---@class lde.rockspec.NormalizedNativeModule
+---@field sources string[]
+---@field libraries string[]?
+---@field libdirs string[]?
+---@field incdirs string[]?
+---@field defines string[]?
+
+---@param src lde.rockspec.NativeModuleSpec
+---@param buildTable lde.rockspec.NativeModuleDefaults?
+---@return lde.rockspec.NormalizedNativeModule
+local function normalizeNativeModule(src, buildTable)
+	if type(src.sources) == "string" then src.sources = { src.sources } end
+	for _, f in ipairs({ "libraries", "libdirs", "incdirs", "defines" }) do
+		if type(src[f]) == "string" then
+			src[f] = { src[f] }
+		elseif src[f] == nil and buildTable and buildTable[f] then
+			src[f] = type(buildTable[f]) == "string" and { buildTable[f] } or buildTable[f]
+		end
+	end
+	return src
+end
+
+--- Pure: builds the compiler argument list for a native module from its
+--- (normalized) spec. Extracted so the flag construction can be unit-tested
+--- without a toolchain.
+---@class lde.rockspec.NativeGccContext
+---@field packageDir string
+---@field modulesDir string
+---@field luajitPath string
+---@field destAbs string
+---@field jitOS string
+---@field makePath? fun(path: string): string
+
+---@param src lde.rockspec.NormalizedNativeModule
+---@param ctx lde.rockspec.NativeGccContext
+---@return string[]
+local function nativeGccArgs(src, ctx)
+	local jitOS = ctx.jitOS or jit.os
+	local ljPath = ctx.luajitPath
+	local dir = ctx.packageDir
+	local modulesDir = ctx.modulesDir
+	local makePath = ctx.makePath or function(p) return p end
+
+	local srcFiles = {}
+	for _, s in ipairs(src.sources) do
+		srcFiles[#srcFiles + 1] = path.join(dir, s)
+	end
+
+	local args = { "-shared", "-fPIC", "-DLUAJIT_VERSION=LuaJIT 2.1.0-beta3", "-DLUA_VERSION_NUM=501",
+		"-I" .. path.join(ljPath, "include") }
+	for _, d in ipairs(src.defines or {}) do args[#args + 1] = "-D" .. d end
+	if jitOS == "Windows" then
+		-- compat-5.3 (bundled by rocks like bit32) selects strerror_r when
+		-- _XOPEN_SOURCE >= 600 (which lprefix.h defines), but UCRT only
+		-- provides strerror_s — force the strerror_s branch.
+		args[#args + 1] = "-DCOMPAT53_HAVE_STRERROR_R=0"
+		args[#args + 1] = "-DCOMPAT53_HAVE_STRERROR_S=1"
+	end
+	-- Rockspec `incdirs` entries: absolute, relative to the package dir, or
+	-- $(VAR) placeholders resolved from the rock's standard variables (unknown
+	-- vars are skipped). LuaSec needs this for its bundled src/luasocket headers.
+	local incVars = {
+		LUA_INCDIR = path.join(ljPath, "include"),
+		LUA_LIBDIR = path.join(ljPath, "lib"),
+		PREFIX = modulesDir,
+		LUADIR = modulesDir,
+		LIBDIR = modulesDir,
+	}
+	for _, inc in ipairs(src.incdirs or {}) do
+		local resolved = (inc:gsub("%$%(([%w_]+)%)", function(k) return incVars[k] or "" end))
+		if resolved ~= "" and not resolved:find("$", 1, true) then
+			local incPath = path.isAbsolute(resolved) and resolved or path.join(dir, resolved)
+			args[#args + 1] = "-I" .. makePath(incPath)
+		end
+	end
+	for _, s in ipairs(srcFiles) do args[#args + 1] = s end
+	args[#args + 1] = "-o"
+	args[#args + 1] = ctx.destAbs
+	args[#args + 1] = "-L" .. path.join(ljPath, "lib")
+	for _, d in ipairs(src.libdirs or {}) do
+		local resolved = (d:gsub("%$%(([%w_]+)%)", function(k) return incVars[k] or "" end))
+		if resolved ~= "" and not resolved:find("$", 1, true) then
+			args[#args + 1] = "-L" .. makePath(resolved)
+		end
+	end
+	if jitOS == "Windows" then args[#args + 1] = "-lluajit" end
+	if jitOS == "OSX" then
+		args[#args + 1] = "-undefined"; args[#args + 1] = "dynamic_lookup"
+	end
+	for _, l in ipairs(src.libraries or {}) do args[#args + 1] = "-l" .. l end
+	return args
+end
+
 ---@param dir string?
 ---@param rockspecPath string? # Path to the rockspec file; if nil, scanned from dir
 ---@return lde.Package?, string?
@@ -18,7 +128,7 @@ local function openRockspec(dir, rockspecPath)
 	-- On Windows, returns an env table with the bundled toolchain's bin dir
 	-- prepended to PATH so child processes (gcc, ar, ld, sh, make, etc.)
 	-- resolve. Returns nil on non-Windows or when PATH already has it.
-	---@return table?
+	---@return table<string, string>?
 	local function toolchainEnv()
 		if jit.os ~= "Windows" then return nil end
 		local mingwBin = path.join(lde.global.getMingwDir(), "bin")
@@ -82,22 +192,6 @@ local function openRockspec(dir, rockspecPath)
 	local nativeModules = {}
 	local binScripts, installLuaFiles = {}, {}
 
-	-- LuaRocks accepts a plain string or a list for a native module's
-	-- sources/libraries/libdirs/incdirs/defines (lzlib uses `libraries = "z"`),
-	-- and a build-level default (build.libraries etc.) applies to every module
-	-- unless the module overrides it. Normalize both into per-module lists.
-	local function normalizeNative(src, buildTable)
-		if type(src.sources) == "string" then src.sources = { src.sources } end
-		for _, f in ipairs({ "libraries", "libdirs", "incdirs", "defines" }) do
-			if type(src[f]) == "string" then
-				src[f] = { src[f] }
-			elseif src[f] == nil and buildTable and buildTable[f] then
-				src[f] = type(buildTable[f]) == "string" and { buildTable[f] } or buildTable[f]
-			end
-		end
-		return src
-	end
-
 	if spec.build then
 		for modname, src in pairs(spec.build.modules or {}) do
 			if type(src) == "string" then
@@ -111,9 +205,9 @@ local function openRockspec(dir, rockspecPath)
 						": unrecognised source type for module '" .. modname .. "': " .. src .. "\n")
 				end
 			elseif type(src) == "table" and src.sources then
-				nativeModules[modname] = normalizeNative(src, spec.build)
+				nativeModules[modname] = normalizeNativeModule(src, spec.build)
 			elseif type(src) == "table" and src[1] then
-				nativeModules[modname] = normalizeNative({ sources = src }, spec.build)
+				nativeModules[modname] = normalizeNativeModule({ sources = src }, spec.build)
 			elseif type(src) == "table" and lde.verbose then
 				io.stderr:write("warning: " ..
 					(spec.package or "?") .. ": module '" .. modname .. "' has no sources field, skipping\n")
@@ -147,7 +241,7 @@ local function openRockspec(dir, rockspecPath)
 					nativeModules[modname] = { sources = { src } }
 				end
 			elseif type(src) == "table" and src.sources then
-				nativeModules[modname] = normalizeNative(src, platBuild)
+				nativeModules[modname] = normalizeNativeModule(src, platBuild)
 			end
 		end
 
@@ -346,49 +440,14 @@ local function openRockspec(dir, rockspecPath)
 
 				lde.global.ensureMingw()
 				local ljPath = sea.getLuajitPath()
-				local gccArgs = { "-shared", "-fPIC", "-DLUAJIT_VERSION=LuaJIT 2.1.0-beta3", "-DLUA_VERSION_NUM=501",
-					"-I" .. path.join(ljPath, "include") }
-				for _, d in ipairs(src.defines or {}) do gccArgs[#gccArgs + 1] = "-D" .. d end
-				if jit.os == "Windows" then
-					-- compat-5.3 (bundled by rocks like bit32) selects strerror_r when
-					-- _XOPEN_SOURCE >= 600 (which lprefix.h defines), but UCRT only
-					-- provides strerror_s — force the strerror_s branch.
-					gccArgs[#gccArgs + 1] = "-DCOMPAT53_HAVE_STRERROR_R=0"
-					gccArgs[#gccArgs + 1] = "-DCOMPAT53_HAVE_STRERROR_S=1"
-				end
-				-- Rockspec `incdirs` entries: absolute, relative to the package
-				-- dir, or $(VAR) placeholders resolved from the rock's standard
-				-- variables (unknown vars are skipped). LuaSec needs this for its
-				-- bundled src/luasocket headers.
-				local incVars = {
-					LUA_INCDIR = path.join(ljPath, "include"),
-					LUA_LIBDIR = path.join(ljPath, "lib"),
-					PREFIX = modulesDir,
-					LUADIR = modulesDir,
-					LIBDIR = modulesDir,
-				}
-				for _, inc in ipairs(src.incdirs or {}) do
-					local resolved = (inc:gsub("%$%(([%w_]+)%)", function(k) return incVars[k] or "" end))
-					if resolved ~= "" and not resolved:find("$", 1, true) then
-						local incPath = path.isAbsolute(resolved) and resolved or path.join(dir, resolved)
-						gccArgs[#gccArgs + 1] = "-I" .. makePath(incPath)
-					end
-				end
-				for _, s in ipairs(srcFiles) do gccArgs[#gccArgs + 1] = s end
-				gccArgs[#gccArgs + 1] = "-o"
-				gccArgs[#gccArgs + 1] = destAbs
-				gccArgs[#gccArgs + 1] = "-L" .. path.join(ljPath, "lib")
-				for _, d in ipairs(src.libdirs or {}) do
-					local resolved = (d:gsub("%$%(([%w_]+)%)", function(k) return incVars[k] or "" end))
-					if resolved ~= "" and not resolved:find("$", 1, true) then
-						gccArgs[#gccArgs + 1] = "-L" .. makePath(resolved)
-					end
-				end
-				if jit.os == "Windows" then gccArgs[#gccArgs + 1] = "-lluajit" end
-				if jit.os == "OSX" then
-					gccArgs[#gccArgs + 1] = "-undefined"; gccArgs[#gccArgs + 1] = "dynamic_lookup"
-				end
-				for _, l in ipairs(src.libraries or {}) do gccArgs[#gccArgs + 1] = "-l" .. l end
+				local gccArgs = nativeGccArgs(src, {
+					packageDir = dir,
+					modulesDir = modulesDir,
+					luajitPath = ljPath,
+					destAbs = destAbs,
+					jitOS = jit.os,
+					makePath = makePath,
+				})
 
 				local code, _, stderr = process.exec(lde.global.getCCBin(), gccArgs, { env = toolchainEnv() })
 				if code ~= 0 then
@@ -553,4 +612,10 @@ local function openRockspec(dir, rockspecPath)
 	return pkg, nil
 end
 
-return openRockspec
+local M = {
+	open = openRockspec,
+	nativeGccArgs = nativeGccArgs,
+	normalizeNativeModule = normalizeNativeModule,
+}
+
+return M

@@ -6,7 +6,6 @@ local fs = require("fs")
 local env = require("env")
 local path = require("path")
 local json = require("json")
-local process = require("process")
 
 local tmpBase = path.join(env.tmpdir(), "lde-build-tests")
 
@@ -956,54 +955,66 @@ end)
 -- Regression: a string-valued `libraries` (and string sources/libdirs/defines)
 -- must be treated as a one-element list (lzlib declares `libraries = "z"` and
 -- `libdirs = "$(ZLIB_LIBDIR)"`; without this the link drops -lz and the .so
--- fails with "undefined symbol: inflate").
+-- fails with "undefined symbol: inflate"). Pure unit test: no compiler, no
+-- platform-specific link inspection (ldd/otool/objdump all differ per OS).
 --
 
-test.it("rockspec: string-valued libraries/incdirs are normalized to lists", function()
-	local dir = path.join(tmpBase, "strlibs-rock")
-	fs.mkdir(dir)
-	fs.mkdir(path.join(dir, "src"))
-	-- zlib is always present on unix; libz.so.1 exports inflate()
-	fs.write(path.join(dir, "src", "ztest.c"), [[
-#include <zlib.h>
-#include <stddef.h>
-typedef struct lua_State lua_State;
-typedef int (*lua_CFunction)(lua_State *L);
-static int ztest(lua_State *L) { return 0; }
-int luaopen_ztest(lua_State *L) {
-  return (zlibVersion() != 0) ? 0 : 1;
-}
-]])
-	fs.write(path.join(dir, "strlibs-1.0-1.rockspec"), [[
-package = "strlibs"
-version = "1.0-1"
-source = { url = "https://example.com" }
-build = {
-  type = "builtin",
-  modules = {
-    ztest = {
-      sources = "src/ztest.c",
-      incdirs = "$(LUA_INCDIR)",
-      libraries = "z",
-    }
-  }
-}
-]])
+test.it("rockspec: string-valued native module fields are normalized to lists", function()
+	local hasArg = function(args, want)
+		for _, a in ipairs(args) do
+			if a == want then return true end
+		end
+		return false
+	end
 
-	local pkg, err = lde.Package.openRockspec(dir)
-	test.truthy(pkg, err)
+	-- Every string field becomes a one-element list.
+	local src = lde.Package.normalizeNativeModule({
+		sources = "src/ztest.c",
+		defines = "STR_LIB_TEST",
+		incdirs = "$(LUA_INCDIR)",
+		libdirs = "$(LUA_LIBDIR)",
+		libraries = "c",
+	})
+	test.equal("src/ztest.c", src.sources[1])
+	test.equal("STR_LIB_TEST", src.defines[1])
+	test.equal("$(LUA_INCDIR)", src.incdirs[1])
+	test.equal("$(LUA_LIBDIR)", src.libdirs[1])
+	test.equal("c", src.libraries[1])
 
-	local outputDir = path.join(dir, "target", "strlibs")
-	local ok, berr = pkg:runBuildScript(outputDir)
-	test.truthy(ok, berr)
+	-- Build-level defaults apply when a module omits a field.
+	local withDefaults = lde.Package.normalizeNativeModule({ sources = { "a.c" } }, {
+		libraries = "z",
+		defines = "FOO",
+	})
+	test.equal("z", withDefaults.libraries[1])
+	test.equal("FOO", withDefaults.defines[1])
 
-	-- Without string->list normalization the link drops -lz and the .so has no
-	-- NEEDED entry for libz (lzlib fails at require with "undefined symbol:
-	-- inflate"). ldd lists libz only when -lz was actually passed.
-	local so = path.join(dir, "target", "ztest.so")
-	test.truthy(fs.exists(so))
-	local code, lddOut = process.exec("ldd", { so }, { stdout = "pipe", stderr = "null" })
-	test.truthy(code == 0 and lddOut and lddOut:find("libz", 1, true) ~= nil, lddOut or "ldd failed")
+	-- The normalized fields are passed through to the compiler invocation.
+	local args = lde.Package.nativeGccArgs(src, {
+		packageDir = "/pkg",
+		modulesDir = "/pkg/target",
+		luajitPath = "/lj",
+		destAbs = "/pkg/target/ztest.so",
+		jitOS = "Linux",
+	})
+	test.truthy(hasArg(args, "-lc"), "expected -lc to be passed")
+	test.truthy(hasArg(args, "-DSTR_LIB_TEST"), "expected -DSTR_LIB_TEST to be passed")
+	test.truthy(hasArg(args, "-I/lj/include"), "expected -I/lj/include to be passed")
+	test.truthy(hasArg(args, "-L/lj/lib"), "expected -L/lj/lib to be passed")
+	test.truthy(hasArg(args, "/pkg/src/ztest.c"), "expected the source path to be passed")
+	test.truthy(hasArg(args, "/pkg/target/ztest.so"), "expected the output path to be passed")
+
+	-- Unknown $(VAR) placeholders are skipped rather than passed through raw.
+	local skipped = lde.Package.nativeGccArgs({ sources = { "a.c" }, libdirs = { "$(ZLIB_LIBDIR)" } }, {
+		packageDir = "/pkg",
+		modulesDir = "/pkg/target",
+		luajitPath = "/lj",
+		destAbs = "/out/a.so",
+		jitOS = "Linux",
+	})
+	for _, a in ipairs(skipped) do
+		test.falsy(a:find("ZLIB_LIBDIR", 1, true), "unresolved placeholder leaked into args")
+	end
 end)
 
 --

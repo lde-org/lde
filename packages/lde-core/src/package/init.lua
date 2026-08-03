@@ -138,7 +138,11 @@ function Package.openLDE(dir)
 	return setmetatable({ dir = dir }, Package), nil
 end
 
-Package.openRockspec = require("lde-core.package.rockspec")
+local rockspecModule = require("lde-core.package.rockspec")
+Package.openRockspec = rockspecModule.open
+-- Exposed for unit tests: pure native-module helpers (no toolchain needed).
+Package.nativeGccArgs = rockspecModule.nativeGccArgs
+Package.normalizeNativeModule = rockspecModule.normalizeNativeModule
 
 ---@param dir string?
 ---@param rockspec string? # Path to rockspec, forwarded to openRockspec if no lde.json
