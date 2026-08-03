@@ -307,7 +307,7 @@ int luaopen_answer(lua_State *L) {
 		app:installDependencies()
 		app:build()
 
-		test.truthy(fs.exists(path.join(appDir, "target", "answer.so")))
+		test.truthy(fs.exists(path.join(appDir, "target", "answer" .. (jit.os == "Windows" and ".dll" or ".so"))))
 
 		local ok, err = app:runFile()
 		if not ok then print(err) end

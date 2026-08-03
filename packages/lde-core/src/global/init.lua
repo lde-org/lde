@@ -164,7 +164,6 @@ function global.getCCBin()
 	return "gcc"
 end
 
-
 --- Returns the make binary used for builds.
 --- On Windows, prefers the bundled mingw toolchain's mingw32-make (the
 --- conventional name there) and falls back to the bare name so a make on

@@ -58,8 +58,7 @@ test.it("luarocks: lua-cjson encodes and decodes",
 local isAndroid = env.var("ANDROID_ROOT") ~= nil
 
 -- Android: Skip because termux doesn't expose crypt symbols.
--- Windows: luke (luaposix's build system) shells out with sh syntax.
-test.skipIf(isAndroid or jit.os == "Windows")("luarocks: luaposix gets pid", function()
+test.skipIf(isAndroid)("luarocks: luaposix gets pid", function()
 	local app = makeApp("rocks-luaposix", { posix = { luarocks = "luaposix" } })
 	app:installDependencies()
 	local ok, err = app:runString([[

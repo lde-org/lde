@@ -11,8 +11,7 @@ local tmpBase = path.join(env.tmpdir(), "lde-compile-tests")
 fs.rmdir(tmpBase)
 fs.mkdir(tmpBase)
 
-test.skipIf(jit.os == "Windows")(
-	"compile: native C module is loadable in compiled binary", function()
+test.it("compile: native C module is loadable in compiled binary", function()
 		local rockDir = path.join(tmpBase, "answer-rock")
 		fs.mkdir(rockDir)
 		fs.mkdir(path.join(rockDir, "csrc"))
@@ -57,8 +56,9 @@ int luaopen_answer(lua_State *L) {
 
 		local binTmp = app:compile()
 		local binPath = path.join(appDir, "answer-app")
+		if jit.os == "Windows" then binPath = binPath .. ".exe" end
 		fs.move(binTmp, binPath)
-		fs.chmod(binPath, tonumber("755", 8)) ---@cast fs fs.raw.posix
+		if jit.os ~= "Windows" then fs.chmod(binPath, tonumber("755", 8)) end
 		test.truthy(fs.exists(binPath), "compiled binary should exist")
 
 		local code, stdout, stderr = process.exec(binPath, {})

@@ -953,7 +953,7 @@ assert(shellContent:match("hello"), "sh/read mismatch: " .. shellContent)
 	test.truthy(fs.read(path.join(outputDir, "shell.txt")):match("hello"))
 end)
 
-test.skipIf(jit.os == "Windows")("rockspec: make build.variables are substituted and passed to make", function()
+test.it("rockspec: make build.variables are substituted and passed to make", function()
 	local dir = path.join(tmpBase, "make-vars-rock")
 	fs.mkdir(dir)
 	-- Makefile that writes MY_INCDIR to built.txt on build, then copies it on install.
