@@ -243,7 +243,7 @@ test.it("rockspec dep: can require(packagename) from a consumer package", functi
 	test.truthy(ok)
 end)
 
-test.skipIf(jit.os == "Windows" or jit.os == "OSX")(
+test.it(
 	"rockspec native C module: can require and call a C function returning 52", function()
 		fs.mkdir(tmpBase)
 

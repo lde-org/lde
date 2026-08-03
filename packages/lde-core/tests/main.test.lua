@@ -16,7 +16,7 @@ fs.rmdir(tmpBase)
 -- runtime.executeFile
 --
 
-test.skipIf(jit.os == "OSX")("runtime.executeFile runs a Lua script", function()
+test.it("runtime.executeFile runs a Lua script", function()
 	fs.mkdir(tmpBase)
 	local scriptPath = path.join(tmpBase, "hello.lua")
 	fs.write(scriptPath, 'return 42')
@@ -625,7 +625,7 @@ test.it("runFile: errors with a clear message when package has no bin and no ini
 	test.includes(err, "no-entrypoint")
 end)
 
-test.skipIf(jit.os ~= "Linux")("archive dep: installs a .tar.gz dependency from a URL", function()
+test.it("archive dep: installs a .tar.gz dependency from a URL", function()
 	fs.mkdir(tmpBase)
 	local appDir = path.join(tmpBase, "archive-dep-app")
 	fs.mkdir(appDir)

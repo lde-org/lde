@@ -350,7 +350,7 @@ local function openRockspec(dir, rockspecPath)
 				CC            = lde.global.getGCCBin(),
 				LD            = lde.global.getGCCBin(),
 				CFLAGS        = "-fPIC",
-				LIBFLAG       = "-shared",
+				LIBFLAG       = jit.os == "OSX" and "-shared -undefined dynamic_lookup" or "-shared",
 				LIB_EXTENSION = jit.os == "Windows" and "dll" or jit.os == "OSX" and "dylib" or "so",
 				OBJ_EXTENSION = "o"
 			}

@@ -22,7 +22,7 @@ local function makeApp(name, deps)
 	return lde.Package.open(dir)
 end
 
-test.skipIf(jit.os == "Windows" or jit.os == "OSX")("luarocks: lpeg matches a pattern", function()
+test.it("luarocks: lpeg matches a pattern", function()
 	local app = makeApp("rocks-lpeg", { lpeg = { luarocks = "lpeg" } })
 	app:installDependencies()
 	local ok, err = app:runString([[
@@ -32,8 +32,7 @@ test.skipIf(jit.os == "Windows" or jit.os == "OSX")("luarocks: lpeg matches a pa
 	test.truthy(ok)
 end)
 
--- Disabled for macos: https://github.com/lde-org/lde/issues/90
-test.skipIf(jit.os == "Windows" or jit.os == "OSX")("luarocks: luasocket parses a url", function()
+test.it("luarocks: luasocket parses a url", function()
 	local app = makeApp("rocks-luasocket", { socket = { luarocks = "luasocket" } })
 	app:installDependencies()
 	local ok, err = app:runString([[
@@ -44,8 +43,7 @@ test.skipIf(jit.os == "Windows" or jit.os == "OSX")("luarocks: luasocket parses 
 	test.truthy(ok)
 end)
 
--- Disabled for macos: https://github.com/lde-org/lde/issues/90
-test.skipIf(jit.os == "Windows" or jit.os == "OSX")("luarocks: lua-cjson encodes and decodes",
+test.it("luarocks: lua-cjson encodes and decodes",
 	function()
 		local app = makeApp("rocks-cjson", { cjson = { luarocks = "lua-cjson" } })
 		app:installDependencies()
@@ -59,8 +57,9 @@ test.skipIf(jit.os == "Windows" or jit.os == "OSX")("luarocks: lua-cjson encodes
 
 local isAndroid = env.var("ANDROID_ROOT") ~= nil
 
--- Android: Skip because termux doesn't expose crypt symbols
-test.skipIf(isAndroid or jit.os == "Windows" or jit.os == "OSX")("luarocks: luaposix gets pid", function()
+-- Android: Skip because termux doesn't expose crypt symbols.
+-- Windows: luke (luaposix's build system) shells out with sh syntax.
+test.skipIf(isAndroid or jit.os == "Windows")("luarocks: luaposix gets pid", function()
 	local app = makeApp("rocks-luaposix", { posix = { luarocks = "luaposix" } })
 	app:installDependencies()
 	local ok, err = app:runString([[

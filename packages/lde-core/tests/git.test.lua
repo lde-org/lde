@@ -165,7 +165,7 @@ test.it("rockspec git dep: middleclass can be required after install", function(
 	test.truthy(ok)
 end)
 
-test.skipIf(jit.os == "Windows" or jit.os == "OSX")("rockspec git dep: luafilesystem native C module works", function()
+test.it("rockspec git dep: luafilesystem native C module works", function()
 	local dir = path.join(tmpBase, "lfs-consumer")
 	fs.mkdir(dir)
 	fs.mkdir(path.join(dir, "src"))

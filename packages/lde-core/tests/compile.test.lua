@@ -11,7 +11,7 @@ local tmpBase = path.join(env.tmpdir(), "lde-compile-tests")
 fs.rmdir(tmpBase)
 fs.mkdir(tmpBase)
 
-test.skipIf(jit.os == "Windows" or jit.os == "OSX")(
+test.skipIf(jit.os == "Windows")(
 	"compile: native C module is loadable in compiled binary", function()
 		local rockDir = path.join(tmpBase, "answer-rock")
 		fs.mkdir(rockDir)

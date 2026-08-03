@@ -711,7 +711,7 @@ test.it("runTests with path-like filter containing glob resolves and matches", f
 	test.equal(results.files[1].file, "sub" .. path.separator .. "two.test.lua")
 end)
 
-test.skipIf(jit.os == "Windows" or jit.os == "OSX")(
+test.it(
 	"rockspec buildfn: array-style sources table compiles native module", function()
 		local rockDir = path.join(tmpBase, "array-sources-rock")
 		fs.mkdir(rockDir)
