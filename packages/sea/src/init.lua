@@ -254,18 +254,6 @@ char lde_tmpdir[4096];
 	local libStartupStr  = libTmpDirInit .. table.concat(libStartup, "\n")
 	local libPreloadsStr = table.concat(libPreloads, "\n")
 
-	local tmpnameShim    = util.dedent([[
-		do
-			local _ctr = 0
-			local _tmpdir = os.getenv("TMPDIR") or os.getenv("TEMP") or os.getenv("TMP") or "/tmp"
-			_tmpdir = _tmpdir:gsub("[\\/]+$", "")
-			os.tmpname = function()
-				_ctr = _ctr + 1
-				return _tmpdir .. "/lde_" .. tostring(os.clock() * 1000):gsub("%.", "") .. "_" .. _ctr .. ".tmp"
-			end
-		end
-	]])
-
 	local ffiShim = ""
 	if #ffiShimEntries > 0 then
 		ffiShim = util.dedent(string.format([[
@@ -290,10 +278,10 @@ char lde_tmpdir[4096];
 		]], table.concat(ffiShimEntries, ", ")))
 	end
 
-	-- Patches os.tmpname and remaps ffi.load to the embedded shared libs.
-	-- Kept as its own chunk (instead of being prepended to the bundle) so it
-	-- works for both source and bytecode bundles.
-	local shimSource = tmpnameShim .. "\n" .. ffiShim
+	-- Remaps ffi.load to the embedded shared libs. Kept as its own chunk
+	-- (instead of being prepended to the bundle) so it works for both source
+	-- and bytecode bundles.
+	local shimSource = ffiShim
 	local shimStartup = ""
 	if shimSource ~= "" then
 		shimStartup = string.format(

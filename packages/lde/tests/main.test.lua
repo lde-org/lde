@@ -35,10 +35,7 @@ test.it("should not ignore --git in ldx", function()
 	fs.rmdir(repoDir)
 end)
 
--- TODO: Figure out why android struggles with cli tests
-local isAndroid = env.var("ANDROID_ROOT") ~= nil
-
-test.skipIf(isAndroid)("lde test skips packages with no tests/ directory", function()
+test.it("lde test skips packages with no tests/ directory", function()
 	local tmpDir = path.join(env.tmpdir(), "lde-test-skip-test")
 	fs.rmdir(tmpDir)
 	fs.mkdir(tmpDir)
@@ -84,7 +81,7 @@ test.it("--tree overrides the global lde directory", function()
 	test.truthy(fs.exists(path.join(tmpTree, "git")))
 end)
 
-test.skipIf(isAndroid)("-C changes the working directory before loose-file resolution", function()
+test.it("-C changes the working directory before loose-file resolution", function()
 	local tmpDir = path.join(env.tmpdir(), "lde-cli-cwd-short")
 	local pkgDir = path.join(tmpDir, "pkg")
 	fs.rmdir(tmpDir)
@@ -99,7 +96,7 @@ test.skipIf(isAndroid)("-C changes the working directory before loose-file resol
 	fs.rmdir(tmpDir)
 end)
 
-test.skipIf(isAndroid)("--cwd changes the working directory before package resolution", function()
+test.it("--cwd changes the working directory before package resolution", function()
 	local tmpDir = path.join(env.tmpdir(), "lde-cli-cwd-long")
 	local pkgDir = path.join(tmpDir, "pkg")
 	fs.rmdir(tmpDir)
@@ -131,8 +128,7 @@ test.it("--cwd errors when the target directory does not exist", function()
 	fs.rmdir(tmpDir)
 end)
 
--- TODO: re-enable once a nightly build with TMPDIR set in the Android Docker run is available
-test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde <script> <args> passes positional args to the script", function()
+test.it("lde <script> <args> passes positional args to the script", function()
 	local script = path.join(env.tmpdir(), "lde-argtest.lua")
 	fs.write(script, 'io.write(arg[1] .. " " .. arg[2])')
 
@@ -141,8 +137,7 @@ test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde <script> <args> passes position
 	test.includes(out, "hello world")
 end)
 
--- TODO: re-enable once a nightly build with TMPDIR set in the Android Docker run is available
-test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde <script> receives arg[0] as the script path", function()
+test.it("lde <script> receives arg[0] as the script path", function()
 	local script = path.join(env.tmpdir(), "lde-arg0test.lua")
 	fs.write(script, "io.write(arg[0])")
 
