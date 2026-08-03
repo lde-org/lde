@@ -163,7 +163,7 @@ local function safeIdent(name)
 end
 
 ---@param main string # name used as the chunk label
----@param source string # bundled lua (source or LuaJIT bytecode, as returned by bundlePackage); bytecode is linked as a raw .incbin blob
+---@param source string|{ name: string, modules: { name: string, code: string }[] } # bundled lua: source string, LuaJIT bytecode string, or a raw bytecode table (bundlePackage { raw = true }) — raw tables are linked as a .incbin blob with lazy preload loaders
 ---@param sharedLibs? { name: string, content: string }[]
 ---@param compiler? string # path to compiler binary; defaults to SEA_CC env var or "gcc"
 ---@return string
@@ -303,17 +303,17 @@ char lde_tmpdir[4096];
 		)
 	end
 
-	local isBytecode  = source:sub(1, 3) == "\27LJ"
-	local bundleDecls = ""
-	if isBytecode then
-		-- LuaJIT bytecode contains NUL bytes, so it can't live in a C string
-		-- literal. Link it as a raw blob with .incbin instead: 1:1 size (smaller
-		-- than the source it replaces) and zero runtime decode cost. The path is
-		-- content-addressed so recompiles of unchanged code reuse the file.
-		local hash   = util.fnv1a(source)
+	local isRawBundle = type(source) == "table"
+	local isBytecode  = not isRawBundle and source:sub(1, 3) == "\27LJ"
+
+	-- Link a raw byte blob into the binary (1:1 size, zero runtime decode).
+	-- The path is content-addressed so recompiles of unchanged code reuse the
+	-- file; returns the C declarations (asm + externs) for the blob.
+	local function writeBundleBlob(content)
+		local hash   = util.fnv1a(content)
 		local bcPath = path.join(env.tmpdir(), "lde-bundle-" .. hash .. ".bc")
 		if not fs.exists(bcPath) then
-			fs.write(bcPath, source)
+			fs.write(bcPath, content)
 			if not fs.exists(bcPath) then
 				error("Failed to write bundle bytecode to " .. bcPath)
 			end
@@ -321,8 +321,10 @@ char lde_tmpdir[4096];
 
 		-- Forward slashes keep the path valid in .incbin on Windows; the asm
 		-- symbol name differs on macOS (Mach-O prefixes C symbols with _).
+		-- Blank line after [[ so the #if lands at the start of a line (Lua
+		-- long brackets swallow the first newline).
 		local asmPath = bcPath:gsub("\\", "/"):gsub('"', '\\"')
-		bundleDecls = string.format([[
+		return string.format([[
 
 #if defined(__APPLE__)
 __asm__(".globl _lde_bundle_start\n_lde_bundle_start:\n.incbin \"%s\"\n.globl _lde_bundle_end\n_lde_bundle_end:\n");
@@ -332,6 +334,95 @@ __asm__(".globl lde_bundle_start\nlde_bundle_start:\n.incbin \"%s\"\n.globl lde_
 extern const unsigned char lde_bundle_start[];
 extern const unsigned char lde_bundle_end[];
 ]], asmPath, asmPath)
+	end
+
+	local bundleDecls  = ""
+	local loaderHelper = ""
+	local filePreloads = {}
+	local preloadSetup = {}
+	local mainLoad     = ""
+
+	if isRawBundle then
+		-- bundlePackage raw mode: per-module bytecode is concatenated into one
+		-- blob and the C side registers lazy package.preload loaders over it.
+		-- Only the main entry is loaded eagerly (it needs argv); everything else
+		-- deserializes on first require(), so --version/help never touch the
+		-- whole module graph.
+		local blobParts = {}
+		local modules   = {}
+		local offset    = 0
+		for _, m in ipairs(source.modules) do
+			modules[#modules + 1] = {
+				name      = m.name,
+				chunkname = "@" .. m.name,
+				off       = offset,
+				len       = #m.code
+			}
+			blobParts[#blobParts + 1] = m.code
+			offset = offset + #m.code
+		end
+		bundleDecls = writeBundleBlob(table.concat(blobParts))
+
+		local modEntries = {}
+		for _, m in ipairs(modules) do
+			modEntries[#modEntries + 1] = string.format(
+				'\t{ "%s", "%s", %d, %d },' ,
+				m.name:gsub(".", CEscapes),
+				m.chunkname:gsub(".", CEscapes),
+				m.off,
+				m.len
+			)
+		end
+
+		loaderHelper = string.format([[
+static const struct lde_module { const char* name; const char* chunkname; size_t off; size_t len; } lde_modules[] = {
+%s
+};
+
+static int lde_module_loader(lua_State* L) {
+	const char* name = lua_tostring(L, 1);
+	for (size_t i = 0; i < sizeof(lde_modules) / sizeof(lde_modules[0]); i++) {
+		if (strcmp(name, lde_modules[i].name) == 0) {
+			if (luaL_loadbuffer(L, (const char*)lde_bundle_start + lde_modules[i].off,
+					lde_modules[i].len, lde_modules[i].chunkname) != LUA_OK) {
+				return lua_error(L);
+			}
+			lua_pushvalue(L, 1); /* modules may use (...) at the top level */
+			lua_call(L, 1, 1);
+			return 1;
+		}
+	}
+	return luaL_error(L, "module '%%s' not found in bundle", name);
+}
+]], table.concat(modEntries, "\n"))
+
+		local mainMod
+		for _, m in ipairs(modules) do
+			if m.name == source.name then mainMod = m end
+		end
+		if not mainMod then
+			error("bundle is missing the main module '" .. source.name .. "'")
+		end
+
+		for _, m in ipairs(modules) do
+			if m.name ~= source.name then
+				preloadSetup[#preloadSetup + 1] = string.format(
+					'lua_pushstring(L, "%s"); lua_pushcfunction(L, lde_module_loader); lua_settable(L, -3);',
+					m.name:gsub(".", CEscapes)
+				)
+			end
+		end
+
+		mainLoad = string.format(
+			'luaL_loadbuffer(L, (const char*)lde_bundle_start + %d, %d, "%s"); lua_setfield(L, -2, "%s");',
+			mainMod.off, mainMod.len,
+			mainMod.chunkname:gsub(".", CEscapes),
+			mainMod.name:gsub(".", CEscapes)
+		)
+	elseif isBytecode then
+		-- LuaJIT bytecode wrapper (contains the escaped module bytecode as
+		-- string constants), linked as a raw blob.
+		bundleDecls = writeBundleBlob(source)
 
 		filePreloads = {
 			('luaL_loadbuffer(L, (const char*)lde_bundle_start, (size_t)(lde_bundle_end - lde_bundle_start), "@%s"); lua_setfield(L, -2, "%s");')
@@ -349,7 +440,15 @@ extern const unsigned char lde_bundle_end[];
 		}
 	end
 
-	local stdintInclude = (hasLibs and "#include <stdint.h>\n#include <string.h>\n#include <stdlib.h>\n" or "") .. "#ifdef __ANDROID__\n#include <unistd.h>\n#endif\n"
+	local extraIncludes = {}
+	if hasLibs then
+		extraIncludes[#extraIncludes + 1] = "#include <stdint.h>\n#include <string.h>\n#include <stdlib.h>\n"
+	end
+	if isRawBundle then
+		-- lde_module_loader uses strcmp/size_t.
+		extraIncludes[#extraIncludes + 1] = "#include <string.h>\n#include <stddef.h>\n"
+	end
+	local stdintInclude = table.concat(extraIncludes) .. "#ifndef _WIN32\n#include <unistd.h>\n#endif\n"
 
 	-- lde_loadlib_loader: a C closure that calls package.loadlib(upvalue1, "*").
 	-- Only emitted when there are shared libs to avoid dead-code warnings.
@@ -381,7 +480,7 @@ static int lde_loadlib_loader(lua_State* L) {
 #include "lauxlib.h"
 #include "lualib.h"
 
-	]] .. libDeclsStr .. bundleDecls .. [[
+	]] .. libDeclsStr .. bundleDecls .. loaderHelper .. [[
 
 ]] .. loadlibHelper .. [[
 
@@ -406,7 +505,7 @@ int main(int argc, char** argv) {
 	lua_getglobal(L, "package");
 	lua_getfield(L, -1, "preload");
 
-	]] .. table.concat(filePreloads, "\n\t") .. [[
+	]] .. table.concat(filePreloads, "\n\t") .. table.concat(preloadSetup, "\n\t") .. mainLoad .. [[
 
 	]] .. libPreloadsStr .. [[
 
@@ -423,21 +522,22 @@ int main(int argc, char** argv) {
 	int result = lua_pcall(L, argc - 1, 0, base);
 	if (result != LUA_OK) {
 		fprintf(stderr, "%s\n", lua_tostring(L, -1));
-		lua_close(L);
-#ifdef __ANDROID__
 		fflush(NULL);
-		_exit(1);
-#else
+#ifdef _WIN32
 		return 1;
+#else
+		_exit(1);
 #endif
 	}
 
-	lua_close(L);
-#ifdef __ANDROID__
+	/* Skip lua_close: the OS reclaims the Lua state at exit, and lua_close's
+	 * GC teardown costs ~0.2ms on every run. Flush stdio explicitly since
+	 * _exit bypasses the C runtime's atexit flushing. */
 	fflush(NULL);
-	_exit(0);
-#else
+#ifdef _WIN32
 	return 0;
+#else
+	_exit(0);
 #endif
 }
 ]]

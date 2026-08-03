@@ -15,9 +15,10 @@ local function compilePackage(package)
 	package:build()
 	package:installDependencies()
 
-	-- Bytecode bundles skip the parser at startup: sea embeds the bytecode as a
-	-- raw blob (.incbin) and luaL_loadbuffer detects it without parsing.
-	local source = bundlePackage(package, { bytecode = true })
+	-- Raw bytecode: sea embeds the per-module bytecode as a raw blob (.incbin)
+	-- and registers lazy preload loaders over it, so startup only deserializes
+	-- the modules a command actually requires.
+	local source = bundlePackage(package, { raw = true })
 
 	local sharedLibs = {}
 	local modulesDir = package:getModulesDir()

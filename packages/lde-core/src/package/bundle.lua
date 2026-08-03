@@ -65,11 +65,12 @@ local function bundleDir(projectName, dir, files)
 end
 
 ---@param package lde.Package
----@param opts { bytecode: boolean? }?
----@return string bundled source
+---@param opts { bytecode: boolean?, raw: boolean? }?
+---@return string|{ name: string, modules: { name: string, code: string }[] }
 local function bundlePackage(package, opts)
 	opts = opts or {}
-	local useBytecode = opts.bytecode
+	local useBytecode = opts.bytecode or opts.raw
+	local raw = opts.raw
 
 	local files = {}
 	local modulesDir = package:getModulesDir()
@@ -87,6 +88,23 @@ local function bundlePackage(package, opts)
 		end
 	end
 
+	local mainName = package:getName()
+
+	if raw then
+		-- Raw bytecode table for sea.compile: each module's bytecode is kept
+		-- separate so the C side can embed it as raw bytes and deserialize it
+		-- lazily on first require(), instead of parsing/deserializing the whole
+		-- module graph at startup.
+		local modules = {}
+		for moduleName, content in pairs(files) do
+			modules[#modules + 1] = {
+				name = moduleName,
+				code = compileBytecode(content, moduleName)
+			}
+		end
+		return { name = mainName, modules = modules }
+	end
+
 	local parts = {}
 	for moduleName, content in pairs(files) do
 		if useBytecode then
@@ -95,10 +113,23 @@ local function bundlePackage(package, opts)
 			content = escapeString(content)
 		end
 
-		parts[#parts + 1] = string.format(
-			'package.preload["%s"] = load("%s", "@%s")',
-			moduleName, content, moduleName
-		)
+		if moduleName == mainName then
+			-- Main entry: loaded eagerly so the final call can pass args through.
+			parts[#parts + 1] = string.format(
+				'package.preload["%s"] = load("%s", "@%s")',
+				moduleName, content, moduleName
+			)
+		else
+			-- Everything else: defer bytecode deserialization to first require(),
+			-- so trivial commands (--version, help) don't pay for the whole
+			-- module graph at startup. Forward the modname vararg that require
+			-- passes to preload loaders: modules use (...), e.g. lde-core does
+			-- package.loaded[(...)] = lde at the top.
+			parts[#parts + 1] = string.format(
+				'package.preload["%s"] = function(...) return load("%s", "@%s")(...) end',
+				moduleName, content, moduleName
+			)
+		end
 	end
 
 	parts[#parts + 1] = string.format('return package.preload["%s"](...)', package:getName())
