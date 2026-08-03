@@ -1,8 +1,4 @@
-local ansi = require("ansi")
 local clap = require("clap")
-local env = require("env")
-local fs = require("fs")
-local path = require("path")
 
 -- Enable UTF-8 console output on Windows
 if jit.os == "Windows" then
@@ -14,32 +10,50 @@ end
 
 local args = clap.parse({ ... })
 
-local cwdOverride = args:option("cwd") or args:short("C")
-if cwdOverride then
-	local requestedCwd = path.resolve(env.cwd(), cwdOverride)
-	if not fs.isdir(requestedCwd) then
-		ansi.printf("{red}Error: Directory does not exist: %s", requestedCwd)
-		os.exit(1)
+-- Parse the overrides up front so --version is detected even when combined
+-- with -C/--tree (matching the historical behavior), but don't apply them
+-- until after the version check.
+local cwdOverride  = args:option("cwd") or args:short("C")
+local treeOverride = args:option("tree")
+
+-- Applies -C/--tree. Kept separate so the --version path below can apply
+-- them too, while the plain `lde --version` never pays for ansi/env/fs/path
+-- or lde-core.
+local function applyOverrides()
+	local ansi = require("ansi")
+	local env = require("env")
+	local fs = require("fs")
+	local path = require("path")
+
+	if cwdOverride then
+		local requestedCwd = path.resolve(env.cwd(), cwdOverride)
+		if not fs.isdir(requestedCwd) then
+			ansi.printf("{red}Error: Directory does not exist: %s", requestedCwd)
+			os.exit(1)
+		end
+
+		if not env.chdir(requestedCwd) then
+			ansi.printf("{red}Error: Failed to change directory: %s", requestedCwd)
+			os.exit(1)
+		end
 	end
 
-	if not env.chdir(requestedCwd) then
-		ansi.printf("{red}Error: Failed to change directory: %s", requestedCwd)
-		os.exit(1)
+	if treeOverride then
+		local lde = require("lde-core")
+		lde.verbose = true
+		lde.global.setDir(treeOverride)
+		lde.global.init()
 	end
+
+	return ansi, env, fs, path
 end
 
 -- Fast paths that avoid loading lde-core (whose module graph pulls in
 -- git2-sys, curl-sys, json, etc.) — this is what dominates CLI startup.
-
-local treeOverride = args:option("tree")
-if treeOverride then
-	local lde = require("lde-core")
-	lde.verbose = true
-	lde.global.setDir(treeOverride)
-	lde.global.init()
-end
-
 if args:flag("version") and args:count() == 0 then
+	if cwdOverride or treeOverride then
+		applyOverrides()
+	end
 	local ok, v = pcall(require, "lde.version")
 	print(ok and v or "0.9.2")
 	return
@@ -48,10 +62,12 @@ end
 local evalCode = args:short("e")
 local luaFile = args:flag("lua") and args:pop()
 
-if args:count() == 0 and args:flag("help") then
+if args:flag("help") and args:count() == 0 and not evalCode and not luaFile then
 	require("lde.commands.help")(args)
 	return
 end
+
+local ansi, env, fs, path = applyOverrides()
 
 if args:flag("update-path") or args:flag("setup") then
 	require("lde.setup")()
