@@ -148,7 +148,7 @@ function global.getMingwDir()
 	return path.join(global.getDir(), "mingw")
 end
 
-function global.getGCCBin()
+function global.getCCBin()
 	local override = env.var("SEA_CC")
 	if override then
 		return override
@@ -162,6 +162,28 @@ function global.getGCCBin()
 	end
 
 	return "gcc"
+end
+
+
+--- Returns the make binary used for builds.
+--- On Windows, prefers the bundled mingw toolchain's mingw32-make (the
+--- conventional name there) and falls back to the bare name so a make on
+--- PATH is used when no toolchain is installed.
+---@return string
+function global.getMakeBin()
+	if jit.os == "Windows" then
+		local mingwMake = path.join(global.getMingwDir(), "bin", "mingw32-make.exe")
+		if fs.exists(mingwMake) then
+			return mingwMake
+		end
+		local makeExe = path.join(global.getMingwDir(), "bin", "make.exe")
+		if fs.exists(makeExe) then
+			return makeExe
+		end
+		return "mingw32-make"
+	end
+
+	return "make"
 end
 
 function global.getRegistryDir()

@@ -77,21 +77,25 @@ local function defaultBuildFn(pkg, outputDir)
 	env.set("LDE_OUTPUT_DIR", outputDir)
 	env.set("LPM_OUTPUT_DIR", outputDir)
 
-	-- Expose the gcc binary and, on Windows, prepend its directory to PATH so
-	-- child processes spawned by build:sh() (cmake, ninja, etc.) can find it.
-	local gccBin = global.getGCCBin()
+	-- Expose the C compiler and make binaries and, on Windows, prepend the
+	-- toolchain bin dir to PATH so child processes spawned by build:sh()
+	-- (cmake, ninja, make, sh, etc.) can find them.
+	local ccBin = global.getCCBin()
+	local makeBin = global.getMakeBin()
 	local oldCC  = env.var("CC") or ""
+	local oldMAKE = env.var("MAKE") or ""
 	local oldPATH = env.var("PATH") or ""
-	env.set("CC", gccBin)
+	env.set("CC", ccBin)
+	env.set("MAKE", makeBin)
 	if jit.os == "Windows" then
-		local mingwBinDir = path.dirname(gccBin)
+		local mingwBinDir = path.dirname(ccBin)
 		if not oldPATH:find(mingwBinDir, 1, true) then
 			env.set("PATH", mingwBinDir .. ";" .. oldPATH)
 		end
 	end
 
 	-- Inject lde-build instance into the guest state
-	Instance.setup(state, outputDir, gccBin)
+	Instance.setup(state, outputDir, ccBin)
 
 	local cwd = pkg:getDir()
 	local oldCwd = env.cwd()
@@ -103,6 +107,7 @@ local function defaultBuildFn(pkg, outputDir)
 	env.set("LDE_OUTPUT_DIR", "")
 	env.set("LPM_OUTPUT_DIR", "")
 	env.set("CC", oldCC)
+	env.set("MAKE", oldMAKE)
 	if jit.os == "Windows" then env.set("PATH", oldPATH) end
 	state:close()
 

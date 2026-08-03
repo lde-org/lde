@@ -15,6 +15,18 @@ local curl = require("curl-sys")
 local function openRockspec(dir, rockspecPath)
 	dir = dir or env.cwd()
 
+	-- On Windows, returns an env table with the bundled toolchain's bin dir
+	-- prepended to PATH so child processes (gcc, ar, ld, sh, make, etc.)
+	-- resolve. Returns nil on non-Windows or when PATH already has it.
+	---@return table?
+	local function toolchainEnv()
+		if jit.os ~= "Windows" then return nil end
+		local mingwBin = path.join(lde.global.getMingwDir(), "bin")
+		local curPath = env.var("PATH") or ""
+		if curPath:find(mingwBin, 1, true) then return nil end
+		return { PATH = mingwBin .. ";" .. curPath }
+	end
+
 	local content
 	if not rockspecPath then -- Search for a rockspec in the directory
 		if fs.isdir(dir) then
@@ -145,11 +157,15 @@ local function openRockspec(dir, rockspecPath)
 		local modulesDir = path.dirname(outputDir)
 
 		if buildType == "make" then
-			if not process.exec("make", { "--version" }) then
+			lde.global.ensureMingw()
+			local makeBin = lde.global.getMakeBin()
+			if not process.exec(makeBin, { "--version" }) then
 				return nil,
 					"Package '" .. (spec.package or "?") .. "' requires 'make' to build, but it was not found." ..
 					" Install make (e.g. build-essential on Debian/Ubuntu, Xcode Command Line Tools on macOS)."
 			end
+
+			local makeEnv = toolchainEnv()
 
 			local luajitPath = sea.getLuajitPath()
 			local luajitInclude = path.join(luajitPath, "include")
@@ -186,7 +202,7 @@ local function openRockspec(dir, rockspecPath)
 			local buildArgs = buildVarList(spec.build.variables)
 			if buildTarget ~= "" then buildArgs[#buildArgs + 1] = buildTarget end
 
-			local code, _, stderr = process.exec("make", buildArgs, { cwd = dir })
+			local code, _, stderr = process.exec(makeBin, buildArgs, { cwd = dir, env = makeEnv })
 			if code ~= 0 then
 				local msg = (stderr ~= "" and stderr) or ("exited with code " .. code)
 				return nil, "make failed: " .. msg
@@ -195,7 +211,7 @@ local function openRockspec(dir, rockspecPath)
 			local installArgs = buildVarList(spec.build.install_variables)
 			installArgs[#installArgs + 1] = installTarget
 
-			code, _, stderr = process.exec("make", installArgs, { cwd = dir })
+			code, _, stderr = process.exec(makeBin, installArgs, { cwd = dir, env = makeEnv })
 			if code ~= 0 then
 				local msg = (stderr ~= "" and stderr) or ("exited with code " .. code)
 				return nil, "make install failed: " .. msg
@@ -304,13 +320,7 @@ local function openRockspec(dir, rockspecPath)
 				end
 				for _, l in ipairs(src.libraries or {}) do gccArgs[#gccArgs + 1] = "-l" .. l end
 
-				local gccEnv
-				if jit.os == "Windows" then
-					local mingwBin = path.join(lde.global.getMingwDir(), "bin")
-					gccEnv = { PATH = mingwBin .. ";" .. (env.var("PATH") or "") }
-				end
-
-				local code, _, stderr = process.exec(lde.global.getGCCBin(), gccArgs, { env = gccEnv })
+				local code, _, stderr = process.exec(lde.global.getCCBin(), gccArgs, { env = toolchainEnv() })
 				if code ~= 0 then
 					local msg = (stderr ~= "" and stderr) or ("exited with code " .. code)
 					return nil, "Failed to compile native module '" .. modname .. "': " .. msg
@@ -350,8 +360,9 @@ local function openRockspec(dir, rockspecPath)
 				LIBDIR        = modulesDir,
 				LUADIR        = modulesDir,
 				PREFIX        = modulesDir,
-				CC            = lde.global.getGCCBin(),
-				LD            = lde.global.getGCCBin(),
+				CC            = lde.global.getCCBin(),
+				LD            = lde.global.getCCBin(),
+				MAKE          = lde.global.getMakeBin(),
 				CFLAGS        = "-fPIC",
 				LIBFLAG       = jit.os == "OSX" and "-shared -undefined dynamic_lookup" or "-shared",
 				-- LuaJIT modules are .so on every platform; rockspecs that pass
@@ -400,7 +411,7 @@ local function openRockspec(dir, rockspecPath)
 				if bin == ldeBin then
 					table.insert(argv, 1, "--lua")
 				end
-				local code, _, stderr = process.exec(bin, argv, { cwd = dir })
+				local code, _, stderr = process.exec(bin, argv, { cwd = dir, env = toolchainEnv() })
 				if code ~= 0 then
 					local msg = (stderr ~= "" and stderr) or ("exited with code " .. code)
 					return nil, msg

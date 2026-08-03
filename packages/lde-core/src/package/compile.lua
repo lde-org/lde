@@ -62,7 +62,7 @@ local function compilePackage(package)
 		::continue::
 	end
 
-	return sea.compile(package:getName(), source, sharedLibs, lde.global.getGCCBin())
+	return sea.compile(package:getName(), source, sharedLibs, lde.global.getCCBin())
 end
 
 return compilePackage
