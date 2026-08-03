@@ -949,7 +949,7 @@ build = {
 	local ok, berr = pkg:runBuildScript(outputDir)
 	-- Without incdirs support this fails: greet.h not found
 	test.truthy(ok, berr)
-	test.truthy(fs.exists(path.join(dir, "target", "greet.so")))
+	test.truthy(fs.exists(path.join(dir, "target", "greet." .. (jit.os == "Windows" and "dll" or "so"))))
 end)
 
 --
