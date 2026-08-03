@@ -185,15 +185,22 @@ function sea.compile(main, source, sharedLibs, compiler)
 		local id                            = safeIdent(lib.name)
 		local hash                          = util.fnv1a(lib.content)
 		local ext                           = jit.os == "Windows" and "dll"
-			or jit.os == "OSX" and "dylib"
 			or "so"
 		local libFileName                   = string.format("lde-lib-%s-%s.%s", lib.name, hash, ext)
 		ffiShimEntries[#ffiShimEntries + 1] = string.format('["%s"]="%s"', lib.name, libFileName)
-		-- alias as libcurl, libcurl.so, and curl
+		-- alias as libcurl, libcurl.so/libcurl.dylib, and curl
 		local leaf                          = lib.name:match("[^.]+$")  -- e.g. "libcurl"
 		local bare                          = leaf:match("^lib(.+)$") or leaf -- e.g. "curl"
 		ffiShimEntries[#ffiShimEntries + 1] = string.format('["%s"]="%s"', leaf, libFileName)
-		ffiShimEntries[#ffiShimEntries + 1] = string.format('["%s.%s"]="%s"', leaf, ext, libFileName)
+		if jit.os == "Windows" then
+			ffiShimEntries[#ffiShimEntries + 1] = string.format('["%s.dll"]="%s"', leaf, libFileName)
+		else
+			-- Runtime code may load the library by either a LuaJIT-style .so name
+			-- or a platform .dylib name (e.g. git2-sys calls
+			-- ffi.load("libgit2.dylib") on macOS); map both to the embedded copy.
+			ffiShimEntries[#ffiShimEntries + 1] = string.format('["%s.so"]="%s"', leaf, libFileName)
+			ffiShimEntries[#ffiShimEntries + 1] = string.format('["%s.dylib"]="%s"', leaf, libFileName)
+		end
 		ffiShimEntries[#ffiShimEntries + 1] = string.format('["%s"]="%s"', bare, libFileName)
 
 		libDecls[#libDecls + 1]             = string.format(

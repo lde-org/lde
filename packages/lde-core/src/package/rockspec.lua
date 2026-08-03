@@ -275,7 +275,10 @@ local function openRockspec(dir, rockspecPath)
 			end
 
 			for modname, src in pairs(nativeModules) do
-				local ext = jit.os == "Windows" and "dll" or jit.os == "OSX" and "dylib" or "so"
+				-- LuaJIT uses .so on macOS too (its default cpath is ?.so), and
+				-- rockspec build systems like luke hardcode .so in their install
+				-- phase, so build with .so rather than .dylib.
+				local ext = jit.os == "Windows" and "dll" or "so"
 				local destAbs = path.join(modulesDir, modname:gsub("%.", path.separator) .. "." .. ext)
 				local destDir = path.dirname(destAbs)
 				if not fs.isdir(destDir) then fs.mkdirAll(destDir) end
@@ -351,7 +354,11 @@ local function openRockspec(dir, rockspecPath)
 				LD            = lde.global.getGCCBin(),
 				CFLAGS        = "-fPIC",
 				LIBFLAG       = jit.os == "OSX" and "-shared -undefined dynamic_lookup" or "-shared",
-				LIB_EXTENSION = jit.os == "Windows" and "dll" or jit.os == "OSX" and "dylib" or "so",
+				-- LuaJIT modules are .so on every platform; rockspecs that pass
+				-- $(LIB_EXTENSION) to their build (e.g. luaposix's luke) assume .so
+				-- in their install phase, so .dylib here would leave built modules
+				-- uninstallable on macOS.
+				LIB_EXTENSION = jit.os == "Windows" and "dll" or "so",
 				OBJ_EXTENSION = "o"
 			}
 

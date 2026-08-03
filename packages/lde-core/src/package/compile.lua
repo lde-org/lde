@@ -6,9 +6,19 @@ local lde = require("lde-core")
 
 local bundlePackage = require("lde-core.package.bundle")
 
-local nativeExt = jit.os == "Windows" and "dll"
-	or jit.os == "OSX" and "dylib"
-	or "so"
+local nativeExts = jit.os == "Windows" and { "dll" }
+	or (jit.os == "OSX" and { "so", "dylib" } or { "so" })
+
+---@param fileName string
+---@return string?
+local function matchNativeExt(fileName)
+	for _, ext in ipairs(nativeExts) do
+		if fileName:match("%." .. ext .. "$") then
+			return ext
+		end
+	end
+	return nil
+end
 
 ---@param package lde.Package
 local function compilePackage(package)
@@ -26,23 +36,27 @@ local function compilePackage(package)
 	for entry in fs.readdir(modulesDir) do
 		local p = path.join(modulesDir, entry.name)
 		if not fs.isdir(p) then
-			if entry.name:match("%." .. nativeExt .. "$") then
+			local ext = matchNativeExt(entry.name)
+			if ext then
 				local content = fs.read(p)
 				if not content then error("Could not read file: " .. p) end
-				local moduleName = entry.name:gsub("%." .. nativeExt .. "$", "")
+				local moduleName = entry.name:gsub("%." .. ext .. "$", "")
 				table.insert(sharedLibs, { name = moduleName, content = content })
 			end
 			goto continue
 		end
 
-		for _, relativePath in ipairs(fs.scan(p, "**" .. path.separator .. "*." .. nativeExt)) do
-			local absPath = path.join(p, relativePath)
-			local content = fs.read(absPath)
-			if not content then error("Could not read file: " .. absPath) end
+		for _, relativePath in ipairs(fs.scan(p, "**")) do
+			local ext = matchNativeExt(relativePath)
+			if ext then
+				local absPath = path.join(p, relativePath)
+				local content = fs.read(absPath)
+				if not content then error("Could not read file: " .. absPath) end
 
-			local moduleName = string.gsub(relativePath, path.separator, "."):gsub("%." .. nativeExt .. "$", "")
-			moduleName = moduleName ~= "" and (entry.name .. "." .. moduleName) or entry.name
-			table.insert(sharedLibs, { name = moduleName, content = content })
+				local moduleName = string.gsub(relativePath, path.separator, "."):gsub("%." .. ext .. "$", "")
+				moduleName = moduleName ~= "" and (entry.name .. "." .. moduleName) or entry.name
+				table.insert(sharedLibs, { name = moduleName, content = content })
+			end
 		end
 
 		::continue::

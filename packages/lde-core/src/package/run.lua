@@ -15,7 +15,7 @@ local function getLuaPathsForPackage(package)
 	local luaCPath =
 		ffi.os == "Linux" and path.join(modulesDir, "?.so") .. ";"
 		or ffi.os == "Windows" and path.join(modulesDir, "?.dll") .. ";"
-		or path.join(modulesDir, "?.dylib") .. ";"
+		or path.join(modulesDir, "?.so") .. ";" .. path.join(modulesDir, "?.dylib") .. ";"
 
 	return luaPath, luaCPath
 end
