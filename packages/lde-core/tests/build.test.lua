@@ -990,6 +990,11 @@ test.it("rockspec: string-valued native module fields are normalized to lists", 
 	test.equal("FOO", withDefaults.defines[1])
 
 	-- The normalized fields are passed through to the compiler invocation.
+	-- Expected flags are built with path.join so the assertions match the
+	-- platform-native separators the code produces on Windows too.
+	local incFlag = "-I" .. path.join("/lj", "include")
+	local libFlag = "-L" .. path.join("/lj", "lib")
+	local srcPath = path.join("/pkg", "src/ztest.c")
 	local args = lde.Package.nativeGccArgs(src, {
 		packageDir = "/pkg",
 		modulesDir = "/pkg/target",
@@ -999,9 +1004,9 @@ test.it("rockspec: string-valued native module fields are normalized to lists", 
 	})
 	test.truthy(hasArg(args, "-lc"), "expected -lc to be passed")
 	test.truthy(hasArg(args, "-DSTR_LIB_TEST"), "expected -DSTR_LIB_TEST to be passed")
-	test.truthy(hasArg(args, "-I/lj/include"), "expected -I/lj/include to be passed")
-	test.truthy(hasArg(args, "-L/lj/lib"), "expected -L/lj/lib to be passed")
-	test.truthy(hasArg(args, "/pkg/src/ztest.c"), "expected the source path to be passed")
+	test.truthy(hasArg(args, incFlag), "expected " .. incFlag .. " to be passed")
+	test.truthy(hasArg(args, libFlag), "expected " .. libFlag .. " to be passed")
+	test.truthy(hasArg(args, srcPath), "expected " .. srcPath .. " to be passed")
 	test.truthy(hasArg(args, "/pkg/target/ztest.so"), "expected the output path to be passed")
 
 	-- Unknown $(VAR) placeholders are skipped rather than passed through raw.
