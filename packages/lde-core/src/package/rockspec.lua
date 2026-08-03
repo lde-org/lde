@@ -80,6 +80,7 @@ local function openRockspec(dir, rockspecPath)
 
 	local modules = {}
 	local nativeModules = {}
+	local binScripts, installLuaFiles = {}, {}
 	if spec.build then
 		for modname, src in pairs(spec.build.modules or {}) do
 			if type(src) == "string" then
@@ -134,10 +135,19 @@ local function openRockspec(dir, rockspecPath)
 				nativeModules[modname] = src
 			end
 		end
+
+		-- Platform build tables (e.g. platforms.unix) merge over the base build;
+		-- LuaSec declares its install.lua only there.
+		if spec.build.install then
+			for k, v in pairs(spec.build.install.bin or {}) do binScripts[k] = v end
+			for k, v in pairs(spec.build.install.lua or {}) do installLuaFiles[k] = v end
+		end
+		if platBuild and platBuild.install then
+			for k, v in pairs(platBuild.install.bin or {}) do binScripts[k] = v end
+			for k, v in pairs(platBuild.install.lua or {}) do installLuaFiles[k] = v end
+		end
 	end
 
-	local binScripts = (spec.build and spec.build.install and spec.build.install.bin) or {}
-	local installLuaFiles = (spec.build and spec.build.install and spec.build.install.lua) or {}
 	local binEntry
 	local bk, bv = next(binScripts)
 	if bk then binEntry = type(bk) == "number" and path.basename(bv) or bk end
@@ -323,6 +333,24 @@ local function openRockspec(dir, rockspecPath)
 					gccArgs[#gccArgs + 1] = "-DCOMPAT53_HAVE_STRERROR_R=0"
 					gccArgs[#gccArgs + 1] = "-DCOMPAT53_HAVE_STRERROR_S=1"
 				end
+				-- Rockspec `incdirs` entries: absolute, relative to the package
+				-- dir, or $(VAR) placeholders resolved from the rock's standard
+				-- variables (unknown vars are skipped). LuaSec needs this for its
+				-- bundled src/luasocket headers.
+				local incVars = {
+					LUA_INCDIR = path.join(ljPath, "include"),
+					LUA_LIBDIR = path.join(ljPath, "lib"),
+					PREFIX = modulesDir,
+					LUADIR = modulesDir,
+					LIBDIR = modulesDir,
+				}
+				for _, inc in ipairs(src.incdirs or {}) do
+					local resolved = (inc:gsub("%$%(([%w_]+)%)", function(k) return incVars[k] or "" end))
+					if resolved ~= "" and not resolved:find("$", 1, true) then
+						local incPath = path.isAbsolute(resolved) and resolved or path.join(dir, resolved)
+						gccArgs[#gccArgs + 1] = "-I" .. makePath(incPath)
+					end
+				end
 				for _, s in ipairs(srcFiles) do gccArgs[#gccArgs + 1] = s end
 				gccArgs[#gccArgs + 1] = "-o"
 				gccArgs[#gccArgs + 1] = destAbs
@@ -352,7 +380,9 @@ local function openRockspec(dir, rockspecPath)
 			for modname, src in pairs(installLuaFiles) do
 				if not src:match("%.lua$") then goto continue_install_lua end
 				if type(modname) == "number" then
-					modname = src:gsub("%.lua$", ""):gsub("[/\\]", ".")
+					-- LuaRocks semantics: a numeric key installs the file under its
+					-- own basename (e.g. "src/ssl.lua" becomes module "ssl").
+					modname = path.basename(src):gsub("%.lua$", "")
 				end
 				local modPath = modname:gsub("%.", path.separator)
 				local destAbs = path.join(modulesDir, modPath .. ".lua")

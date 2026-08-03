@@ -858,6 +858,100 @@ build = {
 end)
 
 --
+-- Regression: platform build.install.lua must merge over the base build, and
+-- array-style lua entries install under their basename (LuaSec pattern).
+--
+
+test.it("rockspec: platform install.lua merges and array keys use basename", function()
+	local platKey = jit.os == "OSX" and "macosx" or jit.os == "Windows" and "win32" or "linux"
+
+	local dir = path.join(tmpBase, "plat-install-lua-rock")
+	fs.mkdir(dir)
+	fs.mkdir(path.join(dir, "src"))
+	fs.write(path.join(dir, "src", "ssl.lua"), 'return "ssl"')
+	fs.write(path.join(dir, "src", "https.lua"), 'return "https"')
+	fs.write(path.join(dir, "plat-install-1.0-1.rockspec"), string.format([[
+package = "plat-install"
+version = "1.0-1"
+source = { url = "https://example.com" }
+build = {
+  type = "builtin",
+  modules = {},
+  platforms = {
+    ["%s"] = {
+      install = {
+        lua = {
+          "src/ssl.lua",
+          ["ssl.https"] = "src/https.lua",
+        }
+      }
+    }
+  }
+}
+]], platKey))
+
+	local pkg, err = lde.Package.openRockspec(dir)
+	test.truthy(pkg, err)
+
+	local outputDir = path.join(dir, "target", "plat-install")
+	local ok, berr = pkg:runBuildScript(outputDir)
+	test.truthy(ok, berr)
+
+	-- array key "src/ssl.lua" must land as target/ssl.lua (basename),
+	-- not target/src/ssl.lua
+	test.truthy(fs.exists(path.join(dir, "target", "ssl.lua")))
+	test.equal(fs.exists(path.join(dir, "target", "src", "ssl.lua")), false)
+	-- string key ssl.https -> target/ssl/https.lua
+	test.truthy(fs.exists(path.join(dir, "target", "ssl", "https.lua")))
+end)
+
+--
+-- Regression: rockspec native modules must honor incdirs (LuaSec bundles its
+-- luasocket headers under src/luasocket and includes <luasocket/io.h>).
+--
+
+test.it("rockspec: native compile honors module incdirs", function()
+	local dir = path.join(tmpBase, "incdirs-rock")
+	fs.mkdir(dir)
+	fs.mkdir(path.join(dir, "src"))
+	fs.mkdir(path.join(dir, "src", "inc"))
+	fs.write(path.join(dir, "src", "inc", "greet.h"), "int lde_incdir_ok(void);\n")
+	fs.write(path.join(dir, "src", "greet.c"), [[
+#include <greet.h>
+#include <stddef.h>
+typedef struct lua_State lua_State;
+typedef int (*lua_CFunction)(lua_State *L);
+extern void lua_pushinteger(lua_State *L, int n);
+int lde_incdir_ok(void) { return 42; }
+static int greet(lua_State *L) { lua_pushinteger(L, lde_incdir_ok()); return 1; }
+int luaopen_greet(lua_State *L) { return 0; }
+]])
+	fs.write(path.join(dir, "incdirs-1.0-1.rockspec"), [[
+package = "incdirs"
+version = "1.0-1"
+source = { url = "https://example.com" }
+build = {
+  type = "builtin",
+  modules = {
+    greet = {
+      sources = { "src/greet.c" },
+      incdirs = { "src/inc" },
+    }
+  }
+}
+]])
+
+	local pkg, err = lde.Package.openRockspec(dir)
+	test.truthy(pkg, err)
+
+	local outputDir = path.join(dir, "target", "incdirs")
+	local ok, berr = pkg:runBuildScript(outputDir)
+	-- Without incdirs support this fails: greet.h not found
+	test.truthy(ok, berr)
+	test.truthy(fs.exists(path.join(dir, "target", "greet.so")))
+end)
+
+--
 -- Regression: make build.variables / install_variables substitution + bin promotion
 --
 
