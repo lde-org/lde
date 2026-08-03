@@ -15,7 +15,7 @@ local runtime = require("lde-core.runtime")
 ---@field onFileDone?  fun(file: string)
 ---@field onStart?     fun(name: string): any
 ---@field onPass?      fun(name: string, handle: any)
----@field onFail?      fun(name: string, err: string, handle: any)
+---@field onFail?      fun(name: string, err: string, handle: any, file?: string)
 ---@field onSkip?      fun(name: string)
 
 ---@class lde.TestResults
@@ -175,7 +175,7 @@ local function runTestFile(testFile, luaPath, luaCPath, reporter)
 		reporter.onPass(name, handles[name]); handles[name] = nil
 	end or nil
 	local onFail = reporter and reporter.onFail and function(name, err)
-		reporter.onFail(name, err, handles[name]); handles[name] = nil
+		reporter.onFail(name, err, handles[name], testFile); handles[name] = nil
 	end or nil
 	local onSkip = reporter and reporter.onSkip and function(name)
 		reporter.onSkip(name)
@@ -300,7 +300,11 @@ local function runTests(package, reporter, filters)
 			end
 		end
 
-		totalTests    = totalTests    + #fileResult.results - skipCount
+		-- A file that fails to load ran no tests, but is itself a failure.
+		local fileFailed = fileResult.error and true or false
+		if fileFailed then failCount = failCount + 1 end
+
+		totalTests    = totalTests    + #fileResult.results - skipCount + (fileFailed and 1 or 0)
 		totalFailures = totalFailures + failCount
 		totalSkipped  = totalSkipped  + skipCount
 
