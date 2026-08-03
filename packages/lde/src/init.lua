@@ -81,10 +81,13 @@ if args:flag("ensure-mingw") then
 	return
 end
 
-local commandName = args:pop()
-if (not commandName or commandName == "help") and not evalCode and not luaFile then
-	require("lde.commands.help")(args)
-	return
+local commandName
+if not evalCode and not luaFile then
+	commandName = args:pop()
+	if not commandName or commandName == "help" then
+		require("lde.commands.help")(args)
+		return
+	end
 end
 
 local lde = require("lde-core")

@@ -145,3 +145,15 @@ test.it("lde <script> receives arg[0] as the script path", function()
 	test.truthy(ok)
 	test.includes(out, script)
 end)
+
+test.it("lde --lua <script> passes all positional args to the script", function()
+	-- Regression: the first positional arg used to be swallowed as the CLI
+	-- command name, so `lde --lua build-aux/luke install --quiet ...` ran
+	-- luke without its `install` target and installed nothing.
+	local script = path.join(env.tmpdir(), "lde-lua-argtest.lua")
+	fs.write(script, 'io.write(table.concat(arg, "|"))')
+
+	local ok, out = ldecli { "--lua", script, "install", "--quiet", "FOO=bar" }
+	test.truthy(ok)
+	test.includes(out, "install|--quiet|FOO=bar")
+end)
