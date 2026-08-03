@@ -81,8 +81,11 @@ local function repl(_args)
 		return "{\n" .. table.concat(items, ",\n") .. "\n" .. pad .. "}"
 	end
 
-	-- Rewrite `local x, y = ...` to `x, y = ...` so variables persist in G across lines.
+	-- Desugar local declarations so names persist in G across lines:
+	--   `local function name(...)` → `function name(...)` (lands in the chunk env)
+	--   `local x, y = ...`         → `x, y = ...`
 	local function delocal(s)
+		s = s:gsub("^%s*local%s+function%s+([%a_][%w_]*)%s*%(", "function %1(")
 		return (s:gsub("^%s*local%s+([%a_][%w_%s,]-)%s*=", "%1 ="))
 	end
 
