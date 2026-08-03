@@ -26,18 +26,25 @@ jobs:
         include:
           - os: ubuntu-22.04
             outfile: lde-linux-x86-64
+            zipfile: lde-linux-x86-64.zip
           - os: ubuntu-22.04-arm
             outfile: lde-linux-aarch64
+            zipfile: lde-linux-aarch64.zip
           - os: windows-latest
             outfile: lde-windows-x86-64.exe
+            zipfile: lde-windows-x86-64.zip
           - os: windows-11-arm
             outfile: lde-windows-aarch64.exe
+            zipfile: lde-windows-aarch64.zip
           - os: macos-15-intel
             outfile: lde-macos-x86-64
+            zipfile: lde-macos-x86-64.zip
           - os: macos-15
             outfile: lde-macos-aarch64
+            zipfile: lde-macos-aarch64.zip
           - os: ubuntu-22.04-arm
             outfile: lde-android-aarch64
+            zipfile: lde-android-aarch64.zip
             android: true
 
     runs-on: ${{ matrix.os }}
@@ -157,6 +164,19 @@ jobs:
             termux-android:latest \
             bash -c "/workspace/lde --setup && /workspace/lde -C /workspace/packages/lde run -- compile --outfile /workspace/packages/lde/${{ matrix.outfile }} && cd /workspace && /workspace/packages/lde/${{ matrix.outfile }} test"
 
+      - name: Package binary
+        if: runner.os != 'Windows'
+        run: |
+          cd packages/lde
+          zip -q "${{ matrix.zipfile }}" "${{ matrix.outfile }}"
+
+      - name: Package binary (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cd packages/lde
+          Compress-Archive -Path "${{ matrix.outfile }}" -DestinationPath "${{ matrix.zipfile }}"
+
       - name: Upload nightly release asset
         uses: softprops/action-gh-release@v3
         with:
@@ -167,5 +187,5 @@ jobs:
             Automated nightly build from master.
             Commit: ${{ github.sha }}
             Run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          files: packages/lde/${{ matrix.outfile }}
+          files: packages/lde/${{ matrix.zipfile }}
           fail_on_unmatched_files: true
