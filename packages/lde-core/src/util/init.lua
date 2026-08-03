@@ -173,6 +173,59 @@ function util.resolveLuarocksSource(name, version)
 	return url, arch
 end
 
+--- Whether a Lua-version constraint string (e.g. "== 5.4", ">= 5.1, < 5.4",
+--- "5.1") is satisfied by the given version.
+---@param constraintStr string
+---@param ver string
+---@return boolean
+local function constraintSatisfied(constraintStr, ver)
+	if not constraintStr or constraintStr == "" then return true end
+	local found = false
+	for op, cver in constraintStr:gmatch("([><=~!]+)%s*([%d%.%-]+)") do
+		found = true
+		if not luarocks.satisfies(ver, op, cver) then return false end
+	end
+	if not found then
+		return luarocks.satisfies(ver, "==", constraintStr)
+	end
+	return true
+end
+
+--- Whether a rockspec's lua/luajit dependency constraints accept the running
+--- engine (LuaJIT 2.1 == Lua 5.1). Rocks like cqueues publish per-version
+--- variants (…-51 through …-54) and must resolve to the 5.1 build.
+---@param content string
+---@return boolean
+local function rockspecEngineOkContent(content)
+	local ok, spec = rocked.parse(content)
+	if not ok then return true end
+	for _, depStr in ipairs(spec.dependencies or {}) do
+		local name, rest = depStr:match("^([%w%-_]+)%s*(.*)")
+		if name == "lua" then
+			if not constraintSatisfied(rest, "5.1") then return false end
+		elseif name == "luajit" then
+			if not constraintSatisfied(rest, "2.1") then return false end
+		end
+	end
+	return true
+end
+
+--- Fetch (or read from the rockspec cache) a published rockspec and check its
+--- engine constraints. Unverifiable rockspecs are assumed compatible.
+---@param url string
+---@return boolean
+local function rockspecEngineOk(url)
+	local cacheFile = util.rockspecCacheFile(url)
+	local content = fs.exists(cacheFile) and fs.read(cacheFile) or nil
+	if not content then
+		local res, err = curl.get(url)
+		if not res then return true end
+		content = res.body
+		fs.write(cacheFile, content)
+	end
+	return rockspecEngineOkContent(content)
+end
+
 --- Resolves the best version of a luarocks package plus the rockspec (metadata)
 --- and .src.rock (content) URLs for that exact version. Uses the persisted URL
 --- cache when possible; falls back to a manifest scan otherwise.
@@ -193,18 +246,35 @@ function util.resolveLuarocksBest(name, constraint)
 		local version = url:match("^.*/" .. name:gsub("([%-%.%+%*%?%[%]%^%$%(%)%%])", "%%%1") .. "%-([^/]+)" .. suffix)
 		if version then
 			local rockspecUrl = url:gsub("%.src%.rock$", ".rockspec")
-			if arch == "src" then
-				return version, rockspecUrl, url
+			-- The URL cache may predate engine-aware resolution; skip entries
+			-- the current engine can't run (e.g. a Lua 5.4-only build).
+			if not rockspecUrl or rockspecEngineOk(rockspecUrl) then
+				if arch == "src" then
+					return version, rockspecUrl, url
+				end
+				return version, url, nil
 			end
-			return version, url, nil
 		end
 	end
 
 	local manifest, err = getManifest()
 	if not manifest then return nil, nil, nil, err end
 
-	local v, rockspecUrl, srcUrl, uerr = luarocks.getBest(manifest, name, constraint)
-	if not v then return nil, nil, nil, uerr end
+	-- Walk candidate versions newest-first and skip any whose rockspec declares
+	-- an engine (lua/luajit) constraint the current engine doesn't satisfy.
+	local candidates = luarocks.listBest(manifest, name, constraint)
+	local v, rockspecUrl, srcUrl
+	for _, c in ipairs(candidates) do
+		if not (c.rockspecUrl and not rockspecEngineOk(c.rockspecUrl)) then
+			v, rockspecUrl, srcUrl = c.version, c.rockspecUrl, c.srcUrl
+			break
+		end
+	end
+	if not v then
+		return nil, nil, nil, "No version of '" .. name .. "'" ..
+			(constraint and (" satisfies: " .. constraint) or "") ..
+			" is compatible with the current engine (LuaJIT / Lua 5.1)"
+	end
 
 	-- Cache unversioned resolutions for future invocations
 	if not constraint then

@@ -454,7 +454,10 @@ handlers.luarocks = {
 			error("No source artifact for '" .. n.alias .. "'")
 		end
 		local sourceUrl = source.url
-		if sourceUrl:match("^git") then
+		-- LuaRocks treats any of these as a git source: git://, git+https://,
+		-- or a plain URL ending in .git (e.g. "https://github.com/x/y.git");
+		-- anything else is a plain archive to download.
+		if sourceUrl:match("^git") or sourceUrl:match("%.git$") then
 			sourceUrl = lde.util.normalizeGitUrl(sourceUrl)
 			local fallback = lde.global.planGitRepo(n.name, sourceUrl, source.branch or source.tag, nil)
 			fallback.url = sourceUrl
@@ -466,8 +469,11 @@ handlers.luarocks = {
 					dir = fallback.dir,
 					kind = "git",
 				}
-			else
+			elseif fallback.clone then
 				n._content = { kind = "clone" }
+			else
+				-- Repo dir already cached: nothing to download or extract.
+				n._content = nil
 			end
 		else
 			local dir = lde.global.getArchiveDir(sourceUrl)
@@ -516,12 +522,15 @@ handlers.luarocks = {
 	end,
 	---@param n lde.install.Node
 	open = function(n)
-		local c = content(n) --[[@as lde.install.ContentPlan]]
+		local c = content(n)
 		local pkg, err
-		if c.kind == "src" then
+		if c and c.kind == "src" then
 			pkg, err = lde.util.openSrcRock(c.dir --[[@as string]], c.url --[[@as string]])
 		else
-			pkg, err = lde.Package.openRockspec(c.dir --[[@as string]], n.rockspecUrl)
+			-- Rockspec-backed, or a git fallback whose repo dir was already cached
+			-- (content() returns nil in that case).
+			local pkgDir = c and c.dir or (n._fallbackGit and n._fallbackGit.dir or n.dir)
+			pkg, err = lde.Package.openRockspec(pkgDir, n.rockspecUrl)
 		end
 		if not pkg then error("Failed to load '" .. n.name .. "': " .. (err or "")) end
 		n.pkg = pkg
@@ -530,15 +539,20 @@ handlers.luarocks = {
 	---@param n lde.install.Node
 	---@return lde.Lockfile.Dependency
 	lock = function(n)
-		local c = content(n) --[[@as lde.install.ContentPlan]]
-		if c.kind == "src" then
+		local c = content(n)
+		if c and c.kind == "src" then
 			return { archive = n.srcUrl }
 		end
-		if c.kind == "git" or c.kind == "clone" then
+		if c and (c.kind == "git" or c.kind == "clone") then
 			local fallback = n._fallbackGit --[[@as lde.install.GitPlan]]
 			return { git = fallback.url, commit = fallback.commit, rockspec = n.rockspecUrl }
 		end
-		return { archive = c.url, rockspec = n.rockspecUrl }
+		if c then
+			return { archive = c.url, rockspec = n.rockspecUrl }
+		end
+		-- Cached git dir (content() returns nil): lock to the resolved git ref.
+		local fallback = n._fallbackGit --[[@as lde.install.GitPlan]]
+		return { git = fallback.url, commit = fallback.commit, rockspec = n.rockspecUrl }
 	end,
 }
 
@@ -793,6 +807,14 @@ local function installDependencies(package, dependencies, relativeTo, features)
 		end
 
 		local dest = path.join(modulesDir, alias)
+
+		-- Git/registry deps are symlinked (or built) into target/, and the
+		-- symlink target encodes the resolved commit. This loop only runs when
+		-- the lockfile changed (the fast path returns earlier), so a stale link
+		-- from a previous commit must be dropped before the build re-creates it.
+		if entry.lock.git and fs.islink(dest) then
+			fs.delete(dest)
+		end
 
 		-- Has a build script, needs to run.
 		if not fs.islink(dest) then

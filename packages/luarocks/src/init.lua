@@ -248,7 +248,7 @@ end
 ---@param op string
 ---@param constraint string
 ---@return boolean
-local function satisfies(ver, op, constraint)
+function luarocks.satisfies(ver, op, constraint)
 	local c = cmpVer(parseVer(ver), parseVer(constraint))
 	if op == ">=" then
 		return c >= 0
@@ -306,7 +306,7 @@ function luarocks.getRockspecUrl(manifest, name, constraint)
 	for _, v in ipairs(sorted) do
 		local ok = true
 		for _, c in ipairs(constraints) do
-			if not satisfies(v, c.op, c.ver) then
+			if not luarocks.satisfies(v, c.op, c.ver) then
 				ok = false
 				break
 			end
@@ -344,7 +344,7 @@ local function pickUrl(urlMap, name, constraint)
 	for _, v in ipairs(sorted) do
 		local ok = true
 		for _, c in ipairs(constraints) do
-			if not satisfies(v, c.op, c.ver) then ok = false; break end
+			if not luarocks.satisfies(v, c.op, c.ver) then ok = false; break end
 		end
 		if ok then return urlMap[v] end
 	end
@@ -413,7 +413,7 @@ function luarocks.getBest(manifest, name, constraint)
 		if #constraints > 0 then
 			local ok = true
 			for _, c in ipairs(constraints) do
-				if not satisfies(v, c.op, c.ver) then ok = false; break end
+				if not luarocks.satisfies(v, c.op, c.ver) then ok = false; break end
 			end
 			if not ok then goto continue end
 		end
@@ -437,6 +437,61 @@ function luarocks.getBest(manifest, name, constraint)
 	end
 
 	return nil, nil, nil, "No version of '" .. name .. "'" .. (constraint and (" satisfies: " .. constraint) or " found")
+end
+
+--- Returns every (constraint-satisfying) version of a package, newest first,
+--- with the metadata (rockspec) and content (.src.rock) artifact URLs for each.
+--- Callers can walk the list to skip versions the running engine can't use
+--- (e.g. cqueues-…-54 declares "lua == 5.4" and must be skipped on LuaJIT).
+---@param manifest luarocks.Manifest
+---@param name string
+---@param constraint string?
+---@return { version: string, rockspecUrl: string?, srcUrl: string? }[]
+function luarocks.listBest(manifest, name, constraint)
+	local versions, err = manifest:package(name)
+	if not versions then return {} end
+
+	local sorted = {}
+	for v in pairs(versions) do sorted[#sorted + 1] = v end
+	table.sort(sorted, function(a, b) return cmpVer(parseVer(a), parseVer(b)) > 0 end)
+
+	local constraints = {}
+	if constraint and constraint ~= "" then
+		for op, ver in constraint:gmatch("([><=~!]+)%s*([%d%.%-]+)") do
+			constraints[#constraints + 1] = { op = op, ver = ver }
+		end
+		if #constraints == 0 then
+			-- Exact version string
+			sorted = { constraint }
+		end
+	end
+
+	local out = {}
+	for _, v in ipairs(sorted) do
+		if #constraints > 0 then
+			local ok = true
+			for _, c in ipairs(constraints) do
+				if not luarocks.satisfies(v, c.op, c.ver) then ok = false; break end
+			end
+			if not ok then goto continue end
+		end
+
+		local entries = versions[v]
+		if entries then
+			local hasSrc, hasRockspec = false, false
+			for _, entry in ipairs(entries) do
+				if entry.arch == "src" then hasSrc = true end
+				if entry.arch == "rockspec" then hasRockspec = true end
+			end
+			out[#out + 1] = {
+				version = v,
+				rockspecUrl = hasRockspec and string.format("%s/%s-%s.rockspec", ROCKSPEC_BASE, name, v) or nil,
+				srcUrl = hasSrc and string.format("%s/%s-%s.src.rock", ROCKSPEC_BASE, name, v) or nil,
+			}
+		end
+		::continue::
+	end
+	return out
 end
 
 luarocks.Manifest = Manifest

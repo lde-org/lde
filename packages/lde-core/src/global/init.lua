@@ -280,6 +280,29 @@ function global.cloneDir(repoName, repoUrl, commit, progress)
 	return true
 end
 
+--- Resolve a branch-or-tag ref to a commit sha. Tries the ref as a branch
+--- first, then as a (peeled) tag — rockspec `source.tag` values are tags, and
+--- annotated tags point at a tag object rather than a commit.
+---@param repoUrl string
+---@param ref string? -- branch or tag name, or nil/"" for HEAD
+---@return string? sha
+---@return string? err
+local function resolveGitRef(repoUrl, ref)
+	if not ref or ref == "" or ref == "HEAD" then
+		return git2.lsRemote(repoUrl, "HEAD")
+	end
+
+	local sha, err = git2.lsRemote(repoUrl, "refs/heads/" .. ref)
+	if sha then return sha end
+	-- Tags: prefer the peeled "^{}" entry (annotated tags), then the raw tag ref
+	-- (lightweight tags point straight at the commit).
+	sha, err = git2.lsRemote(repoUrl, "refs/tags/" .. ref .. "^{}")
+	if sha then return sha end
+	sha, err = git2.lsRemote(repoUrl, "refs/tags/" .. ref)
+	if sha then return sha end
+	return nil, err
+end
+
 --- Ensures a git repo is cached locally (via tarball for GitHub/GitLab, git clone otherwise).
 --- Always resolves to a specific commit. Returns the cache directory and the pinned commit.
 ---@param repoName string
@@ -290,10 +313,9 @@ end
 ---@return string commit
 function global.getOrInitGitRepo(repoName, repoUrl, branch, commit)
 	if not commit then
-		local ref = branch and ("refs/heads/" .. branch) or "HEAD"
-		local sha, err = git2.lsRemote(repoUrl, ref)
+		local sha, err = resolveGitRef(repoUrl, branch)
 		if not sha then
-			error("Failed to resolve '" .. ref .. "' for " .. repoUrl .. ": " .. (err or ""))
+			error("Failed to resolve '" .. (branch or "HEAD") .. "' for " .. repoUrl .. ": " .. (err or ""))
 		end
 		commit = sha
 	end
@@ -342,10 +364,9 @@ end
 ---@return lde.install.GitPlan
 function global.planGitRepo(repoName, repoUrl, branch, commit)
 	if not commit then
-		local ref = branch and ("refs/heads/" .. branch) or "HEAD"
-		local sha, err = git2.lsRemote(repoUrl, ref)
+		local sha, err = resolveGitRef(repoUrl, branch)
 		if not sha then
-			error("Failed to resolve '" .. ref .. "' for " .. repoUrl .. ": " .. (err or ""))
+			error("Failed to resolve '" .. (branch or "HEAD") .. "' for " .. repoUrl .. ": " .. (err or ""))
 		end
 		commit = sha
 	end
@@ -477,8 +498,7 @@ end
 ---@return string repoDir
 ---@return string commit
 function global.getOrCloneRepo(repoName, cloneUrl, branch)
-	local ref = branch and ("refs/heads/" .. branch) or "HEAD"
-	local commit, err = git2.lsRemote(cloneUrl, ref)
+	local commit, err = resolveGitRef(cloneUrl, branch)
 	if not commit then
 		error("Failed to resolve ref for " .. cloneUrl .. ": " .. (err or ""))
 	end

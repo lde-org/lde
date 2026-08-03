@@ -81,8 +81,29 @@ local function openRockspec(dir, rockspecPath)
 	local modules = {}
 	local nativeModules = {}
 	local binScripts, installLuaFiles = {}, {}
+
+	-- LuaRocks accepts a plain string or a list for a native module's
+	-- sources/libraries/libdirs/incdirs/defines (lzlib uses `libraries = "z"`),
+	-- and a build-level default (build.libraries etc.) applies to every module
+	-- unless the module overrides it. Normalize both into per-module lists.
+	local function normalizeNative(src, buildTable)
+		if type(src.sources) == "string" then src.sources = { src.sources } end
+		for _, f in ipairs({ "libraries", "libdirs", "incdirs", "defines" }) do
+			if type(src[f]) == "string" then
+				src[f] = { src[f] }
+			elseif src[f] == nil and buildTable and buildTable[f] then
+				src[f] = type(buildTable[f]) == "string" and { buildTable[f] } or buildTable[f]
+			end
+		end
+		return src
+	end
+
 	if spec.build then
-		for modname, src in pairs(spec.build.modules or {}) do
+		for rawModname, src in pairs(spec.build.modules or {}) do
+			-- LuaRocks strips a trailing ".lua" from builtin module keys
+			-- (lua-resty-core declares "resty.core.base.lua"), so
+			-- require("resty.core.base") resolves to resty/core/base.lua.
+			local modname = rawModname:match("^(.*)%.lua$") or rawModname
 			if type(src) == "string" then
 				if path.extension(src) == "lua" then
 					modules[modname] = src
@@ -94,10 +115,9 @@ local function openRockspec(dir, rockspecPath)
 						": unrecognised source type for module '" .. modname .. "': " .. src .. "\n")
 				end
 			elseif type(src) == "table" and src.sources then
-				if type(src.sources) == "string" then src = { sources = { src.sources } } end
-				nativeModules[modname] = src
+				nativeModules[modname] = normalizeNative(src, spec.build)
 			elseif type(src) == "table" and src[1] then
-				nativeModules[modname] = { sources = src }
+				nativeModules[modname] = normalizeNative({ sources = src }, spec.build)
 			elseif type(src) == "table" and lde.verbose then
 				io.stderr:write("warning: " ..
 					(spec.package or "?") .. ": module '" .. modname .. "' has no sources field, skipping\n")
@@ -123,7 +143,8 @@ local function openRockspec(dir, rockspecPath)
 				(spec.package or "?") .. ": no platform config for '" .. jitPlatform .. "'\n")
 		end
 
-		for modname, src in pairs(platBuild and platBuild.modules or {}) do
+		for rawModname, src in pairs(platBuild and platBuild.modules or {}) do
+			local modname = rawModname:match("^(.*)%.lua$") or rawModname
 			if type(src) == "string" then
 				if path.extension(src) == "lua" then
 					modules[modname] = src
@@ -131,8 +152,7 @@ local function openRockspec(dir, rockspecPath)
 					nativeModules[modname] = { sources = { src } }
 				end
 			elseif type(src) == "table" and src.sources then
-				if type(src.sources) == "string" then src = { sources = { src.sources } } end
-				nativeModules[modname] = src
+				nativeModules[modname] = normalizeNative(src, platBuild)
 			end
 		end
 
@@ -191,6 +211,11 @@ local function openRockspec(dir, rockspecPath)
 				LUA_LIBDIR  = makePath(path.join(luajitPath, "lib")),
 				LUALIB      = "libluajit.a",
 				CFLAGS      = "-fPIC",
+				-- Rocks that auto-detect the Lua toolchain (cqueues' luapath)
+				-- scan CPPFLAGS for -I dirs; without this they fall back to the
+				-- system Lua headers (e.g. 5.4) and link against APIs LuaJIT
+				-- doesn't export (lua_rawgetp).
+				CPPFLAGS    = makePath("-I" .. path.join(luajitPath, "include")),
 				LIBFLAG     = "-shared",
 				INST_LIBDIR = makePath(modulesDir),
 				INST_LUADIR = makePath(modulesDir),
@@ -355,7 +380,12 @@ local function openRockspec(dir, rockspecPath)
 				gccArgs[#gccArgs + 1] = "-o"
 				gccArgs[#gccArgs + 1] = destAbs
 				gccArgs[#gccArgs + 1] = "-L" .. path.join(ljPath, "lib")
-				for _, d in ipairs(src.libdirs or {}) do gccArgs[#gccArgs + 1] = "-L" .. d end
+				for _, d in ipairs(src.libdirs or {}) do
+					local resolved = (d:gsub("%$%(([%w_]+)%)", function(k) return incVars[k] or "" end))
+					if resolved ~= "" and not resolved:find("$", 1, true) then
+						gccArgs[#gccArgs + 1] = "-L" .. makePath(resolved)
+					end
+				end
 				if jit.os == "Windows" then gccArgs[#gccArgs + 1] = "-lluajit" end
 				if jit.os == "OSX" then
 					gccArgs[#gccArgs + 1] = "-undefined"; gccArgs[#gccArgs + 1] = "dynamic_lookup"
@@ -390,6 +420,17 @@ local function openRockspec(dir, rockspecPath)
 				if not fs.isdir(destDir) then fs.mkdirAll(destDir) end
 				fs.copy(path.join(dir, src), destAbs)
 				::continue_install_lua::
+			end
+
+			-- copy_directories: ship non-module assets (e.g. luacov's HTML
+			-- reporter static files) preserving their relative layout.
+			for _, copyDir in ipairs(spec.build.copy_directories or {}) do
+				local srcAbs = path.join(dir, copyDir)
+				local destAbs = path.join(modulesDir, copyDir)
+				if fs.isdir(srcAbs) then
+					fs.mkdirAll(destAbs)
+					fs.copy(srcAbs, destAbs)
+				end
 			end
 
 			fs.write(stampFile, buildStamp)
