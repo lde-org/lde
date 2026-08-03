@@ -2,8 +2,20 @@ local fs = require("fs")
 local path = require("path")
 local ansi = require("ansi")
 local env = require("env")
+local process = require("process")
+local ffi = require("ffi")
 
 local lde = require("lde-core")
+
+-- Cross-platform sleep used to poll the file watchers in --watch mode.
+local sleep
+if jit.os == "Windows" then
+	pcall(ffi.cdef, "void Sleep(unsigned long dwMilliseconds);")
+	sleep = function(ms) ffi.C.Sleep(ms) end
+else
+	pcall(ffi.cdef, "int usleep(unsigned int usec);")
+	sleep = function(ms) ffi.C.usleep(ms * 1000) end
+end
 
 ---@param packageDir string
 ---@param msg string
@@ -22,7 +34,7 @@ local function makeReporter(pkgDir)
 				print()
 			end
 			firstFile = false
-			ansi.printf("  {gray}%s", file)
+			ansi.printf("  {bold}%s", file)
 		end,
 		onStart = function(name)
 			return ansi.progress(name)
@@ -66,14 +78,100 @@ local function printSummary(failures, passed, total, skipped)
 	end
 end
 
+--- Re-run `lde test` whenever the project's source or tests change.
+--- The watcher only covers src/, tests/, and the package root (non-recursive,
+--- filtered to lde.json/build.lua) so the target/ churn from running the tests
+--- never triggers a re-run.
+---@param filters string[]
+local function runWatch(filters)
+	local dirty = false
+	local watchers = {}
+
+	---@param dir string
+	---@param recursive boolean
+	---@param filter? fun(name: string): boolean
+	local function addWatch(dir, recursive, filter)
+		if not fs.isdir(dir) then return end
+		local watcher = fs.watch(dir, function(_event, name)
+			if not filter or filter(name) then dirty = true end
+		end, { recursive = recursive })
+		if not watcher then
+			ansi.printf("{red}Failed to watch: %s", dir)
+			os.exit(1)
+		end
+		watchers[#watchers + 1] = watcher
+	end
+
+	local configFiles = function(name)
+		return name == "lde.json" or name == "build.lua"
+	end
+
+	local package = lde.Package.open()
+	if package then
+		addWatch(package:getSrcDir(), true)
+		addWatch(path.join(package:getDir(), "tests"), true)
+		addWatch(package:getDir(), false, configFiles)
+	else
+		local cwd = env.cwd()
+		for _, relativePath in ipairs(fs.scan(cwd, "**" .. path.separator .. "lde.json")) do
+			local pkgDir = path.dirname(path.join(cwd, relativePath))
+			local pkg = lde.Package.open(pkgDir)
+			if pkg and fs.isdir(path.join(pkgDir, "tests")) then
+				addWatch(pkg:getSrcDir(), true)
+				addWatch(path.join(pkgDir, "tests"), true)
+				addWatch(pkgDir, false, configFiles)
+			end
+		end
+	end
+
+	if #watchers == 0 then
+		ansi.printf("{yellow}No packages with tests found")
+		return
+	end
+
+	local spawnArgs = { "test" }
+	for _, f in ipairs(filters) do spawnArgs[#spawnArgs + 1] = f end
+
+	local function spawnChild()
+		local child, err = process.spawn(env.execPath(), spawnArgs, { stdout = "inherit", stderr = "inherit" })
+		if not child then
+			ansi.printf("{red}Error: %s", tostring(err))
+		end
+		return child
+	end
+
+	local child = spawnChild()
+
+	while true do
+		if child then child:wait() end
+		ansi.printf("{cyan}Watching for changes...")
+
+		dirty = false
+		while not dirty do
+			for _, watcher in ipairs(watchers) do watcher.poll() end
+			if not dirty then sleep(100) end
+		end
+
+		ansi.printf("{cyan}Change detected, running tests...")
+		child = spawnChild()
+	end
+end
+
 ---@param args clap.Args
 local function test(args)
+	local watch = args:flag("watch")
+
 	-- Collect remaining positional args as test file filter globs
 	local filters = {}
 	while true do
 		local v = args:pop()
 		if not v then break end
 		filters[#filters + 1] = v
+	end
+
+	if watch then
+		runWatch(filters)
+		return
 	end
 
 	local package = lde.Package.open()

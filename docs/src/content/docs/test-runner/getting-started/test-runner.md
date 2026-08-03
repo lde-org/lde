@@ -55,6 +55,22 @@ lde test "./tests/unit/*"
 
 If no files match your filters, the package is skipped silently (or shows "No files matched" in multi-package runs).
 
+### Watch Mode
+
+Pass `--watch` to re-run your tests automatically whenever a source or test file changes:
+
+```sh
+lde test --watch
+```
+
+Filters combine with watch mode — only matching files are re-run:
+
+```sh
+lde test --watch "unit/*"
+```
+
+The runner watches `src/` and `tests/`, and also picks up edits to `lde.json` and `build.lua`, so dependency or build-script changes trigger a re-run too. It works from a package directory or from a workspace root with multiple packages.
+
 ## lde-test
 
 This is a minimal testing library that comes bundled with lde. You can require it in your test files and use its simple API to write tests.

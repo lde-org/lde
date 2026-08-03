@@ -760,7 +760,10 @@ local function installDependencies(package, dependencies, relativeTo, features)
 
 	-- Parallel download session: sources are prefetched in batches during the
 	-- graph walk and materialized afterwards. Always cleaned up, even on error.
-	local bar = lde.verbose and ansi.progress("Downloading dependencies") or nil
+	-- Only show the bar when there's something to download — packages with no
+	-- dependencies shouldn't print a spurious "Downloading dependencies".
+	local bar = lde.verbose and next(dependencies or {}) ~= nil
+		and ansi.progress("Downloading dependencies") or nil
 	download.begin(bar and {
 		progress = function(done, total)
 			local ratio = total > 0 and (done / total) or nil
