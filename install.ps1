@@ -17,8 +17,14 @@ if ($nightly) {
 
 $rawArch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
 $arch = if ($rawArch -eq "Arm64") { "aarch64" } else { "x86-64" }
+$exe = "lde-windows-$arch.exe"
+
+$zip = Join-Path $dir "lde.zip"
 
 New-Item -ItemType Directory $dir -Force | Out-Null
-Invoke-WebRequest "https://github.com/$repo/releases/download/$tag/lde-windows-$arch.exe" -OutFile $bin
+Invoke-WebRequest "https://github.com/$repo/releases/download/$tag/lde-windows-$arch.zip" -OutFile $zip
+Expand-Archive -Path $zip -DestinationPath $dir -Force
+Move-Item -Path (Join-Path $dir $exe) -Destination $bin -Force
+Remove-Item $zip -Force
 
 & $bin --setup

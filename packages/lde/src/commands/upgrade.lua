@@ -5,6 +5,7 @@ local path = require("path")
 local fs = require("fs")
 local env = require("env")
 local curl = require("curl-sys")
+local Archive = require("archive")
 
 local lde = require("lde-core")
 
@@ -14,6 +15,13 @@ local arch = jit.arch == "arm64" and "aarch64" or "x86-64"
 local isAndroid = env.var("ANDROID_ROOT") ~= nil
 
 local artifactNames = {
+	Windows = "lde-windows-" .. arch .. ".zip",
+	Linux = isAndroid and "lde-android-" .. arch .. ".zip" or "lde-linux-" .. arch .. ".zip",
+	OSX = "lde-macos-" .. arch .. ".zip"
+}
+
+-- Name of the binary inside the release archive.
+local innerNames = {
 	Windows = "lde-windows-" .. arch .. ".exe",
 	Linux = isAndroid and "lde-android-" .. arch or "lde-linux-" .. arch,
 	OSX = "lde-macos-" .. arch
@@ -83,6 +91,8 @@ local function upgrade(args)
 		return
 	end
 
+	local innerName = innerNames[jit.os]
+
 	local downloadUrl = nil
 	for _, asset in ipairs(releaseInfo.assets) do
 		if asset.name == artifactName then
@@ -100,11 +110,13 @@ local function upgrade(args)
 	local binName = path.basename(binLocation)
 	local tempNewLocation = path.join(binDir, binName .. ".new")
 	local tempOldLocation = path.join(binDir, binName .. ".old")
+	local tempZipLocation = path.join(binDir, binName .. ".zip")
+	local tempExtractDir = path.join(binDir, binName .. ".tmp")
 
 	local bar = ansi.progress("Downloading " .. artifactName)
 
-	-- Download directly to file
-	local dlOk, dlErr = curl.download(downloadUrl, tempNewLocation, {
+	-- Download the archive directly to file
+	local dlOk, dlErr = curl.download(downloadUrl, tempZipLocation, {
 		progress = function(dltotal, dlnow)
 			local ratio = dltotal > 0 and (dlnow / dltotal) or nil
 			local info = dltotal > 0
@@ -115,16 +127,41 @@ local function upgrade(args)
 	})
 	if not dlOk then
 		bar:fail("Downloading " .. artifactName)
-		ansi.printf("{red}Failed to download binary: %s", dlErr)
+		ansi.printf("{red}Failed to download archive: %s", dlErr)
 		return
 	end
 
 	bar:done("Downloaded " .. artifactName)
 
-	if not fs.exists(tempNewLocation) then
-		ansi.printf("{red}Failed to download binary: file not created")
+	if not fs.exists(tempZipLocation) then
+		ansi.printf("{red}Failed to download archive: file not created")
 		return
 	end
+
+	-- Extract the binary from the archive
+	local extractOk, extractErr = Archive.new(tempZipLocation):extract(tempExtractDir)
+	if not extractOk then
+		fs.delete(tempZipLocation)
+		ansi.printf("{red}Failed to extract archive: %s", extractErr)
+		return
+	end
+
+	local extractedBinary = path.join(tempExtractDir, innerName)
+	if not fs.exists(extractedBinary) then
+		fs.delete(tempZipLocation)
+		fs.rmdir(tempExtractDir)
+		ansi.printf("{red}Binary not found in archive: %s", innerName)
+		return
+	end
+
+	local stageOk, stageErr = fs.move(extractedBinary, tempNewLocation)
+	fs.delete(tempZipLocation)
+	if not stageOk then
+		fs.rmdir(tempExtractDir)
+		ansi.printf("{red}Failed to stage new binary: %s", stageErr)
+		return
+	end
+	fs.rmdir(tempExtractDir)
 
 	-- Remove any leftover .old binary from a previous upgrade (Windows rename fails if dest exists)
 	if fs.exists(tempOldLocation) then
