@@ -156,6 +156,14 @@ local function openRockspec(dir, rockspecPath)
 
 		local modulesDir = path.dirname(outputDir)
 
+		-- On Windows, pass forward-slash paths to make: sh (busybox) eats
+		-- backslashes in unquoted make recipes, and Windows tools accept '/'
+		-- in paths.
+		local function makePath(p)
+			if jit.os ~= "Windows" then return p end
+			return (p:gsub("\\", "/"))
+		end
+
 		if buildType == "make" then
 			lde.global.ensureMingw()
 			local makeBin = lde.global.getMakeBin()
@@ -168,19 +176,18 @@ local function openRockspec(dir, rockspecPath)
 			local makeEnv = toolchainEnv()
 
 			local luajitPath = sea.getLuajitPath()
-			local luajitInclude = path.join(luajitPath, "include")
 			local stdVars = {
-				LUA_INCDIR  = luajitInclude,
-				LUA_LIBDIR  = path.join(luajitPath, "lib"),
+				LUA_INCDIR  = makePath(path.join(luajitPath, "include")),
+				LUA_LIBDIR  = makePath(path.join(luajitPath, "lib")),
 				LUALIB      = "libluajit.a",
 				CFLAGS      = "-fPIC",
 				LIBFLAG     = "-shared",
-				INST_LIBDIR = modulesDir,
-				INST_LUADIR = modulesDir,
-				LUADIR      = modulesDir,
-				LIBDIR      = modulesDir,
-				PREFIX      = modulesDir,
-				LUA         = env.execPath()
+				INST_LIBDIR = makePath(modulesDir),
+				INST_LUADIR = makePath(modulesDir),
+				LUADIR      = makePath(modulesDir),
+				LIBDIR      = makePath(modulesDir),
+				PREFIX      = makePath(modulesDir),
+				LUA         = makePath(env.execPath())
 			}
 
 			local function subst(s)
@@ -309,6 +316,13 @@ local function openRockspec(dir, rockspecPath)
 				local gccArgs = { "-shared", "-fPIC", "-DLUAJIT_VERSION=LuaJIT 2.1.0-beta3", "-DLUA_VERSION_NUM=501",
 					"-I" .. path.join(ljPath, "include") }
 				for _, d in ipairs(src.defines or {}) do gccArgs[#gccArgs + 1] = "-D" .. d end
+				if jit.os == "Windows" then
+					-- compat-5.3 (bundled by rocks like bit32) selects strerror_r when
+					-- _XOPEN_SOURCE >= 600 (which lprefix.h defines), but UCRT only
+					-- provides strerror_s — force the strerror_s branch.
+					gccArgs[#gccArgs + 1] = "-DCOMPAT53_HAVE_STRERROR_R=0"
+					gccArgs[#gccArgs + 1] = "-DCOMPAT53_HAVE_STRERROR_S=1"
+				end
 				for _, s in ipairs(srcFiles) do gccArgs[#gccArgs + 1] = s end
 				gccArgs[#gccArgs + 1] = "-o"
 				gccArgs[#gccArgs + 1] = destAbs
