@@ -31,4 +31,4 @@ On Windows `.exe` is appended automatically if not already present.
 
 Shared libraries built by a `build.lua` script are automatically included. See [C Module Support](/docs/package-manager/dependencies/c-module-support) for how to produce them.
 
-> On Linux the binary exports LuaJIT symbols so native modules don't require a separate Lua installation. On Windows you may need to bundle a Lua shared library alongside your executable.
+> The binary exports LuaJIT symbols on Windows, macOS, and Linux, so native modules don't require a separate Lua installation.

@@ -53,7 +53,7 @@ This also works for projects compiled with `lde compile` by scanning and saving 
 
 They are then resolved via a `package.preload` lookup on require(), same as lua files.
 
-They do not require lua on the user's system on Linux as the binary created exports the LuaJIT symbols from LDE. **_This is not the case on Windows which has no analog to this, so you might have to bundle a lua shared library with your project._**
+They do not require lua on the user's system on Windows, macOS, or Linux, as the binary created exports the LuaJIT symbols from LDE.
 
 ## Distributing as a Library
 
