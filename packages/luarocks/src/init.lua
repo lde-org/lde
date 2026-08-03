@@ -107,7 +107,7 @@ function Manifest:package(name)
 	local braceStart = findIdentKey(raw, name) or findQuotedKey(raw, name)
 	if not braceStart then
 		self._cache[name] = false
-		return nil
+		return nil, "Package not found in luarocks registry: " .. name
 	end
 
 	-- Use memchr to scan for { and } to find the matching close brace

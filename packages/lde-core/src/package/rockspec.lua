@@ -99,11 +99,7 @@ local function openRockspec(dir, rockspecPath)
 	end
 
 	if spec.build then
-		for rawModname, src in pairs(spec.build.modules or {}) do
-			-- LuaRocks strips a trailing ".lua" from builtin module keys
-			-- (lua-resty-core declares "resty.core.base.lua"), so
-			-- require("resty.core.base") resolves to resty/core/base.lua.
-			local modname = rawModname:match("^(.*)%.lua$") or rawModname
+		for modname, src in pairs(spec.build.modules or {}) do
 			if type(src) == "string" then
 				if path.extension(src) == "lua" then
 					modules[modname] = src
@@ -143,8 +139,7 @@ local function openRockspec(dir, rockspecPath)
 				(spec.package or "?") .. ": no platform config for '" .. jitPlatform .. "'\n")
 		end
 
-		for rawModname, src in pairs(platBuild and platBuild.modules or {}) do
-			local modname = rawModname:match("^(.*)%.lua$") or rawModname
+		for modname, src in pairs(platBuild and platBuild.modules or {}) do
 			if type(src) == "string" then
 				if path.extension(src) == "lua" then
 					modules[modname] = src
@@ -174,7 +169,10 @@ local function openRockspec(dir, rockspecPath)
 
 	local buildType = spec.build and spec.build.type or "builtin"
 
-	local buildStamp = util.fnv1a(content)
+	-- Include the lde runtime version in the stamp so build outputs are
+	-- rebuilt when the binary is upgraded (build logic may have changed, e.g.
+	-- module layout rules).
+	local buildStamp = util.fnv1a(content .. "\n" .. tostring(lde.global.currentVersion))
 
 	pkg.buildfn = function(_, outputDir)
 		if not fs.isdir(outputDir) then fs.mkdirAll(outputDir) end

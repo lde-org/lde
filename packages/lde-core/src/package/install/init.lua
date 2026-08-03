@@ -737,7 +737,9 @@ local function commitLockfile(pkg, stack, modulesDir)
 	lockfile:save()
 
 	local content = assert(fs.read(pkg:getLockfilePath()), "Failed to read " .. pkg:getLockfilePath())
-	fs.write(path.join(modulesDir, ".installed"), util.fnv1a(content))
+	-- Include the lde runtime version so the fast path invalidates when the
+	-- binary is upgraded (install/build logic may have changed).
+	fs.write(path.join(modulesDir, ".installed"), util.fnv1a(content .. "\n" .. tostring(lde.global.currentVersion)))
 end
 
 ---@param package lde.Package
