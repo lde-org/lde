@@ -151,7 +151,14 @@ local function repl(_args)
 
 		buffer = buffer == "" and delocal(line) or (buffer .. "\n" .. delocal(line))
 
-		local chunk, err = loadstring("return " .. buffer, "repl") or loadstring(buffer, "repl")
+		-- Try as an expression first ("return ..."), then as a statement. The
+		-- error must come from the statement parse: an `a or b` expression only
+		-- yields one value, so a bare `or` would always lose the error message
+		-- and break <eof> detection for multi-line chunks.
+		local chunk, err = loadstring("return " .. buffer, "repl")
+		if not chunk then
+			chunk, err = loadstring(buffer, "repl")
+		end
 
 		if chunk then
 			setfenv(chunk, G)
