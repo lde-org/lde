@@ -4,7 +4,8 @@
 -- LuaRocks packages and verifies every module loads under lde's runtime.
 -- Package set (scraped 2026-08-03): the top 100 rocks by all-time downloads
 -- from https://luarocks.org/modules (134 pages; see scrape_luarocks.py), plus
--- a tail of well-known standalone libraries ("bN" ranks) for extra coverage.
+-- a tail of well-known standalone libraries ("bN" ranks) and cmake-built
+-- bindings ("cN" ranks) for extra coverage.
 -- Rocks that are bound to another runtime carry an `engine` field and are
 -- recorded as skipped, never installed:
 --   * openresty / kong -- need the `ngx` global or OpenResty C symbols
@@ -222,6 +223,10 @@ local PACKAGES = {
 	{ rank = "b13", name = "json.lua", downloads = "n/a" },
 	{ rank = "b14", name = "push", downloads = "n/a" },
 	{ rank = "b15", name = "vusted", downloads = "n/a", shims = { "vim" }, skip = { "tests" } },
+
+	-- ── CMake: rocks whose rockspecs use the cmake build backend ─────────────
+	{ rank = "c1", name = "rapidjson", downloads = "n/a" }, -- C++ JSON binding
+	{ rank = "c2", name = "luv", downloads = "n/a" }, -- libuv bindings
 }
 
 --- Rocks whose install requires system libraries (or a working upstream host)

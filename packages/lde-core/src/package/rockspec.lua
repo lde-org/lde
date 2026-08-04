@@ -286,6 +286,32 @@ local function openRockspec(dir, rockspecPath)
 			return (p:gsub("\\", "/"))
 		end
 
+		-- Standard rock variables used to expand $(VAR) placeholders in build
+		-- variables, for both the make and cmake backends (mirrors LuaRocks).
+		local luajitPath = sea.getLuajitPath()
+		local stdVars = {
+			LUA_INCDIR  = makePath(path.join(luajitPath, "include")),
+			LUA_LIBDIR  = makePath(path.join(luajitPath, "lib")),
+			LUALIB      = "libluajit.a",
+			CFLAGS      = "-fPIC",
+			-- Rocks that auto-detect the Lua toolchain (cqueues' luapath)
+			-- scan CPPFLAGS for -I dirs; without this they fall back to the
+			-- system Lua headers (e.g. 5.4) and link against APIs LuaJIT
+			-- doesn't export (lua_rawgetp).
+			CPPFLAGS    = makePath("-I" .. path.join(luajitPath, "include")),
+			LIBFLAG     = "-shared",
+			INST_LIBDIR = makePath(modulesDir),
+			INST_LUADIR = makePath(modulesDir),
+			LUADIR      = makePath(modulesDir),
+			LIBDIR      = makePath(modulesDir),
+			PREFIX      = makePath(modulesDir),
+			LUA         = makePath(env.execPath())
+		}
+
+		local function subst(s)
+			return (s:gsub("%$%(([%w_]+)%)", function(k) return stdVars[k] or "" end))
+		end
+
 		if buildType == "make" then
 			lde.global.ensureMingw()
 			local makeBin = lde.global.getMakeBin()
@@ -296,30 +322,6 @@ local function openRockspec(dir, rockspecPath)
 			end
 
 			local makeEnv = toolchainEnv()
-
-			local luajitPath = sea.getLuajitPath()
-			local stdVars = {
-				LUA_INCDIR  = makePath(path.join(luajitPath, "include")),
-				LUA_LIBDIR  = makePath(path.join(luajitPath, "lib")),
-				LUALIB      = "libluajit.a",
-				CFLAGS      = "-fPIC",
-				-- Rocks that auto-detect the Lua toolchain (cqueues' luapath)
-				-- scan CPPFLAGS for -I dirs; without this they fall back to the
-				-- system Lua headers (e.g. 5.4) and link against APIs LuaJIT
-				-- doesn't export (lua_rawgetp).
-				CPPFLAGS    = makePath("-I" .. path.join(luajitPath, "include")),
-				LIBFLAG     = "-shared",
-				INST_LIBDIR = makePath(modulesDir),
-				INST_LUADIR = makePath(modulesDir),
-				LUADIR      = makePath(modulesDir),
-				LIBDIR      = makePath(modulesDir),
-				PREFIX      = makePath(modulesDir),
-				LUA         = makePath(env.execPath())
-			}
-
-			local function subst(s)
-				return (s:gsub("%$%(([%w_]+)%)", function(k) return stdVars[k] or "" end))
-			end
 
 			local function buildVarList(extraVars)
 				local args = {}
@@ -367,11 +369,16 @@ local function openRockspec(dir, rockspecPath)
 			fs.write(stampFile, buildStamp)
 			return true
 		elseif buildType == "cmake" then
-			local luajitPath = sea.getLuajitPath()
 			local buildDir = path.join(dir, "build.lde")
 			local installDir = path.join(dir, "install.lde")
 			if not fs.isdir(buildDir) then fs.mkdir(buildDir) end
 			if not fs.isdir(installDir) then fs.mkdir(installDir) end
+
+			-- LuaRocks' cmake backend expands $(VAR) from the rock's standard
+			-- variables and passes build.variables as -D flags. $(PREFIX) is the
+			-- rock's own install dir (LuaRocks: .../rocks-<ver>/<name>/<ver>), so
+			-- the promote step below can pick the built shared libs up.
+			stdVars.PREFIX = makePath(installDir)
 
 			local configureArgs = {
 				"-H.", "-B" .. buildDir,
@@ -381,8 +388,8 @@ local function openRockspec(dir, rockspecPath)
 				"-DLUAJIT_LIBRARIES=" .. path.join(luajitPath, "lib", "libluajit.a"),
 				"-DCMAKE_INSTALL_PREFIX=" .. installDir
 			}
-			for k, v in pairs(spec.build.build_variables or {}) do
-				configureArgs[#configureArgs + 1] = "-D" .. k .. "=" .. v
+			for k, v in pairs(spec.build.variables or spec.build.build_variables or {}) do
+				configureArgs[#configureArgs + 1] = "-D" .. k .. "=" .. subst(v)
 			end
 
 			local code, _, stderr = process.exec("cmake", configureArgs, { cwd = dir })
@@ -395,7 +402,7 @@ local function openRockspec(dir, rockspecPath)
 				{ cwd = dir })
 			if code ~= 0 then return nil, "cmake install failed: " .. (stderr or "") end
 
-			local soExt = jit.os == "OSX" and "**.dylib" or "**.so"
+			local soExt = jit.os == "Windows" and "**.dll" or (jit.os == "OSX" and "**.dylib" or "**.so")
 			for _, rel in ipairs(fs.scan(installDir, soExt)) do
 				fs.copy(path.join(installDir, rel), path.join(modulesDir, path.basename(rel)))
 			end
