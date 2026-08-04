@@ -18,6 +18,12 @@ test.it("keywords are highlighted", function()
 	test.equal(strip(out), "if")
 end)
 
+test.it("const keyword is highlighted", function()
+	local out = highlight("const x = 1")
+	test.truthy(out:find(magenta, 1, true))
+	test.equal(strip(out), "const x = 1")
+end)
+
 test.it("identifiers are not colored", function()
 	local out = highlight("foo")
 	test.equal(out, "foo")
