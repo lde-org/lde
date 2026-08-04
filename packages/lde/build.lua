@@ -5,7 +5,7 @@
 
 local build = require("lde-build")
 
-local BASE_VERSION = "0.9.2"
+local BASE_VERSION = "0.10.0"
 
 -- Use io.popen so this works in both lde-build and minilde contexts without
 -- needing the process package. Note popen shells out via cmd.exe on Windows,

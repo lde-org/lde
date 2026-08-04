@@ -1,7 +1,7 @@
 local ansi = require("ansi")
 
 local ok, currentVersion = pcall(require, "lde.version")
-currentVersion = ok and currentVersion or "0.9.2"
+currentVersion = ok and currentVersion or "0.10.0"
 
 local function help()
 	local commands = {

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "preact/hooks";
+import { createPortal } from "preact/compat";
 
 interface DocEntry {
 	title: string;
@@ -122,11 +123,12 @@ export default function Search() {
 				</kbd>
 			</button>
 
-			{open && (
-				<div
-					class="fixed inset-0 z-50 flex items-start justify-center pt-[15vh] px-4"
-					onClick={(e) => e.target === e.currentTarget && setOpen(false)}
-				>
+			{open &&
+				createPortal(
+					<div
+						class="fixed inset-0 z-50 flex items-start justify-center pt-[15vh] px-4"
+						onClick={(e) => e.target === e.currentTarget && setOpen(false)}
+					>
 					{/* Backdrop */}
 					<div class="absolute inset-0 bg-black/40 dark:bg-black/60 backdrop-blur-sm" onClick={() => setOpen(false)} />
 
@@ -199,8 +201,9 @@ export default function Search() {
 							</p>
 						)}
 					</div>
-				</div>
-			)}
+					</div>,
+					document.body,
+				)}
 
 			<style>{`
 				mark {

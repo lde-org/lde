@@ -52,7 +52,7 @@ if args:flag("version") and args:count() == 0 then
 		applyOverrides()
 	end
 	local ok, v = pcall(require, "lde.version")
-	print(ok and v or "0.9.2")
+	print(ok and v or "0.10.0")
 	return
 end
 
