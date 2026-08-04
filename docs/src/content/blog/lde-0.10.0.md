@@ -233,9 +233,9 @@ The result: stale entries in `~/.lde/git` should stop forcing manual cache delet
 
 The `lde` binary starts faster. The shipped builds are compiled to bytecode, and most modules load lazily. `lde --version` and `lde -e` take a fast path that avoids loading the full runtime.
 
-![startup](/blog-assets/0.10.0/startup.gif)
+![startup](/blog-assets/0.10.0/startup.png)
 
-Startup dropped from about 15 ms in 0.9.1 to around a millisecond. That is roughly 10 to 14 times faster in this benchmark. The commands are the plain executables with no flags, just help output. lde now beats `bun` and is about 4 times faster than `lx --help`.
+Startup dropped from ~15ms to <1ms. Pretty good, considering it beats cli tools written in Rust, like lux, by 4x, and even Bun, which is notoriously fast.
 
 ## Build scripts with `lde-build`
 
@@ -284,6 +284,8 @@ lde repl
 
 Completion covers globals and table fields. For example, `json.e` completes to `json.encode`.
 
+This works via introspection at runtime with the debug library.
+
 ### Multi-line declarations
 
 The REPL keeps declarations alive across lines. `local function` and `const` declarations become plain globals, so they stay available on the next line:
@@ -312,6 +314,8 @@ Windows gets a new toolchain, distributed from [github.com/lde-org/toolchain-dis
 - Windows SDK headers and a target sysroot are included. No separate MinGW setup is needed.
 
 LuaRocks `configure` scripts run under the bundled BusyBox `sh`. `compat-5.3` works with it too. The terminal now enables VT processing, so colors and progress bars render correctly.
+
+Previously, Windows was given a toolchain based on gcc mingw, which had problems as it didn't support Windows on ARM, and it lacked sufficient support for the modern UCRT (Window's C Runtime) which lde is using for everything in its toolchain, from luajit builds to local compiles.
 
 ## LuaRocks compatibility
 
@@ -393,3 +397,9 @@ When lde is built from a git checkout, the version includes the commit hash. The
 - **sea**: avoid a double free on Android
 - **progress**: update bars only when the percentage changes
 - **luajit**: `os.tmpname()` honors `TMPDIR` on Android and in containers
+
+## Ending Note
+
+Hopefully the next blog post will be out sooner than this one took. As for 1.0, I don't plan on having many more versions underneath it. At this point it is just ensuring stability and quality of life that people new to Lua will need in order to succeed with lde.
+
+I appreciate the community that lde has accumulated at this point despite limited outreach. I don't intend on keeping the project very small as it is right now, but it hasn't been advertised as much intentionally to give it time to mature into 1.0 for a major announcement. And I am well aware I need to pick up the pace, as already some competition (even if their credibility may not be the best..) have appeared. But I will make sure it is done right.
