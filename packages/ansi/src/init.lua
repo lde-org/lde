@@ -8,6 +8,33 @@ do
 		local ok, result = pcall(function() return ffi.C._isatty(1) ~= 0 end)
 		if ok then isTTY = result end
 
+		if isTTY then
+			-- Legacy Windows consoles (conhost) ignore ANSI escapes unless VT
+			-- processing is enabled. Without this, progress redraws (\x1b[2K\r)
+			-- print the escape bytes literally and never clear the previous line,
+			-- so each update appends a new entry instead of replacing it.
+			pcall(ffi.cdef, [[
+				typedef void* HANDLE;
+				typedef uint32_t DWORD;
+				typedef int BOOL;
+				HANDLE GetStdHandle(DWORD nStdHandle);
+				BOOL GetConsoleMode(HANDLE hConsoleHandle, DWORD *lpMode);
+				BOOL SetConsoleMode(HANDLE hConsoleHandle, DWORD dwMode);
+			]])
+			pcall(function()
+				local kernel32 = ffi.load("kernel32")
+				local STD_OUTPUT_HANDLE = ffi.cast("DWORD", -11)
+				local ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004
+				local hOut = kernel32.GetStdHandle(STD_OUTPUT_HANDLE)
+				local mode = ffi.new("DWORD[1]")
+				-- GetConsoleMode fails when stdout isn't a console (redirected), in
+				-- which case there's nothing to enable.
+				if kernel32.GetConsoleMode(hOut, mode) ~= 0 then
+					kernel32.SetConsoleMode(hOut, bit.bor(mode[0], ENABLE_VIRTUAL_TERMINAL_PROCESSING))
+				end
+			end)
+		end
+
 		pcall(ffi.cdef, [[
 			typedef union { struct { uint32_t lo, hi; }; uint64_t val; } LARGE_INTEGER;
 			int QueryPerformanceCounter(LARGE_INTEGER *lpPerformanceCount);
