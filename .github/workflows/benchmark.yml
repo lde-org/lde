@@ -16,13 +16,22 @@ jobs:
         with:
           version: nightly
 
-      - name: Install luarocks
+      - name: Install benchmark environment
         run: |
-          sudo apt-get install -y luarocks
+          sudo apt-get update
+          sudo apt-get install -y luarocks lua5.1 liblua5.1-0-dev pkg-config
+
+          # Lux needs this apparently
+          sudo ln -sf /usr/bin/lua5.1 /usr/local/bin/lua
+
+      - name: Install hyperfine
+        run: |
+          curl -fsSL https://github.com/sharkdp/hyperfine/releases/download/v1.20.0/hyperfine-v1.20.0-x86_64-unknown-linux-gnu.tar.gz | tar -xz
+          sudo mv hyperfine-v1.20.0-x86_64-unknown-linux-gnu/hyperfine /usr/local/bin/hyperfine
 
       - name: Install lux
         run: |
-          curl -fsSL https://github.com/lumen-oss/lux/releases/download/v0.27.0/lx-x86_64-unknown-linux-gnu.tar.gz | tar -xz
+          curl -fsSL https://github.com/lumen-oss/lux/releases/download/v0.40.1/lx-x86_64-unknown-linux-gnu.tar.gz | tar -xz
           sudo mv lx /usr/local/bin/lx
 
       - name: Run benchmarks

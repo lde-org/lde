@@ -91,8 +91,7 @@ local function runBenchmarks(tool, tmpdir)
 	bench("install busted (cold)", function()
 		local code, _, stderr
 		if tool == "lde" then
-			code, _, stderr = process.exec("lde", { "--tree", tmpdir .. "/lde", "install", "rocks:busted" },
-				{ stdout = "null" })
+			code, _, stderr = process.exec("lde", { "--tree", tmpdir .. "/lde", "install", "rocks:busted" }, { stdout = "null" })
 		elseif tool == "luarocks" then
 			code, _, stderr = process.exec("luarocks", { "--tree", tmpdir .. "/rocks", "install", "busted" })
 		elseif tool == "lx" then
@@ -104,12 +103,11 @@ local function runBenchmarks(tool, tmpdir)
 	bench("install busted (warm)", function()
 		local code, _, stderr
 		if tool == "lde" then
-			code, _, stderr = process.exec("lde", { "--tree", tmpdir .. "/lde", "install", "rocks:busted" },
-				{ stdout = "null" })
+			code, _, stderr = process.exec("lde", { "--tree", tmpdir .. "/lde", "install", "rocks:busted" }, { stdout = "null" })
 		elseif tool == "luarocks" then
 			code, _, stderr = process.exec("luarocks", { "--tree", tmpdir .. "/rocks", "install", "busted" })
 		elseif tool == "lx" then
-			code, _, stderr = process.exec("lx", { "--tree", tmpdir .. "/rocks", "install", "--force", "busted" })
+			code, _, stderr = process.exec("lx", {  "--no-prompt", "--tree", tmpdir .. "/rocks", "install", "busted" })
 		end
 		return code == 0, stderr
 	end)
