@@ -226,10 +226,17 @@ end
 ---@param v string
 ---@return number[]
 local function parseVer(v)
+	-- LuaRocks version_revision: the revision ("-N") is part of the version and
+	-- must sort too, so "1.0.0-2" beats "1.0.0-1" (previously the revision was
+	-- dropped, leaving equal versions to be ordered nondeterministically by
+	-- table.sort). A missing revision compares as 0, matching LuaRocks (so
+	-- "0.5-0" satisfies ">= 0.5", e.g. the http rock's lpeg_patterns dep).
+	local base, rev = v:match("^([^%-]+)%-(%d+)$")
 	local parts = {}
-	for n in (v:match("^([^%-]+)") or v):gmatch("%d+") do
+	for n in (base or v):gmatch("%d+") do
 		parts[#parts + 1] = tonumber(n)
 	end
+	parts[#parts + 1] = tonumber(rev) or 0
 	return parts
 end
 
