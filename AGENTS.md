@@ -15,7 +15,7 @@ packages/             # Internal packages (local path deps of each other)
   sea/                # Single-executable assembly (compiles bundles into binaries)
   ansi clap semver util luarocks rocked readline
 schemas/              # JSON schema for lde.json
-tests/                # Integration test fixtures
+crater/               # LuaRocks compatibility shotgun (top-100 + cmake rocks)
 minilde.lua           # Bootstrap script (see below)
 ```
 
