@@ -21,6 +21,9 @@ end
 ---@field relativeTo string
 ---@field stack table<string, { pkg: lde.Package, lock: lde.Lockfile.Dependency }>
 ---@field rootLockfile lde.Lockfile?
+---@field locked boolean? # --locked: fail when a dep isn't pinned in the lockfile
+---@field downloads integer # content artifacts actually downloaded (0 = nothing to fetch)
+---@field builds integer # build scripts actually run (0 = nothing to compile)
 
 --- Returns a string key that uniquely identifies a dependency's source.
 ---@param entry lde.Lockfile.Dependency
@@ -41,7 +44,13 @@ end
 local function applyLock(ctx, alias, depInfo)
 	if ctx.rootLockfile then
 		local locked = ctx.rootLockfile:getDependency(alias)
-		if locked then depInfo = withConfigFlags(locked, depInfo) end
+		if locked then return withConfigFlags(locked, depInfo) end
+	end
+	-- --locked installs: the lockfile must already pin every non-path dependency.
+	-- Failing loudly instead of resolving a fresh commit/version is what keeps
+	-- `lde sync --locked` reproducible and offline.
+	if ctx.locked and not depInfo.path then
+		error("Lockfile is out of date: '" .. alias .. "' is not pinned. Run `lde sync` to update it.")
 	end
 	return depInfo
 end
@@ -123,6 +132,7 @@ end
 ---@field deps table<string, lde.Package.Config.Dependency>?
 ---@field pkg lde.Package?
 ---@field expandDir string? -- relativeTo base for the node's children
+---@field materialized boolean? -- content already extracted/cloned this run
 ---@field _content lde.install.ContentPlan?
 ---@field _fallbackGit lde.install.GitPlan?
 
@@ -252,6 +262,7 @@ local function materialize(node)
 	local c = content(node)
 	assert(c, "no content plan for '" .. node.alias .. "'")
 	h(node).materialize(node, c)
+	node.materialized = true
 end
 
 --- Open the node's package (requires content materialized).
@@ -633,6 +644,7 @@ local function collectDependencies(dependencies, ctx)
 					if c.kind ~= "clone" then
 						download.prefetch(c.url --[[@as string]], c.file --[[@as string]])
 					end
+					ctx.downloads = ctx.downloads + 1
 					contentBatch[#contentBatch + 1] = node
 				else
 					-- Content already cached: consume + expand without downloading.
@@ -669,10 +681,13 @@ local function collectDependencies(dependencies, ctx)
 	local contentNodes = {}
 	for _, node in ipairs(order) do
 		local c = content(node)
-		if (c and c.dir and not fs.exists(c.dir)) or (c and c.kind == "clone") then
+		-- Skip nodes whose content the walk already materialized (git clones
+		-- have no cache dir to guard on, so without this they'd clone twice).
+		if not node.materialized and ((c and c.dir and not fs.exists(c.dir)) or (c and c.kind == "clone")) then
 			if c.kind ~= "clone" then
 				download.prefetch(c.url --[[@as string]], c.file --[[@as string]])
 			end
+			ctx.downloads = ctx.downloads + 1
 			contentNodes[#contentNodes + 1] = node
 		end
 	end
@@ -728,7 +743,18 @@ end
 ---@param stack table<string, { pkg: lde.Package, lock: lde.Lockfile.Dependency }>
 ---@param modulesDir string
 local function commitLockfile(pkg, stack, modulesDir)
+	-- Merge with any existing lockfile: runtime and dev installs each commit
+	-- their own slice of the graph, and neither should drop the other's pins.
+	-- Copy into a fresh table: the json package iterates a decoded table's
+	-- internal key order (maintained via json.addField), so mutating the
+	-- decoded table directly would silently drop added entries on encode.
+	local existing = pkg:readLockfile()
 	local lockEntries = {}
+	if existing then
+		for alias, entry in pairs(existing:getDependencies()) do
+			lockEntries[alias] = entry
+		end
+	end
 	for alias, entry in pairs(stack) do
 		lockEntries[alias] = entry.lock
 	end
@@ -737,32 +763,59 @@ local function commitLockfile(pkg, stack, modulesDir)
 	lockfile:save()
 
 	local content = assert(fs.read(pkg:getLockfilePath()), "Failed to read " .. pkg:getLockfilePath())
-	-- Include the lde runtime version so the fast path invalidates when the
-	-- binary is upgraded (install/build logic may have changed).
-	fs.write(path.join(modulesDir, ".installed"), util.fnv1a(content .. "\n" .. tostring(lde.global.currentVersion)))
+	-- Hash the lockfile together with the lde runtime version (binary upgrades
+	-- invalidate the cache) and the manifest (a hand-edited lde.json must too),
+	-- so the fast path only skips installs that are genuinely up to date.
+	local manifest = fs.read(pkg:getConfigPath()) or ""
+	fs.write(path.join(modulesDir, ".installed"),
+		util.fnv1a(content .. "\n" .. tostring(lde.global.currentVersion) .. "\n" .. manifest))
 end
 
 ---@param package lde.Package
 ---@param dependencies table<string, lde.Package.Config.Dependency>?
 ---@param relativeTo string?
 ---@param features lde.Package.Config.FeatureFlag[]?
-local function installDependencies(package, dependencies, relativeTo, features)
+---@param opts { summary: boolean?, locked: boolean? }?
+---@return { checked: integer, installs: integer, changed: boolean, cached: boolean }
+local function installDependencies(package, dependencies, relativeTo, features, opts)
 	local isRoot = dependencies == nil
 	dependencies = dependencies or package:getDependencies()
 	relativeTo = relativeTo or package.dir
+	opts = opts or {}
 
 	features = features or {}
 	features[#features + 1] = platformLookup[jit.os]
 
 	local modulesDir = package:getModulesDir()
 
-	-- Fast path: if target/.installed hash matches the current lockfile, skip all work
-	if isRoot then
+	-- Nothing to do (or already done): report the direct dep count so callers
+	-- can still print a "No changes" summary line. cached = the install was a
+	-- no-op because everything was already materialized.
+	local function noopResult()
+		local installs = 0
+		for _ in pairs(dependencies) do installs = installs + 1 end
+		return { checked = installs, installs = installs, changed = false, cached = true }
+	end
+
+	-- Temporary: a .skip marker in target/ (written by minilde during the
+	-- bootstrap) means the deps are already materialized — skip all install
+	-- work so nothing gets re-downloaded or re-built.
+	if isRoot and fs.exists(path.join(modulesDir, ".skip")) then return noopResult() end
+
+	-- Fast path: if target/.installed hash matches the current lockfile, skip all work.
+	-- Bypassed under --locked so it always re-verifies the manifest against the
+	-- lockfile instead of trusting the marker.
+	if isRoot and not opts.locked then
 		local installedPath = path.join(modulesDir, ".installed")
 		local lockfilePath = package:getLockfilePath()
 		if fs.exists(lockfilePath) and fs.exists(installedPath) then
 			local content = fs.read(lockfilePath)
-			if content and fs.read(installedPath) == util.fnv1a(content) then return end
+			-- commitLockfile hashes lockfile + runtime version + manifest; the
+			-- check must use the same input or it can never match.
+			local manifest = fs.read(package:getConfigPath()) or ""
+			if content and fs.read(installedPath) == util.fnv1a(content .. "\n" .. tostring(lde.global.currentVersion) .. "\n" .. manifest) then
+				return noopResult()
+			end
 		end
 	end
 
@@ -771,14 +824,22 @@ local function installDependencies(package, dependencies, relativeTo, features)
 	local ctx = {
 		relativeTo = relativeTo,
 		stack = {},
-		rootLockfile = isRoot and package:readLockfile() or nil
+		-- The lockfile pins every previously-resolved alias (runtime and dev),
+		-- so dev-dependency installs resolve from it instead of lsRemote-ing.
+		rootLockfile = package:readLockfile(),
+		locked = opts.locked,
+		downloads = 0,
+		builds = 0,
 	}
+
+	local installs = 0
+	for _ in pairs(dependencies) do installs = installs + 1 end
 
 	-- Parallel download session: sources are prefetched in batches during the
 	-- graph walk and materialized afterwards. Always cleaned up, even on error.
 	-- Only show the bar when there's something to download — packages with no
 	-- dependencies shouldn't print a spurious "Downloading dependencies".
-	local bar = lde.verbose and next(dependencies or {}) ~= nil
+	local bar = lde.verbose and installs > 0
 		and ansi.progress("Downloading dependencies") or nil
 	download.begin(bar and {
 		progress = function(done, total)
@@ -788,47 +849,79 @@ local function installDependencies(package, dependencies, relativeTo, features)
 	} or nil)
 
 	local ok, err = pcall(collectDependencies, dependencies, ctx)
-	if ok then
-		download.finish()
-		if bar then bar:done() end
-	else
+	if not ok then
 		download.abort()
-		if bar then bar:fail() end
+		-- Only fail the bar if it actually rendered (downloads were in flight);
+		-- a resolution error (e.g. --locked pin check) never drew anything.
+		if bar and ctx.downloads > 0 then bar:fail() end
 		error(err)
 	end
+	download.finish()
+
+	-- Finalize the download bar once downloads are done. When nothing was
+	-- downloaded the bar never rendered anything, so it is finalized after the
+	-- build pass below — where it either reports the builds or is discarded
+	-- silently (the caller prints its own summary).
+	if bar and ctx.downloads > 0 then bar:done() end
 
 	-- Gets which features are enabled (+ OS specific features)
 	local enabledOptional = resolveEnabledOptional(package, features)
 
-	for alias, entry in pairs(ctx.stack) do
-		local depInfo = dependencies[alias]
+	local buildOk, buildErr = pcall(function()
+		for alias, entry in pairs(ctx.stack) do
+			local depInfo = dependencies[alias]
 
-		-- Optional, skip..
-		if depInfo and depInfo.optional and not enabledOptional[alias] then
-			goto continue
+			-- Optional, skip..
+			if depInfo and depInfo.optional and not enabledOptional[alias] then
+				goto continue
+			end
+
+			local dest = path.join(modulesDir, alias)
+
+			-- Git/registry deps are symlinked (or built) into target/, and the
+			-- symlink target encodes the resolved commit. This loop only runs when
+			-- the lockfile changed (the fast path returns earlier), so a stale link
+			-- from a previous commit must be dropped before the build re-creates it.
+			if entry.lock.git and fs.islink(dest) then
+				fs.delete(dest)
+			end
+
+			-- Has a build script, needs to run.
+			if not fs.islink(dest) then
+				if entry.pkg:build(dest) then ctx.builds = ctx.builds + 1 end
+			end
+
+			::continue::
 		end
+	end)
 
-		local dest = path.join(modulesDir, alias)
-
-		-- Git/registry deps are symlinked (or built) into target/, and the
-		-- symlink target encodes the resolved commit. This loop only runs when
-		-- the lockfile changed (the fast path returns earlier), so a stale link
-		-- from a previous commit must be dropped before the build re-creates it.
-		if entry.lock.git and fs.islink(dest) then
-			fs.delete(dest)
-		end
-
-		-- Has a build script, needs to run.
-		if not fs.islink(dest) then
-			entry.pkg:build(dest)
-		end
-
-		::continue::
+	if not buildOk then
+		error(buildErr)
 	end
 
-	if isRoot then
-		commitLockfile(package, ctx.stack, modulesDir)
+	local checked = 0
+	for _ in pairs(ctx.stack) do checked = checked + 1 end
+
+	-- With nothing downloaded or built the bar never rendered anything, so it
+	-- is discarded silently for summary callers (they print the "No changes"
+	-- line themselves, so both paths render identically) and finalized with the
+	-- old "2ms" line for default callers (run/test/compile).
+	if bar and ctx.downloads == 0 then
+		if ctx.builds > 0 then
+			bar:done()
+		elseif not opts.summary then
+			bar:done()
+		end
 	end
+
+	commitLockfile(package, ctx.stack, modulesDir)
+
+	return {
+		checked = checked,
+		installs = installs,
+		changed = ctx.downloads > 0 or ctx.builds > 0,
+		cached = false,
+	}
 end
 
 return installDependencies

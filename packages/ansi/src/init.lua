@@ -146,6 +146,7 @@ end
 
 -- progress: animated spinner with elapsed time.
 -- update(ratio, info) — ratio is 0–1 or nil (indeterminate); info is optional status text.
+-- setLabel(msg) — swap the label shown by the spinner and used by done/fail.
 -- done(msg) / fail(msg) — finalize with checkmark or cross.
 
 local BAR_WIDTH = 20
@@ -179,6 +180,7 @@ end
 
 ---@class ansi.Progress
 ---@field update fun(self: ansi.Progress, ratio: number?, info: string?)
+---@field setLabel fun(self: ansi.Progress, label: string)
 ---@field done fun(self: ansi.Progress, msg: string?)
 ---@field fail fun(self: ansi.Progress, msg: string?)
 
@@ -190,6 +192,9 @@ function ansi.progress(label)
 	if not isTTY then
 		return {
 			update = function() end,
+			setLabel = function(_, newLabel)
+				label = newLabel
+			end,
 			done = function(_, msg)
 				local elapsed = formatElapsed(now() - startTime)
 				io.write(colors.green ..
@@ -205,8 +210,10 @@ function ansi.progress(label)
 	end
 
 	local lastRendered = nil
+	local lastRatio, lastInfo
 
 	local function render(ratio, info)
+		lastRatio, lastInfo = ratio, info
 		local barStr = renderBar(ratio)
 		local pct = ratio and string.format("%3d%%", math.floor(ratio * 100)) or nil
 		local elapsed = formatElapsed(now() - startTime)
@@ -231,6 +238,11 @@ function ansi.progress(label)
 	return {
 		update = function(_, ratio, info)
 			render(ratio, info)
+		end,
+		setLabel = function(_, newLabel)
+			label = newLabel
+			lastRendered = false -- force the next render past the pct dedupe check
+			render(lastRatio, lastInfo)
 		end,
 		done = function(_, msg)
 			local elapsed = formatElapsed(now() - startTime)

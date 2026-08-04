@@ -97,8 +97,9 @@ end
 
 ---@param package lde.Package
 ---@param destinationPath string?
+---@return boolean built # true when a build script actually ran
 local function buildPackage(package, destinationPath)
-	if currentlyBuilding[package] then return end
+	if currentlyBuilding[package] then return false end
 	currentlyBuilding[package] = true
 
 	destinationPath = destinationPath or path.join(package:getModulesDir(), package:getName())
@@ -146,6 +147,7 @@ local function buildPackage(package, destinationPath)
 	end
 
 	currentlyBuilding[package] = nil
+	return inputsChanged or false
 end
 
 return buildPackage

@@ -221,7 +221,26 @@ function Package:getDependencies()
 end
 
 function Package:getDevDependencies()
-	return self:readConfig().devDependencies or {}
+	local deps = self:readConfig().devDependencies or {}
+
+	local lockfile = self:readLockfile()
+	if not lockfile then return deps end
+
+	-- Prefer locked versions (which have pinned commits) over lde.json, but
+	-- preserve config-only flags (optional, features) that aren't stored in the
+	-- lockfile — mirroring getDependencies().
+	local merged = {}
+	for name, depInfo in pairs(deps) do
+		local locked = lockfile:getDependency(name)
+		if locked then
+			locked.optional = depInfo.optional
+			locked.features = depInfo.features
+			merged[name] = locked
+		else
+			merged[name] = depInfo
+		end
+	end
+	return merged
 end
 
 function Package:getName()
@@ -248,8 +267,9 @@ end
 
 Package.installDependencies = require("lde-core.package.install")
 
-function Package:installDevDependencies()
-	self:installDependencies(self:getDevDependencies())
+---@param opts { summary: boolean?, locked: boolean? }?
+function Package:installDevDependencies(opts)
+	return self:installDependencies(self:getDevDependencies(), nil, nil, opts)
 end
 
 Package.updateDependencies = require("lde-core.package.update")

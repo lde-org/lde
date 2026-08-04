@@ -237,7 +237,7 @@ test.it("installDependencies installs multiple dependencies", function()
 	test.truthy(fs.exists(path.join(mainDir, "target", "multi-dep-b", "init.lua")))
 end)
 
-test.it("installDependencies skips already-installed symlink dependencies", function()
+	test.it("installDependencies skips already-installed symlink dependencies", function()
 	makePackageWithSrc("skip-dep", {
 		["init.lua"] = 'return "skip"'
 	})
@@ -260,6 +260,92 @@ test.it("installDependencies skips already-installed symlink dependencies", func
 	pkg:installDependencies()
 
 	test.truthy(fs.exists(path.join(mainDir, "target", "skip-dep")))
+end)
+
+--
+-- installDependencies --locked (lockfile-only installs)
+--
+
+test.it("locked install fails when a git dep is not pinned in the lockfile", function()
+	local mainDir = path.join(tmpBase, "locked-unpinned")
+	fs.mkdir(mainDir)
+	fs.mkdir(path.join(mainDir, "src"))
+	fs.write(path.join(mainDir, "src", "init.lua"), 'return true')
+
+	fs.write(path.join(mainDir, "lde.json"), json.encode({
+		name = "locked-unpinned",
+		version = "0.1.0",
+		dependencies = {
+			foo = { git = "https://example.invalid/foo" }
+		}
+	}))
+
+	local pkg = lde.Package.open(mainDir)
+	local ok, err = pcall(function()
+		pkg:installDependencies(nil, nil, nil, { locked = true })
+	end)
+	test.falsy(ok)
+	test.includes(tostring(err), "not pinned")
+end)
+
+test.it("locked install allows path deps without lockfile pins", function()
+	makePackageWithSrc("locked-path-dep", {
+		["init.lua"] = 'return "locked-path-dep"'
+	})
+
+	local mainDir = path.join(tmpBase, "locked-path-main")
+	fs.mkdir(mainDir)
+	fs.mkdir(path.join(mainDir, "src"))
+	fs.write(path.join(mainDir, "src", "init.lua"), 'return true')
+	fs.write(path.join(mainDir, "lde.json"), json.encode({
+		name = "locked-path-main",
+		version = "0.1.0",
+		dependencies = {
+			["locked-path-dep"] = { path = "../locked-path-dep" }
+		}
+	}))
+
+	local pkg = lde.Package.open(mainDir)
+	local result = pkg:installDependencies(nil, nil, nil, { locked = true })
+	test.truthy(fs.exists(path.join(mainDir, "target", "locked-path-dep")))
+	test.falsy(result.changed)
+	test.equal(result.installs, 1)
+	test.equal(result.checked, 1)
+end)
+
+test.it("installDevDependencies pins dev deps into the lockfile", function()
+	makePackageWithSrc("dev-pinned-dep", {
+		["init.lua"] = 'return "dev-pinned-dep"'
+	})
+	makePackageWithSrc("dev-pinned-runtime", {
+		["init.lua"] = 'return "dev-pinned-runtime"'
+	})
+
+	local mainDir = path.join(tmpBase, "dev-pinned-main")
+	fs.mkdir(mainDir)
+	fs.mkdir(path.join(mainDir, "src"))
+	fs.write(path.join(mainDir, "src", "init.lua"), 'return true')
+	fs.write(path.join(mainDir, "lde.json"), json.encode({
+		name = "dev-pinned-main",
+		version = "0.1.0",
+		dependencies = {
+			["dev-pinned-runtime"] = { path = "../dev-pinned-runtime" }
+		},
+		devDependencies = {
+			["dev-pinned-dep"] = { path = "../dev-pinned-dep" }
+		}
+	}))
+
+	local pkg = lde.Package.open(mainDir)
+	pkg:installDependencies()
+	pkg:installDevDependencies()
+
+	local lockfile = pkg:readLockfile()
+	test.truthy(lockfile)
+	test.truthy(lockfile:getDependency("dev-pinned-dep"), "dev dep should be pinned")
+	test.truthy(lockfile:getDependency("dev-pinned-runtime"), "runtime pin should survive the dev commit")
+	test.truthy(fs.exists(path.join(mainDir, "target", "dev-pinned-dep")))
+	test.truthy(fs.exists(path.join(mainDir, "target", "dev-pinned-runtime")))
 end)
 
 --

@@ -14,7 +14,7 @@ local function help()
 		{ cmd = "init",      ex = nil,           color = "red",     desc = "Initialize current directory as a project" },
 		{ cmd = "upgrade",   ex = nil,           color = "red",     desc = "Upgrade lde to the latest version" },
 		{},
-		{ cmd = "sync",      ex = nil,           color = "yellow",  desc = "Install dependencies for the current project" },
+		{ cmd = "sync",      ex = nil,           color = "yellow",  desc = "Install dependencies (--locked: from lockfile only)" },
 		{ cmd = "install",   ex = "rocks:busted", color = "yellow",  desc = "Install a tool to PATH with --git/--path/rocks:" },
 		{ cmd = "uninstall", ex = "busted",      color = "yellow",  desc = "Uninstall a tool from PATH" },
 		{ cmd = "add",       ex = "hood",        color = "yellow",  desc = "Add a dependency (--path <path> or --git <url>)" },
