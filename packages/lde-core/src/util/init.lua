@@ -10,7 +10,7 @@ local luarocks = require("luarocks")
 local curl = require("curl-sys")
 local Archive = require("archive")
 
-local MANIFEST_URL = "https://luarocks.org/manifest"
+local MANIFEST_URL = "https://luarocks.org/manifest.zip"
 local MANIFEST_TTL = 60 * 60 * 24 -- 24 hours
 
 ---@type luarocks.Manifest?
@@ -32,14 +32,23 @@ local function getManifest()
 	end
 
 	local p = lde.verbose and ansi.progress("Fetching luarocks manifest") or nil
+
+	-- luarocks.org serves the ~4.4MB raw manifest as a ~140KB zip; download the
+	-- zip and decode the single "manifest" file it contains, all in memory.
 	local res, err = curl.get(MANIFEST_URL)
 	if not res then
 		if p then p:fail() end
 		return nil, "Failed to fetch manifest: " .. (err or "")
 	end
 
-	fs.write(cacheFile, res.body)
-	cachedManifest = luarocks.Manifest.new(res.body)
+	local raw, rerr = Archive.new(res.body):read("manifest")
+	if not raw then
+		if p then p:fail() end
+		return nil, "Failed to read manifest from zip: " .. (rerr or "")
+	end
+
+	fs.write(cacheFile, raw)
+	cachedManifest = luarocks.Manifest.new(raw)
 	if p then p:done() end
 	return cachedManifest
 end
