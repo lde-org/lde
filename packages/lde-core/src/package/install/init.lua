@@ -3,7 +3,6 @@ local path = require("path")
 local util = require("util")
 local ansi = require("ansi")
 local rocked = require("rocked")
-local luarocks = require("luarocks")
 local download = require("lde-core.util.download")
 
 local lde = require("lde-core")
@@ -585,31 +584,6 @@ local function collectDependencies(dependencies, ctx)
 	---@type lde.install.Node[]
 	local order = {} -- nodes in discovery order
 
-	-- resolveLuarocksBest downloads the newest version's rockspec to verify the
-	-- rock supports LuaJIT (rocks like cqueues publish per-Lua-version builds).
-	-- With a cold cache each dep does that as a separate synchronous request —
-	-- one serial round trip per dep (~40ms each), which dominates cold installs.
-	-- Warm the rockspec cache for every dep at once through the parallel download
-	-- batch, so the per-dep checks below hit local files instead of the network.
-	---@param deps table<string, lde.Package.Config.Dependency>
-	local function prefetchEngineChecks(deps)
-		local manifest = lde.util.getManifest()
-		if not manifest then return end
-		for alias, depInfo in pairs(deps) do
-			if not graph[alias] and depInfo.luarocks then
-				local name = depInfo.name or depInfo.luarocks
-				local candidates = luarocks.listBest(manifest, name, depInfo.version)
-				local c = candidates[1]
-				if c and c.rockspecUrl then
-					local file = lde.util.rockspecCacheFile(c.rockspecUrl)
-					if not fs.exists(file) then
-						download.prefetch(c.rockspecUrl, file)
-					end
-				end
-			end
-		end
-	end
-
 	---@param deps table<string, lde.Package.Config.Dependency>
 	---@param relativeTo string
 	---@return lde.install.Node[]
@@ -638,8 +612,6 @@ local function collectDependencies(dependencies, ctx)
 
 	-- ── Phase 1: graph walk (metadata-only) ────────────────────────────────
 	---@type lde.install.Node[]
-	prefetchEngineChecks(dependencies)
-	download.drain()
 	local frontier = addDeps(dependencies, ctx.relativeTo)
 
 	while #frontier > 0 do
@@ -688,16 +660,6 @@ local function collectDependencies(dependencies, ctx)
 
 		for _, node in ipairs(metaBatch) do
 			consume(node)
-		end
-
-		-- New deps discovered at this level hit the same serial engine checks in
-		-- expand below; prefetch their candidate rockspecs before expanding.
-		for _, node in ipairs(metaBatch) do
-			prefetchEngineChecks(node.deps or {})
-		end
-		download.drain()
-
-		for _, node in ipairs(metaBatch) do
 			for _, child in ipairs(expand(node, ctx, graph, order)) do
 				nextFrontier[#nextFrontier + 1] = child
 			end

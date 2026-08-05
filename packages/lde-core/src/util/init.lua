@@ -10,7 +10,11 @@ local luarocks = require("luarocks")
 local curl = require("curl-sys")
 local Archive = require("archive")
 
-local MANIFEST_URL = "https://luarocks.org/manifest.zip"
+-- luarocks.org publishes per-Lua-version manifests that already exclude
+-- versions incompatible with the running engine, so resolution needs no
+-- per-candidate rockspec engine checks. LuaJIT is Lua 5.1.
+local MANIFEST_URL = "https://luarocks.org/manifest-5.1.zip"
+local MANIFEST_ENTRY = MANIFEST_URL:match("([^/]+)%.zip$") -- the file inside the zip
 local MANIFEST_TTL = 60 * 60 * 24 -- 24 hours
 
 ---@type luarocks.Manifest?
@@ -20,7 +24,10 @@ local cachedManifest
 local function getManifest()
 	if cachedManifest then return cachedManifest end
 
-	local cacheFile = path.join(lde.global.getDir(), "luarocks-manifest.raw")
+	-- The manifest is global registry metadata: cache it in the user-level lde
+	-- directory, not the (possibly per-tree) global dir, so --tree installs share
+	-- one manifest instead of re-downloading it for every tree.
+	local cacheFile = path.join(lde.global.getUserDir(), "luarocks-manifest.raw")
 
 	local stat = fs.stat(cacheFile)
 	if stat and (os.time() - stat.modifyTime) < MANIFEST_TTL then
@@ -33,20 +40,21 @@ local function getManifest()
 
 	local p = lde.verbose and ansi.progress("Fetching luarocks manifest") or nil
 
-	-- luarocks.org serves the ~4.4MB raw manifest as a ~140KB zip; download the
-	-- zip and decode the single "manifest" file it contains, all in memory.
+	-- luarocks.org serves the ~4.2MB raw manifest as a ~130KB zip; download the
+	-- zip and decode the single "manifest-5.1" file it contains, all in memory.
 	local res, err = curl.get(MANIFEST_URL)
 	if not res then
 		if p then p:fail() end
 		return nil, "Failed to fetch manifest: " .. (err or "")
 	end
 
-	local raw, rerr = Archive.new(res.body):read("manifest")
+	local raw, rerr = Archive.new(res.body):read(MANIFEST_ENTRY)
 	if not raw then
 		if p then p:fail() end
 		return nil, "Failed to read manifest from zip: " .. (rerr or "")
 	end
 
+	fs.mkdirAll(lde.global.getUserDir())
 	fs.write(cacheFile, raw)
 	cachedManifest = luarocks.Manifest.new(raw)
 	if p then p:done() end
@@ -59,13 +67,13 @@ end
 local urlCache
 
 local function getUrlCachePath()
-	return path.join(lde.global.getDir(), "luarocks-url-cache.json")
+	return path.join(lde.global.getUserDir(), "luarocks-url-cache-5.1.json")
 end
 
 local function loadUrlCache()
 	if urlCache then return urlCache end
 	local cachePath = getUrlCachePath()
-	local manifestPath = path.join(lde.global.getDir(), "luarocks-manifest.raw")
+	local manifestPath = path.join(lde.global.getUserDir(), "luarocks-manifest.raw")
 	local cstat = fs.stat(cachePath)
 	local mstat = fs.stat(manifestPath)
 	if cstat and mstat and cstat.modifyTime >= mstat.modifyTime then
@@ -182,62 +190,14 @@ function util.resolveLuarocksSource(name, version)
 	return url, arch
 end
 
---- Whether a Lua-version constraint string (e.g. "== 5.4", ">= 5.1, < 5.4",
---- "5.1") is satisfied by the given version.
----@param constraintStr string
----@param ver string
----@return boolean
-local function constraintSatisfied(constraintStr, ver)
-	if not constraintStr or constraintStr == "" then return true end
-	local found = false
-	for op, cver in constraintStr:gmatch("([><=~!]+)%s*([%d%.%-]+)") do
-		found = true
-		if not luarocks.satisfies(ver, op, cver) then return false end
-	end
-	if not found then
-		return luarocks.satisfies(ver, "==", constraintStr)
-	end
-	return true
-end
-
---- Whether a rockspec's lua/luajit dependency constraints accept the running
---- engine (LuaJIT 2.1 == Lua 5.1). Rocks like cqueues publish per-version
---- variants (…-51 through …-54) and must resolve to the 5.1 build.
----@param content string
----@return boolean
-local function rockspecEngineOkContent(content)
-	local ok, spec = rocked.parse(content)
-	if not ok then return true end
-	for _, depStr in ipairs(spec.dependencies or {}) do
-		local name, rest = depStr:match("^([%w%-_]+)%s*(.*)")
-		if name == "lua" then
-			if not constraintSatisfied(rest, "5.1") then return false end
-		elseif name == "luajit" then
-			if not constraintSatisfied(rest, "2.1") then return false end
-		end
-	end
-	return true
-end
-
---- Fetch (or read from the rockspec cache) a published rockspec and check its
---- engine constraints. Unverifiable rockspecs are assumed compatible.
----@param url string
----@return boolean
-local function rockspecEngineOk(url)
-	local cacheFile = util.rockspecCacheFile(url)
-	local content = fs.exists(cacheFile) and fs.read(cacheFile) or nil
-	if not content then
-		local res, err = curl.get(url)
-		if not res then return true end
-		content = res.body
-		fs.write(cacheFile, content)
-	end
-	return rockspecEngineOkContent(content)
-end
-
 --- Resolves the best version of a luarocks package plus the rockspec (metadata)
 --- and .src.rock (content) URLs for that exact version. Uses the persisted URL
 --- cache when possible; falls back to a manifest scan otherwise.
+---
+--- The manifest is the Lua-version-filtered one (manifest-5.1 for LuaJIT), so
+--- every version it lists is engine-compatible by construction: the newest
+--- satisfying the constraint is picked directly, with no per-candidate rockspec
+--- fetches.
 ---@param name string
 ---@param constraint string?
 ---@return string? version
@@ -255,43 +215,30 @@ function util.resolveLuarocksBest(name, constraint)
 		local version = url:match("^.*/" .. name:gsub("([%-%.%+%*%?%[%]%^%$%(%)%%])", "%%%1") .. "%-([^/]+)" .. suffix)
 		if version then
 			local rockspecUrl = url:gsub("%.src%.rock$", ".rockspec")
-			-- The URL cache may predate engine-aware resolution; skip entries
-			-- the current engine can't run (e.g. a Lua 5.4-only build).
-			if not rockspecUrl or rockspecEngineOk(rockspecUrl) then
-				if arch == "src" then
-					return version, rockspecUrl, url
-				end
-				return version, url, nil
+			if arch == "src" then
+				return version, rockspecUrl, url
 			end
+			return version, url, nil
 		end
 	end
 
 	local manifest, err = getManifest()
 	if not manifest then return nil, nil, nil, err end
 
-	-- Walk candidate versions newest-first and skip any whose rockspec declares
-	-- an engine (lua/luajit) constraint the current engine doesn't satisfy.
 	local candidates = luarocks.listBest(manifest, name, constraint)
-	local v, rockspecUrl, srcUrl
-	for _, c in ipairs(candidates) do
-		if not (c.rockspecUrl and not rockspecEngineOk(c.rockspecUrl)) then
-			v, rockspecUrl, srcUrl = c.version, c.rockspecUrl, c.srcUrl
-			break
-		end
-	end
-	if not v then
+	local c = candidates[1]
+	if not c then
 		return nil, nil, nil, "No version of '" .. name .. "'" ..
-			(constraint and (" satisfies: " .. constraint) or "") ..
-			" is compatible with the current engine (LuaJIT / Lua 5.1)"
+			(constraint and (" satisfies: " .. constraint) or " found")
 	end
 
 	-- Cache unversioned resolutions for future invocations
 	if not constraint then
-		cache[name] = { url = srcUrl or rockspecUrl, arch = srcUrl and "src" or "rockspec" }
+		cache[name] = { url = c.srcUrl or c.rockspecUrl, arch = c.srcUrl and "src" or "rockspec" }
 		saveUrlCache()
 	end
 
-	return v, rockspecUrl, srcUrl, nil
+	return c.version, c.rockspecUrl, c.srcUrl, nil
 end
 
 --- Resolves a luarocks package name/version to a Package via the luarocks registry.
