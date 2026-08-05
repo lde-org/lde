@@ -33,6 +33,24 @@ test.it("lde add rocks:<name> stores dependency without registry prefix", functi
 	test.truthy(config.dependencies["lpeg"], "dependency should be stored as 'lpeg'")
 end)
 
+test.it("lde add creates dependencies field when config has none", function()
+	local dir = makeProject("create-dependencies-test")
+	-- makeProject writes a config with dependencies = {}; overwrite it without the key
+	-- so we exercise the branch that creates the field from scratch (regression:
+	-- plain assignment bypassed json's keyStore and the field was dropped on encode)
+	fs.write(path.join(dir, "lde.json"), json.encode({
+		name = "create-dependencies-test",
+		version = "0.1.0"
+	}))
+
+	ldecli({ "add", "mylib", "--path", "../mylib" }, dir)
+
+	local config = json.decode(fs.read(path.join(dir, "lde.json")))
+	test.truthy(config.dependencies, "dependencies field should be created")
+	test.truthy(config.dependencies["mylib"], "mylib should be in dependencies")
+	test.equal(config.dependencies["mylib"].path, "../mylib")
+end)
+
 test.it("lde add --dev --path adds to devDependencies not dependencies", function()
 	local dir = makeProject("dev-path-test")
 	ldecli({ "add", "mylib", "--dev", "--path", "../mylib" }, dir)

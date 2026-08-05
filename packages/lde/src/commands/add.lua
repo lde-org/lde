@@ -59,7 +59,7 @@ local function add(args)
 		dependencyTable = config.devDependencies
 	else
 		if not config.dependencies then
-			config.dependencies = {}
+			json.addField(config, "dependencies", {})
 		end
 		dependencyTable = config.dependencies
 	end ---@cast dependencyTable -nil
