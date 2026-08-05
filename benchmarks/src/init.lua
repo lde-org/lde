@@ -2,6 +2,7 @@ local ffi = require("ffi")
 
 local process = require("process")
 local ansi = require("ansi")
+local fs = require("fs")
 
 ---@type fun(): number
 local now
@@ -39,48 +40,84 @@ local function sysinfo()
 		ansi.printf("  {gray}%s:{reset} %s", k, v or "unknown")
 	end
 
-	local function read(cmd)
-		local code, stdout = process.exec(cmd, nil, { unsafe = true, stderr = "null" })
+	local function read(cmd, args)
+		local code, stdout = process.exec(cmd, args, { stderr = "null" })
 		return code == 0 and stdout and stdout:gsub("%s+$", "") or nil
 	end
 
+	local function match(out, pattern)
+		return out and out:match(pattern) or nil
+	end
+
 	if ffi.os == "Windows" then
-		row("OS", read("cmd /c ver"))
-		row("CPU Model", read("wmic cpu get Name /value"):match("Name=(.+)"))
-		row("CPU Cores", read("wmic cpu get NumberOfCores /value"):match("NumberOfCores=(.+)"))
-		row("Total Memory", read("wmic computersystem get TotalPhysicalMemory /value"):match("TotalPhysicalMemory=(.+)"))
+		row("OS", read("cmd", { "/c", "ver" }))
+		row("CPU Model", match(read("wmic", { "cpu", "get", "Name", "/value" }), "Name=(.+)"))
+		row("CPU Cores", match(read("wmic", { "cpu", "get", "NumberOfCores", "/value" }), "NumberOfCores=(.+)"))
+		row("Total Memory", match(read("wmic", { "computersystem", "get", "TotalPhysicalMemory", "/value" }), "TotalPhysicalMemory=(.+)"))
 		row("Hostname", os.getenv("COMPUTERNAME"))
 	else
-		row("OS", read("uname -sr"))
+		row("OS", read("uname", { "-sr" }))
 		row("Hostname", read("hostname"))
 		---@format disable-next
-		row("CPU Model", read("sh -c \"grep -m1 'model name' /proc/cpuinfo | cut -d: -f2 | xargs\"") or read("sysctl -n machdep.cpu.brand_string"))
-		row("CPU Cores", read("sh -c \"nproc 2>/dev/null || sysctl -n hw.logicalcpu\""))
+		row("CPU Model", read("sh", { "-c", "grep -m1 -E 'model name|Processor' /proc/cpuinfo | cut -d: -f2 | xargs" }) or read("sysctl", { "-n", "machdep.cpu.brand_string" }))
+		row("CPU Cores", read("sh", { "-c", "nproc 2>/dev/null || sysctl -n hw.logicalcpu" }))
 
-		local meminfo = read("grep MemTotal /proc/meminfo")
+		local meminfo = read("sh", { "-c", "grep MemTotal /proc/meminfo" })
 		local memGB = meminfo and meminfo:match("(%d+)") and
 			("%d GB"):format(tonumber(meminfo:match("(%d+)")) / 1024 / 1024) or
-			read("sh -c \"sysctl -n hw.memsize | awk '{print int($1/1073741824) \\\" GB\\\"}' \"")
+			read("sh", { "-c", "sysctl -n hw.memsize | awk '{print int($1/1073741824) \" GB\"}'" })
 		row("Total Memory", memGB)
-		row("Platform", read("uname -m"))
+		row("Platform", read("uname", { "-m" }))
 	end
 end
 
 sysinfo()
 
 ---@param label string
----@param fn fun(): boolean?, string?
-local function bench(label, fn)
+---@param opts { run: fun(): boolean?, string?, prepare?: fun(), warmup?: integer, runs?: integer }
+local function bench(label, opts)
 	local p = ansi.progress(label)
-	local start = now()
-	local ok, err = fn()
-	local elapsed = (now() - start) / 1e9
-	local time = ansi.colorize("gray", string.format("%.3fs", elapsed))
-	if ok then
-		p:done(label .. " " .. time)
-	else
-		p:fail(label .. " " .. time .. (err and ("\n    " .. ansi.colorize("red", err)) or ""))
+	local runs = opts.runs or 1
+	local warmup = opts.warmup or 0
+
+	for _ = 1, warmup do
+		if opts.prepare then opts.prepare() end
+		local ok, err = opts.run()
+		if not ok then
+			p:fail(label .. " warmup failed: " .. (err or "unknown"))
+			return
+		end
 	end
+
+	local times = {}
+	for i = 1, runs do
+		if opts.prepare then opts.prepare() end
+		local start = now()
+		local ok, err = opts.run()
+		local elapsed = (now() - start) / 1e9
+		if not ok then
+			p:fail(label .. " run " .. i .. "/" .. runs .. " failed: " .. (err or "unknown"))
+			return
+		end
+		times[#times + 1] = elapsed
+	end
+
+	table.sort(times)
+
+	local sum = 0
+	for _, t in ipairs(times) do sum = sum + t end
+	local mean = sum / runs
+
+	local mid = math.floor(runs / 2)
+	local median = runs % 2 == 1 and times[mid + 1] or (times[mid] + times[mid + 1]) / 2
+
+	local variance = 0
+	for _, t in ipairs(times) do variance = variance + (t - mean) * (t - mean) end
+	local stddev = math.sqrt(variance / runs)
+
+	local stats = string.format("min: %.3fs  median: %.3fs  mean: %.3fs ± %.3fs  (%d runs)",
+		times[1], median, mean, stddev, runs)
+	p:done(label .. " " .. ansi.colorize("gray", stats))
 end
 
 ---@param tool string  -- "lde" | "luarocks" | "lx"
@@ -88,42 +125,64 @@ end
 local function runBenchmarks(tool, tmpdir)
 	ansi.printf("\n{bold}=== %s ==={reset}", tool)
 
-	bench("install busted (cold)", function()
-		local code, _, stderr
-		if tool == "lde" then
-			code, _, stderr = process.exec("lde", { "--tree", tmpdir .. "/lde", "install", "rocks:busted" }, { stdout = "null" })
-		elseif tool == "luarocks" then
-			code, _, stderr = process.exec("luarocks", { "--tree", tmpdir .. "/rocks", "install", "busted" })
-		elseif tool == "lx" then
-			code, _, stderr = process.exec("lx", { "--tree", tmpdir .. "/rocks", "install", "busted" })
-		end
-		return code == 0, stderr
-	end)
+	local treeDir = tmpdir .. (tool == "lde" and "/lde" or "/rocks")
 
-	bench("install busted (warm)", function()
-		local code, _, stderr
-		if tool == "lde" then
-			code, _, stderr = process.exec("lde", { "--tree", tmpdir .. "/lde", "install", "rocks:busted" }, { stdout = "null" })
-		elseif tool == "luarocks" then
-			code, _, stderr = process.exec("luarocks", { "--tree", tmpdir .. "/rocks", "install", "busted" })
-		elseif tool == "lx" then
-			code, _, stderr = process.exec("lx", {  "--no-prompt", "--tree", tmpdir .. "/rocks", "install", "busted" })
-		end
-		return code == 0, stderr
-	end)
+	-- Run counts match the reference hyperfine benchmark parameters:
+	-- cold installs warmup 0 runs 5, warm installs warmup 2 runs 10.
+	bench("install busted (cold)", {
+		warmup = 0,
+		runs = 5,
+		prepare = function()
+			fs.rmdir(treeDir)
+		end,
+		run = function()
+			local code, _, stderr
+			if tool == "lde" then
+				code, _, stderr = process.exec("lde", { "--tree", treeDir, "install", "rocks:busted" }, { stdout = "null" })
+			elseif tool == "luarocks" then
+				code, _, stderr = process.exec("luarocks", { "--tree", treeDir, "install", "busted" }, { stdout = "null" })
+			elseif tool == "lx" then
+				code, _, stderr = process.exec("lx", { "--tree", treeDir, "install", "busted" }, { stdout = "null" })
+			end
+			return code == 0, stderr
+		end,
+	})
 
-	bench("build C rock (luafilesystem)", function()
-		local code, _, stderr
-		if tool == "lde" then
-			code, _, stderr = process.exec("lde", { "--tree", tmpdir .. "/lde", "install", "rocks:luafilesystem" },
-				{ stdout = "null" })
-		elseif tool == "luarocks" then
-			code, _, stderr = process.exec("luarocks", { "--tree", tmpdir .. "/rocks", "install", "luafilesystem" })
-		elseif tool == "lx" then
-			code, _, stderr = process.exec("lx", { "--tree", tmpdir .. "/rocks", "install", "luafilesystem" })
-		end
-		return code == 0, stderr
-	end)
+	bench("install busted (warm)", {
+		warmup = 2,
+		runs = 10,
+		run = function()
+			local code, _, stderr
+			if tool == "lde" then
+				code, _, stderr = process.exec("lde", { "--tree", treeDir, "install", "rocks:busted" }, { stdout = "null" })
+			elseif tool == "luarocks" then
+				code, _, stderr = process.exec("luarocks", { "--tree", treeDir, "install", "busted" }, { stdout = "null" })
+			elseif tool == "lx" then
+				code, _, stderr = process.exec("lx", { "--no-prompt", "--tree", treeDir, "install", "busted" }, { stdout = "null" })
+			end
+			return code == 0, stderr
+		end,
+	})
+
+	bench("build C rock (luafilesystem)", {
+		warmup = 0,
+		runs = 5,
+		prepare = function()
+			fs.rmdir(treeDir)
+		end,
+		run = function()
+			local code, _, stderr
+			if tool == "lde" then
+				code, _, stderr = process.exec("lde", { "--tree", treeDir, "install", "rocks:luafilesystem" },
+					{ stdout = "null" })
+			elseif tool == "luarocks" then
+				code, _, stderr = process.exec("luarocks", { "--tree", treeDir, "install", "luafilesystem" })
+			elseif tool == "lx" then
+				code, _, stderr = process.exec("lx", { "--tree", treeDir, "install", "luafilesystem" })
+			end
+			return code == 0, stderr
+		end,
+	})
 end
 
 local tools = {}
@@ -141,17 +200,9 @@ end
 
 for _, tool in ipairs(tools) do
 	local tmpdir = os.tmpname():gsub("[^/\\]+$", "") .. "bench_" .. tool
-	if jit.os == "Windows" then
-		os.execute("mkdir " .. tmpdir)
-	else
-		os.execute("mkdir -p " .. tmpdir)
-	end
+	fs.mkdirAll(tmpdir)
 
 	runBenchmarks(tool, tmpdir)
 
-	if jit.os == "Windows" then
-		os.execute("rmdir /s /q " .. tmpdir)
-	else
-		os.execute("rm -rf " .. tmpdir)
-	end
+	fs.rmdir(tmpdir)
 end

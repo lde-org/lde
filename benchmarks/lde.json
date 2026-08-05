@@ -2,7 +2,14 @@
 	"name": "benchmarks",
 	"version": "0.1.0",
 	"dependencies": {
-		"process": { "git": "https://github.com/lde-org/process" },
-		"ansi": { "path": "../packages/ansi" }
+		"process": {
+			"git": "https://github.com/lde-org/process"
+		},
+		"ansi": {
+			"path": "../packages/ansi"
+		},
+		"fs": {
+			"git": "https://github.com/lde-org/fs"
+		}
 	}
 }
