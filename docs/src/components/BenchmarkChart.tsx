@@ -4,25 +4,25 @@ const benchmarks = [
 	{
 		name: "Busted (Cold)",
 		results: [
-			{ tool: "lde", time: 0.746 },
-			{ tool: "luarocks", time: 8.251 },
-			{ tool: "lx", time: 2.950 },
+			{ tool: "lde", time: 1.528 },
+			{ tool: "luarocks", time: 6.131 },
+			{ tool: "lx", time: 2.293 },
 		],
 	},
 	{
 		name: "Busted (Warm)",
 		results: [
-			{ tool: "lde", time: 0.008 },
-			{ tool: "luarocks", time: 1.196 },
-			{ tool: "lx", time: 2.297 },
+			{ tool: "lde", time: 0.009 },
+			{ tool: "luarocks", time: 1.364 },
+			{ tool: "lx", time: 0.007 },
 		],
 	},
 	{
 		name: "LuaFileSystem",
 		results: [
-			{ tool: "lde", time: 0.312 },
-			{ tool: "luarocks", time: 0.757 },
-			{ tool: "lx", time: 1.096 },
+			{ tool: "lde", time: 0.267 },
+			{ tool: "luarocks", time: 0.824 },
+			{ tool: "lx", time: 1.022 },
 		],
 	},
 ];
@@ -119,14 +119,6 @@ export default function BenchmarkChart() {
 										: <span class={`font-medium ${c.text}`}>{r.tool}</span>
 									}
 									{isLde && <span class={`font-semibold ${c.text}`}>lde</span>}
-									{isFastest && (
-										<span class="text-[10px] font-semibold uppercase tracking-wider text-emerald-400 bg-emerald-400/10 border border-emerald-400/20 px-1.5 py-0.5 rounded-full">
-											fastest
-										</span>
-									)}
-									{!isFastest && isLde && (
-										<a href="https://github.com/lde-org/lde/issues/102" target="_blank" rel="noopener noreferrer" class="text-xs opacity-50 hover:opacity-80 transition-opacity" title="tracking issue">😞</a>
-									)}
 								</div>
 								<div class="flex items-center gap-3">
 									{!isFastest && (
@@ -172,7 +164,7 @@ export default function BenchmarkChart() {
 			<div class="px-6 py-3 border-t border-black/8 dark:border-white/8 flex items-center justify-between gap-2 text-xs text-black/30 dark:text-white/25">
 				<div class="flex items-center gap-2">
 					<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-					Linux x86-64 · 4 cores · avg of 5 runs · latest versions
+					Linux x86-64 · AMD EPYC 7763 · 4 cores · avg of 5 runs · latest versions
 				</div>
 				<a
 					href="https://github.com/lde-org/lde/tree/master/benchmarks"
