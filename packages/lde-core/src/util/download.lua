@@ -71,7 +71,12 @@ function download.drain()
 	if not session then return end
 	local results = session.batch:runAll()
 	for destPath, index in pairs(session.pending) do
-		session.pending[destPath] = results[index] or { ok = false, err = "missing result" }
+		-- Entries already resolved by a previous drain hold a result table, not an
+		-- index; re-resolving them would index the batch by a table and clobber the
+		-- good result with "missing result". Only resolve entries still pending.
+		if type(index) ~= "table" then
+			session.pending[destPath] = results[index] or { ok = false, err = "missing result" }
+		end
 	end
 end
 
