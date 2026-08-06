@@ -81,6 +81,29 @@ test.it("--tree overrides the global lde directory", function()
 	test.truthy(fs.exists(path.join(tmpTree, "git")))
 end)
 
+test.it("lde -v prints the version like --version", function()
+	local okV, outV = ldecli { "-v" }
+	local okLong, outLong = ldecli { "--version" }
+
+	test.truthy(okV)
+	test.truthy(okLong)
+	test.truthy(outV and #outV > 0)
+	test.equal(outV, outLong)
+end)
+
+test.it("lde -v combines with --tree like --version does", function()
+	local tmpTree = path.join(env.tmpdir(), "lde-v-tree-test")
+	fs.rmdir(tmpTree)
+
+	local ok, out = ldecli { "-v", "--tree", tmpTree }
+	test.truthy(ok)
+	test.truthy(out and #out > 0)
+	test.truthy(fs.exists(tmpTree))
+	test.truthy(fs.exists(path.join(tmpTree, "git")))
+
+	fs.rmdir(tmpTree)
+end)
+
 test.it("-C changes the working directory before loose-file resolution", function()
 	local tmpDir = path.join(env.tmpdir(), "lde-cli-cwd-short")
 	local pkgDir = path.join(tmpDir, "pkg")

@@ -95,6 +95,20 @@ function Args:flag(desiredKey)
 end
 
 ---@param desiredKey string
+---@return boolean
+function Args:flagShort(desiredKey)
+	local flag = "-" .. desiredKey
+	for i, arg in ipairs(self.raw) do
+		if arg == "--" then break end
+		if arg == flag then
+			table.remove(self.raw, i)
+			return true
+		end
+	end
+	return false
+end
+
+---@param desiredKey string
 ---@return string? val
 function Args:short(desiredKey)
 	local flag = "-" .. desiredKey

@@ -47,7 +47,12 @@ end
 
 -- Fast paths that avoid loading lde-core (whose module graph pulls in
 -- git2-sys, curl-sys, json, etc.) — this is what dominates CLI startup.
-if args:flag("version") and args:count() == 0 then
+-- `-v` is the single-dash alias for `--version` and shares its fast path and
+-- override-combination semantics (`lde -v --tree <dir>` applies the override
+-- before printing).
+local versionRequested = args:flag("version") or args:flagShort("v")
+
+if versionRequested and args:count() == 0 then
 	if cwdOverride or treeOverride then
 		applyOverrides()
 	end
