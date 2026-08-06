@@ -886,8 +886,34 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 		-- Build in reverse discovery order: children (a rock's deps, including
 		-- build backends like luarocks-build-rust-mlua) are discovered after
 		-- their parent, so a reverse iteration builds every dependency before
-		-- the rock that requires it.
+		-- the rock that requires it. Rockspec builtin native compiles spawn
+		-- concurrently (asyncBuild mode): gcc children are polled and their
+		-- finalizers run once all of them finish, so independent rocks compile
+		-- in parallel while ordering constraints are still respected.
 		local order = ctx.order or {}
+
+		local asyncBuild = require("lde-core.util.async-build")
+		---@type { alias: string, finalize: fun(): boolean?, string? }[]
+		local pending = {}
+		---@type table<string, boolean>
+		local pendingAlias = {}
+		asyncBuild.begin()
+
+		--- Wait for all spawned native compiles and run their finalizers.
+		---@param forAlias string? # only drains when that alias has a pending build
+		local function drain(forAlias)
+			if forAlias and not pendingAlias[forAlias] then return end
+			for _, job in ipairs(pending) do
+				local ok, err = job.finalize()
+				if not ok then
+					error("Build failed for '" .. job.alias .. "': " .. tostring(err))
+				end
+				ctx.builds = ctx.builds + 1
+			end
+			pending = {}
+			pendingAlias = {}
+		end
+
 		for i = #order, 1, -1 do
 			local node = order[i]
 			local alias = node.alias
@@ -912,11 +938,32 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 
 			-- Has a build script, needs to run.
 			if not fs.islink(dest) then
-				if entry.pkg:build(dest) then ctx.builds = ctx.builds + 1 end
+				-- A dependent whose build reads dependency outputs (make/cmake/
+				-- command backends, or builtin rocks linking against a native
+				-- dep's .so) must wait for those deps' pending compiles first.
+				-- Pure-Lua builtin installs only copy their own sources, so they
+				-- build without draining, keeping independent compiles overlapped.
+				-- Non-rockspec packages (git/path with build scripts) default to
+				-- draining to preserve the historical ordering guarantee.
+				if entry.pkg.buildNeedsDeps ~= false then
+					for depAlias in pairs(node.deps or {}) do
+						drain(depAlias)
+					end
+				end
+				local built, deferred = entry.pkg:build(dest)
+				if deferred then
+					pending[#pending + 1] = { alias = alias, finalize = deferred }
+					pendingAlias[alias] = true
+				elseif built then
+					ctx.builds = ctx.builds + 1
+				end
 			end
 
 			::continue::
 		end
+
+		drain()
+		asyncBuild.finish()
 	end)
 
 	if not buildOk then

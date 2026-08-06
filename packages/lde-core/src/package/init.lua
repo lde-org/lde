@@ -12,7 +12,8 @@ local process = require("process")
 ---@field dir string
 ---@field cachedConfig lde.Package.Config?
 ---@field cachedConfigMtime number?
----@field buildfn (fun(pkg: lde.Package, outputDir: string): boolean, string?)?
+---@field buildfn (fun(pkg: lde.Package, outputDir: string): boolean?, string?, (fun(): boolean?, string?)?)?
+---@field buildNeedsDeps boolean? # false = pure-Lua builtin install that never reads dependency build outputs
 local Package = {}
 Package.__index = Package
 
@@ -121,6 +122,7 @@ end
 ---@param outputDir string
 ---@return boolean? ok
 ---@return string? err
+---@return (fun(): boolean?, string?)? deferred # non-nil when the build spawned async native compiles
 function Package:runBuildScript(outputDir)
 	return (self.buildfn or defaultBuildFn)(self, outputDir)
 end

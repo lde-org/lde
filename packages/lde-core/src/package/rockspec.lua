@@ -10,6 +10,9 @@ local util = require("util")
 
 local curl = util.lazy(function() return require("curl-sys") end)
 
+-- Enables concurrent native compiles during install builds (see build loop).
+local asyncBuild = require("lde-core.util.async-build")
+
 --- LuaRocks accepts a plain string or a list for a native module's
 --- sources/libraries/libdirs/incdirs/defines (lzlib uses `libraries = "z"`),
 --- and a build-level default (build.libraries etc.) applies to every module
@@ -329,6 +332,13 @@ local function openRockspec(dir, rockspecPath)
 		modules, nativeModules = autoLua, autoNative
 	end
 
+	-- Whether this package's build can read dependency build outputs (the
+	-- install build loop uses this to decide if a pending native compile of a
+	-- dependency must finish first). Pure-Lua builtin/module/none installs only
+	-- copy from the rock's own source, so they never need a dependency's .so.
+	pkg.buildNeedsDeps = buildType ~= "builtin" and buildType ~= "module" and buildType ~= "none"
+		or next(nativeModules) ~= nil
+
 	-- Include the lde runtime version in the stamp so build outputs are
 	-- rebuilt when the binary is upgraded (build logic may have changed, e.g.
 	-- module layout rules).
@@ -497,6 +507,8 @@ local function openRockspec(dir, rockspecPath)
 				fs.copy(path.join(dir, src), destAbs)
 			end
 
+			---@type { child: process.Child?, modname: string }[]
+			local nativeChildren = {}
 			for modname, src in pairs(nativeModules) do
 				-- LuaJIT uses .so on macOS too (its default cpath is ?.so), and
 				-- rockspec build systems like luke hardcode .so in their install
@@ -522,49 +534,83 @@ local function openRockspec(dir, rockspecPath)
 					makePath = makePath,
 				})
 
-				local code, _, stderr = process.exec(lde.global.getCCBin(), gccArgs, { env = toolchainEnv() })
-				if code ~= 0 then
-					local msg = (stderr ~= "" and stderr) or ("exited with code " .. code)
-					return nil, "Failed to compile native module '" .. modname .. "': " .. msg
+				-- Async mode (install build pass): spawn gcc without blocking so
+				-- independent rocks compile concurrently; the caller polls the
+				-- children and then runs finishNative() below. Otherwise keep the
+				-- historical blocking behavior.
+				local ccBin = lde.global.getCCBin()
+				local spawnOpts = { env = toolchainEnv(), stdout = "pipe", stderr = "pipe" }
+				if asyncBuild.isActive() then
+					local child, serr = process.spawn(ccBin, gccArgs, spawnOpts)
+					if not child then
+						return nil, "Failed to compile native module '" .. modname .. "': " .. (serr or "spawn failed")
+					end
+					nativeChildren[#nativeChildren + 1] = { child = child, modname = modname }
+				else
+					local code, _, stderr = process.exec(ccBin, gccArgs, spawnOpts)
+					if code ~= 0 then
+						local msg = (stderr ~= "" and stderr) or ("exited with code " .. code)
+						return nil, "Failed to compile native module '" .. modname .. "': " .. msg
+					end
 				end
 			end
 
-			for k, v in pairs(binScripts) do
-				local binName = type(k) == "number" and path.basename(v) or k
-				local binDest = path.join(outputDir, binName)
-				local binDestDir = path.dirname(binDest)
-				if not fs.isdir(binDestDir) then fs.mkdirAll(binDestDir) end
-				fs.copy(path.join(dir, v), binDest)
-			end
-
-			for modname, src in pairs(installLuaFiles) do
-				if not src:match("%.lua$") then goto continue_install_lua end
-				if type(modname) == "number" then
-					-- LuaRocks semantics: a numeric key installs the file under its
-					-- own basename (e.g. "src/ssl.lua" becomes module "ssl").
-					modname = path.basename(src):gsub("%.lua$", "")
+			-- Post-compile steps: verify any spawned gcc children, install
+			-- binaries/extra files, and stamp the build. Deferred to the caller
+			-- in async mode; run inline otherwise (no children in that case).
+			local function finishNative()
+				for _, nc in ipairs(nativeChildren) do
+					local code, _, stderr = nc.child:wait()
+					if code ~= 0 then
+						local msg = (stderr ~= "" and stderr) or ("exited with code " .. code)
+						return nil, "Failed to compile native module '" .. nc.modname .. "': " .. msg
+					end
 				end
-				local modPath = modname:gsub("%.", path.separator)
-				local destAbs = path.join(modulesDir, modPath .. ".lua")
-				local destDir = path.dirname(destAbs)
-				if not fs.isdir(destDir) then fs.mkdirAll(destDir) end
-				fs.copy(path.join(dir, src), destAbs)
-				::continue_install_lua::
-			end
 
-			-- copy_directories: ship non-module assets (e.g. luacov's HTML
-			-- reporter static files) preserving their relative layout.
-			for _, copyDir in ipairs(spec.build.copy_directories or {}) do
-				local srcAbs = path.join(dir, copyDir)
-				local destAbs = path.join(modulesDir, copyDir)
-				if fs.isdir(srcAbs) then
-					fs.mkdirAll(destAbs)
-					fs.copy(srcAbs, destAbs)
+				for k, v in pairs(binScripts) do
+					local binName = type(k) == "number" and path.basename(v) or k
+					local binDest = path.join(outputDir, binName)
+					local binDestDir = path.dirname(binDest)
+					if not fs.isdir(binDestDir) then fs.mkdirAll(binDestDir) end
+					fs.copy(path.join(dir, v), binDest)
 				end
+
+				for modname, src in pairs(installLuaFiles) do
+					if not src:match("%.lua$") then goto continue_install_lua end
+					if type(modname) == "number" then
+						-- LuaRocks semantics: a numeric key installs the file under its
+						-- own basename (e.g. "src/ssl.lua" becomes module "ssl").
+						modname = path.basename(src):gsub("%.lua$", "")
+					end
+					local modPath = modname:gsub("%.", path.separator)
+					local destAbs = path.join(modulesDir, modPath .. ".lua")
+					local destDir = path.dirname(destAbs)
+					if not fs.isdir(destDir) then fs.mkdirAll(destDir) end
+					fs.copy(path.join(dir, src), destAbs)
+					::continue_install_lua::
+				end
+
+				-- copy_directories: ship non-module assets (e.g. luacov's HTML
+				-- reporter static files) preserving their relative layout.
+				for _, copyDir in ipairs(spec.build.copy_directories or {}) do
+					local srcAbs = path.join(dir, copyDir)
+					local destAbs = path.join(modulesDir, copyDir)
+					if fs.isdir(srcAbs) then
+						fs.mkdirAll(destAbs)
+						fs.copy(srcAbs, destAbs)
+					end
+				end
+
+				fs.write(stampFile, buildStamp)
+				return true
 			end
 
-			fs.write(stampFile, buildStamp)
-			return true
+			if #nativeChildren > 0 then
+				-- Async mode: the install build loop polls the children, then
+				-- calls this finalizer (which verifies exit codes + stamps).
+				return nil, nil, finishNative
+			end
+			return finishNative()
 		elseif buildType == "command" then
 			local luajitPath = sea.getLuajitPath()
 			local ldeBin = env.execPath()
