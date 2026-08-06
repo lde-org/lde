@@ -175,3 +175,29 @@ test.it("parseDependency handles dashed names and exact-version deps", function(
 	test.equal(name, "lua-cjson")
 	test.equal(version, "2.1.0.6")
 end)
+
+test.it("parse defaults missing build to builtin for rockspec format 3.0+", function()
+	local ok, parsed = rocked.parse([[
+rockspec_format = "3.0"
+package = "luarocks"
+version = "3.13.0-1"
+source = { url = "git+https://github.com/luarocks/luarocks" }
+]])
+	if not ok then
+		error("Expected format 3.0 rockspec without build to parse: " .. tostring(parsed))
+	end
+	test.equal(parsed.build.type, "builtin")
+end)
+
+test.it("parse rejects missing build for rockspec formats older than 3.0", function()
+	local ok, parsed = rocked.parse([[
+rockspec_format = "2.0"
+package = "oldpkg"
+version = "1.0-1"
+source = { url = "https://example.com" }
+]])
+	if ok then
+		error("Expected old-format rockspec without build to fail")
+	end ---@cast parsed string
+	test.includes(parsed, "No build section found")
+end)

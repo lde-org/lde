@@ -44,6 +44,7 @@ local rocked = {}
 ---@class rocked.raw.Output
 ---@field version string
 ---@field package string
+---@field rockspec_format string?
 ---@field description rocked.raw.Description?
 ---@field source { url: string, branch: string?, tag: string? }
 ---@field dependencies string[]?
@@ -103,7 +104,17 @@ function rocked.parse(spec)
 
 	local build = chunkEnv.build
 	if not build then
-		return false, "No build section found"
+		-- Rockspec format 3.0+ makes the build table optional: it defaults to a
+		-- builtin build (modules are autodetected from the source tree). Older
+		-- formats require an explicit build table.
+		local format = chunkEnv.rockspec_format
+		local major = format and tonumber(tostring(format):match("^(%d+)"))
+		if major and major >= 3 then
+			build = { type = "builtin" }
+			chunkEnv.build = build
+		else
+			return false, "No build section found"
+		end
 	end
 
 	build.type = build.type or "builtin"
