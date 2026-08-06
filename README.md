@@ -29,21 +29,13 @@ To get started, [read the docs](https://lde.sh/docs/general/getting-started/intr
 - `lde update` — Update dependencies to their latest versions
 - `lde publish` — Submit your package to [the registry](https://github.com/lde-org/registry)
 
-## Platform Support
+## Platform Support & Installation
 
-| OS      | Architecture  |
-| ------- | ------------- |
-| Linux   | x86-64, ARM64 |
-| macOS   | x86-64, ARM64 |
-| Windows | x86-64, ARM64 |
-| Android | ARM64         |
-
-## Installation
-
-| OS            | Command                                   |
-| ------------- | ----------------------------------------- |
-| Linux & macOS | `curl -fsSL https://lde.sh/install \| sh` |
-| Windows       | `irm https://lde.sh/install.ps1 \| iex`   |
+| OS            | Architecture  | Install command                           |
+| ------------- | ------------- | ----------------------------------------- |
+| Linux & macOS | x86-64, ARM64 | `curl -fsSL https://lde.sh/install \| sh` |
+| Windows       | x86-64, ARM64 | `irm https://lde.sh/install.ps1 \| iex`   |
+| Android       | ARM64         | —                                         |
 
 _Already installed? Run `lde upgrade` to update._
 
@@ -51,7 +43,7 @@ _Already installed? Run `lde upgrade` to update._
 
 ```bash
 lde new myproject && cd myproject
-lde add hood --git https://github.com/codebycruz/hood
+lde add hood --git https://github.com/bycruz/hood
 echo "print(require('hood'))" > ./src/init.lua
 lde run
 # Output: table: 0x7f53326fd030
@@ -60,7 +52,7 @@ lde run
 Or run a remote project in one command:
 
 ```bash
-ldx triangle --git https://github.com/codebycruz/hood
+ldx triangle --git https://github.com/bycruz/hood
 ```
 
 ## How does lde compare to other tools?
