@@ -3,7 +3,6 @@ local path    = require("path")
 local env     = require("env")
 local ffi     = require("ffi")
 local lua     = require("lua-sys")
-local runtime = require("lde-core.runtime")
 
 ---@class lde.TestFileResult
 ---@field file    string

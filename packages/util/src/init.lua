@@ -41,4 +41,17 @@ function util.fnv1a(s)
 	return string.format("%08x", bit.band(h, 0xFFFFFFFF))
 end
 
+--- Returns a lazily evaluated value: `factory()` runs on the first call,
+--- every call after that returns the cached value.
+---@generic T
+---@param factory fun(): T
+---@return fun(): T
+function util.lazy(factory)
+	local value
+	return function()
+		if value == nil then value = factory() end
+		return value
+	end
+end
+
 return util

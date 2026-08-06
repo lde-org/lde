@@ -7,8 +7,9 @@ local rocked = require("rocked")
 local ansi = require("ansi")
 local lde = require("lde-core")
 local luarocks = require("luarocks")
-local curl = require("curl-sys")
-local Archive = require("archive")
+
+local curl = require("util").lazy(function() return require("curl-sys") end)
+local Archive = require("util").lazy(function() return require("archive") end)
 
 -- luarocks.org publishes per-Lua-version manifests that already exclude
 -- versions incompatible with the running engine, so resolution needs no
@@ -42,13 +43,13 @@ local function getManifest()
 
 	-- luarocks.org serves the ~4.2MB raw manifest as a ~130KB zip; download the
 	-- zip and decode the single "manifest-5.1" file it contains, all in memory.
-	local res, err = curl.get(MANIFEST_URL)
+	local res, err = curl().get(MANIFEST_URL)
 	if not res then
 		if p then p:fail() end
 		return nil, "Failed to fetch manifest: " .. (err or "")
 	end
 
-	local raw, rerr = Archive.new(res.body):read(MANIFEST_ENTRY)
+	local raw, rerr = Archive().new(res.body):read(MANIFEST_ENTRY)
 	if not raw then
 		if p then p:fail() end
 		return nil, "Failed to read manifest from zip: " .. (rerr or "")
@@ -121,7 +122,7 @@ function util.openRockspecUrl(name, url, branch, commit)
 		content = fs.read(rockspecCacheFile)
 	end
 	if not content then
-		local res, fetchErr = curl.get(url)
+		local res, fetchErr = curl().get(url)
 		if not res then
 			return nil, nil, "Failed to fetch rockspec: " .. (fetchErr or "")
 		end
@@ -275,7 +276,7 @@ function util.openLuarocksPackage(name, version)
 			srcDir = nestedArchive:gsub("%.tar%.[gbx]z2?$", ""):gsub("%.zip$", "")
 			if not fs.isdir(srcDir) then
 				fs.mkdir(srcDir)
-				local ok2, err2 = Archive.new(nestedArchive):extract(srcDir, { stripComponents = true })
+				local ok2, err2 = Archive().new(nestedArchive):extract(srcDir, { stripComponents = true })
 				if not ok2 then
 					return nil, nil, "Failed to extract nested archive in src rock '" .. name .. "': " .. (err2 or "")
 				end
@@ -361,7 +362,7 @@ function util.openSrcRock(archiveDir, url)
 		srcDir = nestedArchive:gsub("%.tar%.[gbx]z2?$", ""):gsub("%.zip$", "")
 		if not fs.isdir(srcDir) then
 			fs.mkdir(srcDir)
-			local ok2, err2 = Archive.new(nestedArchive):extract(srcDir, { stripComponents = true })
+			local ok2, err2 = Archive().new(nestedArchive):extract(srcDir, { stripComponents = true })
 			if not ok2 then
 				return nil, "Failed to extract nested archive in src rock: " .. (err2 or "")
 			end

@@ -2,8 +2,9 @@ local path = require("path")
 local fs = require("fs")
 local util = require("util")
 local ansi = require("ansi")
-local git2 = require("git2-sys")
 local process = require("process")
+
+local git2 = util.lazy(function() return require("git2-sys") end)
 
 local Package = require("lde-core.package")
 
@@ -211,7 +212,7 @@ end
 local function isInsideGitRepo(dir)
 	local current = dir
 	while current do
-		local repo = git2.open(current)
+		local repo = git2().open(current)
 		if repo then
 			if repo:workdir() ~= nil then return true end
 		end
@@ -286,7 +287,7 @@ local function initPackage(dir)
 	end
 
 	if hasGit() and not isInsideGitRepo(dir) then
-		local repo = git2.init(dir)
+		local repo = git2().init(dir)
 		if not repo then
 			ansi.printf("{yellow}Warning: failed to initialize git repository")
 		end

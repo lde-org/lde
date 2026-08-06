@@ -7,7 +7,8 @@ local env = require("env")
 local path = require("path")
 local process = require("process")
 local util = require("util")
-local curl = require("curl-sys")
+
+local curl = util.lazy(function() return require("curl-sys") end)
 
 --- LuaRocks accepts a plain string or a list for a native module's
 --- sources/libraries/libdirs/incdirs/defines (lzlib uses `libraries = "z"`),
@@ -214,7 +215,7 @@ local function openRockspec(dir, rockspecPath)
 		if fs.exists(cacheFile) then
 			content = fs.read(cacheFile)
 		else
-			local res, err = curl.get(rockspecPath)
+			local res, err = curl().get(rockspecPath)
 			if not res then
 				return nil, "Could not fetch rockspec: " .. rockspecPath .. ": " .. (err or "")
 			end

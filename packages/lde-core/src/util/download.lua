@@ -1,5 +1,7 @@
-local curl = require("curl-sys")
 local fs = require("fs")
+local util = require("util")
+
+local curl = util.lazy(function() return require("curl-sys") end)
 
 --- Parallel download session used during dependency installation.
 ---
@@ -27,7 +29,7 @@ local session = nil
 function download.begin(opts)
 	assert(not session, "download session already active")
 	session = {
-		batch = curl.batch({ progress = opts and opts.progress or nil }),
+		batch = curl().batch({ progress = opts and opts.progress or nil }),
 		pending = {},
 	}
 end

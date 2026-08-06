@@ -6,9 +6,16 @@ local semver = require("semver")
 local lde = require("lde-core")
 local ansi = require("ansi")
 local env = require("env")
+local util = require("util")
 
 local global = {}
 package.loaded[(...)] = global
+
+-- Lazily wrap native modules to avoid loading them (which uses a ton of memory and adds some overhead to copy the file)
+-- This isn't done with require() inline because that would cause issues with LuaJIT compilation.
+local curl = util.lazy(function() return require("curl-sys") end)
+local Archive = util.lazy(function() return require("archive") end)
+local git2 = util.lazy(function() return require("git2-sys") end)
 
 global.getConfig = require("lde-core.global.config")
 global.currentVersion = (function()
@@ -87,7 +94,7 @@ local function downloadTarball(url, commit, hostType, repoDir, label)
 		}
 	end
 
-	local ok, dlErr = require("curl-sys").download(tarballUrl, archiveFile, dlOpts)
+	local ok, dlErr = curl().download(tarballUrl, archiveFile, dlOpts)
 	if not ok then
 		fs.rmdir(repoDir)
 		fs.delete(archiveFile)
@@ -95,7 +102,7 @@ local function downloadTarball(url, commit, hostType, repoDir, label)
 		error("Failed to download " .. tarballUrl .. ": " .. (dlErr or ""))
 	end
 
-	local ok2, err2 = require("archive").new(archiveFile):extract(repoDir, { stripComponents = true })
+	local ok2, err2 = Archive().new(archiveFile):extract(repoDir, { stripComponents = true })
 	fs.delete(archiveFile)
 
 	if not ok2 then
@@ -200,17 +207,16 @@ local registrySynced = false
 function global.syncRegistry()
 	if registrySynced then return end
 	registrySynced = true
-	local git2 = require("git2-sys")
 
 	local registryDir = global.getRegistryDir()
 	if not fs.exists(registryDir) then
-		local repo, err = git2.clone(global.getConfig().registry, registryDir)
+		local repo, err = git2().clone(global.getConfig().registry, registryDir)
 		if not repo then
 			error("Failed to clone lde registry: " .. (err or "unknown error"))
 		end
 		repo:updateSubmodules()
 	else
-		local repo = git2.open(registryDir)
+		local repo = git2().open(registryDir)
 		if repo then repo:pull() end
 	end
 end
@@ -275,9 +281,8 @@ end
 ---@param commit string
 ---@param progress fun(stats: table)?
 function global.cloneDir(repoName, repoUrl, commit, progress)
-	local git2 = require("git2-sys")
 	local repoDir = global.getGitRepoDir(repoName, commit)
-	local repo, err = git2.clone(repoUrl, repoDir, nil, nil, progress)
+	local repo, err = git2().clone(repoUrl, repoDir, nil, nil, progress)
 	if not repo then return nil, err end
 	repo:updateSubmodules(nil, progress)
 	local ok, cerr = repo:checkout(commit)
@@ -293,18 +298,17 @@ end
 ---@return string? sha
 ---@return string? err
 local function resolveGitRef(repoUrl, ref)
-	local git2 = require("git2-sys")
 	if not ref or ref == "" or ref == "HEAD" then
-		return git2.lsRemote(repoUrl, "HEAD")
+		return git2().lsRemote(repoUrl, "HEAD")
 	end
 
-	local sha, err = git2.lsRemote(repoUrl, "refs/heads/" .. ref)
+	local sha, err = git2().lsRemote(repoUrl, "refs/heads/" .. ref)
 	if sha then return sha end
 	-- Tags: prefer the peeled "^{}" entry (annotated tags), then the raw tag ref
 	-- (lightweight tags point straight at the commit).
-	sha, err = git2.lsRemote(repoUrl, "refs/tags/" .. ref .. "^{}")
+	sha, err = git2().lsRemote(repoUrl, "refs/tags/" .. ref .. "^{}")
 	if sha then return sha end
-	sha, err = git2.lsRemote(repoUrl, "refs/tags/" .. ref)
+	sha, err = git2().lsRemote(repoUrl, "refs/tags/" .. ref)
 	if sha then return sha end
 	return nil, err
 end
@@ -400,8 +404,7 @@ end
 ---@return boolean? ok
 ---@return string? err
 function global.extractGitTarball(archiveFile, repoDir)
-	local Archive = require("archive")
-	local ok, err = Archive.new(archiveFile):extract(repoDir, { stripComponents = true })
+	local ok, err = Archive().new(archiveFile):extract(repoDir, { stripComponents = true })
 	fs.delete(archiveFile)
 	return ok, err
 end
@@ -432,7 +435,7 @@ function global.getOrInitArchive(url)
 			}
 		end
 
-		local ok, dlErr = require("curl-sys").download(url, archiveFile, dlOpts)
+		local ok, dlErr = curl().download(url, archiveFile, dlOpts)
 		if not ok then
 			if bar then bar:fail("Downloading " .. filename) end
 			error("Failed to download archive '" .. url .. "': " .. (dlErr or ""))
@@ -467,7 +470,7 @@ function global.extractArchive(url, archiveFile, archiveDir)
 		return nil, "missing downloaded archive: " .. archiveFile
 	end
 
-	local Archive = require("archive")
+	local Archive = Archive()
 	local ok, err2
 	if url:match("%.src%.rock$") then
 		-- .src.rock is a zip with no single top-level dir; extract directly
@@ -517,8 +520,7 @@ function global.getOrCloneRepo(repoName, cloneUrl, branch)
 		if hostType then
 			downloadTarball(cloneUrl, commit, hostType, repoDir, repoName)
 		else
-			local git2 = require("git2-sys")
-			local repo, cerr = git2.clone(cloneUrl, repoDir, branch)
+			local repo, cerr = git2().clone(cloneUrl, repoDir, branch)
 			if not repo then
 				error("Failed to clone git repository: " .. (cerr or "unknown error"))
 			end
@@ -639,8 +641,7 @@ function global.ensureMingw(opts)
 			end
 		}
 	end
-	local curl = require("curl-sys")
-	local ok, dlErr = curl.download(SEVENZ_URL, sevenzPath, dlOpts1)
+	local ok, dlErr = curl().download(SEVENZ_URL, sevenzPath, dlOpts1)
 	if not ok then
 		fs.rmdir(tmpDir)
 		if p1 then p1:fail("Downloading 7z extractor") end

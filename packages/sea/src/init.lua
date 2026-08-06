@@ -5,11 +5,12 @@ local path = require("path")
 local env = require("env")
 local fs = require("fs")
 local jit = require("jit")
-local Archive = require("archive")
-local curl = require("curl-sys")
 local ansi = require("ansi")
 
 local util = require("util")
+
+local curl = util.lazy(function() return require("curl-sys") end)
+local Archive = util.lazy(function() return require("archive") end)
 
 local ljDistRepo = "lde-org/luajit"
 local ljDistTag = "latest"
@@ -106,7 +107,7 @@ local function getLuajitPath(compiler)
 	local tarballPath = path.join(cacheDir, tarballName)
 
 	local bar = ansi.progress("Downloading " .. tarballName)
-	local ok, dlErr = curl.download(downloadUrl, tarballPath, {
+	local ok, dlErr = curl().download(downloadUrl, tarballPath, {
 		progress = function(dltotal, dlnow)
 			local ratio = dltotal > 0 and (dlnow / dltotal) or nil
 			local info = dltotal > 0
@@ -121,7 +122,7 @@ local function getLuajitPath(compiler)
 	end
 	bar:done("Downloaded " .. tarballName)
 
-	local ok, err = Archive.new(tarballPath):extract(cacheDir)
+	local ok, err = Archive().new(tarballPath):extract(cacheDir)
 	if not ok then
 		print("??", downloadUrl, tarballPath)
 		error("Failed to extract LuaJIT: " .. (err or ""))

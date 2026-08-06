@@ -1,11 +1,12 @@
 local fs = require("fs")
 local json = require("json")
-local git2 = require("git2-sys")
 local semver = require("semver")
 local luarocks = require("luarocks")
 
 local global = require("lde-core.global")
 local util = require("lde-core.util")
+
+local git2 = require("util").lazy(function() return require("git2-sys") end)
 
 --- Checks a git dependency for newer commits via ls-remote and pins any
 --- newer commit in the lockfile.
@@ -16,7 +17,7 @@ local util = require("lde-core.util")
 ---@return string message
 local function updateGitDependency(package, name, depInfo)
 	local ref = depInfo.branch and ("refs/heads/" .. depInfo.branch) or "HEAD"
-	local latestCommit, err = git2.lsRemote(depInfo.git, ref)
+	local latestCommit, err = git2().lsRemote(depInfo.git, ref)
 	if not latestCommit then
 		return false, "failed: " .. (err or "unknown error")
 	end
