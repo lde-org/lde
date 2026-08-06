@@ -173,7 +173,7 @@ function luarocks.setup(state, opts)
 	-- fs.execute. list_dir/find likewise can't get a table back from a host
 	-- callback, so their host helpers return entries variadically and the
 	-- guest assembles them.
-	state:load([[
+	local ok, err = state:load([[
 		local fs_list, fs_find = ...
 		local fs = package.loaded["luarocks.fs"]
 		function fs.execute_env(envs, cmd)
@@ -189,7 +189,10 @@ function luarocks.setup(state, opts)
 		function fs.find(dir)
 			return { fs_find(dir) }
 		end
-	]]):eval(listDirNames, findFiles)
+	]]):pcall(listDirNames, findFiles)
+	if not ok then
+		error("failed to install luarocks polyfills: " .. tostring(err))
+	end
 end
 
 return luarocks

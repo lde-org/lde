@@ -161,7 +161,9 @@ local ROCKSPEC_FIELDS = {
 ---@param permissions rocked.Permissions? # per-action gates for sandbox side effects
 function rocked.parse(spec, permissions)
 	return sandbox({ permissions = permissions }, function(state, g)
-		state:eval(spec, "t")
+		local ok, err = state:load(spec, "t"):pcall()
+		if not ok then return false, err end
+
 		local out = {}
 		for _, field in ipairs(ROCKSPEC_FIELDS) do
 			local v = g:get(field)
@@ -218,25 +220,20 @@ end
 ---@return string? err
 function rocked.runBackend(buildType, rockspec, opts)
 	return sandbox(opts, function(state, g)
-		g:set("_rocked_build_type", buildType)
-		g:set("_rocked_rockspec", state:table(rockspec))
-		state:eval([[
+		local ok, err = state:load([[
+			local build_type, rockspec = ...
 			-- rockspec:type() is a method on the (guest-coerced) rockspec. It
 			-- must live guest-side: a host callback would receive the table as
 			-- its self argument, which the bridge cannot pass.
-			_rocked_rockspec.type = function() return "rockspec" end
-			local ok, err = xpcall(function()
-				local driver = require("luarocks.build." .. _rocked_build_type)
-				local result, buildErr = driver.run(_rocked_rockspec, false)
-				if result ~= true then
-					error(tostring(buildErr or "backend returned false"), 0)
-				end
-			end, function(e) return tostring(e) end)
-			_rocked_ok = ok
-			_rocked_err = err
-		]])
-		if g:get("_rocked_ok") then return true end
-		return false, g:get("_rocked_err")
+			rockspec.type = function() return "rockspec" end
+			local driver = require("luarocks.build." .. build_type)
+			local result, buildErr = driver.run(rockspec, false)
+			if result ~= true then
+				error(tostring(buildErr or "backend returned false"), 0)
+			end
+		]]):pcall(buildType, state:table(rockspec))
+		if ok then return true end
+		return false, err
 	end)
 end
 
