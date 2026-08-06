@@ -120,6 +120,8 @@ local function bench(label, opts)
 	p:done(label .. " " .. ansi.colorize("gray", stats))
 end
 
+local shh = { stdout = "null" }
+
 ---@param tool string  -- "lde" | "luarocks" | "lx"
 ---@param tmpdir string
 local function runBenchmarks(tool, tmpdir)
@@ -138,11 +140,11 @@ local function runBenchmarks(tool, tmpdir)
 		run = function()
 			local code, _, stderr
 			if tool == "lde" then
-				code, _, stderr = process.exec("lde", { "--tree", treeDir, "install", "rocks:busted" }, { stdout = "null" })
+				code, _, stderr = process.exec("lde", { "--tree", treeDir, "install", "rocks:busted" }, shh)
 			elseif tool == "luarocks" then
-				code, _, stderr = process.exec("luarocks", { "--tree", treeDir, "install", "busted" }, { stdout = "null" })
+				code, _, stderr = process.exec("luarocks", { "--tree", treeDir, "install", "busted" }, shh)
 			elseif tool == "lx" then
-				code, _, stderr = process.exec("lx", { "--tree", treeDir, "install", "busted" }, { stdout = "null" })
+				code, _, stderr = process.exec("lx", { "--tree", treeDir, "install", "busted" }, shh)
 			end
 			return code == 0, stderr
 		end,
@@ -154,11 +156,11 @@ local function runBenchmarks(tool, tmpdir)
 		run = function()
 			local code, _, stderr
 			if tool == "lde" then
-				code, _, stderr = process.exec("lde", { "--tree", treeDir, "install", "rocks:busted" }, { stdout = "null" })
+				code, _, stderr = process.exec("lde", { "--tree", treeDir, "install", "rocks:busted" }, shh)
 			elseif tool == "luarocks" then
-				code, _, stderr = process.exec("luarocks", { "--tree", treeDir, "install", "busted" }, { stdout = "null" })
+				code, _, stderr = process.exec("luarocks", { "--tree", treeDir, "install", "busted" }, shh)
 			elseif tool == "lx" then
-				code, _, stderr = process.exec("lx", { "--no-prompt", "--tree", treeDir, "install", "busted" }, { stdout = "null" })
+				code, _, stderr = process.exec("lx", { "--no-prompt", "--tree", treeDir, "install", "busted" }, shh)
 			end
 			return code == 0, stderr
 		end,
@@ -173,12 +175,11 @@ local function runBenchmarks(tool, tmpdir)
 		run = function()
 			local code, _, stderr
 			if tool == "lde" then
-				code, _, stderr = process.exec("lde", { "--tree", treeDir, "install", "rocks:luafilesystem" },
-					{ stdout = "null" })
+				code, _, stderr = process.exec("lde", { "--tree", treeDir, "install", "rocks:luafilesystem" }, shh)
 			elseif tool == "luarocks" then
-				code, _, stderr = process.exec("luarocks", { "--tree", treeDir, "install", "luafilesystem" })
+				code, _, stderr = process.exec("luarocks", { "--tree", treeDir, "install", "luafilesystem" }, shh)
 			elseif tool == "lx" then
-				code, _, stderr = process.exec("lx", { "--tree", treeDir, "install", "luafilesystem" })
+				code, _, stderr = process.exec("lx", { "--tree", treeDir, "install", "luafilesystem" }, shh)
 			end
 			return code == 0, stderr
 		end,
