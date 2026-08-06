@@ -26,6 +26,7 @@ local download = {}
 ---@field batch CurlBatch
 ---@field pending table<string, integer|table>  destPath -> batch transfer index (a result table once resolved)
 ---@field background table<string, boolean>  destPath -> true for transfers drain() must not block on
+---@field onTransfer fun(destPath: string)? # fired once per completed transfer, after its result is resolved
 ---@field progress fun(done: integer, total: integer)?
 
 local session = nil
@@ -81,6 +82,16 @@ local function pendingNonBackground()
 	return false
 end
 
+--- Resolve a finished transfer's pending entry into its result table.
+---@param destPath string
+local function resolveTransfer(destPath)
+	local index = session.pending[destPath]
+	if type(index) ~= "number" then return end
+	local res = session.batch:results()[index] or { ok = false, err = "missing result" }
+	session.pending[destPath] = res
+	session.background[destPath] = nil
+end
+
 --- Pump the batch until `waitFor` finishes, or until every non-background
 --- transfer is done when `waitFor` is nil.
 ---@param waitFor string?
@@ -94,17 +105,24 @@ local function pumpUntil(waitFor)
 		end
 		local running = session.batch:pump()
 		if running > 0 then session.batch:wait(10) end
+		-- Fire completion callbacks for transfers that finished this round.
+		if session.onTransfer then
+			for destPath, index in pairs(session.pending) do
+				if type(index) == "number" and transferDone(destPath) then
+					resolveTransfer(destPath)
+					session.onTransfer(destPath)
+				end
+			end
+		end
 	end
 end
 
---- Resolve a finished transfer's pending entry into its result table.
----@param destPath string
-local function resolveTransfer(destPath)
-	local index = session.pending[destPath]
-	if type(index) ~= "number" then return end
-	local res = session.batch:results()[index] or { ok = false, err = "missing result" }
-	session.pending[destPath] = res
-	session.background[destPath] = nil
+--- Register a callback fired once per completed transfer (after its pending
+--- entry has been resolved to a result table). Used to pipeline work under the
+--- download tail.
+---@param fn fun(destPath: string)?
+function download.onTransfer(fn)
+	if session then session.onTransfer = fn end
 end
 
 --- Register a URL to be fetched into `destPath` as part of the current batch.

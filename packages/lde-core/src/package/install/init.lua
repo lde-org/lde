@@ -687,6 +687,8 @@ local function collectDependencies(dependencies, ctx)
 	-- ── Phase 2: download all remaining content in one parallel batch ──────
 	---@type lde.install.Node[]
 	local contentNodes = {}
+	---@type table<string, lde.install.Node>
+	local contentByFile = {}
 	for _, node in ipairs(order) do
 		local c = content(node)
 		-- Skip nodes whose content the walk already materialized (git clones
@@ -694,15 +696,31 @@ local function collectDependencies(dependencies, ctx)
 		if not node.materialized and ((c and c.dir and not fs.exists(c.dir)) or (c and c.kind == "clone")) then
 			if c.kind ~= "clone" then
 				download.prefetch(c.url --[[@as string]], c.file --[[@as string]])
+				contentByFile[c.file --[[@as string]]] = node
 			end
 			ctx.downloads = ctx.downloads + 1
 			contentNodes[#contentNodes + 1] = node
 		end
 	end
 
-	download.drain()
-	for _, node in ipairs(contentNodes) do
+	-- Pipeline: as each download lands, materialize + open the node and queue
+	-- its build, so independent compiles overlap the remaining downloads.
+	download.onTransfer(function(destPath)
+		local node = contentByFile[destPath]
+		if not node then return end
 		materialize(node)
+		ctx.build.addNode(node)
+	end)
+	download.drain()
+
+	-- Materialize anything the pipeline didn't (git clones have no transfer).
+	for _, node in ipairs(contentNodes) do
+		if not node.materialized then materialize(node) end
+	end
+
+	-- Queue the remaining nodes (cached/path deps never downloaded) for build.
+	for _, node in ipairs(order) do
+		ctx.build.addNode(node)
 	end
 
 	-- ── Phase 3: open packages + build the stack ───────────────────────────
@@ -786,6 +804,152 @@ local function commitLockfile(pkg, stack, modulesDir)
 		util.fnv1a(content .. "\n" .. tostring(lde.global.currentVersion) .. "\n" .. manifest))
 end
 
+--- Build scheduler for the install build pass.
+---
+--- Nodes become buildable the moment their content is materialized *and* every
+--- dependency whose build they can read has finished, so independent rocks
+--- (and their gcc compiles) start building while the download batch is still
+--- draining — overlapping the build with the download tail. Ordering
+--- constraints are preserved via `buildNeedsDeps` (the same rule the old
+--- sequential loop used).
+---@param ctx lde.install.Context
+---@return { addNode: fun(node: lde.install.Node), finish: fun() }
+local function makeBuildScheduler(ctx)
+	local asyncBuild = require("lde-core.util.async-build")
+
+	---@type { alias: string, finalize: fun(): boolean?, string? }[]
+	local pending = {}
+	---@type table<string, boolean>
+	local done = {}      -- alias -> build finished or skipped
+	---@type lde.install.Node[]
+	local queue = {}     -- content-ready nodes waiting to build
+	---@type table<string, boolean>
+	local queued = {}    -- alias -> addNode already ran
+	---@type table<string, boolean>
+	local attempted = {} -- alias -> attemptBuild already ran
+
+	-- Forward declarations: the functions below reference each other.
+	local pumpQueue
+	local attemptBuild
+
+	--- Whether a node's build may run now: its package is open, and every dep
+	--- it can read outputs from has finished building.
+	---@param node lde.install.Node
+	---@return boolean
+	local function ready(node)
+		if not ctx.stack[node.alias] then return false end
+		local entry = ctx.stack[node.alias]
+		if entry.pkg.buildNeedsDeps ~= false then
+			for depAlias in pairs(node.deps or {}) do
+				if not done[depAlias] then return false end
+			end
+		end
+		return true
+	end
+
+	--- Run a deferred finalizer once its spawned compiles finished.
+	---@param job { alias: string, finalize: fun(): boolean?, string? }
+	local function finalizeJob(job)
+		local ok, err = job.finalize()
+		if not ok then
+			error("Build failed for '" .. job.alias .. "': " .. tostring(err))
+		end
+		ctx.builds = ctx.builds + 1
+		done[job.alias] = true
+		pumpQueue()
+	end
+
+	--- Attempt to build one node (spawning gcc async when asyncBuild is active).
+	---@param node lde.install.Node
+	attemptBuild = function(node)
+		local alias = node.alias
+		if attempted[alias] then return end
+		local entry = ctx.stack[alias]
+		if not entry then return end
+
+		-- Optional deps that aren't enabled for this platform: skip, but mark
+		-- them done so dependents don't wait on them.
+		local depInfo = ctx.dependencies[alias]
+		if depInfo and depInfo.optional and not ctx.enabledOptional[alias] then
+			attempted[alias] = true
+			done[alias] = true
+			return
+		end
+
+		if not ready(node) then return end
+		attempted[alias] = true
+
+		local dest = path.join(ctx.modulesDir, alias)
+
+		-- Git/registry deps are symlinked (or built) into target/, and the
+		-- symlink target encodes the resolved commit. Drop a stale link from a
+		-- previous commit before the build re-creates it.
+		if entry.lock.git and fs.islink(dest) then
+			fs.delete(dest)
+		end
+
+		-- Already a symlink (path deps / no-build git deps): nothing to build.
+		if fs.islink(dest) then
+			done[alias] = true
+			return
+		end
+
+		local built, deferred = entry.pkg:build(dest)
+		if deferred then
+			pending[#pending + 1] = { alias = alias, finalize = deferred }
+		else
+			if built then ctx.builds = ctx.builds + 1 end
+			done[alias] = true
+			pumpQueue()
+		end
+	end
+
+	--- Try to build every queued node that is now ready.
+	pumpQueue = function()
+		local progressed = true
+		while progressed do
+			progressed = false
+			for _, node in ipairs(queue) do
+				if not attempted[node.alias] and ready(node) then
+					attemptBuild(node)
+					progressed = true
+				end
+			end
+		end
+	end
+	local scheduler = {}
+
+	--- Open a node's package (once), record its stack entry, and queue it for
+	--- building. Idempotent per alias.
+	---@param node lde.install.Node
+	function scheduler.addNode(node)
+		local alias = node.alias
+		if queued[alias] then return end
+		queued[alias] = true
+		queue[#queue + 1] = node
+		if not ctx.stack[alias] then
+			local pkg = open(node)
+			local lockEntry = lock(node)
+			lockEntry.name = node.depInfo.name
+			ctx.stack[alias] = { pkg = pkg, lock = withConfigFlags(lockEntry, node.depInfo) }
+		end
+		pumpQueue()
+	end
+
+	--- Wait for all spawned compiles, then build whatever is left.
+	function scheduler.finish()
+		for _, job in ipairs(pending) do
+			finalizeJob(job)
+		end
+		pending = {}
+		pumpQueue()
+		asyncBuild.finish()
+	end
+
+	asyncBuild.begin()
+	return scheduler
+end
+
 ---@param package lde.Package
 ---@param dependencies table<string, lde.Package.Config.Dependency>?
 ---@param relativeTo string?
@@ -834,6 +998,10 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 		end
 	end
 
+	-- Gets which features are enabled (+ OS specific features); the build
+	-- scheduler consults it while the download batch is still draining.
+	local enabledOptional = resolveEnabledOptional(package, features)
+
 	local ctx = {
 		relativeTo = relativeTo,
 		stack = {},
@@ -843,7 +1011,12 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 		locked = opts.locked,
 		downloads = 0,
 		builds = 0,
+		-- Build-scheduler inputs.
+		dependencies = dependencies,
+		modulesDir = modulesDir,
+		enabledOptional = enabledOptional,
 	}
+	ctx.build = makeBuildScheduler(ctx)
 
 	local installs = 0
 	for _ in pairs(dependencies) do installs = installs + 1 end
@@ -887,6 +1060,10 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 		opts.rootExtract()
 	end
 
+	-- Finish the build pass: drain any spawned compiles and build whatever the
+	-- pipeline didn't get to (cached/path deps that never downloaded).
+	ctx.build.finish()
+
 	if not fs.exists(modulesDir) then fs.mkdir(modulesDir) end
 
 	-- Finalize the download bar once downloads are done. When nothing was
@@ -894,97 +1071,6 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 	-- build pass below — where it either reports the builds or is discarded
 	-- silently (the caller prints its own summary).
 	if bar and ctx.downloads > 0 then bar:done() end
-
-	-- Gets which features are enabled (+ OS specific features)
-	local enabledOptional = resolveEnabledOptional(package, features)
-
-	local buildOk, buildErr = pcall(function()
-		-- Build in reverse discovery order: children (a rock's deps, including
-		-- build backends like luarocks-build-rust-mlua) are discovered after
-		-- their parent, so a reverse iteration builds every dependency before
-		-- the rock that requires it. Rockspec builtin native compiles spawn
-		-- concurrently (asyncBuild mode): gcc children are polled and their
-		-- finalizers run once all of them finish, so independent rocks compile
-		-- in parallel while ordering constraints are still respected.
-		local order = ctx.order or {}
-
-		local asyncBuild = require("lde-core.util.async-build")
-		---@type { alias: string, finalize: fun(): boolean?, string? }[]
-		local pending = {}
-		---@type table<string, boolean>
-		local pendingAlias = {}
-		asyncBuild.begin()
-
-		--- Wait for all spawned native compiles and run their finalizers.
-		---@param forAlias string? # only drains when that alias has a pending build
-		local function drain(forAlias)
-			if forAlias and not pendingAlias[forAlias] then return end
-			for _, job in ipairs(pending) do
-				local ok, err = job.finalize()
-				if not ok then
-					error("Build failed for '" .. job.alias .. "': " .. tostring(err))
-				end
-				ctx.builds = ctx.builds + 1
-			end
-			pending = {}
-			pendingAlias = {}
-		end
-
-		for i = #order, 1, -1 do
-			local node = order[i]
-			local alias = node.alias
-			local entry = ctx.stack[alias]
-			if not entry then goto continue end
-			local depInfo = dependencies[alias]
-
-			-- Optional, skip..
-			if depInfo and depInfo.optional and not enabledOptional[alias] then
-				goto continue
-			end
-
-			local dest = path.join(modulesDir, alias)
-
-			-- Git/registry deps are symlinked (or built) into target/, and the
-			-- symlink target encodes the resolved commit. This loop only runs when
-			-- the lockfile changed (the fast path returns earlier), so a stale link
-			-- from a previous commit must be dropped before the build re-creates it.
-			if entry.lock.git and fs.islink(dest) then
-				fs.delete(dest)
-			end
-
-			-- Has a build script, needs to run.
-			if not fs.islink(dest) then
-				-- A dependent whose build reads dependency outputs (make/cmake/
-				-- command backends, or builtin rocks linking against a native
-				-- dep's .so) must wait for those deps' pending compiles first.
-				-- Pure-Lua builtin installs only copy their own sources, so they
-				-- build without draining, keeping independent compiles overlapped.
-				-- Non-rockspec packages (git/path with build scripts) default to
-				-- draining to preserve the historical ordering guarantee.
-				if entry.pkg.buildNeedsDeps ~= false then
-					for depAlias in pairs(node.deps or {}) do
-						drain(depAlias)
-					end
-				end
-				local built, deferred = entry.pkg:build(dest)
-				if deferred then
-					pending[#pending + 1] = { alias = alias, finalize = deferred }
-					pendingAlias[alias] = true
-				elseif built then
-					ctx.builds = ctx.builds + 1
-				end
-			end
-
-			::continue::
-		end
-
-		drain()
-		asyncBuild.finish()
-	end)
-
-	if not buildOk then
-		error(buildErr)
-	end
 
 	local checked = 0
 	for _ in pairs(ctx.stack) do checked = checked + 1 end
