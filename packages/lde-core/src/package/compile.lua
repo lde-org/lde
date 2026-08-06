@@ -35,6 +35,12 @@ local function compilePackage(package)
 
 	for entry in fs.readdir(modulesDir) do
 		local p = path.join(modulesDir, entry.name)
+		if entry.name == "tests" then
+			-- lde test exposes the package's tests/ dir as target/tests; test
+			-- code must never end up embedded in the executable.
+			goto continue
+		end
+
 		if not fs.isdir(p) then
 			local ext = matchNativeExt(entry.name)
 			if ext then

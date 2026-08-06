@@ -332,6 +332,34 @@ test.it("bundle includes top-level lua files in target/ (not just subdir modules
 	test.truthy(bundle:find('"mymod.sub"'), "subdir mymod/sub.lua should be bundled as 'mymod.sub'")
 end)
 
+test.it("bundle excludes test files (target/tests and *.test.lua)", function()
+	local dir = makePackageDir("bundle-notests", { name = "bundle-notests", version = "0.1.0", dependencies = {} })
+	local targetDir = path.join(dir, "target")
+	fs.mkdir(targetDir)
+
+	-- target/tests: the artifact lde test creates to expose the package's tests/ dir
+	fs.mkdir(path.join(targetDir, "tests"))
+	fs.write(path.join(targetDir, "tests", "main.test.lua"), "return 1")
+	-- test helper modules (tests/lib/...) must not ship either
+	fs.mkdir(path.join(targetDir, "tests", "lib"))
+	fs.write(path.join(targetDir, "tests", "lib", "helpers.lua"), "return 2")
+
+	-- a stray *.test.lua inside an otherwise normal module dir
+	fs.mkdir(path.join(targetDir, "mymod"))
+	fs.write(path.join(targetDir, "mymod", "sub.test.lua"), "return 3")
+	-- ... while its non-test sibling is real code and must still ship
+	fs.write(path.join(targetDir, "mymod", "sub.lua"), "return 99")
+
+	local pkg = lde.Package.open(dir)
+	local bundle = pkg:bundle()
+	---@cast bundle string
+
+	test.falsy(bundle:find('"tests.main.test"'), "tests/main.test.lua must not be bundled")
+	test.falsy(bundle:find('"tests.lib.helpers"'), "tests/lib/helpers.lua must not be bundled")
+	test.falsy(bundle:find('"mymod.sub.test"'), "*.test.lua files must not be bundled")
+	test.truthy(bundle:find('"mymod.sub"'), "non-test sibling modules must still be bundled")
+end)
+
 --
 -- getDependencyPath
 --

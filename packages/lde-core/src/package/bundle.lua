@@ -31,6 +31,12 @@ local function escapeBytes(s)
 	end))
 end
 
+---@param relativePath string
+---@return boolean
+local function isTestFile(relativePath)
+	return relativePath:match("%.test%.lua$") ~= nil
+end
+
 ---@param content string
 ---@param chunkName string
 ---@return string
@@ -47,6 +53,10 @@ end
 ---@param files table<string, string>
 local function bundleDir(projectName, dir, files)
 	for _, relativePath in ipairs(fs.scan(dir, "**" .. path.separator .. "*.lua")) do
+		if isTestFile(relativePath) then
+			goto continue
+		end
+
 		local absPath = path.join(dir, relativePath)
 		local content = fs.read(absPath)
 		if not content then
@@ -61,6 +71,8 @@ local function bundleDir(projectName, dir, files)
 		end
 
 		files[moduleName] = content
+
+		::continue::
 	end
 end
 
@@ -77,15 +89,22 @@ local function bundlePackage(package, opts)
 
 	for entry in fs.readdir(modulesDir) do
 		local p = path.join(modulesDir, entry.name)
+		if entry.name == "tests" then
+			-- lde test exposes the package's tests/ dir as target/tests; it's
+			-- test-only code and must never end up in a bundle.
+			goto continue
+		end
+
 		if fs.isdir(p) then
 			bundleDir(entry.name, p, files)
-		elseif entry.name:match("%.lua$") then
+		elseif entry.name:match("%.lua$") and not isTestFile(entry.name) then
 			local content = fs.read(p)
 			if content then
 				local moduleName = entry.name:gsub("%.lua$", "")
 				files[moduleName] = content
 			end
 		end
+		::continue::
 	end
 
 	local mainName = package:getName()
