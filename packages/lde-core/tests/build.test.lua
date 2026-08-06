@@ -262,6 +262,82 @@ end)
 	test.truthy(fs.exists(path.join(mainDir, "target", "skip-dep")))
 end)
 
+test.it("installDependencies re-installs when the dep is missing from target/", function()
+	makePackageWithSrc("wipe-dep", {
+		["init.lua"] = 'return "wipe"'
+	})
+
+	local mainDir = path.join(tmpBase, "wipe-main")
+	fs.mkdir(mainDir)
+	fs.mkdir(path.join(mainDir, "src"))
+	fs.write(path.join(mainDir, "src", "init.lua"), 'return true')
+
+	fs.write(path.join(mainDir, "lde.json"), json.encode({
+		name = "wipe-main",
+		version = "0.1.0",
+		dependencies = {
+			["wipe-dep"] = { path = "../wipe-dep" }
+		}
+	}))
+
+	local pkg = lde.Package.open(mainDir)
+	pkg:installDependencies()
+
+	-- Simulate wiped materialization (e.g. the git cache was deleted, taking
+	-- the symlink target with it): drop the dep from target/ entirely.
+	fs.rmdir(path.join(mainDir, "target", "wipe-dep"))
+
+	-- The .installed marker still matches the lockfile, but the install must
+	-- not be treated as a no-op — the dep has to come back.
+	local result = pkg:installDependencies()
+	test.falsy(result.cached)
+	test.equal(fs.read(path.join(mainDir, "target", "wipe-dep", "init.lua")), 'return "wipe"')
+end)
+
+test.it("installDependencies re-installs when a dep symlink is dangling", function()
+	local depDir = makePackageWithSrc("dangling-dep", {
+		["init.lua"] = 'return "dangling"'
+	})
+
+	local mainDir = path.join(tmpBase, "dangling-main")
+	fs.mkdir(mainDir)
+	fs.mkdir(path.join(mainDir, "src"))
+	fs.write(path.join(mainDir, "src", "init.lua"), 'return true')
+
+	fs.write(path.join(mainDir, "lde.json"), json.encode({
+		name = "dangling-main",
+		version = "0.1.0",
+		dependencies = {
+			["dangling-dep"] = { path = "../dangling-dep" }
+		}
+	}))
+
+	local pkg = lde.Package.open(mainDir)
+	pkg:installDependencies()
+	test.truthy(fs.islink(path.join(mainDir, "target", "dangling-dep")))
+
+	-- Wipe the symlink's target out from under it, like deleting the git cache
+	-- dirs in ~/.lde/git: the link itself is still there but nothing resolves.
+	-- The .installed marker hash still matches, so without the integrity check
+	-- this would be a silent no-op and require() would fail at runtime.
+	fs.rmdir(depDir)
+	local ok, err = pcall(function() pkg:installDependencies() end)
+	if ok then error("install should not treat a dangling dep as installed") end
+	test.includes(tostring(err), "dangling-dep")
+
+	-- Restoring the source lets the next install recover cleanly.
+	fs.mkdir(depDir)
+	fs.mkdir(path.join(depDir, "src"))
+	fs.write(path.join(depDir, "lde.json"), json.encode({
+		name = "dangling-dep",
+		version = "0.1.0",
+		dependencies = {}
+	}))
+	fs.write(path.join(depDir, "src", "init.lua"), 'return "dangling"')
+	pkg:installDependencies()
+	test.equal(fs.read(path.join(mainDir, "target", "dangling-dep", "init.lua")), 'return "dangling"')
+end)
+
 --
 -- installDependencies --locked (lockfile-only installs)
 --

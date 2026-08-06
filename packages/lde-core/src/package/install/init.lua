@@ -950,6 +950,35 @@ local function makeBuildScheduler(ctx)
 	return scheduler
 end
 
+--- True when every requested dependency is actually materialized in the modules
+--- dir. The .installed marker hash only proves the lockfile/manifest didn't
+--- change; it can't see materialization wiped out of band — deleting ~/.lde/git
+--- leaves the git-dep symlinks in target/ dangling, and a deleted target/<alias>
+--- is simply missing. Detecting that here falls back to a full install which
+--- re-downloads and re-materializes, instead of `lde run` failing at require time.
+---@param dependencies table<string, lde.Package.Config.Dependency>
+---@param enabledOptional table<string, true>
+---@param modulesDir string
+---@return boolean
+local function installIsIntact(dependencies, enabledOptional, modulesDir)
+	if not fs.isdir(modulesDir) then return false end
+
+	for alias, depInfo in pairs(dependencies) do
+		-- Optional deps disabled for this platform were never materialized.
+		if depInfo.optional and not enabledOptional[alias] then
+			goto continue
+		end
+		-- fs.exists follows symlinks, so a dangling git-dep link (its cache dir
+		-- was wiped) reports missing here and forces a reinstall.
+		if not fs.exists(path.join(modulesDir, alias)) then
+			return false
+		end
+		::continue::
+	end
+
+	return true
+end
+
 ---@param package lde.Package
 ---@param dependencies table<string, lde.Package.Config.Dependency>?
 ---@param relativeTo string?
@@ -966,6 +995,10 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 	features[#features + 1] = platformLookup[jit.os]
 
 	local modulesDir = package:getModulesDir()
+
+	-- Gets which features are enabled (+ OS specific features); the install
+	-- integrity check and the build scheduler both consult it.
+	local enabledOptional = resolveEnabledOptional(package, features)
 
 	-- Nothing to do (or already done): report the direct dep count so callers
 	-- can still print a "No changes" summary line. cached = the install was a
@@ -993,14 +1026,16 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 			-- check must use the same input or it can never match.
 			local manifest = fs.read(package:getConfigPath()) or ""
 			if content and fs.read(installedPath) == util.fnv1a(content .. "\n" .. tostring(lde.global.currentVersion) .. "\n" .. manifest) then
-				return noopResult()
+				-- The hash only proves the lockfile didn't change; materialization
+				-- may still be gone (e.g. `rm -rf ~/.lde/git` dangling the git
+				-- symlinks in target/). Verify the install is intact before trusting
+				-- the marker so `lde run` re-installs instead of failing at require.
+				if installIsIntact(dependencies, enabledOptional, modulesDir) then
+					return noopResult()
+				end
 			end
 		end
 	end
-
-	-- Gets which features are enabled (+ OS specific features); the build
-	-- scheduler consults it while the download batch is still draining.
-	local enabledOptional = resolveEnabledOptional(package, features)
 
 	local ctx = {
 		relativeTo = relativeTo,
