@@ -5,6 +5,7 @@
 		"fs": { "git": "https://github.com/lde-org/fs" },
 		"path": { "git": "https://github.com/lde-org/path" },
 		"process": { "git": "https://github.com/lde-org/process" },
+		"env": { "git": "https://github.com/lde-org/env" },
 		"lua-sys": { "git": "https://github.com/lde-org/lua-sys" }
 	},
 	"devDependencies": {

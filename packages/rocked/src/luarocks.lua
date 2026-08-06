@@ -1,6 +1,7 @@
 local fs = require("fs")
 local path = require("path")
 local process = require("process")
+local env = require("env")
 
 --- Polyfills for the subset of the LuaRocks runtime API that custom build
 --- backends expect (luarocks.fs, luarocks.dir, luarocks.path,
@@ -61,6 +62,50 @@ local function copyWithMode(src, dst, mode)
 	return ok, err
 end
 
+---@param p string
+---@param relativeTo string?
+---@return string
+local function absoluteName(p, relativeTo)
+	relativeTo = relativeTo or env.cwd()
+	if path.isAbsolute(p) then return path.normalize(p) end
+	return path.normalize(path.join(relativeTo, p))
+end
+
+--- Create a directory under the system temp dir and return its path.
+---@param name string
+---@return string
+local function makeTempDir(name)
+	local p = path.join(env.tmpdir(), name)
+	fs.mkdirAll(p)
+	return p
+end
+
+--- List the immediate entries of a directory. Returns the names as multiple
+--- string values — host callbacks can only return primitives, so the guest
+--- assembles them into a table.
+---@param dir string
+---@return string...
+local function listDirNames(dir)
+	local names = {}
+	local iter = fs.readdir(dir)
+	if iter then
+		for entry in iter do names[#names + 1] = entry.name end
+	end
+	return unpack(names)
+end
+
+--- Recursively list the files under a directory (relative paths), as multiple
+--- string values for the guest to assemble.
+---@param dir string
+---@return string...
+local function findFiles(dir)
+	local files = {}
+	if fs.isdir(dir) then
+		for _, rel in ipairs(fs.scan(dir, "**")) do files[#files + 1] = rel end
+	end
+	return unpack(files)
+end
+
 --- Inject the polyfills into a guest state. The modules are plain host tables
 --- (functions become callbacks); assigning them through the package.loaded
 --- proxy coerces them into the guest by value, so require() returns them
@@ -83,19 +128,32 @@ function luarocks.setup(state, opts)
 		or "so"
 
 	local loaded = state:globals().package.loaded
-
 	loaded["luarocks.fs"] = {
 		exists            = fs.exists,
+		is_dir            = fs.isdir,
 		make_dir          = fs.mkdirAll,
 		copy              = copyWithMode,
+		delete            = fs.delete,
 		execute           = function(cmd) return runCommand(cmd, cwd ~= "" and cwd or nil, opts.permissions) end,
 		is_tool_available = toolAvailable,
+		current_dir       = env.cwd,
+		absolute_name     = absoluteName,
+		make_temp_dir     = makeTempDir,
 		Q                 = function(s)
 			return '"' .. tostring(s):gsub('"', '\\"') .. '"'
 		end,
 	}
-	loaded["luarocks.dir"] = { path = path.join, dir_name = path.dirname, }
-	loaded["luarocks.path"] = { lib_dir = function(_name, _version) return libDir end, lua_dir = function(_name, _version) return libDir end }
+	loaded["luarocks.dir"] = {
+		path          = path.join,
+		dir_name      = path.dirname,
+		absolute_name = absoluteName,
+		normalize     = path.normalize,
+	}
+	loaded["luarocks.path"] = {
+		lib_dir     = function(_name, _version) return libDir end,
+		lua_dir     = function(_name, _version) return libDir end,
+		install_dir = function(_name, _version) return libDir end,
+	}
 	loaded["luarocks.core.cfg"] = {
 		lua_version            = "5.1",
 		luajit_version         = jit.version,
@@ -106,13 +164,17 @@ function luarocks.setup(state, opts)
 	}
 	loaded["luarocks.util"] = {
 		get_luajit_version = function() return jit.version end,
+		printout           = print,
+		printerr           = function(s) io.stderr:write(tostring(s) .. "\n") end,
 	}
 
 	-- fs.execute_env receives a guest env table, which the bridge cannot pass
 	-- to a host callback, so the flattening lives guest-side on top of
-	-- fs.execute.
-	-- TODO: Replace with a host callback when lua-sys supports retrieving user values as lua.Table efficiently
+	-- fs.execute. list_dir/find likewise can't get a table back from a host
+	-- callback, so their host helpers return entries variadically and the
+	-- guest assembles them.
 	state:load([[
+		local fs_list, fs_find = ...
 		local fs = package.loaded["luarocks.fs"]
 		function fs.execute_env(envs, cmd)
 			local parts = {}
@@ -121,7 +183,13 @@ function luarocks.setup(state, opts)
 			end
 			return fs.execute(table.concat(parts, " ") .. " " .. cmd)
 		end
-	]]):eval()
+		function fs.list_dir(dir)
+			return { fs_list(dir) }
+		end
+		function fs.find(dir)
+			return { fs_find(dir) }
+		end
+	]]):eval(listDirNames, findFiles)
 end
 
 return luarocks

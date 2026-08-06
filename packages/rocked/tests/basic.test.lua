@@ -378,3 +378,63 @@ test.it("runBackend honors permissions callbacks", function()
 	})
 	test.truthy(ok3, err3)
 end)
+
+test.it("runBackend exercises the extended polyfill surface", function()
+	local base = path.join(tmpBase, "rocked-surface")
+	fs.rmdir(base)
+	fs.mkdirAll(path.join(base, "luarocks", "build"))
+	fs.write(path.join(base, "luarocks", "build", "surface.lua"), [[
+		local fs = require("luarocks.fs")
+		local dir = require("luarocks.dir")
+		local path = require("luarocks.path")
+		local cfg = require("luarocks.core.cfg")
+		local util = require("luarocks.util")
+
+		local backend = {}
+		function backend.run(rockspec, no_install)
+			local cwd = fs.current_dir()
+			assert(type(cwd) == "string" and cwd ~= "", "current_dir")
+
+			local abs = fs.absolute_name("rel.txt")
+			assert(abs:match("rel%.txt$") ~= nil, "absolute_name")
+			assert(abs:match("^/") ~= nil or abs:match("^%a:[/\\]"), "absolute_name is absolute")
+
+			assert(type(fs.is_dir(cwd)) == "boolean", "is_dir")
+			assert(type(fs.delete(cwd .. "/definitely-missing")) == "boolean", "delete")
+
+			local listed = fs.list_dir(cwd)
+			assert(type(listed) == "table", "list_dir returns a table")
+
+			local found = fs.find(base)
+			assert(type(found) == "table", "find returns a table")
+
+			local tmp = fs.make_temp_dir("rocked-surface-tmp")
+			assert(type(tmp) == "string" and fs.is_dir(tmp), "make_temp_dir")
+			fs.delete(tmp)
+
+			assert(type(dir.normalize("a//b")) == "string", "dir.normalize")
+			assert(type(dir.absolute_name("x")) == "string", "dir.absolute_name")
+			assert(type(path.install_dir(rockspec.name, rockspec.version)) == "string", "install_dir")
+			assert(type(cfg.lib_extension) == "string", "lib_extension")
+
+			util.printout("surface ok")
+			util.printerr("surface stderr ok")
+			return true
+		end
+		return backend
+	]])
+
+	-- base must exist with at least one file for find() to list
+	fs.write(path.join(base, "marker.txt"), "x")
+
+	local ok, err = rocked.runBackend("surface", {
+		name = "x",
+		version = "1.0-1",
+		build = { type = "surface" },
+	}, {
+		cwd = base,
+		libDir = base,
+		packagePath = path.join(base, "?.lua") .. ";" .. path.join(base, "?", "init.lua"),
+	})
+	test.truthy(ok, err)
+end)
