@@ -53,6 +53,7 @@ local rocked = {}
 ---@field dependencies string[]?
 ---@field build_dependencies string[]?
 ---@field test_dependencies string[]?
+---@field test { type: string?, flags: string[]?, platforms: table<string, { flags: string[]? }>? }?
 ---@field build rocked.raw.Build
 
 -- ─── Host side of the sandbox ─────────────────────────────────────────────

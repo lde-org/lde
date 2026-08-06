@@ -7,6 +7,17 @@ local clap = require("clap")
 
 local args = clap.parse({ ... })
 
+	-- `--lua [args...]` runs the lde binary as a plain Lua interpreter: the
+	-- args form a `lua` command line (`-e <code>` chunks, then an optional
+	-- script with its args). Everything after the flag belongs to the
+	-- interpreter — scripts may pass their own lde-looking options (e.g.
+	-- `luarocks install --tree=...` shelled out through the lde binary) — so
+	-- it's split off before any lde option parsing.
+	local luaCliArgs
+	if args:flag("lua") then
+		luaCliArgs = args:drain()
+	end
+
 -- Parse the overrides up front so --version is detected even when combined
 -- with -C/--tree (matching the historical behavior), but don't apply them
 -- until after the version check.
@@ -62,9 +73,8 @@ if versionRequested and args:count() == 0 then
 end
 
 local evalCode = args:short("e")
-local luaFile = args:flag("lua") and args:pop()
 
-if args:flag("help") and args:count() == 0 and not evalCode and not luaFile then
+	if args:flag("help") and args:count() == 0 and not evalCode and not luaCliArgs then
 	require("lde.commands.help")()
 	return
 end
@@ -92,7 +102,7 @@ if args:flag("ensure-mingw") then
 end
 
 local commandName
-if not evalCode and not luaFile then
+if not evalCode and not luaCliArgs then
 	commandName = args:pop()
 	if not commandName or commandName == "help" then
 		require("lde.commands.help")(args)
@@ -122,8 +132,8 @@ if evalCode then
 	return
 end
 
-if luaFile then
-	local ok, err = lde.runtime.executeFile(luaFile, { args = args:drain(), cwd = env.cwd() })
+if luaCliArgs then
+	local ok, err = lde.runtime.executeLuaCLI(luaCliArgs, { cwd = env.cwd() })
 	if not ok then
 		ansi.printf("{red}Error: %s", tostring(err)); os.exit(1)
 	end

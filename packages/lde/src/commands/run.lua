@@ -34,8 +34,6 @@ local function run(args)
 				local ok, err = lde.runtime.executeFile(name, {
 					args = scriptArgs,
 					cwd = env.cwd(),
-					packagePath = "",
-					packageCPath = "",
 					profile = profile,
 					flamegraph = flamegraph
 				})

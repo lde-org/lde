@@ -3,6 +3,8 @@ local path    = require("path")
 local env     = require("env")
 local ffi     = require("ffi")
 local lua     = require("lua-sys")
+local process = require("process")
+local rocked  = require("rocked")
 
 ---@class lde.TestFileResult
 ---@field file    string
@@ -24,6 +26,8 @@ local lua     = require("lua-sys")
 ---@field failures number
 ---@field skipped  number
 ---@field error    string?
+---@field external boolean? # true when tests ran under an external runner (busted)
+---@field exitCode number? # exit code of the external runner
 
 local function getLuaPathsForPackage(pkg)
 	local modulesDir = pkg:getModulesDir()
@@ -226,6 +230,148 @@ local function runTestFile(testFile, luaPath, luaCPath, reporter)
 	return { file = testFile, results = results }
 end
 
+--- Create a minimal Lua installation at ~/.lde/lua that test harnesses can
+--- shell out to: a `lua` executable that runs the lde binary as a plain Lua
+--- interpreter (so scripts run with the harness's LUA_PATH/LUA_CPATH env
+--- instead of any package context), plus include/ and lib/ symlinked to the
+--- LuaJIT dev tree so C rocks the harness builds (e.g. cluacov) find headers
+--- and libs. LuaRocks' own test suite drives this via the rockspec test flags
+--- `-Xhelper lua=$(LUA) -Xhelper lua_dir=$(LUA_DIR)`.
+---@return string luaDir
+---@return string luaBin
+local function ensureMockLuaDir()
+	local lde = require("lde-core")
+	local luaDir = path.join(lde.global.getDir(), "lua")
+	if not fs.isdir(luaDir) then fs.mkdir(luaDir) end
+
+	local luaBin = assert(env.execPath(), "no executable path")
+	-- The wrapper hands the whole command line to `lde --lua`, which
+	-- interprets it like a `lua` invocation (`-e <code>` chunks, optional
+	-- script, `-i` REPL) in a plain state honoring LUA_PATH/LUA_CPATH env.
+	-- Remove the pre-0.11 driver file this replaced, if present.
+	fs.delete(path.join(luaDir, "run-e.lua"))
+	local wrapper = "#!/bin/sh\n"
+		.. "exec '" .. luaBin .. "' --lua \"$@\"\n"
+	local wrapperPath = path.join(luaDir, "lua")
+	fs.write(wrapperPath, wrapper)
+	fs.chmod(wrapperPath, tonumber("755", 8))
+
+	-- Headers/libs for native rocks the harness compiles.
+	local jitTree = require("sea").getLuajitPath()
+	for _, sub in ipairs({ "include", "lib" }) do
+		local link = path.join(luaDir, sub)
+		if fs.exists(link) and not fs.islink(link) then
+			fs.delete(link)
+		end
+		if not fs.exists(link) then
+			fs.mklink(path.join(jitTree, sub), link)
+		end
+	end
+
+	return luaDir, wrapperPath
+end
+
+--- Run the test specification of a rockspec-based package.
+---
+--- LuaRocks packages don't use the tests/*.test.lua layout; their tests are
+--- defined by the rockspec itself: a `test` section (a framework plus
+--- per-platform flags) and `test_dependencies` (rocks installed only for
+--- testing). busted is the supported framework: lde installs it (plus the
+--- declared test rocks) into target/ and invokes it from the package root,
+--- where busted picks up the `.busted` config, `spec/` directory, and helper
+--- scripts automatically. lde's own binary doubles as the Lua interpreter, so
+--- test harnesses that shell out to `$(LUA)` (e.g. the LuaRocks test suite
+--- running its in-tree `src/bin/luarocks`) work without a system Lua install.
+---@param package  lde.Package
+---@param filters  string[]? # extra args passed through to the test runner
+---@return lde.TestResults
+local function runRockspecTests(package, filters)
+	local spec = package.rockspecData
+	local testSpec = spec and spec.test
+	local testType = testSpec and testSpec.type or "busted"
+
+	if not spec or testType ~= "busted" then
+		return {
+			package = package, files = {}, total = 0, failures = 0, skipped = 0,
+			error = "Unsupported rockspec test type: " .. tostring(testType) .. " (only 'busted' is supported)",
+		}
+	end
+
+	-- Test-only rocks: the busted framework itself plus whatever the rockspec
+	-- declares in test_dependencies (e.g. coverage runners, output handlers).
+	local testDeps = { busted = { luarocks = "busted" } }
+	for _, depStr in ipairs(spec.test_dependencies or {}) do
+		local name, version = rocked.parseDependency(depStr)
+		if name and name ~= "lua" and name ~= "luajit" then
+			testDeps[name] = { luarocks = name, version = version }
+		end
+	end
+	package:installDependencies(testDeps, package.dir)
+
+	-- Per-platform flags from the rockspec's test section.
+	local platform = ffi.os == "Windows" and "windows" or "unix"
+	local rawFlags
+	if testSpec then
+		local platSpec = testSpec.platforms and testSpec.platforms[platform]
+		if platSpec and platSpec.flags then
+			rawFlags = platSpec.flags
+		elseif testSpec.flags then
+			rawFlags = testSpec.flags
+		end
+	end
+
+	-- The interpreter test harnesses shell out to: `$(LUA)` is a wrapper that
+	-- runs the lde binary as plain Lua (so scripts see the harness's env paths,
+	-- not any package context), and `$(LUA_DIR)` is the mock Lua install dir
+	-- (~/.lde/lua) with headers/libs for C rocks the harness builds.
+	local luaDir, luaBin = ensureMockLuaDir()
+
+	local modulesDir = package:getModulesDir()
+	local bustedBin = path.join(modulesDir, "busted", "busted")
+	if not fs.exists(bustedBin) then
+		return {
+			package = package, files = {}, total = 0, failures = 0, skipped = 0,
+			error = "busted was installed but its runner was not found at " .. bustedBin,
+		}
+	end
+
+	local runArgs = { bustedBin }
+	for _, flag in ipairs(rawFlags or {}) do
+		runArgs[#runArgs + 1] = (flag:gsub("%$%(LUA%)", luaBin):gsub("%$%(LUA_DIR%)", luaDir))
+	end
+	for _, filter in ipairs(filters or {}) do
+		runArgs[#runArgs + 1] = filter
+	end
+
+	-- Run busted as a subprocess with the package root as cwd: busted reads
+	-- `.busted` from there, and the `;;` in LUA_PATH/LUA_CPATH keeps the default
+	-- paths (incl. ./?.lua) so the package's own spec/ and src/ stay reachable
+	-- (e.g. spec.util.* helpers, modules busted's --lpath prefix doesn't cover).
+	local luaPath = path.join(modulesDir, "?.lua") .. ";" .. path.join(modulesDir, "?", "init.lua") .. ";;"
+	local soExt = ffi.os == "Windows" and "?.dll" or "?.so"
+	local luaCPath = path.join(modulesDir, soExt) .. ";;"
+
+	local exitCode = process.exec(luaBin, runArgs, {
+		cwd = package.dir,
+		env = { LUA_PATH = luaPath, LUA_CPATH = luaCPath },
+		stdout = "inherit",
+		stderr = "inherit",
+	})
+
+	-- busted reports counts in its own output; the summary here is derived from
+	-- its exit code. external marks results that came from an external runner.
+	local failed = exitCode ~= 0
+	return {
+		package  = package,
+		files    = {},
+		total    = failed and 1 or 0,
+		failures = failed and 1 or 0,
+		skipped  = 0,
+		external = true,
+		exitCode = exitCode,
+	}
+end
+
 ---@param package  lde.Package
 ---@param reporter lde.TestReporter?
 ---@param filters  string[]?
@@ -234,6 +380,12 @@ local function runTests(package, reporter, filters)
 	package:installDependencies()
 	package:installDevDependencies()
 	package:build()
+
+	-- Rockspec-based packages run their test specification (busted) instead of
+	-- lde-test files.
+	if package.isRockspec then
+		return runRockspecTests(package, filters)
+	end
 
 	local testDir = package:getTestDir()
 	if not fs.exists(testDir) then

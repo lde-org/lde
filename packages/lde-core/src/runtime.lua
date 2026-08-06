@@ -291,7 +291,132 @@ local function executeString(code, opts)
 	return executeSource(code, "-e", opts)
 end
 
+--- Run arguments as a Lua interpreter would: zero or more `-e <code>` chunks,
+--- then an optional script with its args (or an interactive REPL when the
+--- script slot is `-i`). Test harnesses shell out through the lde binary as
+--- their Lua interpreter, and depend on the chaining semantics — a prelude
+--- chunk (e.g. luacov's runner) must run before the script *in the same
+--- state*, and the script must see a rebuilt arg table (arg[0] = script,
+--- arg[1..] = its args), matching stock `lua -e ... script args`.
+---@param args string[] # the command line after `--lua`
+---@param opts lde.ExecuteOptions?
+---@return boolean ok
+---@return any err
+local function executeLuaCLI(args, opts)
+	opts = opts or {}
+
+	-- Parse `-e <code>` chunks at the front, then an optional script.
+	local eChunks = {}
+	local i = 1
+	while args[i] == "-e" do
+		i = i + 1
+		if args[i] == nil then
+			return false, "no code given for -e"
+		end
+		eChunks[#eChunks + 1] = args[i]
+		i = i + 1
+	end
+	---@type string?
+	local script = args[i]
+	local scriptArgs = {}
+	for j = i + 1, #args do scriptArgs[#scriptArgs + 1] = args[j] end
+	local interactive = script == "-i"
+	if interactive then script = nil end
+	if not script and #eChunks == 0 and not interactive then
+		return false, "no script or -e chunk given after --lua"
+	end
+
+	-- Change cwd on the host process (guest inherits the same OS environment)
+	local oldCwd
+	if opts.cwd then
+		oldCwd = env.cwd()
+		env.chdir(opts.cwd)
+	end
+
+	-- Apply env vars; save originals for restore
+	local oldEnvVars = {}
+	if opts.env then
+		for k, v in pairs(opts.env) do
+			oldEnvVars[k] = env.var(k)
+			env.set(k, v)
+		end
+	end
+
+	local function cleanup()
+		for k, v in pairs(oldEnvVars) do env.set(k, v) end
+		if oldCwd then env.chdir(oldCwd) end
+	end
+
+	-- Fresh isolated state
+	local state = lua.new()
+	local g = state:globals()
+	local pkg = g.package
+	if opts.packagePath  then pkg.path  = opts.packagePath  end
+	if opts.packageCPath then pkg.cpath = opts.packageCPath end
+
+	-- arg[0] = the script path (real Lua semantics); -e chunks see the same
+	-- table the script would.
+	local argTbl = state:table()
+	argTbl[0] = script or "-e"
+	for j, v in ipairs(scriptArgs) do argTbl[j] = v end
+	g.arg = argTbl
+
+	local ok, r = true, nil
+	for _, code in ipairs(eChunks) do
+		local chunk, err = state:load(code, "-e")
+		if not chunk then
+			ok, r = false, err
+			break
+		end
+		ok, r = pcall(chunk.eval, chunk)
+		if not ok then break end
+	end
+
+	if ok and interactive then
+		local repl, err = state:load([[
+			while true do
+				io.write("> ")
+				io.flush()
+				local line = io.read()
+				if not line then break end
+				local chunk = line:match("^=(.*)$")
+				if chunk then chunk = "return " .. chunk else chunk = line end
+				local f, err = loadstring(chunk)
+				if f then
+					local pok, a = pcall(f)
+					if not pok then print(tostring(a))
+					elseif a ~= nil then print(tostring(a)) end
+				else
+					print(tostring(err))
+				end
+			end
+		]], "@repl")
+		if not repl then
+			ok, r = false, err
+		else
+			ok, r = pcall(repl.eval, repl)
+		end
+	elseif ok and script then
+		local source, err = fs.read(script)
+		if not source then
+			ok, r = false, "Failed to read " .. script .. ": " .. (err or "unknown error")
+		else
+			local chunk, lerr = state:load(source, "@" .. script)
+			if not chunk then
+				ok, r = false, lerr
+			else
+				ok, r = pcall(chunk.eval, chunk, unpack(scriptArgs))
+			end
+		end
+	end
+
+	state:close()
+	cleanup()
+	return ok, r
+end
+
 return {
 	executeFile   = executeFile,
 	executeString = executeString,
+	executeLuaCLI = executeLuaCLI,
 }

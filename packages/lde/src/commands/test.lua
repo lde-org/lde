@@ -376,6 +376,23 @@ local function test(args)
 			::continue::
 		end
 
+		-- Rockspec-based packages (e.g. LuaRocks projects) whose test
+		-- specification lives in the rockspec; skip ones that also have an
+		-- lde.json (already handled above) and require a busted-style layout.
+		for _, relativePath in ipairs(fs.scan(cwd, "**" .. path.separator .. "*.rockspec")) do
+			local configPath = path.join(cwd, relativePath)
+			local pkgDir = path.dirname(configPath)
+			if fs.exists(path.join(pkgDir, "lde.json")) then goto continue end
+			if not (fs.isdir(path.join(pkgDir, "spec")) or fs.exists(path.join(pkgDir, ".busted"))) then
+				goto continue
+			end
+			local pkg = lde.Package.open(pkgDir)
+			if pkg then
+				packages[#packages + 1] = pkg
+			end
+			::continue::
+		end
+
 		if #packages == 0 then
 			ansi.printf("{yellow}No packages with tests found")
 			return
@@ -392,6 +409,18 @@ local function test(args)
 			local results = pkg:runTests(reporter, filters)
 			if results.error then
 				ansi.printf("  {red}%s", results.error)
+				hadFailures = true
+				totalFailures = totalFailures + 1
+			elseif results.external then
+				-- External runners (busted) print their own results.
+				if results.exitCode ~= 0 then
+					ansi.printf("  {red}Tests: failed (exit %s)", tostring(results.exitCode))
+					hadFailures = true
+					totalFailures = totalFailures + 1
+				else
+					ansi.printf("  {green}Tests: passed")
+					totalPassed = totalPassed + 1
+				end
 			elseif #results.files == 0 and #filters > 0 then
 				ansi.printf("  {gray}No files matched")
 			else
@@ -418,6 +447,20 @@ local function test(args)
 	local results = package:runTests(reporter, filters)
 	if results.error then
 		ansi.printf("{red}%s", results.error)
+		print()
+		os.exit(1)
+		return
+	elseif results.external then
+		-- External runners (busted) print their own results; lde just reports
+		-- the verdict so the exit code matches the suite's.
+		if results.exitCode ~= 0 then
+			ansi.printf("{red}Tests: failed (exit %s)", tostring(results.exitCode))
+		else
+			ansi.printf("{green}Tests: passed")
+		end
+		print()
+		os.exit(results.exitCode ~= 0 and 1 or 0)
+		return
 	else
 		printFileErrors(results, package:getDir())
 	end

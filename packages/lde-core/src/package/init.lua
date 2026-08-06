@@ -14,6 +14,8 @@ local process = require("process")
 ---@field cachedConfigMtime number?
 ---@field buildfn (fun(pkg: lde.Package, outputDir: string): boolean?, string?, (fun(): boolean?, string?)?)?
 ---@field buildNeedsDeps boolean? # false = pure-Lua builtin install that never reads dependency build outputs
+---@field isRockspec boolean? # true when opened from a *.rockspec (no lde.json)
+---@field rockspecData rocked.raw.Output? # parsed rockspec, when isRockspec
 local Package = {}
 Package.__index = Package
 

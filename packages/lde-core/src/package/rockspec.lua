@@ -92,10 +92,20 @@ local function autodetectModules(pkgDir, packageName)
 			modName = modName:gsub("%.init$", "")
 			if modName == "" then modName = packageName end
 			local srcPath = basePrefix .. rel
+			local isInit = rel:match("[/\\]init%.lua$") or rel == "init.lua"
+			-- When a module name is claimed by both a file (x.lua) and a
+			-- directory entry (<dir>/init.lua), the file wins, mirroring
+			-- require()'s ?.lua-before-?/init.lua search order. LuaRocks' own
+			-- tree has exactly this shape: cmd.lua is the real luarocks.cmd
+			-- module while cmd/init.lua is the "init" subcommand.
 			if ext == "lua" then
-				luaModules[modName] = srcPath
+				if not luaModules[modName] or not isInit then
+					luaModules[modName] = srcPath
+				end
 			else
-				nativeModules[modName] = { sources = { srcPath } }
+				if not nativeModules[modName] or not isInit then
+					nativeModules[modName] = { sources = { srcPath } }
+				end
 			end
 		end
 		::continue::
@@ -242,6 +252,12 @@ local function openRockspec(dir, rockspecPath)
 	end ---@cast spec rocked.raw.Output
 
 	local pkg = setmetatable({ dir = dir }, lde.Package)
+
+	-- Mark rockspec-backed packages so commands can dispatch on the package
+	-- type, and keep the parsed spec around (e.g. `lde test` reads the
+	-- rockspec's `test` section and `test_dependencies` from it).
+	pkg.isRockspec = true
+	pkg.rockspecData = spec
 
 	local modules = {}
 	local nativeModules = {}

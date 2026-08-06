@@ -180,3 +180,39 @@ test.it("lde --lua <script> passes all positional args to the script", function(
 	test.truthy(ok)
 	test.includes(out, "install|--quiet|FOO=bar")
 end)
+
+test.it("lde --lua runs -e chunks before the script in the same state", function()
+	-- Test harnesses shell out through the lde binary as their Lua interpreter
+	-- (e.g. a luacov prelude before a luarocks CLI run) and rely on the chunk's
+	-- side effects being visible to the script.
+	local script = path.join(env.tmpdir(), "lde-lua-echain.lua")
+	fs.write(script, "io.write(marker)")
+
+	local ok, out = ldecli { "--lua", "-e", "marker = 'chained'", script }
+	test.truthy(ok)
+	test.includes(out, "chained")
+end)
+
+test.it("lde --lua supports multiple -e chunks", function()
+	local ok, out = ldecli { "--lua", "-e", "io.write('a')", "-e", "io.write('b')" }
+	test.truthy(ok)
+	test.includes(out, "ab")
+end)
+
+test.it("lde --lua rebuilds arg for the script after -e chunks", function()
+	local script = path.join(env.tmpdir(), "lde-lua-eargs.lua")
+	fs.write(script, "io.write(arg[0] .. '|' .. table.concat(arg, '|'))")
+
+	local ok, out = ldecli { "--lua", "-e", "x = 1", script, "a", "b" }
+	test.truthy(ok)
+	test.includes(out, script .. "|a|b")
+end)
+
+test.it("lde --lua -i enters an interactive REPL", function()
+	-- stdin hits EOF immediately under process.exec; the prompt still proves
+	-- the REPL branch was taken.
+	local ok, out = ldecli { "--lua", "-e", "io.write('pre')", "-i" }
+	test.truthy(ok)
+	test.includes(out, "pre")
+	test.includes(out, ">")
+end)
