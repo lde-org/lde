@@ -11,6 +11,11 @@ local curl = util.lazy(function() return require("curl-sys") end)
 --- batch. The sequential resolution work that follows therefore hits the
 --- cache instead of the network.
 ---
+--- `background()` transfers (used for overlapped `install rocks:` root
+--- downloads) are not waited on by `drain()`: they keep downloading while the
+--- resolver proceeds and are collected with `waitBackground()` (or by
+--- `finish()`).
+---
 --- Outside of an active session (`download.active()` == false) everything
 --- falls back to the plain synchronous `curl.*` calls, so non-install paths
 --- (e.g. `lde install --git`, bundling, `ensureMingw`) are unaffected.
@@ -19,7 +24,8 @@ local download = {}
 
 ---@class download.Session
 ---@field batch CurlBatch
----@field pending table<string, integer>  destPath -> batch transfer index
+---@field pending table<string, integer|table>  destPath -> batch transfer index (a result table once resolved)
+---@field background table<string, boolean>  destPath -> true for transfers drain() must not block on
 ---@field progress fun(done: integer, total: integer)?
 
 local session = nil
@@ -31,6 +37,7 @@ function download.begin(opts)
 	session = {
 		batch = curl().batch({ progress = opts and opts.progress or nil }),
 		pending = {},
+		background = {},
 	}
 end
 
@@ -54,6 +61,52 @@ function download.active()
 	return session ~= nil
 end
 
+--- Whether a pending transfer has finished (result table available).
+---@param destPath string
+---@return boolean
+local function transferDone(destPath)
+	local index = session.pending[destPath]
+	if type(index) ~= "number" then return true end
+	local res = session.batch:results()[index]
+	return res ~= nil and res.err ~= "transfer not finished"
+end
+
+---@return boolean true when any non-background transfer is still running
+local function pendingNonBackground()
+	for destPath, index in pairs(session.pending) do
+		if type(index) == "number" and not session.background[destPath] then
+			if not transferDone(destPath) then return true end
+		end
+	end
+	return false
+end
+
+--- Pump the batch until `waitFor` finishes, or until every non-background
+--- transfer is done when `waitFor` is nil.
+---@param waitFor string?
+local function pumpUntil(waitFor)
+	if not session then return end
+	while true do
+		if waitFor ~= nil then
+			if transferDone(waitFor) then return end
+		elseif not pendingNonBackground() then
+			return
+		end
+		local running = session.batch:pump()
+		if running > 0 then session.batch:wait(10) end
+	end
+end
+
+--- Resolve a finished transfer's pending entry into its result table.
+---@param destPath string
+local function resolveTransfer(destPath)
+	local index = session.pending[destPath]
+	if type(index) ~= "number" then return end
+	local res = session.batch:results()[index] or { ok = false, err = "missing result" }
+	session.pending[destPath] = res
+	session.background[destPath] = nil
+end
+
 --- Register a URL to be fetched into `destPath` as part of the current batch.
 --- Returns "pending" when a session is active (the file is not guaranteed to
 --- exist until `drain()` is called), or "done" when no session is active
@@ -68,21 +121,42 @@ function download.prefetch(url, destPath)
 	return "pending"
 end
 
---- Block until every prefetched download in the session has completed.
+--- Like `prefetch`, but `drain()` will not wait for this transfer: it keeps
+--- downloading in the background while the caller resolves other dependencies,
+--- and is collected later via `waitBackground()` (or by `finish()`).
+---@param url string
+---@param destPath string
+---@return "pending"|"done"
+function download.background(url, destPath)
+	if not session then return "done" end
+	local index = session.batch:add(url, { path = destPath })
+	session.pending[destPath] = index
+	session.background[destPath] = true
+	return "pending"
+end
+
+--- Block until every non-background prefetched download has completed.
 function download.drain()
 	if not session then return end
-	local results = session.batch:runAll()
-	for destPath, index in pairs(session.pending) do
-		-- Entries already resolved by a previous drain hold a result table, not an
-		-- index; re-resolving them would index the batch by a table and clobber the
-		-- good result with "missing result". Only resolve entries still pending.
-		if type(index) ~= "table" then
-			session.pending[destPath] = results[index] or { ok = false, err = "missing result" }
-		end
+	pumpUntil(nil)
+	for destPath in pairs(session.pending) do
+		if not session.background[destPath] then resolveTransfer(destPath) end
 	end
 end
 
---- Result of the prefetched download for `destPath` (after `drain()`).
+--- Block until a specific (typically background) transfer completes and
+--- resolve it. Returns its result, or nil when no session is active.
+---@param destPath string
+---@return { ok: boolean, path: string, err: string? }?
+function download.waitBackground(destPath)
+	if not session then return nil end
+	pumpUntil(destPath)
+	resolveTransfer(destPath)
+	return download.result(destPath)
+end
+
+--- Result of the prefetched download for `destPath` (after `drain()` /
+--- `waitBackground()`).
 ---@param destPath string
 ---@return { ok: boolean, path: string, err: string? }?
 function download.result(destPath)

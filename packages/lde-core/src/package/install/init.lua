@@ -834,8 +834,6 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 		end
 	end
 
-	if not fs.exists(modulesDir) then fs.mkdir(modulesDir) end
-
 	local ctx = {
 		relativeTo = relativeTo,
 		stack = {},
@@ -854,14 +852,23 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 	-- graph walk and materialized afterwards. Always cleaned up, even on error.
 	-- Only show the bar when there's something to download — packages with no
 	-- dependencies shouldn't print a spurious "Downloading dependencies".
-	local bar = lde.verbose and installs > 0
-		and ansi.progress("Downloading dependencies") or nil
-	download.begin(bar and {
-		progress = function(done, total)
-			local ratio = total > 0 and (done / total) or nil
-			bar:update(ratio, done .. "/" .. total)
-		end
-	} or nil)
+	--
+	-- A session may already be active when this install runs inside an
+	-- overlapped `install rocks:` flow (the root package's own download started
+	-- before resolution). In that case the session is shared and the caller
+	-- ends it.
+	local sessionWasActive = download.active()
+	local bar = nil
+	if not sessionWasActive then
+		bar = lde.verbose and installs > 0
+			and ansi.progress("Downloading dependencies") or nil
+		download.begin(bar and {
+			progress = function(done, total)
+				local ratio = total > 0 and (done / total) or nil
+				bar:update(ratio, done .. "/" .. total)
+			end
+		} or nil)
+	end
 
 	local ok, err = pcall(collectDependencies, dependencies, ctx)
 	if not ok then
@@ -871,7 +878,16 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 		if bar and ctx.downloads > 0 then bar:fail() end
 		error(err)
 	end
-	download.finish()
+	if not sessionWasActive then download.finish() end
+
+	-- Overlapped `install rocks:` installs start the root package's .src.rock
+	-- download before resolution; materialize it now that the content batch has
+	-- drained, so the build pass and lockfile commit see a real package dir.
+	if opts and opts.rootExtract then
+		opts.rootExtract()
+	end
+
+	if not fs.exists(modulesDir) then fs.mkdir(modulesDir) end
 
 	-- Finalize the download bar once downloads are done. When nothing was
 	-- downloaded the bar never rendered anything, so it is finalized after the
