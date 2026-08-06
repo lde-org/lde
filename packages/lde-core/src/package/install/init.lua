@@ -518,9 +518,9 @@ handlers.luarocks = {
 			n.spec = spec
 			n.deps = {}
 			for _, depStr in ipairs(spec.dependencies or {}) do
-				local name, rest = depStr:match("^([%w%-_]+)%s*(.*)")
+				local name, version = rocked.parseDependency(depStr)
 				if name and name ~= "lua" and name ~= "luajit" then
-					n.deps[name] = { luarocks = name, version = rest ~= "" and rest or nil }
+					n.deps[name] = { luarocks = name, version = version }
 				end
 			end
 		elseif n.srcUrl then

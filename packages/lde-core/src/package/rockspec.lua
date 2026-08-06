@@ -584,9 +584,9 @@ local function openRockspec(dir, rockspecPath)
 	pkg.readConfig = function()
 		local deps = {}
 		for _, depStr in ipairs(spec.dependencies or {}) do
-			local name, rest = depStr:match("^([%w%-_]+)%s*(.*)")
+			local name, version = rocked.parseDependency(depStr)
 			if name and name ~= "lua" and name ~= "luajit" then
-				deps[name] = { luarocks = name, version = rest ~= "" and rest or nil }
+				deps[name] = { luarocks = name, version = version }
 			end
 		end
 

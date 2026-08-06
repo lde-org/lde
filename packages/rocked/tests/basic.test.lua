@@ -145,3 +145,33 @@ test.it("shouldn't run for too long", function()
 
 	test.notEqual(parsed:find("Rockspec took too long to run"), nil)
 end)
+
+--
+-- rocked.parseDependency
+--
+
+test.it("parseDependency splits name and constraint at whitespace", function()
+	local name, version = rocked.parseDependency("luafilesystem >= 1.8.0")
+	test.equal(name, "luafilesystem")
+	test.equal(version, ">= 1.8.0")
+end)
+
+test.it("parseDependency keeps dots in the package name", function()
+	-- rocks.nvim deps like "fidget.nvim >= 1.1.0": the '.' must stay in the
+	-- name, not leak into the constraint (previously parsed as fidget + ".nvim >= 1.1.0")
+	local name, version = rocked.parseDependency("fidget.nvim >= 1.1.0")
+	test.equal(name, "fidget.nvim")
+	test.equal(version, ">= 1.1.0")
+end)
+
+test.it("parseDependency returns nil version for unconstrained deps", function()
+	local name, version = rocked.parseDependency("luafilesystem")
+	test.equal(name, "luafilesystem")
+	test.equal(version, nil)
+end)
+
+test.it("parseDependency handles dashed names and exact-version deps", function()
+	local name, version = rocked.parseDependency("lua-cjson 2.1.0.6")
+	test.equal(name, "lua-cjson")
+	test.equal(version, "2.1.0.6")
+end)

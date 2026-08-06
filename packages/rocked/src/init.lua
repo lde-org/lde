@@ -115,4 +115,19 @@ function rocked.parse(spec)
 	return true, chunkEnv
 end
 
+--- Parses a single rockspec dependency string into its package name and
+--- optional version constraint.
+---
+--- LuaRocks names may contain dots (e.g. "fidget.nvim >= 1.1.0"), so the
+--- name is everything up to the first whitespace — not up to the first '.'
+--- or operator character.
+---@param depStr string
+---@return string? name
+---@return string? version # Constraint such as ">= 1.1.0"; nil when unconstrained
+function rocked.parseDependency(depStr)
+	local name, rest = depStr:match("^([%w%.%-_]+)%s*(.*)")
+	if not name then return nil, nil end
+	return name, (rest ~= "" and rest or nil)
+end
+
 return rocked
