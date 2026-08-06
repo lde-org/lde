@@ -120,51 +120,56 @@ function Instance:cc(args)
 	return stdout or "", stderr or ""
 end
 
---- Inject an lde-build instance into a lua.State as require("lde-build").
---- All I/O methods are registered as host callbacks; the guest calls them
---- via the cross-state bridge. No guest-side Lua source needed — the instance
---- table is built entirely from host functions registered as guest globals,
---- then assembled into a table in the guest via state:load().
----@param state    lua.State
+-- ─── Guest-side assembly ─────────────────────────────────────────────────
+--
+-- The build table scripts see via require("lde-build") is assembled guest-
+-- side. The host methods can't be called across the state boundary with the
+-- instance as self, so setup() passes them in as host callbacks (varargs);
+-- this chunk wires them into the table, forwarding calls. `cc` receives its
+-- argument table already unpacked — only primitives cross host↔guest.
+local GUEST_SOURCE = [==[
+	local outDir, gccBin, fetch, write, read, extract, copy, delete, move, exists, sh, cc = ...
+	local build = {
+		outDir  = outDir,
+		gccBin  = gccBin,
+		fetch   = function(self, url)        return fetch(url)         end,
+		write   = function(self, rel, cnt)   write(rel, cnt)           end,
+		read    = function(self, rel)        return read(rel)          end,
+		extract = function(self, rel, dest)  extract(rel, dest)        end,
+		copy    = function(self, rel, dest)  copy(rel, dest)           end,
+		delete  = function(self, rel)        delete(rel)               end,
+		move    = function(self, rel, dest)  move(rel, dest)           end,
+		exists  = function(self, rel)        return exists(rel)        end,
+		sh      = function(self, cmd)        sh(cmd)                   end,
+		cc      = function(self, args)       return cc(unpack(args))   end,
+	}
+	package.preload["lde-build"] = function() return build end
+	package.preload["lpm-build"] = function() return build end
+]==]
+
+--- Inject an lde-build instance into a lua-sys guest state.
+---
+--- The instance methods are registered as host callbacks and passed into the
+--- guest as varargs; the guest chunk assembles them into the `lde-build`
+--- table via package.preload. No globals cross the boundary.
+---@param state     lua.State
 ---@param outputDir string
----@param gccBin?  string  # path to gcc binary; defaults to "gcc"
+---@param gccBin?   string # path to gcc binary; defaults to "gcc"
 function Instance.setup(state, outputDir, gccBin)
 	local inst = Instance.new(outputDir, gccBin or "gcc")
-	local g = state:globals()
-
-	-- Register each method as a named host callback global, then assemble
-	-- the build table in guest Lua and expose it via package.preload.
-	g._lde_build_outDir  = outputDir
-	g._lde_build_gccBin  = inst.gccBin
-	g._lde_build_fetch   = function(url)           return inst:fetch(url)       end
-	g._lde_build_write   = function(rel, content)  inst:write(rel, content)     end
-	g._lde_build_read    = function(rel)            return inst:read(rel)        end
-	g._lde_build_extract = function(rel, dest)      inst:extract(rel, dest)     end
-	g._lde_build_copy    = function(rel, dest)      inst:copy(rel, dest)        end
-	g._lde_build_delete  = function(rel)            inst:delete(rel)            end
-	g._lde_build_move    = function(rel, dest)      inst:move(rel, dest)        end
-	g._lde_build_exists  = function(rel)            return inst:exists(rel)     end
-	g._lde_build_sh      = function(cmd)            inst:sh(cmd)               end
-	g._lde_build_cc      = function(...)            return inst:cc({...})      end
-
-	state:eval([[
-		local _build = {
-			outDir   = _lde_build_outDir,
-			gccBin   = _lde_build_gccBin,
-			fetch    = function(self, url)        return _lde_build_fetch(url)         end,
-			write    = function(self, rel, cnt)   _lde_build_write(rel, cnt)           end,
-			read     = function(self, rel)        return _lde_build_read(rel)          end,
-			extract  = function(self, rel, dest)  _lde_build_extract(rel, dest)        end,
-			copy     = function(self, rel, dest)  _lde_build_copy(rel, dest)           end,
-			delete   = function(self, rel)        _lde_build_delete(rel)               end,
-			move     = function(self, rel, dest)  _lde_build_move(rel, dest)           end,
-			exists   = function(self, rel)        return _lde_build_exists(rel)        end,
-			sh       = function(self, cmd)        _lde_build_sh(cmd)                   end,
-			cc       = function(self, args)       return _lde_build_cc(unpack(args))           end,
-		}
-		package.preload["lde-build"] = function() return _build end
-		package.preload["lpm-build"] = function() return _build end
-	]])
+	state:load(GUEST_SOURCE, "@lde-build"):call(
+		inst.outDir, inst.gccBin,
+		function(url)          return inst:fetch(url)     end,
+		function(rel, content) inst:write(rel, content)   end,
+		function(rel)          return inst:read(rel)      end,
+		function(rel, dest)    inst:extract(rel, dest)    end,
+		function(rel, dest)    inst:copy(rel, dest)       end,
+		function(rel)          inst:delete(rel)           end,
+		function(rel, dest)    inst:move(rel, dest)       end,
+		function(rel)          return inst:exists(rel)    end,
+		function(cmd)          inst:sh(cmd)               end,
+		function(...)          return inst:cc({ ... })    end
+	)
 end
 
 return Instance

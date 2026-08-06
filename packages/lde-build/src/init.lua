@@ -1,6 +1,6 @@
 ---@meta
 
----@type lde.build.Instance
-local t = require("lde-build.build").new()
+---@return lde.build.Instance
+local function create() end
 
-return t
+return create()
