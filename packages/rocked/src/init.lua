@@ -1,3 +1,6 @@
+local lua = require("lua-sys")
+local luarocks = require("rocked.luarocks")
+
 local rocked = {}
 
 ---@class rocked.raw.Description
@@ -28,7 +31,7 @@ local rocked = {}
 ---@field install rocked.raw.BuildInstall?
 
 ---@class rocked.raw.Build
----@field type "builtin" | "module" | "make" | "cmake" | "none" | "command"
+---@field type string
 ---@field modules table<string, rocked.raw.BuildSource>?
 ---@field install rocked.raw.BuildInstall?
 ---@field copy_directories string[]?
@@ -48,82 +51,141 @@ local rocked = {}
 ---@field description rocked.raw.Description?
 ---@field source { url: string, branch: string?, tag: string? }
 ---@field dependencies string[]?
+---@field build_dependencies string[]?
+---@field test_dependencies string[]?
 ---@field build rocked.raw.Build
 
--- Things we'll provide to the rockspec sandbox
-local baseChunkEnv = {
-	pairs = pairs,
-	ipairs = ipairs,
-	next = next
+-- ─── Host side of the sandbox ─────────────────────────────────────────────
+
+-- Instruction budget for a rockspec chunk before it is killed.
+local DEFAULT_INSTRUCTION_LIMIT = 1e7
+
+---@class rocked.Permissions
+---@field execute? fun(command: string): boolean # allow running `command`; default: allow
+
+---@class rocked.SandboxOpts
+---@field packagePath string? # package.path for require() inside the sandbox
+---@field cpath string?
+---@field cwd string? # working directory for fs.execute
+---@field libDir string? # what luarocks.path.lib_dir() resolves to
+---@field instructionLimit number?
+---@field permissions rocked.Permissions? # per-action gates; unlisted actions default to allow
+
+-- Whitelist of globals exposed to the sandbox. Rockspecs are declarative
+-- data, so no I/O, process, debug, or FFI access; everything else in the
+-- freshly-opened guest state is stripped. The luarocks.* API is provided as
+-- polyfills via package.preload (see rocked.luarocks).
+local WHITELISTED_LIBS = { "string", "table", "math", "package" }
+local WHITELISTED_FUNCS = {
+	"assert", "error", "getmetatable", "ipairs", "next", "pairs",
+	"pcall", "rawequal", "rawget", "rawset", "require", "select",
+	"setmetatable", "tonumber", "tostring", "type", "unpack", "xpcall",
 }
 
----@overload fun(spec: string): false, string?
----@overload fun(spec: string): true, rocked.raw.Output
-function rocked.raw(spec)
-	local unsafeChunk, err = loadstring(spec, "t")
-	if not unsafeChunk then
-		return false, err
+--- Convert a guest value (a lua.Table proxy or primitive) into plain host
+--- data, recursively. Guest functions are rejected: rockspecs and backends
+--- hand data across the boundary, not executable values.
+---@param v any
+---@return any
+local function materialize(v)
+	if type(v) == "function" then
+		error("rockspec contains executable values (functions); only data is supported", 0)
 	end
-
-	local oh, om, oc = debug.gethook()
-	debug.sethook(function() error("Rockspec took too long to run") end, "", 1e7)
-
-	local chunkEnv = setmetatable({}, { __index = baseChunkEnv })
-	local chunk = setfenv(unsafeChunk, chunkEnv)
-
-	-- Debug hooks aren't guaranteed to run with JIT on, also it's safer this way
-	jit.off(chunk)
-
-	local ok, out = pcall(chunk)
-
-	debug.sethook(oh, om, oc)
-
-	if not ok then
-		return false, out
+	if type(v) ~= "table" then return v end
+	local mt = getmetatable(v)
+	if not (mt and rawget(mt, "_is_lua_value") == true) then return v end
+	local out = {}
+	for k, val in v:pairs() do
+		out[materialize(k)] = materialize(val)
 	end
-
-	return true, chunkEnv
+	return out
 end
 
-local validRockTypes = {
-	["builtin"] = true,
-	["module"]  = true,
-	["make"]    = true,
-	["cmake"]   = true,
-	["none"]    = true,
-	["command"] = true,
+--- Run `source` inside a fresh isolated lua-sys guest state: a whitelisted
+--- global surface, an instruction limit (which also keeps the guest on the
+--- interpreter so the count hook fires), and luarocks.* polyfills.
+---
+--- The host callback `fn(state, g)` does the actual work; its first two
+--- results become the return values, and any error it raises becomes
+--- `(false, err)`.
+---@param opts rocked.SandboxOpts?
+---@param fn fun(state: lua.State, g: lua.Table): boolean|nil, string?
+---@return boolean|nil ok
+---@return string? err
+local function sandbox(opts, fn)
+	opts = opts or {}
+	local state = lua.new()
+	local g = state:globals()
+
+	local allowed = {}
+	for _, name in ipairs(WHITELISTED_LIBS) do allowed[name] = true end
+	for _, name in ipairs(WHITELISTED_FUNCS) do allowed[name] = true end
+	-- Collect first: deleting keys while iterating a guest table is unsafe.
+	local toRemove = {}
+	for name in g:pairs() do
+		if type(name) == "string" and not allowed[name] then
+			toRemove[#toRemove + 1] = name
+		end
+	end
+	for _, name in ipairs(toRemove) do g:set(name, nil) end
+
+	-- require() only resolves preloads and the caller-provided paths.
+	g:get("package"):set("path", opts.packagePath or "")
+	g:get("package"):set("cpath", opts.cpath or "")
+
+	-- Instruction budget; setHook also disables the guest JIT while installed.
+	state:setHook(function()
+		error("Rockspec took too long to run")
+	end, "count", opts.instructionLimit or DEFAULT_INSTRUCTION_LIMIT)
+
+	luarocks.setup(state, opts)
+
+	local ok, a, b = pcall(fn, state, g)
+	state:close()
+	if not ok then return false, a end
+	return a, b
+end
+
+-- ─── Rockspec parsing ─────────────────────────────────────────────────────
+
+---@type string[]
+local ROCKSPEC_FIELDS = {
+	"package", "version", "rockspec_format", "description", "source",
+	"dependencies", "build_dependencies", "test_dependencies",
+	"external_dependencies", "build", "test", "variables",
 }
 
 ---@overload fun(spec: string): false, string?
 ---@overload fun(spec: string): true, rocked.raw.Output
-function rocked.parse(spec)
-	local ok, chunkEnv = rocked.raw(spec)
-	if not ok then
-		return false, chunkEnv
-	end ---@cast chunkEnv rocked.raw.Output
-
-	local build = chunkEnv.build
-	if not build then
-		-- Rockspec format 3.0+ makes the build table optional: it defaults to a
-		-- builtin build (modules are autodetected from the source tree). Older
-		-- formats require an explicit build table.
-		local format = chunkEnv.rockspec_format
-		local major = format and tonumber(tostring(format):match("^(%d+)"))
-		if major and major >= 3 then
-			build = { type = "builtin" }
-			chunkEnv.build = build
-		else
-			return false, "No build section found"
+---@param spec string
+---@param permissions rocked.Permissions? # per-action gates for sandbox side effects
+function rocked.parse(spec, permissions)
+	return sandbox({ permissions = permissions }, function(state, g)
+		state:eval(spec, "t")
+		local out = {}
+		for _, field in ipairs(ROCKSPEC_FIELDS) do
+			local v = g:get(field)
+			if v ~= nil then out[field] = materialize(v) end
 		end
-	end
 
-	build.type = build.type or "builtin"
+		local build = out.build
+		if not build then
+			-- Rockspec format 3.0+ makes the build table optional: it defaults
+			-- to a builtin build (modules are autodetected from the source
+			-- tree). Older formats require an explicit build table.
+			local format = out.rockspec_format
+			local major = format and tonumber(tostring(format):match("^(%d+)"))
+			if major and major >= 3 then
+				build = { type = "builtin" }
+				out.build = build
+			else
+				return false, "No build section found"
+			end
+		end
 
-	if not validRockTypes[build.type] then
-		return false, "Invalid build type: " .. tostring(build.type)
-	end
-
-	return true, chunkEnv
+		build.type = build.type or "builtin"
+		return true, out
+	end)
 end
 
 --- Parses a single rockspec dependency string into its package name and
@@ -139,6 +201,43 @@ function rocked.parseDependency(depStr)
 	local name, rest = depStr:match("^([%w%.%-_]+)%s*(.*)")
 	if not name then return nil, nil end
 	return name, (rest ~= "" and rest or nil)
+end
+
+-- ─── Custom build backends ────────────────────────────────────────────────
+
+--- Run a custom build backend (e.g. "rust-mlua") inside the sandbox.
+---
+--- Mirrors LuaRocks' build dispatch: the backend is a module named
+--- `luarocks.build.<type>` provided by a rock named `luarocks-build-<type>`
+--- (installed via build_dependencies), and is invoked as
+--- `driver.run(rockspec, no_install)`.
+---@param buildType string
+---@param rockspec table # Host-side rockspec data (coerced into the guest)
+---@param opts rocked.SandboxOpts?
+---@return boolean ok
+---@return string? err
+function rocked.runBackend(buildType, rockspec, opts)
+	return sandbox(opts, function(state, g)
+		g:set("_rocked_build_type", buildType)
+		g:set("_rocked_rockspec", state:table(rockspec))
+		state:eval([[
+			-- rockspec:type() is a method on the (guest-coerced) rockspec. It
+			-- must live guest-side: a host callback would receive the table as
+			-- its self argument, which the bridge cannot pass.
+			_rocked_rockspec.type = function() return "rockspec" end
+			local ok, err = xpcall(function()
+				local driver = require("luarocks.build." .. _rocked_build_type)
+				local result, buildErr = driver.run(_rocked_rockspec, false)
+				if result ~= true then
+					error(tostring(buildErr or "backend returned false"), 0)
+				end
+			end, function(e) return tostring(e) end)
+			_rocked_ok = ok
+			_rocked_err = err
+		]])
+		if g:get("_rocked_ok") then return true end
+		return false, g:get("_rocked_err")
+	end)
 end
 
 return rocked

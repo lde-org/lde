@@ -1,6 +1,13 @@
 local test = require("lde-test")
 local rocked = require("rocked")
 
+local fs = require("fs")
+local path = require("path")
+
+-- Unique tmp base without pulling in the env package (rocked keeps its dep
+-- surface small): os.tmpname() returns a path inside the system temp dir.
+local tmpBase = path.dirname(os.tmpname())
+
 local BUSTED_ROCKSPEC = [==[
 local package_name = "busted"
 local package_version = "2.3.0"
@@ -96,10 +103,8 @@ build = {
     ['busted.languages.is']                   = 'busted/languages/is.lua',
     ['busted.languages.it']                   = 'busted/languages/it.lua',
     ['busted.languages.ja']                   = 'busted/languages/ja.lua',
-    ['busted.languages.ko']                   = 'busted/languages/ko.lua',
     ['busted.languages.nl']                   = 'busted/languages/nl.lua',
     ['busted.languages.pt-BR']                = 'busted/languages/pt-BR.lua',
-    ['busted.languages.ro']                   = 'busted/languages/ro.lua',
     ['busted.languages.ru']                   = 'busted/languages/ru.lua',
     ['busted.languages.th']                   = 'busted/languages/th.lua',
     ['busted.languages.ua']                   = 'busted/languages/ua.lua',
@@ -118,6 +123,9 @@ test.it("should be able to parse busted's rockspec", function()
 	if not ok then
 		error("Failed to parse rockspec: " .. parsed)
 	end
+	test.equal(parsed.package, "busted")
+	test.equal(parsed.build.type, "builtin")
+	test.equal(parsed.dependencies[2], "lua_cliargs >= 3.0")
 end)
 
 test.it("should be in a separate environment", function()
@@ -131,6 +139,43 @@ test.it("should be in a separate environment", function()
 	end ---@cast parsed string
 
 	test.notEqual(parsed:find("attempt to call global 'print'"), nil)
+end)
+
+test.it("sandbox exposes only whitelisted globals", function()
+	local ok, parsed = rocked.parse([[
+		package = "globals-probe"
+		version = "1.0-1"
+		source = { url = "https://example.com" }
+		build = {
+			type = "builtin",
+			modules = {
+				["probe.os"]      = tostring(os ~= nil),
+				["probe.io"]      = tostring(io ~= nil),
+				["probe.debug"]   = tostring(debug ~= nil),
+				["probe.print"]   = tostring(print ~= nil),
+				["probe.load"]    = tostring(load ~= nil),
+				["probe.jit"]     = tostring(jit ~= nil),
+				["probe.math"]    = tostring(math ~= nil),
+				["probe.string"]  = tostring(string ~= nil),
+				["probe.pairs"]   = tostring(pairs ~= nil),
+				["probe.require"] = tostring(require ~= nil),
+			},
+		}
+	]])
+	if not ok then
+		error("probe parse failed: " .. tostring(parsed))
+	end
+	local m = parsed.build.modules
+	test.equal(m["probe.os"], "false")
+	test.equal(m["probe.io"], "false")
+	test.equal(m["probe.debug"], "false")
+	test.equal(m["probe.print"], "false")
+	test.equal(m["probe.load"], "false")
+	test.equal(m["probe.jit"], "false")
+	test.equal(m["probe.math"], "true")
+	test.equal(m["probe.string"], "true")
+	test.equal(m["probe.pairs"], "true")
+	test.equal(m["probe.require"], "true")
 end)
 
 test.it("shouldn't run for too long", function()
@@ -176,6 +221,10 @@ test.it("parseDependency handles dashed names and exact-version deps", function(
 	test.equal(version, "2.1.0.6")
 end)
 
+--
+-- rockspec format 3.0
+--
+
 test.it("parse defaults missing build to builtin for rockspec format 3.0+", function()
 	local ok, parsed = rocked.parse([[
 rockspec_format = "3.0"
@@ -200,4 +249,132 @@ source = { url = "https://example.com" }
 		error("Expected old-format rockspec without build to fail")
 	end ---@cast parsed string
 	test.includes(parsed, "No build section found")
+end)
+
+--
+-- custom build backends
+--
+
+local FAKE_BACKEND = [==[
+local fs = require("luarocks.fs")
+local dir = require("luarocks.dir")
+local path = require("luarocks.path")
+local cfg = require("luarocks.core.cfg")
+
+local backend = {}
+function backend.run(rockspec, no_install)
+	assert(rockspec:type() == "rockspec", "rockspec:type()")
+	assert(rockspec.name == "fake-rock", "rockspec.name")
+	assert(cfg.lua_version == "5.1", "cfg.lua_version")
+	assert(cfg.cache.luajit_version ~= nil, "cfg.cache.luajit_version")
+	assert(cfg.is_platform("windows") == (cfg.external_lib_extension == "dll"), "cfg.is_platform")
+	assert(fs.exists(rockspec.variables.LUA_INCDIR), "fs.exists")
+	assert(path.lib_dir(rockspec.name, rockspec.version) == rockspec.variables.LUA_INCDIR, "path.lib_dir")
+	local joined = dir.path("a", "b")
+	assert(joined == "a/b" or joined:match("a[/\\]b"), "dir.path")
+	return true
+end
+return backend
+]==]
+
+test.it("runBackend executes a custom backend in the sandbox", function()
+	local base = path.join(tmpBase, "rocked-backend")
+	fs.rmdir(base)
+	fs.mkdirAll(path.join(base, "luarocks", "build"))
+	fs.write(path.join(base, "luarocks", "build", "fake.lua"), FAKE_BACKEND)
+	fs.write(path.join(base, "marker"), "x")
+
+	local ok, err = rocked.runBackend("fake", {
+		name = "fake-rock",
+		version = "1.0-1",
+		build = { type = "fake", modules = { "fake_mod" } },
+		variables = { LUA_INCDIR = base },
+	}, {
+		packagePath = path.join(base, "?.lua") .. ";" .. path.join(base, "?", "init.lua"),
+		libDir = base,
+	})
+	test.truthy(ok, err)
+end)
+
+test.it("runBackend surfaces backend errors", function()
+	local base = path.join(tmpBase, "rocked-backend-fail")
+	fs.rmdir(base)
+	fs.mkdirAll(path.join(base, "luarocks", "build"))
+	fs.write(path.join(base, "luarocks", "build", "failing.lua"), [[
+		local backend = {}
+		function backend.run(rockspec, no_install)
+			error("boom")
+		end
+		return backend
+	]])
+
+	local ok, err = rocked.runBackend("failing", {
+		name = "x",
+		build = { type = "failing" },
+	}, {
+		packagePath = path.join(base, "?.lua") .. ";" .. path.join(base, "?", "init.lua"),
+	})
+	test.falsy(ok)
+	test.includes(err, "boom")
+end)
+
+test.it("runBackend rejects a missing backend module", function()
+	local ok, err = rocked.runBackend("does-not-exist", {
+		name = "x",
+		build = { type = "does-not-exist" },
+	}, {
+		packagePath = path.join(tmpBase, "rocked-nowhere", "?.lua"),
+	})
+	test.falsy(ok)
+	test.truthy(err and err:find("luarocks.build.does-not-exist", 1, true))
+end)
+
+test.it("runBackend honors permissions callbacks", function()
+	local base = path.join(tmpBase, "rocked-perms")
+	fs.rmdir(base)
+	fs.mkdirAll(path.join(base, "luarocks", "build"))
+	fs.write(path.join(base, "luarocks", "build", "perm.lua"), [[
+		local fs = require("luarocks.fs")
+		local backend = {}
+		function backend.run(rockspec, no_install)
+			return fs.execute("echo hi > " .. rockspec.variables.OUT)
+		end
+		return backend
+	]])
+
+	local function rockspec()
+		return {
+			name = "x",
+			version = "1.0-1",
+			build = { type = "perm" },
+			variables = { OUT = path.join(base, "out.txt") },
+		}
+	end
+	local opts = {
+		packagePath = path.join(base, "?.lua") .. ";" .. path.join(base, "?", "init.lua"),
+	}
+
+	-- Denied: the callback is consulted and the command never runs.
+	local consulted = false
+	local ok, err = rocked.runBackend("perm", rockspec(), {
+		permissions = {
+			execute = function(cmd)
+				consulted = true
+				return false
+			end,
+		},
+		packagePath = opts.packagePath,
+	})
+	test.falsy(ok)
+	test.truthy(consulted, "execute permission callback should be consulted")
+	test.equal(fs.exists(path.join(base, "out.txt")), false)
+
+	-- Allowed: default (no permissions table) and explicit allow both run.
+	local ok2, err2 = rocked.runBackend("perm", rockspec(), opts)
+	test.truthy(ok2, err2)
+	local ok3, err3 = rocked.runBackend("perm", rockspec(), {
+		permissions = { execute = function() return true end },
+		packagePath = opts.packagePath,
+	})
+	test.truthy(ok3, err3)
 end)

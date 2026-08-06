@@ -523,6 +523,14 @@ handlers.luarocks = {
 					n.deps[name] = { luarocks = name, version = version }
 				end
 			end
+			-- Build backends (e.g. luarocks-build-rust-mlua) install alongside
+			-- runtime deps so their modules resolve at build time.
+			for _, depStr in ipairs(spec.build_dependencies or {}) do
+				local name, version = rocked.parseDependency(depStr)
+				if name and name ~= "lua" and name ~= "luajit" then
+					n.deps[name] = { luarocks = name, version = version }
+				end
+			end
 		elseif n.srcUrl then
 			-- No published rockspec: read deps from the extracted content.
 			local pkg = open(n)
@@ -714,6 +722,12 @@ local function collectDependencies(dependencies, ctx)
 			ctx.stack[alias] = { pkg = pkg, lock = withConfigFlags(lockEntry, node.depInfo) }
 		end
 	end
+
+	-- Discovery order is a topological order (parents expand before their
+	-- children), so the build pass can depend on it: build backends like
+	-- luarocks-build-rust-mlua must land in target/ before the rock that
+	-- requires them builds.
+	ctx.order = order
 end
 
 ---@type table<string, lde.Package.Config.FeatureFlag>
@@ -869,7 +883,16 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 	local enabledOptional = resolveEnabledOptional(package, features)
 
 	local buildOk, buildErr = pcall(function()
-		for alias, entry in pairs(ctx.stack) do
+		-- Build in reverse discovery order: children (a rock's deps, including
+		-- build backends like luarocks-build-rust-mlua) are discovered after
+		-- their parent, so a reverse iteration builds every dependency before
+		-- the rock that requires it.
+		local order = ctx.order or {}
+		for i = #order, 1, -1 do
+			local node = order[i]
+			local alias = node.alias
+			local entry = ctx.stack[alias]
+			if not entry then goto continue end
 			local depInfo = dependencies[alias]
 
 			-- Optional, skip..

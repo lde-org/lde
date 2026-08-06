@@ -48,6 +48,57 @@ local function normalizeNativeModule(src, buildTable)
 	return src
 end
 
+--- LuaRocks' builtin backend autodetects modules when a rockspec (format
+--- 3.0+) declares none: every .lua/.c file under the source root is installed
+--- as a module named by its path, with a leading src/, lua/ or lib/ stripped
+--- (e.g. src/luarocks/build/x.lua => luarocks.build.x). Rocks like
+--- luarocks-build-rust-mlua ship their backend as a bare source tree with no
+--- explicit build.modules.
+---@param pkgDir string
+---@param packageName string
+---@return table<string, string> luaModules
+---@return table<string, lde.rockspec.NativeModuleSpec> nativeModules
+local function autodetectModules(pkgDir, packageName)
+	local luaModules, nativeModules = {}, {}
+	local base = pkgDir
+	for _, prefix in ipairs({ "src", "lua", "lib" }) do
+		if fs.isdir(path.join(pkgDir, prefix)) then
+			base = path.join(pkgDir, prefix)
+			break
+		end
+	end
+
+	-- Module paths are stored relative to the package root (the builtin branch
+	-- joins them with pkgDir), so when scanning a src/ subdir the relative
+	-- path must be prefixed back up (src/luarocks/build/x.lua, not
+	-- luarocks/build/x.lua).
+	local basePrefix = base ~= pkgDir
+		and (path.relative(pkgDir, base):gsub("\\", "/") .. "/")
+		or ""
+
+	for _, rel in ipairs(fs.scan(base, "**")) do
+		local first = rel:match("^([^/\\]+)")
+		if first == "target" or first == ".git" or first == "build.lde" or first == "install.lde" then
+			goto continue
+		end
+		local ext = path.extension(rel)
+		if ext == "lua" or ext == "c" then
+			local modName = rel:gsub("\\", "/"):gsub("%." .. ext .. "$", ""):gsub("/", ".")
+			-- init.lua / <dir>/init.lua map to the package / dir name
+			modName = modName:gsub("%.init$", "")
+			if modName == "" then modName = packageName end
+			local srcPath = basePrefix .. rel
+			if ext == "lua" then
+				luaModules[modName] = srcPath
+			else
+				nativeModules[modName] = { sources = { srcPath } }
+			end
+		end
+		::continue::
+	end
+	return luaModules, nativeModules
+end
+
 --- Pure: builds the compiler argument list for a native module from its
 --- (normalized) spec. Extracted so the flag construction can be unit-tested
 --- without a toolchain.
@@ -192,6 +243,13 @@ local function openRockspec(dir, rockspecPath)
 	local nativeModules = {}
 	local binScripts, installLuaFiles = {}, {}
 
+	-- Only builtin/module builds interpret build.modules as lua/native module
+	-- sources; other backends (make, cmake, custom like rust-mlua) consume the
+	-- table themselves (rust-mlua uses an array of crate names), so never warn
+	-- about entries we don't understand.
+	local buildType = spec.build and spec.build.type or "builtin"
+	local interpretsModules = buildType == "builtin" or buildType == "module"
+
 	if spec.build then
 		for modname, src in pairs(spec.build.modules or {}) do
 			if type(src) == "string" then
@@ -199,7 +257,7 @@ local function openRockspec(dir, rockspecPath)
 					modules[modname] = src
 				elseif path.extension(src) == "c" then
 					nativeModules[modname] = { sources = { src } }
-				elseif lde.verbose then
+				elseif lde.verbose and interpretsModules then
 					io.stderr:write("warning: " ..
 						(spec.package or "?") ..
 						": unrecognised source type for module '" .. modname .. "': " .. src .. "\n")
@@ -208,7 +266,7 @@ local function openRockspec(dir, rockspecPath)
 				nativeModules[modname] = normalizeNativeModule(src, spec.build)
 			elseif type(src) == "table" and src[1] then
 				nativeModules[modname] = normalizeNativeModule({ sources = src }, spec.build)
-			elseif type(src) == "table" and lde.verbose then
+			elseif type(src) == "table" and lde.verbose and interpretsModules then
 				io.stderr:write("warning: " ..
 					(spec.package or "?") .. ": module '" .. modname .. "' has no sources field, skipping\n")
 			end
@@ -261,7 +319,14 @@ local function openRockspec(dir, rockspecPath)
 	local bk, bv = next(binScripts)
 	if bk then binEntry = type(bk) == "number" and path.basename(bv) or bk end
 
-	local buildType = spec.build and spec.build.type or "builtin"
+	-- LuaRocks' builtin backend autodetects modules when a rockspec (format
+	-- 3.0+) declares none; used by rocks like luarocks-build-rust-mlua that
+	-- ship their backend as a bare source tree.
+	if next(modules) == nil and next(nativeModules) == nil
+		and (buildType == "builtin" or buildType == "module") then
+		local autoLua, autoNative = autodetectModules(dir, spec.package or "")
+		modules, nativeModules = autoLua, autoNative
+	end
 
 	-- Include the lde runtime version in the stamp so build outputs are
 	-- rebuilt when the binary is upgraded (build logic may have changed, e.g.
@@ -577,13 +642,50 @@ local function openRockspec(dir, rockspecPath)
 			fs.write(stampFile, buildStamp)
 			return true
 		else
-			return nil, "unsupported build type: " .. buildType
+			-- Custom build backend (e.g. rust-mlua): LuaRocks loads a module
+			-- named luarocks.build.<type> from a rock called luarocks-build-<type>
+			-- (installed via build_dependencies) and calls driver.run(). Run it
+			-- in the isolated rockspec sandbox with luarocks.* polyfills; the
+			-- backend installs its output into modulesDir itself.
+			-- Backends address files relative to their source dir, so chdir
+			-- there like build.lua scripts do (and restore on every path).
+			local prevDir = env.cwd()
+			env.chdir(dir)
+			local r1, r2, r3 = pcall(rocked.runBackend, buildType, {
+				name = spec.package,
+				version = spec.version,
+				build = spec.build,
+				variables = stdVars,
+			}, {
+				cwd = dir,
+				libDir = modulesDir,
+				packagePath = path.join(modulesDir, "?.lua") .. ";" .. path.join(modulesDir, "?", "init.lua"),
+				cpath = path.join(modulesDir, "?.so") .. ";" .. path.join(modulesDir, "?.dll") .. ";" .. path.join(modulesDir, "?.dylib"),
+			})
+			env.chdir(prevDir)
+			if not r1 then
+				return nil, "Build error: " .. tostring(r2)
+			end
+			if not r2 then
+				return nil, "Build error: " .. (r3 or "unknown error")
+			end
+
+			fs.write(stampFile, buildStamp)
+			return true
 		end -- builtin
 	end
 
 	pkg.readConfig = function()
 		local deps = {}
 		for _, depStr in ipairs(spec.dependencies or {}) do
+			local name, version = rocked.parseDependency(depStr)
+			if name and name ~= "lua" and name ~= "luajit" then
+				deps[name] = { luarocks = name, version = version }
+			end
+		end
+		-- Build backends (e.g. luarocks-build-rust-mlua) install alongside
+		-- runtime deps so their modules resolve at build time.
+		for _, depStr in ipairs(spec.build_dependencies or {}) do
 			local name, version = rocked.parseDependency(depStr)
 			if name and name ~= "lua" and name ~= "luajit" then
 				deps[name] = { luarocks = name, version = version }
