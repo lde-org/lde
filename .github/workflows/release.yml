@@ -38,6 +38,9 @@ jobs:
 
     runs-on: ${{ matrix.os }}
 
+    env:
+      LDE_RELEASE: 1
+
     steps:
       - uses: actions/checkout@v6
 
@@ -131,6 +134,7 @@ jobs:
           docker rm termux-build
 
           docker run --rm --privileged --platform linux/arm64 \
+            -e LDE_RELEASE=1 \
             -v ${{ github.workspace }}:/workspace \
             -w /workspace \
             termux-android:latest \
