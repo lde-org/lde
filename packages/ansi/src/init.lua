@@ -118,6 +118,28 @@ local colors = {
 	bg_gray = "\27[100m"
 }
 
+-- Colors are only emitted when stdout is a terminal that supports them.
+-- Windows consoles don't set TERM; their VT mode was enabled above.
+local colorEnabled = isTTY
+if colorEnabled and ffi.os ~= "Windows" then
+	local term = os.getenv("TERM")
+	colorEnabled = term ~= nil and term ~= "dumb"
+end
+
+local noColor = os.getenv("NO_COLOR")
+if noColor and noColor ~= "0" then
+	colorEnabled = false
+end
+
+local forceColor = os.getenv("CLICOLOR_FORCE")
+if forceColor and forceColor ~= "0" then
+	colorEnabled = true
+end
+
+if not colorEnabled then
+	for k in pairs(colors) do colors[k] = "" end
+end
+
 ---@param name ansi.Color
 ---@param s string
 function ansi.colorize(name, s)
@@ -140,6 +162,7 @@ end
 local ESC = "\27["
 
 function ansi.clearLine()
+	if not isTTY then return end
 	io.write(ESC .. "2K\r")
 	io.flush()
 end
