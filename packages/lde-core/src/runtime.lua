@@ -293,6 +293,35 @@ local function executeSource(source, chunkName, opts)
 	return ok, a, b, c, d, e, f
 end
 
+--- Read a script file, compiling Teal/Moonscript sources to Lua when needed.
+--- Shared by executeFile and the --hot/--watch driver so both re-read the
+--- entry point the same way on every run.
+---@param filePath string
+---@return string? source
+---@return string? err
+local function readCompiledFile(filePath)
+	local source, err = fs.read(filePath)
+	if not source then
+		return nil, "Failed to read " .. filePath .. ": " .. (err or "unknown error")
+	end
+	if filePath:match("%.tl$") and not filePath:match("%.d%.tl$") then
+		-- Teal entry point: compile to Lua before handing it to the guest state.
+		local code, cerr = teal.compileFile(filePath)
+		if not code then
+			return nil, "Failed to compile " .. filePath .. ":\n" .. (cerr or "unknown error")
+		end
+		return code, nil
+	elseif filePath:match("%.moon$") then
+		-- Moonscript entry point: compile to Lua before handing it to the guest state.
+		local code, cerr = moonscript.compileFile(filePath)
+		if not code then
+			return nil, "Failed to compile " .. filePath .. ":\n" .. (cerr or "unknown error")
+		end
+		return code, nil
+	end
+	return source, nil
+end
+
 ---@param scriptPath string
 ---@param opts lde.ExecuteOptions?
 local function executeFile(scriptPath, opts)
@@ -302,25 +331,8 @@ local function executeFile(scriptPath, opts)
 	if opts and opts.cwd and not path.isAbsolute(scriptPath) then
 		resolvedPath = path.join(opts.cwd, scriptPath)
 	end
-	local source, err = fs.read(resolvedPath)
-	if not source then
-		return false, "Failed to read " .. resolvedPath .. ": " .. (err or "unknown error")
-	end
-	if resolvedPath:match("%.tl$") and not resolvedPath:match("%.d%.tl$") then
-		-- Teal entry point: compile to Lua before handing it to the guest state.
-		local code, cerr = teal.compileFile(resolvedPath)
-		if not code then
-			return false, "Failed to compile " .. resolvedPath .. ":\n" .. (cerr or "unknown error")
-		end
-		source = code
-	elseif resolvedPath:match("%.moon$") then
-		-- Moonscript entry point: compile to Lua before handing it to the guest state.
-		local code, cerr = moonscript.compileFile(resolvedPath)
-		if not code then
-			return false, "Failed to compile " .. resolvedPath .. ":\n" .. (cerr or "unknown error")
-		end
-		source = code
-	end
+	local source, err = readCompiledFile(resolvedPath)
+	if not source then return false, err end
 	return executeSource(source, resolvedPath, opts)
 end
 
@@ -431,8 +443,9 @@ local function executeLuaCLI(args, opts)
 end
 
 return {
-	createState   = createState,
-	executeFile   = executeFile,
-	executeString = executeString,
-	executeLuaCLI = executeLuaCLI,
+	createState     = createState,
+	executeFile     = executeFile,
+	executeString   = executeString,
+	executeLuaCLI   = executeLuaCLI,
+	readCompiledFile = readCompiledFile,
 }

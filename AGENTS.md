@@ -67,6 +67,9 @@ Commit `lde.lock`. Never commit `target/`.
 
 ```sh
 lde run             # run the package entry point
+lde run --watch     # re-run the entry point on file changes (fresh state each run)
+lde run --hot       # hot-reload: patch require() caches and re-run in the same state
+lde ./file.lua --hot  # hot-reload a loose script outside a package
 lde test             # run all *.test.lua files
 lde test --coverage  # run tests and print a per-file line coverage report
 lde test --watch     # re-run tests on file changes
