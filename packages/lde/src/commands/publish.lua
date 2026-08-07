@@ -19,6 +19,26 @@ local function registryRawBase()
 	return (REGISTRY_REPO:gsub("%.git$", ""):gsub("^https://github%.com/", "https://raw.githubusercontent.com/"))
 end
 
+--- Converts an SSH git URL to its HTTPS form so the registry can clone it
+--- (e.g. git@github.com:user/repo.git -> https://github.com/user/repo.git).
+--- Passes URLs that aren't SSH through unchanged.
+---@param url string
+---@return string
+local function toHttpsUrl(url)
+	-- scp-like syntax: git@host:user/repo.git
+	local host, path = url:match("^git@([^:]+):(.+)$")
+	if host and path then
+		return "https://" .. host .. "/" .. path
+	end
+	-- ssh:// protocol: ssh://git@host/user/repo.git
+	local protoHost, protoPath = url:match("^ssh://git@([^/]+)/(.+)$")
+	if protoHost and protoPath then
+		return "https://" .. protoHost .. "/" .. protoPath
+	end
+
+	return url
+end
+
 --- Fetches the live registry portfile for a package, if one exists.
 ---@param name string
 ---@return lde.Portfile? portfile # nil when the package has never been published
@@ -109,7 +129,7 @@ local function publish(args)
 	json.addField(portfile, "name", config.name)
 	json.addField(portfile, "description", config.description)
 	json.addField(portfile, "authors", config.authors)
-	json.addField(portfile, "git", gitUrl)
+	json.addField(portfile, "git", toHttpsUrl(gitUrl))
 	json.addField(portfile, "branch", branch)
 	json.addField(portfile, "versions", versions)
 
