@@ -417,8 +417,6 @@ test.it("runBackend exercises the extended polyfill surface", function()
 			assert(type(path.install_dir(rockspec.name, rockspec.version)) == "string", "install_dir")
 			assert(type(cfg.lib_extension) == "string", "lib_extension")
 
-			util.printout("surface ok")
-			util.printerr("surface stderr ok")
 			return true
 		end
 		return backend

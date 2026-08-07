@@ -145,7 +145,8 @@ local function resolveSource(pkgDir, msgFile, knownFile)
 end
 
 -- Print the gutter + highlighted code window for a failing line, with a caret
--- marking where the error occurred.
+-- placed directly under the failing line. The caret line keeps a blank gutter
+-- (a gap where the line number would be) so the arrows have vertical room.
 ---@param src string
 ---@param line number
 ---@param msg string?
@@ -160,19 +161,27 @@ local function printSnippet(src, line, msg)
 	local bar       = ansi.colorize("gray", "│")
 	local pad       = string.rep(" ", width)
 
-	print(indent .. pad .. bar)
+	-- Code lines with the gutter prefix: indent + right-aligned number +
+	-- separator + bar + separator. Every other line (bars, caret) reuses the
+	-- same prefix so the gutter stays horizontally aligned.
+	local prefix = indent .. pad .. " " .. bar .. " "
+	local gutter = {}
 	for ln = startLine, endLine do
 		local num = string.rep(" ", width - #tostring(ln)) .. tostring(ln)
 		local code = highlight(expandTabs(lines[ln]))
-		print(indent .. ansi.colorize("gray", num) .. " " .. bar .. " " .. code)
+		gutter[ln] = indent .. ansi.colorize("gray", num) .. " " .. bar .. " " .. code
 	end
 
 	local failing = expandTabs(lines[line])
 	local col, len = findCaretCol(failing, msg)
 	local caret = ansi.format("{red}{bold}%s{reset}", string.rep("^", len))
-	print(indent .. pad .. " " .. bar .. " " .. string.rep(" ", col - 1) .. caret)
 
-	print(indent .. pad .. bar)
+	print(indent .. pad .. " " .. bar)
+	for ln = startLine, line - 1 do print(gutter[ln]) end
+	print(gutter[line])
+	print(prefix .. string.rep(" ", col - 1) .. caret)
+	for ln = line + 1, endLine do print(gutter[ln]) end
+	print(indent .. pad .. " " .. bar)
 end
 
 -- Print a failure message, followed by a source snippet when the failing
