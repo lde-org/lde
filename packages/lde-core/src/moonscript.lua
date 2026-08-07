@@ -1,8 +1,13 @@
+local M = {}
+package.loaded[(...)] = M
+
 local fs = require("fs")
 local path = require("path")
 local lua = require("lua-sys")
 
-local state, chunk ---@type any?, any?
+local lde = require("lde-core")
+local ldeUtil = require("lde-core.util")
+local run = require("lde-core.package.run")
 
 -- Runs inside the compiler guest: the moonscript module stays loaded in that
 -- state across compiles. to_lua returns the compiled Lua or a formatted error.
@@ -16,24 +21,25 @@ local DRIVER = [[
 	return { code = code }
 ]]
 
----@return any # the compiler guest state
+local state, chunk ---@type lua.State?, lua.Chunk?
+
+---@return lua.State # the compiler guest state
 local function ensureMoon()
 	if state then return state end
-	local lde = require("lde-core")
-	local util = require("lde-core.util")
 
 	for attempt = 1, 2 do
-		local pkg, _, err = util.openLuarocksPackage("moonscript")
+		local pkg, _, err = ldeUtil.openLuarocksPackage("moonscript")
 		if not pkg then
 			error("Failed to resolve the Moonscript compiler (luarocks:moonscript): " .. (err or "unknown error"))
 		end
+
 		pkg:build()
 		pkg:installDependencies()
 
 		-- Reuse the package path setup shared by the runner and build scripts.
-		local luaPath, luaCPath = require("lde-core.package.run").getLuaPaths(pkg)
+		local luaPath, luaCPath = run.getLuaPaths(pkg)
 		local st = lua.new()
-		local g = st:globals()
+		local g = st:globals() --[[@as { package: { path: string?, cpath: string? } }]]
 		g.package.path = luaPath
 		g.package.cpath = luaCPath
 
@@ -47,13 +53,15 @@ local function ensureMoon()
 		if attempt == 2 then
 			error("The Moonscript compiler installed but failed to load")
 		end
-		local url = util.resolveLuarocksSource("moonscript")
+
+		local url = ldeUtil.resolveLuarocksSource("moonscript")
 		if url then
 			local archiveDir = lde.global.getArchiveDir(url)
 			fs.rmdir(archiveDir)
 			fs.delete(archiveDir .. ".archive")
 		end
 	end
+
 	error("The Moonscript compiler could not be loaded")
 end
 
@@ -115,8 +123,8 @@ local function compileDir(srcDir, outDir)
 	end
 end
 
-return {
-	compileFile = compileFile,
-	hasMoon = hasMoon,
-	compileDir = compileDir,
-}
+M.compileFile = compileFile
+M.hasMoon = hasMoon
+M.compileDir = compileDir
+
+return M

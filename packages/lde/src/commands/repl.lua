@@ -33,8 +33,7 @@ local function repl(_args)
 		for k, v in pairs(saved) do t[k] = v end
 	end
 
-	local savedLoaded  = clearNonBuiltins(package.loaded)
-	local savedPreload = clearNonBuiltins(package.preload)
+	local savedLoaded, savedPreload ---@type table, table
 
 	local pkg = lde.Package.open()
 	if pkg then
@@ -48,6 +47,11 @@ local function repl(_args)
 		local config = pkg:readConfig()
 		ansi.printf("{gray}Project: {green}%s {gray}(%s)", config.name or "unknown", pkg:getDir())
 	end
+
+	-- Build and install run before this so they can require lde's own modules;
+	-- only the interactive session gets a clean require cache.
+	savedLoaded  = clearNonBuiltins(package.loaded)
+	savedPreload = clearNonBuiltins(package.preload)
 
 	local buffer = ""
 

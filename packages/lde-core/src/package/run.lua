@@ -1,3 +1,6 @@
+local run = {}
+package.loaded[(...)] = run
+
 local fs = require("fs")
 local path = require("path")
 local ffi = require("ffi")
@@ -144,4 +147,8 @@ local function runString(package, code, args, vars, cwd)
 	return runStringWithLuaCLI(package, code, args, vars, engine, cwd)
 end
 
-return { runFile = runFile, runString = runString, getLuaPaths = getLuaPathsForPackage }
+run.runFile = runFile
+run.runString = runString
+run.getLuaPaths = getLuaPathsForPackage
+
+return run
