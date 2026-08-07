@@ -1,5 +1,4 @@
 local ffi = require("ffi")
-local env = require("env")
 
 local isTTY = true
 local now
@@ -124,19 +123,19 @@ local colors = {
 -- Windows consoles don't set TERM; their VT mode was enabled above.
 local colorEnabled = isTTY
 if colorEnabled and ffi.os ~= "Windows" then
-	local term = env.var("TERM")
+	local term = os.getenv("TERM")
 	colorEnabled = term ~= nil and term ~= "dumb"
 end
-if not colorEnabled and (env.var("GITHUB_ACTIONS") == "true" or env.var("GITLAB_CI") == "true") then
+if not colorEnabled and (os.getenv("GITHUB_ACTIONS") == "true" or os.getenv("GITLAB_CI") == "true") then
 	colorEnabled = true
 end
 
-local noColor = env.var("NO_COLOR")
+local noColor = os.getenv("NO_COLOR")
 if noColor and noColor ~= "0" then
 	colorEnabled = false
 end
 
-local forceColor = env.var("CLICOLOR_FORCE")
+local forceColor = os.getenv("CLICOLOR_FORCE")
 if forceColor and forceColor ~= "0" then
 	colorEnabled = true
 end
