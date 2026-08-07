@@ -1,12 +1,17 @@
 local test      = require("lde-test")
+local ansi      = require("ansi")
 local highlight = require("readline.highlight")
 
-local reset     = "\27[0m"
-local magenta   = "\27[35m" -- keyword
-local green     = "\27[32m" -- string
-local yellow    = "\27[33m" -- number
-local gray      = "\27[90m" -- comment
-local blue      = "\27[34m" -- operator
+-- The codes ansi would emit in this environment (empty when colors are
+-- disabled, e.g. piped output) — the tests must pass in both modes.
+local function code(name)
+	return ansi.colorize(name, ""):match("^\27%[[%d;]*m") or ""
+end
+local magenta = code("magenta") -- keyword
+local green   = code("green")   -- string
+local yellow  = code("yellow")  -- number
+local gray    = code("gray")    -- comment
+local blue    = code("blue")    -- operator
 
 local function strip(s)
 	return s:gsub("\27%[[%d;]*m", "")

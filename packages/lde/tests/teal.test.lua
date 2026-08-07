@@ -62,9 +62,15 @@ test.it("reports Teal syntax errors with file:line:col", function()
 	fs.write(path.join(tmpDir, "bad.tl"), "local = 3\n")
 
 	local script = path.join(tmpDir, "bad.tl") --[[@as string]]
-	local ok, out = ldecli({ script })
-	test.falsy(ok)
-	test.includes(out or "", "bad.tl:1:7")
+	-- The error lands on stdout inside a package and on stderr outside one
+	-- (depends on where the suite was launched from); check both streams.
+	local process = require("process")
+	local code, out, errOut = process.exec(assert(env.execPath()), { script })
+	test.falsy(code == 0)
+	local output = (out or "") .. (errOut or "")
+	if not output:find("bad.tl:1:7", 1, true) then
+		error("Expected compile error at bad.tl:1:7, got: " .. output, 2)
+	end
 
 	fs.rmdir(tmpDir)
 end)

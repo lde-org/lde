@@ -125,6 +125,10 @@ if colorEnabled and ffi.os ~= "Windows" then
 	local term = os.getenv("TERM")
 	colorEnabled = term ~= nil and term ~= "dumb"
 end
+if not colorEnabled and (os.getenv("GITHUB_ACTIONS") or os.getenv("GITLAB_CI")) then
+	-- CI log viewers (GitHub Actions, GitLab CI) render ANSI without a tty.
+	colorEnabled = true
+end
 
 local noColor = os.getenv("NO_COLOR")
 if noColor and noColor ~= "0" then
