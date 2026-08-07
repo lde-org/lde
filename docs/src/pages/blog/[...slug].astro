@@ -58,19 +58,19 @@ const tocHeadings = headings.filter((h) => h.depth <= 3);
 	{
 		tocHeadings.length > 0 && (
 			<aside
-				class="hidden xl:block fixed right-8 w-48"
-				style="top: calc(72px + 5rem);"
+				class="hidden xl:block fixed w-48"
+				style="top: calc(72px + 5rem); right: max(2rem, calc((100vw - 48rem) / 2 - 16rem));"
 			>
 				<p class="text-xs font-semibold uppercase tracking-wider text-black/40 dark:text-white/40 mb-3">
 					On this page
 				</p>
-				<ul class="border-l border-black/10 dark:border-white/10 space-y-1">
+				<ul class="border-l border-black/10 dark:border-white/10">
 					{tocHeadings.map((h) => (
-						<li>
+						<li class={h.depth === 2 ? "mt-2 first:mt-0" : undefined}>
 							<a
 								href={`#${h.slug}`}
 								data-toc-slug={h.slug}
-								class={`toc-link block text-sm text-black/40 dark:text-white/40 hover:text-black dark:hover:text-white transition-colors leading-snug border-l border-transparent -ml-px py-0.5 ${h.depth === 3 ? "pl-5" : "pl-3"}`}
+								class={`toc-link block text-sm text-black/40 dark:text-white/40 hover:text-black dark:hover:text-white transition-colors leading-snug border-l border-transparent -ml-px ${h.depth === 3 ? "pl-5 py-0" : "pl-3 py-0.5"}`}
 							>
 								{h.text}
 							</a>
