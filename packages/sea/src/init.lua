@@ -149,14 +149,6 @@ local CEscapes = {
 	["\\"] = "\\\\"
 }
 
----Convert binary content to a C uint8_t array initialiser string, e.g. "0x41,0x42,..."
-local function toByteLiteral(content)
-	local t = {}
-	for i = 1, #content do
-		t[i] = string.format("0x%02x", string.byte(content, i))
-	end
-	return table.concat(t, ",")
-end
 
 ---Sanitise a library name so it is safe to use as a C identifier.
 local function safeIdent(name)
@@ -204,10 +196,27 @@ function sea.compile(main, source, sharedLibs, compiler)
 		end
 		ffiShimEntries[#ffiShimEntries + 1] = string.format('["%s"]="%s"', bare, libFileName)
 
-		libDecls[#libDecls + 1]             = string.format(
-			"static const uint8_t %sLibrary[] = {%s};",
-			id, toByteLiteral(lib.content)
-		)
+		-- Embed the library as a raw blob via an .incbin assembler directive
+		-- instead of a C byte-array literal: a 1MB .so would otherwise become
+		-- ~5MB of "0xNN," tokens that gcc has to lex and parse. The blob is
+		-- written to the same content-addressed path the compiled binary's
+		-- startup uses, so the assembler pass and the runtime share one file.
+		local libPath = path.join(env.tmpdir(), libFileName)
+		if not fs.exists(libPath) then
+			fs.write(libPath, lib.content)
+		end
+
+		local asmPath = libPath:gsub("\\", "/"):gsub('"', '\\"')
+		libDecls[#libDecls + 1]             = string.format([[
+
+#if defined(__APPLE__)
+__asm__(".globl _%s_lib_start\n_%s_lib_start:\n.incbin \"%s\"\n.globl _%s_lib_end\n_%s_lib_end:\n");
+#else
+__asm__(".globl %s_lib_start\n%s_lib_start:\n.incbin \"%s\"\n.globl %s_lib_end\n%s_lib_end:\n");
+#endif
+extern const unsigned char %s_lib_start[];
+extern const unsigned char %s_lib_end[];
+]], id, id, asmPath, id, id, id, id, asmPath, id, id, id, id)
 		libDecls[#libDecls + 1]             = string.format(
 			'static const char %sLibraryName[] = "%s";',
 			id, libFileName
@@ -224,12 +233,12 @@ function sea.compile(main, source, sharedLibs, compiler)
 		if (f == NULL) {
 			f = fopen(%sLibraryPath, "wb");
 			if (f == NULL) { perror("lde-sea: cannot write %s"); return 1; }
-			fwrite(%sLibrary, 1, sizeof(%sLibrary), f);
+			fwrite(%s_lib_start, 1, %s_lib_end - %s_lib_start, f);
 			fclose(f);
 		} else {
 			fclose(f);
 		}
-	}]], id, id, id, id, id, lib.name, id, id)
+	}]], id, id, id, id, id, lib.name, id, id, id)
 
 		local luaopenSym                    = "luaopen_" .. lib.name:gsub("[%.-]", "_")
 		libPreloads[#libPreloads + 1]       = string.format([[
