@@ -28,13 +28,19 @@ test.it("reinstalls src.rock correctly after tar cache and target are cleared (l
 	local dir = makeProject("srcrock-reinstall-test")
 	fs.write(path.join(dir, "src", "init.lua"), 'print(require("socket"))')
 
-	local ok, out = ldecli({ "add", "rocks:luasocket" }, dir)
+	-- Scope the cache clear to a throwaway --tree so the test never wipes the
+	-- shared ~/.lde cache. The suite's other tests (e.g. the Teal/Moonscript
+	-- fixtures) rely on the real cache staying warm — deleting it mid-suite
+	-- forces them to re-download compilers from the network.
+	local treeDir = path.join(tmpBase, "srcrock-tree")
+	fs.rmdir(treeDir)
+
+	local ok, out = ldecli({ "--tree", treeDir, "add", "rocks:luasocket" }, dir)
 	test.truthy(ok, "lde add failed: " .. tostring(out))
 
-	local home = os.getenv("HOME") or os.getenv("USERPROFILE")
-	fs.rmdir(path.join(home, ".lde", "tar"))
+	fs.rmdir(path.join(treeDir, "tar"))
 	fs.rmdir(path.join(dir, "target"))
 
-	ok, out = ldecli({ "run" }, dir)
+	ok, out = ldecli({ "--tree", treeDir, "run" }, dir)
 	test.truthy(ok, "lde run failed after cache clear: " .. tostring(out))
 end)
