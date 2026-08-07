@@ -1,11 +1,32 @@
 local fs = require("fs")
 local path = require("path")
+local lua = require("lua-sys")
 
-local tlModule ---@type any?
-local env ---@type any?
+local state, chunk ---@type any?, any?
 
----@return any
+-- Runs inside the compiler guest: the tl module and the shared env stay
+-- loaded in that state across compiles. Type errors never block codegen
+-- (only syntax errors do); `tl check` remains the strict tool.
+local DRIVER = [[
+	local source, filename = ...
+	local tl = require("tl")
+	if not _lde_tl_env then
+		_lde_tl_env = tl.init_env(false, false, "5.1")
+	end
+	local result = tl.process_string(source, false, _lde_tl_env, filename)
+	if not result.ast then
+		local msgs = {}
+		for _, e in ipairs(result.syntax_errors or {}) do
+			msgs[#msgs + 1] = string.format("%s:%d:%d: %s", e.filename or filename, e.y, e.x, e.msg)
+		end
+		return { err = table.concat(msgs, "\n") }
+	end
+	return { code = tl.generate(result.ast, _lde_tl_env.defaults.gen_target) }
+]]
+
+---@return any # the compiler guest state
 local function ensureTL()
+	if state then return state end
 	local lde = require("lde-core")
 	local util = require("lde-core.util")
 
@@ -17,15 +38,22 @@ local function ensureTL()
 		pkg:build()
 		pkg:installDependencies()
 
-		local tree = pkg:getModulesDir()
-		local oldPath = package.path
-		package.path = path.join(tree, "?.lua") .. ";" .. path.join(tree, "?", "init.lua") .. ";" .. oldPath
-		local ok, tl = pcall(require, "tl")
-		package.path = oldPath
-		if ok then return tl end
+		-- Reuse the package path setup shared by the runner and build scripts.
+		local luaPath, luaCPath = require("lde-core.package.run").getLuaPaths(pkg)
+		local st = lua.new()
+		local g = st:globals()
+		g.package.path = luaPath
+		g.package.cpath = luaCPath
+
+		if pcall(st.eval, st, 'return require("tl")') then
+			state = st
+			chunk = st:load(DRIVER, "@lde-teal-compile")
+			return st
+		end
+		st:close()
 
 		if attempt == 2 then
-			error("The Teal compiler installed but failed to load: " .. tostring(tl))
+			error("The Teal compiler installed but failed to load")
 		end
 		local url = util.resolveLuarocksSource("tl")
 		if url then
@@ -35,35 +63,6 @@ local function ensureTL()
 		end
 	end
 	error("The Teal compiler could not be loaded")
-end
-
----@return any
-local function init()
-	if tlModule then return tlModule end
-	local ok, tl = pcall(require, "tl")
-	if not ok then
-		tl = ensureTL()
-	end
-	tlModule = tl
-	env = tl.init_env(false, false, "5.1")
-	return tlModule
-end
-
----@param source string
----@param filename string?
----@return string? code
----@return string? err
-local function compile(source, filename)
-	local tl = init()
-	local result = tl.process_string(source, false, env, filename or "?")
-	if not result.ast then
-		local msgs = {}
-		for _, e in ipairs(result.syntax_errors or {}) do
-			msgs[#msgs + 1] = string.format("%s:%d:%d: %s", e.filename or filename or "?", e.y, e.x, e.msg)
-		end
-		return nil, table.concat(msgs, "\n")
-	end
-	return tl.generate(result.ast, env.defaults.gen_target)
 end
 
 ---@param dir string
@@ -82,10 +81,27 @@ local function mkdirp(dir)
 	fs.mkdir(dir)
 end
 
+---@param file string
+---@return string? code
+---@return string? err
+local function compileFile(file)
+	local source = fs.read(file)
+	if not source then return nil, "Failed to read " .. file end
+
+	ensureTL()
+	local ok, result = pcall(chunk.eval, chunk, source, file)
+	if not ok then return nil, tostring(result) end
+	if result.err then return nil, result.err end
+	return result.code
+end
+
+--- Compile every .tl under srcDir into outDir (mirroring the directory
+--- structure) and copy everything else, so outDir is a drop-in Lua mirror of
+--- srcDir. `.d.tl` declaration files are copied but not compiled.
 ---@param srcDir string
 ---@param outDir string
 local function compileDir(srcDir, outDir)
-	init()
+	ensureTL()
 	for _, rel in ipairs(fs.scan(srcDir, "**")) do
 		local absSrc = path.join(srcDir, rel)
 		if fs.isdir(absSrc) then
@@ -93,11 +109,7 @@ local function compileDir(srcDir, outDir)
 		elseif rel:match("%.tl$") and not rel:match("%.d%.tl$") then
 			local outRel = rel:gsub("%.tl$", ".lua")
 			mkdirp(path.dirname(path.join(outDir, outRel)))
-			local source = fs.read(absSrc)
-			if not source then
-				error("Failed to read " .. absSrc)
-			end
-			local code, err = compile(source, absSrc)
+			local code, err = compileFile(absSrc)
 			if not code then
 				error("Failed to compile " .. absSrc .. ":\n" .. (err or "unknown error"))
 			end
@@ -112,7 +124,7 @@ local function compileDir(srcDir, outDir)
 end
 
 return {
-	compile = compile,
+	compileFile = compileFile,
 	hasTeal = hasTeal,
 	compileDir = compileDir,
 }

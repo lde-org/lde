@@ -59,17 +59,18 @@ test.it("reports Teal syntax errors with file:line:col", function()
 	local tmpDir = path.join(env.tmpdir(), "lde-teal-syntax-test")
 	fs.rmdir(tmpDir)
 	fs.mkdir(tmpDir)
+	fs.mkdir(path.join(tmpDir, "src"))
+	-- A plain package, so the child runs in a package context and prints the
+	-- compile error to stdout regardless of where the suite was launched from.
+	fs.write(path.join(tmpDir, "lde.json"), json.encode({ name = "teal-bad", version = "0.1.0" }))
+	fs.write(path.join(tmpDir, "src", "init.lua"), "return true")
 	fs.write(path.join(tmpDir, "bad.tl"), "local = 3\n")
 
 	local script = path.join(tmpDir, "bad.tl") --[[@as string]]
-	-- The error lands on stdout inside a package and on stderr outside one
-	-- (depends on where the suite was launched from); check both streams.
-	local process = require("process")
-	local code, out, errOut = process.exec(assert(env.execPath()), { script })
-	test.falsy(code == 0)
-	local output = (out or "") .. (errOut or "")
-	if not output:find("bad.tl:1:7", 1, true) then
-		error("Expected compile error at bad.tl:1:7, got: " .. output, 2)
+	local ok, out = ldecli({ script }, tmpDir)
+	test.falsy(ok)
+	if not (out and out:find("bad.tl:1:7", 1, true)) then
+		error("Expected compile error at bad.tl:1:7, got: " .. tostring(out), 2)
 	end
 
 	fs.rmdir(tmpDir)

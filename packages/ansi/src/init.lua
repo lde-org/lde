@@ -1,4 +1,5 @@
 local ffi = require("ffi")
+local env = require("env")
 
 local isTTY = true
 local now
@@ -118,24 +119,24 @@ local colors = {
 	bg_gray = "\27[100m"
 }
 
--- Colors are only emitted when stdout is a terminal that supports them.
+-- Colors are emitted when stdout is a terminal that supports them, or when
+-- a CI log viewer renders ANSI without a tty (GitHub Actions, GitLab CI).
 -- Windows consoles don't set TERM; their VT mode was enabled above.
 local colorEnabled = isTTY
 if colorEnabled and ffi.os ~= "Windows" then
-	local term = os.getenv("TERM")
+	local term = env.var("TERM")
 	colorEnabled = term ~= nil and term ~= "dumb"
 end
-if not colorEnabled and (os.getenv("GITHUB_ACTIONS") or os.getenv("GITLAB_CI")) then
-	-- CI log viewers (GitHub Actions, GitLab CI) render ANSI without a tty.
+if not colorEnabled and (env.var("GITHUB_ACTIONS") == "true" or env.var("GITLAB_CI") == "true") then
 	colorEnabled = true
 end
 
-local noColor = os.getenv("NO_COLOR")
+local noColor = env.var("NO_COLOR")
 if noColor and noColor ~= "0" then
 	colorEnabled = false
 end
 
-local forceColor = os.getenv("CLICOLOR_FORCE")
+local forceColor = env.var("CLICOLOR_FORCE")
 if forceColor and forceColor ~= "0" then
 	colorEnabled = true
 end

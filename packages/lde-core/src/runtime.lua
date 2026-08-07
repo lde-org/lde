@@ -286,14 +286,14 @@ local function executeFile(scriptPath, opts)
 	end
 	if resolvedPath:match("%.tl$") and not resolvedPath:match("%.d%.tl$") then
 		-- Teal entry point: compile to Lua before handing it to the guest state.
-		local code, cerr = teal.compile(source, resolvedPath)
+		local code, cerr = teal.compileFile(resolvedPath)
 		if not code then
 			return false, "Failed to compile " .. resolvedPath .. ":\n" .. (cerr or "unknown error")
 		end
 		source = code
 	elseif resolvedPath:match("%.moon$") then
 		-- Moonscript entry point: compile to Lua before handing it to the guest state.
-		local code, cerr = moonscript.compile(source, resolvedPath)
+		local code, cerr = moonscript.compileFile(resolvedPath)
 		if not code then
 			return false, "Failed to compile " .. resolvedPath .. ":\n" .. (cerr or "unknown error")
 		end

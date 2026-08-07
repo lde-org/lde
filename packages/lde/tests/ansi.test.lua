@@ -1,42 +1,48 @@
 local test = require("lde-test")
-
 local env = require("env")
-local path = require("path")
-local process = require("process")
 
-local execPath = assert(env.execPath())
+--- Set an env var, reload ansi so its color detection re-runs, run fn, then
+--- restore the previous value and drop the module again.
+---@param name string
+---@param value string?
+---@param fn fun()
+local function withEnv(name, value, fn)
+	local before = env.var(name)
+	env.set(name, value)
+	package.loaded["ansi"] = nil
+	local ok, err = pcall(fn)
+	env.set(name, before)
+	package.loaded["ansi"] = nil
+	if not ok then error(err, 2) end
+end
 
--- The -e children need a package context (target/ on package.path) to resolve
--- ansi; derive the suite's own package dir so this works no matter where the
--- suite was launched from.
-local modulesDir = package.path:match("^([^;]+)/%?%.lua")
-local pkgDir = modulesDir and path.dirname(modulesDir) or env.cwd()
-
--- The spawned children inherit a pipe for stdout, so isatty is false there;
--- the env vars below pin the color decision regardless of the ambient
--- environment (e.g. CI vars in the parent). The -e chunk is wrapped in a
--- do-block so the guest doesn't echo the chunk's return value.
-
-test.it("NO_COLOR strips ANSI escapes even when forced", function()
-	local code, out = process.exec(execPath, {
-		"-e", 'do io.write(require("ansi").format("{red}x")) end'
-	}, { cwd = pkgDir, env = { NO_COLOR = "1" } })
-	test.truthy(code == 0)
-	test.equal(out, "x")
+test.it("NO_COLOR strips ANSI escapes", function()
+	withEnv("NO_COLOR", "1", function()
+		local ansi = require("ansi")
+		test.equal(ansi.format("{red}x"), "x")
+		test.equal(ansi.colorize("green", "y"), "y")
+	end)
 end)
 
-test.it("CLICOLOR_FORCE emits ANSI escapes on non-tty output", function()
-	local code, out = process.exec(execPath, {
-		"-e", 'do io.write(require("ansi").format("{red}x")) end'
-	}, { cwd = pkgDir, env = { CLICOLOR_FORCE = "1" } })
-	test.truthy(code == 0)
-	test.includes(out or "", "\27[31m")
+test.it("CLICOLOR_FORCE emits ANSI escapes", function()
+	withEnv("CLICOLOR_FORCE", "1", function()
+		local ansi = require("ansi")
+		test.includes(ansi.format("{red}x"), "\27[31m")
+	end)
 end)
 
-test.it("GitHub Actions renders ANSI escapes without a tty", function()
-	local code, out = process.exec(execPath, {
-		"-e", 'do io.write(require("ansi").format("{red}x")) end'
-	}, { cwd = pkgDir, env = { GITHUB_ACTIONS = "true" } })
-	test.truthy(code == 0)
-	test.includes(out or "", "\27[31m")
+test.it("GitHub Actions emits ANSI escapes", function()
+	withEnv("GITHUB_ACTIONS", "true", function()
+		local ansi = require("ansi")
+		test.includes(ansi.format("{red}x"), "\27[31m")
+	end)
+end)
+
+test.it("NO_COLOR wins over GitHub Actions", function()
+	withEnv("GITHUB_ACTIONS", "true", function()
+		withEnv("NO_COLOR", "1", function()
+			local ansi = require("ansi")
+			test.equal(ansi.format("{red}x"), "x")
+		end)
+	end)
 end)

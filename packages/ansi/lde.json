@@ -1,4 +1,9 @@
 {
 	"name": "ansi",
-	"version": "0.1.0"
+	"version": "0.1.0",
+	"dependencies": {
+		"env": {
+			"git": "https://github.com/lde-org/env"
+		}
+	}
 }
