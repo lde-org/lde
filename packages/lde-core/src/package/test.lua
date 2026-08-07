@@ -202,7 +202,24 @@ local function runRockspecTests(package, filters)
 		}
 	end
 
-	local runArgs = { bustedBin }
+	-- TODO: replace this hacky fix
+	-- busted's traceback walk (busted/core.lua getTrace) skips every frame whose
+	-- source lives in busted's own module directory, then keeps walking until
+	-- debug.getinfo returns nil and crashes — replacing every real error message
+	-- with nil ("Nil error", 0 tests run). The CLI entry lives in target/busted/,
+	-- so running it directly as the main script always hits this. Run a copy of
+	-- the entry from outside that dir so the walk stops at the main chunk and
+	-- error traces resolve normally.
+	local cliEntry = bustedBin
+	local cliSource = fs.read(bustedBin)
+	if cliSource then
+		cliEntry = path.join(modulesDir, "busted-cli.lua")
+		if fs.read(cliEntry) ~= cliSource then
+			fs.write(cliEntry, cliSource)
+		end
+	end
+
+	local runArgs = { cliEntry }
 	for _, flag in ipairs(rawFlags or {}) do
 		runArgs[#runArgs + 1] = (flag:gsub("%$%(LUA%)", luaBin):gsub("%$%(LUA_DIR%)", luaDir))
 	end
