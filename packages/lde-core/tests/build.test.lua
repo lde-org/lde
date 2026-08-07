@@ -747,6 +747,99 @@ test.it("runTests can require tests.fixture with build script", function()
 	test.equal(results.error, nil)
 end)
 
+-- Package with a build.lua so target/tests is a copy (stamped sync) rather
+-- than a symlink.
+---@param name string
+---@return string dir
+local function makeBuildScriptPackage(name)
+	local dir = makePackageWithSrc(name, { ["init.lua"] = 'return true' })
+	fs.write(path.join(dir, "build.lua"), [[
+local f = io.open(os.getenv("LDE_OUTPUT_DIR") .. "/init.lua", "w")
+f:write("return true")
+f:close()
+]])
+	return dir
+end
+
+---@param dir string
+---@param file string
+---@return string
+local function targetTestsFile(dir, file)
+	return path.join(dir, "target", "tests", file)
+end
+
+test.it("runTests refreshes target/tests copy when a test helper changes", function()
+	local dir = makeBuildScriptPackage("runtests-stamp-change")
+
+	local testsDir = path.join(dir, "tests")
+	fs.mkdir(testsDir)
+	fs.write(path.join(testsDir, "fixture.lua"), 'return { magic = 42 }')
+	fs.write(path.join(testsDir, "main.test.lua"), [[
+local t = require("lde-test")
+local fixture = require("tests.fixture")
+t.it("fixture works", function()
+	t.truthy(fixture.magic)
+end)
+]])
+
+	local pkg = lde.Package.open(dir)
+	test.equal(pkg:runTests().failures, 0)
+
+	-- The stamp is written alongside the copy so unchanged runs can skip it.
+	test.truthy(fs.exists(targetTestsFile(dir, ".lde-tests-stamp")))
+
+	-- Edit the helper and re-run: the copy must be refreshed so
+	-- require("tests.*") never serves stale content. Different size on
+	-- purpose — the stamp's size/mtime fast path can't hide the change.
+	fs.write(path.join(testsDir, "fixture.lua"), 'return { magic = 777 }')
+	test.equal(pkg:runTests().failures, 0)
+
+	local copied = fs.read(targetTestsFile(dir, "fixture.lua"))
+	test.includes(copied, "777")
+	test.falsy(copied:find("magic = 42", 1, true))
+end)
+
+test.it("runTests skips the target/tests copy when tests/ is unchanged", function()
+	local dir = makeBuildScriptPackage("runtests-stamp-skip")
+
+	local testsDir = path.join(dir, "tests")
+	fs.mkdir(testsDir)
+	fs.write(path.join(testsDir, "main.test.lua"), [[
+local t = require("lde-test")
+t.it("passes", function() end)
+]])
+
+	local pkg = lde.Package.open(dir)
+	test.equal(pkg:runTests().failures, 0)
+
+	-- A file dropped into the copy that isn't in tests/ survives the second
+	-- run, proving the copy wasn't re-made (a re-copy would wipe it).
+	local marker = targetTestsFile(dir, "marker.txt")
+	fs.write(marker, "keep me")
+	test.equal(pkg:runTests().failures, 0)
+	test.truthy(fs.exists(marker))
+end)
+
+test.it("runTests refreshes the target/tests copy when a test file is removed", function()
+	local dir = makeBuildScriptPackage("runtests-stamp-delete")
+
+	local testsDir = path.join(dir, "tests")
+	fs.mkdir(testsDir)
+	fs.write(path.join(testsDir, "unused.lua"), 'return "unused"')
+	fs.write(path.join(testsDir, "main.test.lua"), [[
+local t = require("lde-test")
+t.it("passes", function() end)
+]])
+
+	local pkg = lde.Package.open(dir)
+	test.equal(pkg:runTests().failures, 0)
+	test.truthy(fs.exists(targetTestsFile(dir, "unused.lua")))
+
+	fs.delete(path.join(testsDir, "unused.lua"))
+	test.equal(pkg:runTests().failures, 0)
+	test.falsy(fs.exists(targetTestsFile(dir, "unused.lua")))
+end)
+
 test.it("runTests fails when a test file registers no tests", function()
 	local dir = makePackageWithSrc("runtests-empty", { ["init.lua"] = 'return true' })
 
