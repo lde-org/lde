@@ -306,21 +306,36 @@ local function printCoverage(pkg, coverage)
 		return a.file < b.file
 	end)
 
+	-- Column widths: files left-aligned (min 38 chars), the covered/total
+	-- ratio right-aligned as a unit, so "lines" and the percentage land in
+	-- the same column on every row and on the Total line.
+	local fileW = 38
+	local covW, totW = 1, 1
+	for _, r in ipairs(rows) do
+		fileW = math.max(fileW, #r.file)
+		covW = math.max(covW, #tostring(r.covered))
+		totW = math.max(totW, #tostring(r.executable))
+	end
+	local ratioW = covW + 1 + totW
+	-- Widest row: 2 indent + file + 1 + ratio + 1 + "lines" + 2 + "100.0%".
+	local sepW = fileW + ratioW + 17
+
 	print()
 	ansi.printf("  {bold}Coverage")
-	print("  " .. ansi.colorize("gray", string.rep("─", 54)))
+	print("  " .. ansi.colorize("gray", string.rep("─", sepW)))
 	for _, r in ipairs(rows) do
 		-- The color token is spliced into the format string at runtime so
 		-- ansi.format resolves it; {%s} would survive gsub and print literally.
 		local color = percentColor(r.percent)
-		ansi.printf("  {gray}%-38s{reset} %d/%d {gray}lines{reset}  {" .. color .. "}%.1f%%",
-			r.file, r.covered, r.executable, r.percent)
+		ansi.printf("  {gray}%-" .. fileW .. "s{reset} %" .. ratioW .. "s {gray}lines{reset}  {" .. color .. "}%.1f%%",
+			r.file, ("%d/%d"):format(r.covered, r.executable), r.percent)
 	end
-	print("  " .. ansi.colorize("gray", string.rep("─", 54)))
+	print("  " .. ansi.colorize("gray", string.rep("─", sepW)))
 	local totalPercent = totalExecutable > 0 and totalCovered / totalExecutable * 100 or 0
 	local totalColor = percentColor(totalPercent)
-	ansi.printf("  Total: {" .. totalColor .. "}%d/%d{reset} lines ({gray}%.1f%%{reset})",
-		totalCovered, totalExecutable, totalPercent)
+	-- Right-align the Total's ratio with the rows ("  Total: " is 9 chars).
+	ansi.printf("  Total: %s {gray}lines{reset}  {" .. totalColor .. "}%.1f%%",
+		("%" .. (ratioW + fileW - 6) .. "s"):format(("%d/%d"):format(totalCovered, totalExecutable)), totalPercent)
 end
 
 -- Print a notice when coverage was requested but the runner can't provide it.
