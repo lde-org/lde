@@ -86,13 +86,11 @@ local function mkdirp(dir)
 	fs.mkdir(dir)
 end
 
+---@param source string
 ---@param file string
 ---@return string? code
 ---@return string? err
-local function compileFile(file)
-	local source = fs.read(file)
-	if not source then return nil, "Failed to read " .. file end
-
+local function compileSource(source, file)
 	ensureTL()
 	local ok, result = pcall(chunk.eval, chunk, source, file)
 	if not ok then return nil, tostring(result) end
@@ -100,9 +98,22 @@ local function compileFile(file)
 	return result.code
 end
 
+---@param file string
+---@return string? code
+---@return string? err
+local function compileFile(file)
+	local source = fs.read(file)
+	if not source then return nil, "Failed to read " .. file end
+	return compileSource(source, file)
+end
+
 --- Compile every .tl under srcDir into outDir (mirroring the directory
 --- structure) and copy everything else, so outDir is a drop-in Lua mirror of
---- srcDir. `.d.tl` declaration files are copied but not compiled.
+--- srcDir. `.d.tl` declaration files are copied as-is; compiled `.tl` sources
+--- are also preserved next to their `.lua` output so `tl check` can resolve
+--- this package's modules (and its dependencies') with full type info via
+--- include_dir / TL_PATH. The bundler only reads `*.lua`, so the preserved
+--- `.tl` files never reach `lde bundle`/`lde compile` output.
 ---@param srcDir string
 ---@param outDir string
 local function compileDir(srcDir, outDir)
@@ -113,12 +124,20 @@ local function compileDir(srcDir, outDir)
 			mkdirp(path.join(outDir, rel))
 		elseif rel:match("%.tl$") and not rel:match("%.d%.tl$") then
 			local outRel = rel:gsub("%.tl$", ".lua")
-			mkdirp(path.dirname(path.join(outDir, outRel)))
-			local code, err = compileFile(absSrc)
+			local outPath = path.join(outDir, outRel)
+			mkdirp(path.dirname(outPath))
+			local source = fs.read(absSrc)
+			if not source then
+				error("Failed to read " .. absSrc)
+			end
+			local code, err = compileSource(source, absSrc)
 			if not code then
 				error("Failed to compile " .. absSrc .. ":\n" .. (err or "unknown error"))
 			end
-			fs.write(path.join(outDir, outRel), code)
+			fs.write(outPath, code)
+			-- Keep the .tl source alongside the compiled .lua so `tl check` can
+			-- resolve this package's modules with full type info.
+			fs.write(path.join(outDir, rel), source)
 		else
 			local outPath = path.join(outDir, rel)
 			mkdirp(path.dirname(outPath))

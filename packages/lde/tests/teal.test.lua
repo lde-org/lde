@@ -29,11 +29,20 @@ test.it("runs Teal (.tl) packages out of the box", function()
 	test.truthy(ok)
 	test.includes(out or "", "hello tl 42")
 
-	-- The build compiled Teal to Lua in target/; no raw .tl survives.
+	-- The build compiled Teal to Lua in target/, but kept the .tl sources
+	-- next to their .lua output so `tl check` can resolve modules via target/.
 	local targetDir = path.join(tmpDir, "target", "tealfix")
 	test.truthy(fs.exists(path.join(targetDir, "init.lua")))
 	test.truthy(fs.exists(path.join(targetDir, "greet.lua")))
-	test.falsy(fs.exists(path.join(targetDir, "init.tl")))
+	test.truthy(fs.exists(path.join(targetDir, "init.tl")))
+	test.truthy(fs.exists(path.join(targetDir, "greet.tl")))
+
+	-- Bundles only carry the compiled Lua; .tl sources never leak in.
+	local ok2, bundleErr = ldecli({ "bundle" }, tmpDir)
+	if not ok2 then error("bundle failed: " .. tostring(bundleErr), 2) end
+	local bundle = fs.read(path.join(tmpDir, "tealfix.lua"))
+	if not bundle then error("bundle produced no output", 2) end
+	test.falsy(bundle:find(".tl", 1, true))
 
 	fs.rmdir(tmpDir)
 end)
