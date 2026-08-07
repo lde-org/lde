@@ -1,5 +1,5 @@
 if select("#", ...) == 0 then
-	require("lde.commands.help")()
+	require("lde.commands.help").main()
 	return
 end
 
@@ -74,8 +74,25 @@ end
 
 local evalCode = args:short("e")
 
-	if args:flag("help") and args:count() == 0 and not evalCode and not luaCliArgs then
-	require("lde.commands.help")()
+	-- `--help` before a command shows that command's help; alone it shows the
+	-- main help. Kept before the module loading below so plain `lde --help`
+	-- stays fast (no ansi/env/fs/path or lde-core).
+	local helpRequested = args:flag("help")
+	if helpRequested and not evalCode and not luaCliArgs then
+		local target = args:pop()
+		if target then
+			require("lde.commands.help").forCommand(target)
+		else
+			require("lde.commands.help").main()
+		end
+		return
+	end
+
+-- Hidden completion backend invoked by the generated shell scripts. Handled
+-- before the overrides and lde-core load so tab-completion stays fast.
+if args:peek() == "__complete" then
+	args:pop()
+	require("lde.commands.complete")(args)
 	return
 end
 
@@ -105,7 +122,7 @@ local commandName
 if not evalCode and not luaCliArgs then
 	commandName = args:pop()
 	if not commandName or commandName == "help" then
-		require("lde.commands.help")(args)
+		require("lde.commands.help").main(args)
 		return
 	end
 end
@@ -160,11 +177,12 @@ local commandFiles = {
 	outdated  = "lde.commands.outdated",
 	uninstall = "lde.commands.uninstall",
 	publish   = "lde.commands.publish",
+	completion = "lde.commands.completion",
 	repl      = "lde.commands.repl"
 }
 
 -- Commands that don't need the global cache dirs initialized
-local noInitCommands = { help = true }
+local noInitCommands = { help = true, completion = true }
 
 if not noInitCommands[commandName] and not treeOverride then
 	lde.global.init()
