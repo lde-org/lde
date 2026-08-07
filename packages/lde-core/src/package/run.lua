@@ -109,7 +109,7 @@ local function runFile(package, scriptPath, args, vars, cwd, profile, flamegraph
 		end
 
 		scriptPath = config.bin
-			and path.join(package:getTargetDir(), config.bin)
+			and path.join(package:getTargetDir(), (config.bin:gsub("%.tl$", ".lua")))
 			or path.join(package:getTargetDir(), "init.lua")
 	end
 

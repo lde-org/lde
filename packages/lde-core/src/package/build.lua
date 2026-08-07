@@ -4,6 +4,7 @@ local ansi = require("ansi")
 local json = require("json")
 local util = require("util")
 local lde = require("lde-core")
+local teal = require("lde-core.teal")
 
 ---@type table<lde.Package, boolean>
 local currentlyBuilding = setmetatable({}, { __mode = "k" })
@@ -149,12 +150,20 @@ local function buildPackage(package, destinationPath)
 			fs.write(stampPath, json.encode({ version = STAMP_VERSION, files = current }))
 		end
 	else
-		-- If a real directory exists from a previous build-script run, remove it
-		-- before creating the symlink.
-		if fs.isdir(destinationPath) and not fs.islink(destinationPath) then
+		-- Clear any previous output (symlink from a no-build-script run, or a
+		-- real dir from a build-script/Teal run) before materializing fresh.
+		if fs.islink(destinationPath) then
+			fs.delete(destinationPath)
+		elseif fs.isdir(destinationPath) then
 			fs.rmdir(destinationPath)
 		end
-		fs.mklink(package:getSrcDir(), destinationPath)
+		if teal.hasTeal(package:getSrcDir()) then
+			-- Teal package: compile .tl sources to .lua instead of symlinking,
+			-- so the rest of the pipeline (run/test/compile/bundle) only sees Lua.
+			teal.compileDir(package:getSrcDir(), destinationPath)
+		else
+			fs.mklink(package:getSrcDir(), destinationPath)
+		end
 	end
 
 	currentlyBuilding[package] = nil

@@ -4,6 +4,7 @@ local fs   = require("fs")
 local path = require("path")
 local ansi = require("ansi")
 local lde  = require("lde-core")
+local teal = require("lde-core.teal")
 
 local PROFILER_MS_PER_SAMPLE = 1
 
@@ -281,6 +282,14 @@ local function executeFile(scriptPath, opts)
 	local source, err = fs.read(resolvedPath)
 	if not source then
 		return false, "Failed to read " .. resolvedPath .. ": " .. (err or "unknown error")
+	end
+	if resolvedPath:match("%.tl$") and not resolvedPath:match("%.d%.tl$") then
+		-- Teal entry point: compile to Lua before handing it to the guest state.
+		local code, cerr = teal.compile(source, resolvedPath)
+		if not code then
+			return false, "Failed to compile " .. resolvedPath .. ":\n" .. (cerr or "unknown error")
+		end
+		source = code
 	end
 	return executeSource(source, resolvedPath, opts)
 end
