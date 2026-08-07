@@ -112,8 +112,11 @@ test.it("runs Teal (.tl) test files via lde test", function()
 	test.falsy(fs.islink(testsTarget))
 	test.falsy(fs.exists(path.join(testsTarget, ".lde-tests-stamp")))
 
-	-- A .tl filter runs the compiled file.
-	local ok2, out2 = ldecli({ "test", "--", path.join(tmpDir, "tests", "a.test.tl") }, tmpDir)
+	-- A .tl filter runs the compiled file. The filter is relative to the
+	-- package dir, not an absolute path: on macOS $TMPDIR (/var/…) is a
+	-- symlink to /private/var, so an absolute filter built from env.tmpdir()
+	-- wouldn't lexically match the child's getcwd()-based test dir.
+	local ok2, out2 = ldecli({ "test", "--", "./tests/a.test.tl" }, tmpDir)
 	test.truthy(ok2)
 	test.includes(out2 or "", "tl test passes")
 
