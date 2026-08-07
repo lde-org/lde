@@ -307,7 +307,9 @@ function Package:runScript(name, capture)
 
 	local shell = jit.os == "Windows" and { "cmd", "/c" } or { "sh", "-c" }
 	local code, stdout, stderr = process.exec(shell[1], { shell[2], scripts[name] }, opts)
-	return code == 0 or nil, stdout or stderr
+	if code == 0 then return true, stdout or stderr end
+	if stdout or stderr then return nil, stdout or stderr end
+	return nil, "Script exited with " .. (code and ("exit code " .. tostring(code)) or "an unknown error")
 end
 
 return Package

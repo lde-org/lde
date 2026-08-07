@@ -189,7 +189,7 @@ else
 
 		local ok, err = pkg:runScript(commandName)
 		if not ok then
-			error("Script '" .. commandName .. "' failed: " .. err)
+			error("Script '" .. commandName .. "' failed: " .. (err or "exited with a non-zero exit code"))
 		end
 	else
 		ansi.printf("{red}Unknown command: %s", tostring(commandName))
