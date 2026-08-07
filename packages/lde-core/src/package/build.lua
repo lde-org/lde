@@ -5,6 +5,7 @@ local json = require("json")
 local util = require("util")
 local lde = require("lde-core")
 local teal = require("lde-core.teal")
+local moonscript = require("lde-core.moonscript")
 
 ---@type table<lde.Package, boolean>
 local currentlyBuilding = setmetatable({}, { __mode = "k" })
@@ -161,6 +162,8 @@ local function buildPackage(package, destinationPath)
 			-- Teal package: compile .tl sources to .lua instead of symlinking,
 			-- so the rest of the pipeline (run/test/compile/bundle) only sees Lua.
 			teal.compileDir(package:getSrcDir(), destinationPath)
+		elseif moonscript.hasMoon(package:getSrcDir()) then
+			moonscript.compileDir(package:getSrcDir(), destinationPath)
 		else
 			fs.mklink(package:getSrcDir(), destinationPath)
 		end

@@ -93,7 +93,6 @@ $ lde ./script.tl
 
 ## Rules and limitations
 
-- Use the package name as the prefix of `require`. In the package `hello-teal`, use `require("hello-teal.greet")`. This is the same rule as for Lua packages. A `require` statement without the package name will not find the module.
 - You can mix `.tl` files and `.lua` files in the same package.
 - Type errors do not stop the program. LDE checks the types during compilation. A type error gives a warning. The program still runs. Use the command `tl check` for strict type checking.
 - The target is LuaJIT. LDE compiles the code to Lua 5.1. The code runs on the LDE runtime without extra runtime dependencies.

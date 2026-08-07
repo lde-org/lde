@@ -5,6 +5,7 @@ local path = require("path")
 local ansi = require("ansi")
 local lde  = require("lde-core")
 local teal = require("lde-core.teal")
+local moonscript = require("lde-core.moonscript")
 
 local PROFILER_MS_PER_SAMPLE = 1
 
@@ -286,6 +287,13 @@ local function executeFile(scriptPath, opts)
 	if resolvedPath:match("%.tl$") and not resolvedPath:match("%.d%.tl$") then
 		-- Teal entry point: compile to Lua before handing it to the guest state.
 		local code, cerr = teal.compile(source, resolvedPath)
+		if not code then
+			return false, "Failed to compile " .. resolvedPath .. ":\n" .. (cerr or "unknown error")
+		end
+		source = code
+	elseif resolvedPath:match("%.moon$") then
+		-- Moonscript entry point: compile to Lua before handing it to the guest state.
+		local code, cerr = moonscript.compile(source, resolvedPath)
 		if not code then
 			return false, "Failed to compile " .. resolvedPath .. ":\n" .. (cerr or "unknown error")
 		end
