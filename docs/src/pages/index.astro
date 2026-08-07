@@ -12,18 +12,20 @@ const posts = (await getCollection("blog")).sort(
 const latestRelease = posts.find((p) => p.data.title.toLowerCase().startsWith("release"));
 
 const comparison = [
-	{ feature: "Written in", href: "/docs/general/getting-started/introduction", values: ["Lua", "Rust", "Teal"] },
+	{ feature: "Written in", href: "/docs/general/getting-started/introduction", subtitle: "Performant fine-tuned LuaJIT", values: ["Lua", "Rust", "Teal"] },
 	{ feature: "Project format", href: "/docs/package-manager/getting-started/project-structure", values: ["JSON", "TOML/Lua", "Lua"] },
-	{ feature: "Add/remove deps", href: "/docs/package-manager/getting-started/quick-start", values: ["y", "y", "n"] },
-	{ feature: "Built-in test runner", href: "/docs/test-runner/getting-started/test-runner", values: ["y:lde-test", "y:busted", "n"] },
-	{ feature: "Ships with LuaJIT", href: "/docs/runtime/getting-started/runtime", values: ["y", "n", "n"] },
-	{ feature: "Compile to executable", href: "/docs/bundler/guides/compiling", values: ["y", "n", "n"] },
-	{ feature: "Git deps", href: "/docs/package-manager/dependencies/dependencies", values: ["y", "y", "n"] },
-	{ feature: "Registry deps", href: "/docs/package-manager/dependencies/registry", values: ["y:lde", "y:luarocks", "y:luarocks"] },
-	{ feature: "Custom Registry", href: "/docs/package-manager/guides/custom-registry", values: ["y", "n", "y"] },
-	{ feature: "Lockfile", href: "/docs/package-manager/getting-started/project-structure", values: ["y", "y", "y"] },
-	{ feature: "LuaRocks support", href: "/docs/package-manager/dependencies/luarocks-support", values: ["wip", "wip", "y"] },
-	{ feature: "Lua build scripts", href: "/docs/package-manager/dependencies/build-scripts", values: ["build.lua", "rockspec", "rockspec"] },
+	{ feature: "Luarocks compatibility", href: "/docs/package-manager/dependencies/luarocks-support", subtitle: "Intends to provide full compatibility", values: ["wip", "wip", "y"] },
+	{ feature: "Built-in test runner", href: "/docs/test-runner/getting-started/test-runner", subtitle: "Includes coverage reporting", values: ["y:lde-test", "y:busted", "n"] },
+	{ feature: "Ships with LuaJIT", href: "/docs/runtime/getting-started/runtime", subtitle: "No need to install lua on your system", values: ["y", "n", "n"] },
+	{ feature: "Comes with a compiler suite", href: "/docs/bundler/guides/compiling", subtitle: "Windows can compile rocks effortlessly", values: ["y", "n", "n"] },
+	{ feature: "Compile to executable", href: "/docs/bundler/guides/compiling", subtitle: "Compile <1mB programs that run anywhere", values: ["y", "n", "n"] },
+	{ feature: "Git deps", href: "/docs/package-manager/dependencies/dependencies", subtitle: "Also supports monorepos", values: ["y", "y", "n"] },
+	{ feature: "Registry deps", href: "/docs/package-manager/dependencies/registry", subtitle: "Also supports luarocks", values: ["y:lde", "y:luarocks", "y:luarocks"] },
+	{ feature: "Custom Registry", href: "/docs/package-manager/guides/custom-registry", subtitle: "A modern, fast registry", values: ["y", "n", "y"] },
+	{ feature: "Lockfile", href: "/docs/package-manager/getting-started/project-structure", subtitle: "For reproducible builds", values: ["y", "y", "y"] },
+	{ feature: "Lua build scripts", href: "/docs/package-manager/dependencies/build-scripts", subtitle: "Supports custom build scripts", values: ["a:build.lua", "rockspec", "rockspec"] },
+	{ feature: "Teal support", href: "/docs/runtime/guides/teal", subtitle: "First class support without configuration", values: ["y", "n", "n"] },
+	{ feature: "MoonScript support", href: "/docs/runtime/guides/moonscript", subtitle: "First class support without configuration", values: ["y", "n", "n"] },
 ];
 
 const features = [
@@ -231,26 +233,39 @@ const features = [
 						</tr>
 					</thead>
 					<tbody>
-						{comparison.map(({ feature, href, values: cols }) => (
+						{comparison.map(({ feature, href, subtitle, values: cols }) => {
+							const external = href.startsWith("http");
+							return (
 							<tr class="border-t border-black/[0.05] dark:border-white/[0.06] transition-colors">
 								<th scope="row" class="px-6 py-4 text-sm font-medium text-left">
 									<a
 										href={href}
+										target={external ? "_blank" : undefined}
+										rel={external ? "noopener noreferrer" : undefined}
 										class="inline-flex items-center gap-1.5 text-black/70 dark:text-white/65 hover:text-blue-500 dark:hover:text-blue-400 transition-colors"
 									>
 										{feature}
-										<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" class="opacity-45">
-											<path d="M7 17 17 7"></path>
-											<path d="M7 7h10v10"></path>
-										</svg>
+										{external ? (
+											<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" class="opacity-45">
+												<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+												<polyline points="15 3 21 3 21 9"></polyline>
+												<line x1="10" y1="14" x2="21" y2="3"></line>
+											</svg>
+										) : (
+											<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" class="opacity-45">
+												<path d="M7 17 17 7"></path>
+												<path d="M7 7h10v10"></path>
+											</svg>
+										)}
 									</a>
+									{subtitle && <div class="mt-1 text-xs text-black/40 dark:text-white/30">{subtitle}</div>}
 								</th>
 								{cols.map((val, i) => {
 									const blue = i === 0;
 									const base = `px-6 py-4 align-middle ${blue ? "text-blue-400 font-medium" : "text-black/70 dark:text-white/55"}`;
 									if (val === "y") return <td class={base}><span class="inline-flex size-7 items-center justify-center rounded-full bg-emerald-500/14 text-emerald-700 dark:text-emerald-300 font-bold ring-1 ring-emerald-600/20 dark:ring-emerald-400/20">✓</span></td>;
 									if (val === "n") return <td class={base}><span class="inline-flex size-7 items-center justify-center rounded-full bg-red-500/12 text-red-700 dark:text-red-300 font-bold ring-1 ring-red-600/20 dark:ring-red-400/20">✗</span></td>;
-									if (val === "wip") return <td class={base}><span class="inline-flex min-w-11 items-center justify-center rounded-full bg-amber-500/18 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-300 ring-1 ring-amber-600/20 dark:ring-amber-400/20">WIP</span></td>;
+									if (val === "wip") return <td class={base}><span class="inline-flex size-7 items-center justify-center rounded-full bg-amber-500/18 text-amber-800 dark:text-amber-300 font-bold ring-1 ring-amber-600/20 dark:ring-amber-400/20">!</span></td>;
 									if (val.startsWith("y:")) return (
 										<td class={base}>
 											<span class="inline-flex items-center gap-2 rounded-full bg-emerald-500/14 px-2.5 py-1 ring-1 ring-emerald-600/20 dark:ring-emerald-400/20">
@@ -259,10 +274,22 @@ const features = [
 											</span>
 										</td>
 									);
+									if (val.startsWith("a:")) return (
+										<td class={base}>
+											<a href={href} class="inline-flex items-center gap-1.5 text-blue-500 dark:text-blue-400 hover:underline transition-colors">
+												{val.slice(2)}
+												<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" class="opacity-45">
+													<path d="M7 17 17 7"></path>
+													<path d="M7 7h10v10"></path>
+												</svg>
+											</a>
+										</td>
+									);
 									return <td class={base}><span class={blue ? "text-blue-300" : ""}>{val}</span></td>;
 								})}
 							</tr>
-						))}
+							);
+						})}
 					</tbody>
 				</table>
 				</div>
@@ -270,13 +297,15 @@ const features = [
 
 			{/* Mobile rows */}
 			<div class="sm:hidden divide-y divide-black/[0.06] dark:divide-white/[0.06]">
-				{comparison.map(({ feature, href, values: [lde, lux, luarocks] }) => {
+				{comparison.map(({ feature, href, subtitle, values: [lde, lux, luarocks] }) => {
+					const external = href.startsWith("http");
 					const renderVal = (val: string, blue = false) => {
 						const cls = blue ? "text-blue-500 dark:text-blue-400 font-semibold" : "text-black/65 dark:text-white/55";
 						if (val === "y") return <span class="text-emerald-700 dark:text-emerald-300 font-bold">Yes</span>;
 						if (val === "n") return <span class="text-red-700 dark:text-red-300 font-bold">No</span>;
-						if (val === "wip") return <span class="text-amber-800 dark:text-amber-300 font-semibold uppercase tracking-wide text-[11px]">WIP</span>;
+						if (val === "wip") return <span class="text-amber-800 dark:text-amber-300 font-bold">!</span>;
 						if (val.startsWith("y:")) return <span class="inline-flex items-baseline gap-1.5"><span class="text-emerald-700 dark:text-emerald-300 font-bold">Yes</span><span class="text-[11px] text-black/45 dark:text-white/35">{val.slice(2)}</span></span>;
+						if (val.startsWith("a:")) return <a href={href} class="text-blue-500 dark:text-blue-400 font-semibold underline">{val.slice(2)}</a>;
 						return <span class={cls}>{val}</span>;
 					};
 					return (
@@ -284,15 +313,26 @@ const features = [
 							<p class="mb-3">
 								<a
 									href={href}
+									target={external ? "_blank" : undefined}
+									rel={external ? "noopener noreferrer" : undefined}
 									class="inline-flex items-center gap-1.5 text-sm font-medium text-black/75 dark:text-white/65 hover:text-blue-500 dark:hover:text-blue-400 transition-colors"
 								>
 									{feature}
-									<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" class="opacity-45">
-										<path d="M7 17 17 7"></path>
-										<path d="M7 7h10v10"></path>
-									</svg>
+									{external ? (
+										<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" class="opacity-45">
+											<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+											<polyline points="15 3 21 3 21 9"></polyline>
+											<line x1="10" y1="14" x2="21" y2="3"></line>
+										</svg>
+									) : (
+										<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" class="opacity-45">
+											<path d="M7 17 17 7"></path>
+											<path d="M7 7h10v10"></path>
+										</svg>
+									)}
 								</a>
 							</p>
+							{subtitle && <p class="mb-3 text-xs text-black/40 dark:text-white/30">{subtitle}</p>}
 							<div class="grid grid-cols-3 gap-3 text-sm">
 								<div class="flex flex-col gap-1">
 									<span class="text-[10px] text-blue-500 dark:text-blue-400 font-semibold uppercase tracking-[0.18em]">lde</span>

@@ -22,9 +22,9 @@ For example, a project with `./src/foo/qux.lua` named `redestro`, with an entryp
 
 ## Native Modules
 
-Create a `build.lua` file and use all the tools lua provides at your disposal to attempt to build your code into `LDE_OUTPUT_DIR` which will be placed inside of `./target/<dependency name>/*`.
+Create a `build.lua` file that uses the [`lde-build`](/docs/package-manager/dependencies/build-scripts) API. Everything your script writes lands in `./target/<dependency name>/*`.
 
-For example, this can be as simple as an `os.execute("make")` and then an `os.rename` of your output binary into the output directory.
+For example, this can be as simple as a `build:sh("make")` followed by a `build:copy` of your output binary into the output directory. Paths passed to `build:sh` and `build:cc` are relative to the package directory, so use the `build.outDir` field to target the output.
 
 For more info, read about [C Module Support](/docs/package-manager/dependencies/c-module-support).
 

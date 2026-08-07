@@ -1,9 +1,9 @@
 ---
-title: Luarocks Support
+title: LuaRocks Compatibility
 order: 4
 ---
 
-# Luarocks Support
+# LuaRocks Compatibility
 
 LDE supports rockspecs and the [luarocks package registry](https://luarocks.org/) backwards compatibly.
 

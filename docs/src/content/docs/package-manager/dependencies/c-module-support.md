@@ -7,37 +7,40 @@ order: 6
 
 C modules are supported in LDE projects via build scripts.
 
-The process is simple, build your project using CMake, GCC, or anything available to your project, and then extract a `.so` or `.dll` into the output directory of your project, which is `$LDE_OUTPUT_DIR` (which you can get with `os.getenv("LDE_OUTPUT_DIR")`)
-
-This works because LDE also adds an entry to your `package.cpath` which resolves for shared libraries in the same way it resolves for lua files in your `target` directory.
+The process is simple: compile your C source into a shared library and place it inside your package's output directory (`target/<name>/`). lde adds an entry to your `package.cpath` which resolves shared libraries the same way it resolves Lua files in your `target` directory — so the library is `require`d like any other module in your package.
 
 ## Example
 
+This example builds a module named `socket.core` for a package named `socket`. The library lands at `target/socket/core.so` (or `.dll` on Windows), so `require("socket.core")` finds it.
+
 ```lua build.lua
-local outDir = os.getenv("LDE_OUTPUT_DIR")
+local build = require("lde-build")
 
-local pathSep = string.sub(package.config, 1, 1)
-local libraryExt = jit.os == "Windows" and "dll" or jit.os == "Darwin" and "dylib" or "so"
-local libraryName = "core"
+-- src/ is copied into the output directory before the script runs, so the
+-- source is available at build.outDir .. "/socket.c". build:cc resolves
+-- paths from the package directory, so prefix arguments with build.outDir.
+local ext = jit.os == "Windows" and "dll" or "so"
 
-local scriptPath = debug.getinfo(1, "S").source:sub(2):match("(.*/)")
-
-local function join(...)
-	return table.concat({ ... }, pathSep)
-end
-
-local outPath = join(outDir, libraryName .. "." .. libraryExt)
-local inPath = join(scriptPath, "socket.c")
-
-os.execute("gcc -shared -fPIC -o " .. outPath .. " " .. inPath)
+build:cc({
+	"-shared", "-fPIC",
+	"-o", build.outDir .. "/core." .. ext,
+	build.outDir .. "/socket.c"
+})
 ```
 
+The exported symbol must match the require name: `require("socket.core")` looks for `luaopen_socket_core`. The example declares only the Lua C API functions it uses, so it compiles without LuaJIT headers on the machine. Larger modules usually `#include "lua.h"` and arrange for the headers themselves — for example by fetching them with `build:fetch` or driving a full build system with `build:sh`.
+
 ```c socket.c
-#include "lua.h"
+#include <stddef.h>
+
+typedef struct lua_State lua_State;
+typedef int (*lua_CFunction)(lua_State *L);
+
+extern void lua_pushstring(lua_State *L, const char *s);
 
 int luaopen_socket_core(lua_State *L) {
-  lua_pushstring(L, "Hello from C!");
-  return 1;
+	lua_pushstring(L, "Hello from C!");
+	return 1;
 }
 ```
 
