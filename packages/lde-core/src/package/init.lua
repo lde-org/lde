@@ -34,6 +34,23 @@ local function configPathAtDir(dir)
 	return path.join(dir, "lde.json")
 end
 
+--- Resolve the directory a package should be opened from. Returns an error
+--- when the caller falls back to the current working directory but it no
+--- longer exists (e.g. the shell's cwd was deleted while it was open), since
+--- env.cwd() returns nil there and downstream path joins would crash.
+---@param dir string?
+---@return string?, string? # resolved directory, or nil + error message
+local function resolveDir(dir)
+	if dir then return dir, nil end
+
+	local cwd = env.cwd()
+	if not cwd then
+		return nil, "Current working directory no longer exists (it may have been deleted)"
+	end
+
+	return cwd, nil
+end
+
 function Package:getDir() return self.dir end
 
 function Package:getBuildScriptPath() return path.join(self.dir, "build.lua") end
@@ -132,7 +149,9 @@ end
 ---@param dir string?
 ---@return lde.Package?, string?
 function Package.openLDE(dir)
-	dir = dir or env.cwd()
+	local resolved, err = resolveDir(dir)
+	if not resolved then return nil, err end
+	dir = resolved
 
 	local configPath = configPathAtDir(dir)
 	if not fs.exists(configPath) then
@@ -152,7 +171,9 @@ Package.normalizeNativeModule = rockspecModule.normalizeNativeModule
 ---@param rockspec string? # Path to rockspec, forwarded to openRockspec if no lde.json
 ---@return lde.Package?, string?
 function Package.open(dir, rockspec)
-	dir = dir or env.cwd()
+	local resolved, err = resolveDir(dir)
+	if not resolved then return nil, err end
+	dir = resolved
 
 	if fs.exists(configPathAtDir(dir)) then
 		return Package.openLDE(dir)

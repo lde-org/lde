@@ -6,6 +6,7 @@ local fs = require("fs")
 local env = require("env")
 local path = require("path")
 local json = require("json")
+local process = require("process")
 
 local tmpBase = path.join(env.tmpdir(), "lde-package-tests")
 
@@ -53,6 +54,37 @@ test.it("Package.open fails for a nonexistent directory", function()
 	local pkg, err = lde.Package.open(path.join(tmpBase, "does-not-exist"))
 	test.falsy(pkg)
 	test.truthy(err)
+end)
+
+test.skipIf(jit.os == "Windows")("Package.open fails gracefully when the cwd no longer exists", function()
+	fs.mkdir(tmpBase)
+	local parent = path.join(tmpBase, "ghost-cwd")
+	local dir = path.join(parent, "sub")
+	fs.mkdir(parent)
+	fs.mkdir(dir)
+
+	local oldCwd = env.cwd()
+	test.truthy(env.chdir(dir))
+
+	-- Delete the tree from a child process that has left it first: Linux
+	-- refuses to rmdir a directory that is the cwd of the *calling* process,
+	-- but a separate process (e.g. `rm -rf` from another shell) can delete it
+	-- — which is exactly the real-world "deleted cwd" scenario.
+	local ok, err = pcall(function()
+		local code = process.exec("sh", { "-c", "cd / && rm -rf '" .. parent .. "'" }, {})
+		test.equal(code, 0)
+
+		-- Previously this crashed with "invalid value (nil) at index 1 in
+		-- table for 'concat'" because env.cwd() returns nil once the cwd is
+		-- gone and the nil leaked into path.join.
+		local pkg, pkgErr = lde.Package.open()
+		test.falsy(pkg)
+		test.truthy(pkgErr)
+		test.includes(pkgErr or "", "no longer exists")
+	end)
+
+	env.chdir(oldCwd)
+	if not ok then error(err) end
 end)
 
 --

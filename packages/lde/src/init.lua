@@ -34,7 +34,21 @@ local function applyOverrides()
 	local path = require("path")
 
 	if cwdOverride then
-		local requestedCwd = path.resolve(env.cwd(), cwdOverride)
+		local cwd = env.cwd()
+		local requestedCwd
+		if not cwd then
+			-- env.cwd() returns nil when the process's cwd no longer exists
+			-- (deleted while the shell was open). Only an absolute -C can
+			-- still get us somewhere useful in that state.
+			if not path.isAbsolute(cwdOverride) then
+				ansi.printf("{red}Error: Current working directory no longer exists (it may have been deleted); use an absolute path with -C or cd to an existing directory")
+				os.exit(1)
+			end
+
+			requestedCwd = path.normalize(cwdOverride)
+		else
+			requestedCwd = path.resolve(cwd, cwdOverride)
+		end
 		if not fs.isdir(requestedCwd) then
 			ansi.printf("{red}Error: Directory does not exist: %s", requestedCwd)
 			os.exit(1)

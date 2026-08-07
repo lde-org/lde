@@ -189,6 +189,9 @@ end
 ---@return lde.Package?, string?
 local function openRockspec(dir, rockspecPath)
 	dir = dir or env.cwd()
+	if not dir then
+		return nil, "Current working directory no longer exists (it may have been deleted)"
+	end
 
 	-- On Windows, returns an env table with the bundled toolchain's bin dir
 	-- prepended to PATH so child processes (gcc, ar, ld, sh, make, etc.)
