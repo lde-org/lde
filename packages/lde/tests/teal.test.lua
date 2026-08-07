@@ -84,3 +84,38 @@ test.it("reports Teal syntax errors with file:line:col", function()
 
 	fs.rmdir(tmpDir)
 end)
+
+test.it("runs Teal (.tl) test files via lde test", function()
+	local tmpDir = path.join(env.tmpdir(), "lde-teal-test-files")
+	fs.rmdir(tmpDir)
+	fs.mkdir(tmpDir)
+	fs.mkdir(path.join(tmpDir, "src"))
+	fs.mkdir(path.join(tmpDir, "tests"))
+	fs.write(path.join(tmpDir, "lde.json"), json.encode({ name = "tealtests", version = "0.1.0" }))
+	fs.write(path.join(tmpDir, "src", "init.lua"), "return true")
+	fs.write(path.join(tmpDir, "tests", "a.test.tl"), [[
+		local t = require("lde-test")
+		t.it("tl test passes", function()
+			t.equal(40 + 2, 42)
+		end)
+	]])
+
+	local ok, out = ldecli({ "test" }, tmpDir)
+	test.truthy(ok)
+	test.includes(out or "", "tl test passes")
+
+	-- Compiled to Lua under target/tests; the .tl source is kept next to it
+	-- (like src/ builds) but the runner only executes the compiled .lua.
+	local testsTarget = path.join(tmpDir, "target", "tests")
+	test.truthy(fs.exists(path.join(testsTarget, "a.test.lua")))
+	test.truthy(fs.exists(path.join(testsTarget, "a.test.tl")))
+	test.falsy(fs.islink(testsTarget))
+	test.falsy(fs.exists(path.join(testsTarget, ".lde-tests-stamp")))
+
+	-- A .tl filter runs the compiled file.
+	local ok2, out2 = ldecli({ "test", "--", path.join(tmpDir, "tests", "a.test.tl") }, tmpDir)
+	test.truthy(ok2)
+	test.includes(out2 or "", "tl test passes")
+
+	fs.rmdir(tmpDir)
+end)

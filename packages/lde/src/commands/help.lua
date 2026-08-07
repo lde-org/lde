@@ -74,6 +74,14 @@ local function main(args)
 		end
 	end
 
+	---@class lde.HelpCommand
+	---@field cmd string? # command or placeholder text; nil marks a section separator
+	---@field ex string? # example text shown in the second column
+	---@field color string? # ansi color for the command column
+	---@field exColor string? # overrides the default gray example color
+	---@field desc string?
+
+	---@type lde.HelpCommand[]
 	local commands = {
 			{ cmd = "help",      ex = nil,           color = "green",   desc = "Show help for a command" },
 			{ cmd = "run",       ex = nil,           color = "green",   desc = "Execute a project" },
@@ -86,8 +94,8 @@ local function main(args)
 			{ cmd = "upgrade",   ex = nil,           color = "red",     desc = "Upgrade lde to the latest version" },
 			{},
 			{ cmd = "sync",      ex = nil,           color = "yellow",  desc = "Install dependencies (--locked: from lockfile only)" },
-			{ cmd = "install",   ex = "rocks:busted", color = "yellow",  desc = "Install a tool to PATH with --git/--path/rocks:" },
-			{ cmd = "uninstall", ex = "busted",      color = "yellow",  desc = "Uninstall a tool from PATH" },
+			{ cmd = "install",   ex = "rocks:tl", color = "yellow",  desc = "Install a tool to PATH with --git/--path/rocks:" },
+			{ cmd = "uninstall", ex = "tl",      color = "yellow",  desc = "Uninstall a tool from PATH" },
 			{ cmd = "add",       ex = "hood",        color = "yellow",  desc = "Add a dependency (--path <path> or --git <url>)" },
 			{ cmd = "remove",    ex = "json",        color = "yellow",  desc = "Remove a dependency" },
 			{ cmd = "tree",      ex = nil,           color = "yellow",  desc = "Show the dependency tree" },
@@ -99,34 +107,45 @@ local function main(args)
 			{ cmd = "bundle",    ex = nil,           color = "magenta", desc = "Bundle current project into a single lua file" },
 			{},
 			{ cmd = "completion", ex = "bash",       color = "cyan", desc = "Print a shell completion script (bash|zsh|fish)" },
-			{ cmd = "--help", pre = "<command>", color = "cyan", desc = "Print help text for command." }
+			{ cmd = "<command>", ex = "--help", color = "gray", exColor = "cyan", desc = "Print help text for command." }
 		}
 
 	ansi.printf("{blue}{bold}lde{reset} is a package manager for Lua, written in Lua. {gray}(%s)\n", currentVersion)
 	ansi.printf("{bold}Usage:{reset} lde <command> {magenta}[options]")
 	ansi.printf("\n{bold}Commands:{reset}")
 
+	-- Column widths fit the longest command/example so the table stays
+	-- compact; %-Ns pads the plain text, so the escape overhead never shifts
+	-- the columns (colored and plain output line up identically).
+	local cmdW, exW = 0, 0
+	for _, c in ipairs(commands) do
+		if c.cmd then
+			cmdW = math.max(cmdW, #c.cmd)
+			exW = math.max(exW, #(c.ex or ""))
+		end
+	end
+
+	exW = exW + 1
+
+	-- Breathing room between the command and example columns. The footer
+	-- links pad their labels to the same total width so they line up with
+	-- the descriptions.
+	local gap = 2
+	local linkW = cmdW + gap + exW
+
 	for _, command in ipairs(commands) do
 		if not command.cmd then -- Separator
 			print("")
 		else
-			local cmd, ex
-			if command.pre then
-				-- Meta rows like `<command> --help`: the placeholder sits gray in
-				-- the command column, the flag takes the example column.
-				cmd = ansi.format("{bold}{gray}" .. command.pre)
-				ex = ansi.format("{bold}{" .. command.color .. "}" .. command.cmd)
-			else
-				cmd = ansi.format("{bold}{" .. command.color .. "}" .. command.cmd)
-				ex = ansi.colorize("gray", command.ex or "")
-			end
-
-			ansi.printf("  %-23s %-22s %s", cmd, ex, command.desc)
+			-- The {reset} after each cell keeps the example's color from
+			-- bleeding into the description.
+			ansi.printf("  {bold}{" .. command.color .. "}%-" .. cmdW .. "s{reset}" .. string.rep(" ", gap) .. "{" .. (command.exColor or "gray") .. "}%-" .. exW .. "s{reset} %s",
+				command.cmd, command.ex or "", command.desc)
 		end
 	end
 
-	ansi.printf("{bold}%-25s{reset} {blue}  %s", "\nLearn more:", "https://lde.sh")
-	ansi.printf("{bold}%-24s{reset} {blue}  %s", "Join the discord:", "https://lde.sh/discord")
+	ansi.printf("\n{bold}%-" .. linkW .. "s{reset} {blue}  %s", "Learn more:", "https://lde.sh")
+	ansi.printf("{bold}%-" .. linkW .. "s{reset} {blue}  %s", "Join the discord:", "https://lde.sh/discord")
 end
 
 ---@class lde.help

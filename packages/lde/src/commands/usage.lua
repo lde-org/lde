@@ -49,7 +49,7 @@ local commands = {
 	},
 	test = {
 		usage = "lde test [<filter>...]",
-		description = "Run all *.test.lua files, or every package's tests when run outside a package.",
+		description = "Run all *.test.lua files (Teal .tl and Moonscript .moon tests are compiled first), or every package's tests when run outside a package.",
 		arguments = "<filter>  Optional glob patterns limiting which test files run",
 		options = {
 			["--watch"] = { desc = "Re-run tests on file changes" },

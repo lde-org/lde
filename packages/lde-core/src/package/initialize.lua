@@ -22,7 +22,7 @@ local AGENT_TEMPLATE = util.dedent([[
 
 ```sh
 lde run                     # build + install deps + run entry point (src/init.lua)
-lde test                    # run all **/*.test.lua files
+lde test                    # run all **/*.test.lua files (.tl/.moon compiled first)
 lde compile                 # compile to a single native executable
 lde bundle                  # bundle into a single .lua file
 lde -e "<code>"             # run a one-liner with project deps available
@@ -45,7 +45,7 @@ Dependency installation happens automatically on `lde run`, `lde test`, and `lde
 ├── lde.lock          # lockfile — commit this
 ├── src/
 │   └── init.lua      # default entry point
-├── tests/            # test files (**/*.test.lua)
+├── tests/            # test files (**/*.test.lua, .tl/.moon welcome)
 ├── build.lua         # (optional) custom build script
 └── target/           # build output — NEVER commit this
 ```
@@ -107,7 +107,7 @@ lde test                    # run all **/*.test.lua in the package
 lde test -- path/to/test    # run a specific test file
 ```
 
-Test files must match `**/*.test.lua`:
+Test files must match `**/*.test.lua` — Teal (`.tl`) and Moonscript (`.moon`) test files are supported and compiled to Lua before running, the same way `lde run` compiles `src/`:
 
 ```lua
 local test = require("lde-test")

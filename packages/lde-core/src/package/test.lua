@@ -9,6 +9,8 @@ local process        = require("process")
 local rocked         = require("rocked")
 local ldetest        = require("lde-test.test")
 local coverageModule = require("lde-core.coverage")
+local teal           = require("lde-core.teal")
+local moonscript     = require("lde-core.moonscript")
 
 ---@class lde.TestFileResult
 ---@field file    string
@@ -372,12 +374,33 @@ local function runTests(package, reporter, filters, opts)
 	local luaPath, luaCPath = getLuaPathsForPackage(package)
 
 	-- Expose tests/ via target/tests so test files can require each other.
-	-- Build-script packages get a copy (a symlink could be shadowed or wiped
-	-- by the build output); like build inputs, it's stamped so it's refreshed
-	-- only when tests/ actually changed — edits to tests/ (e.g. helpers under
-	-- tests/lib) are never served stale, but unchanged runs don't re-copy.
+	-- Tests written in Teal (.tl) or Moonscript (.moon) are compiled to Lua
+	-- there first — mirroring how build() compiles src/ — so the runner below
+	-- only ever executes Lua. Build-script packages get a copy (a symlink
+	-- could be shadowed or wiped by the build output); like build inputs,
+	-- it's stamped so it's refreshed only when tests/ actually changed —
+	-- edits to tests/ (e.g. helpers under tests/lib) are never served stale,
+	-- but unchanged runs don't re-copy.
 	local targetTestsDir = path.join(package:getModulesDir(), "tests")
-	if package:hasBuildScript() then
+	local testsDir = testDir -- where the runner scans and executes from
+	if teal.hasTeal(testDir) then
+		-- Teal takes precedence over Moonscript, matching build's src/ handling.
+		if fs.islink(targetTestsDir) then
+			fs.delete(targetTestsDir)
+		elseif fs.exists(targetTestsDir) then
+			fs.rmdir(targetTestsDir)
+		end
+		teal.compileDir(testDir, targetTestsDir)
+		testsDir = targetTestsDir
+	elseif moonscript.hasMoon(testDir) then
+		if fs.islink(targetTestsDir) then
+			fs.delete(targetTestsDir)
+		elseif fs.exists(targetTestsDir) then
+			fs.rmdir(targetTestsDir)
+		end
+		moonscript.compileDir(testDir, targetTestsDir)
+		testsDir = targetTestsDir
+	elseif package:hasBuildScript() then
 		local stampPath = path.join(targetTestsDir, TEST_STAMP_FILE)
 		local changed, current = checkTestsInputs(testDir, readTestsStamp(stampPath))
 		if changed or not fs.exists(targetTestsDir) then
@@ -391,11 +414,21 @@ local function runTests(package, reporter, filters, opts)
 		end
 	elseif not fs.exists(targetTestsDir) then
 		fs.mklink(testDir, targetTestsDir)
+	elseif not fs.islink(targetTestsDir) then
+		-- A real directory left over from a previous source-language run:
+		-- replace it with a fresh symlink so pure-Lua tests run from source.
+		fs.rmdir(targetTestsDir)
+		fs.mklink(testDir, targetTestsDir)
 	end
 
-	local testFiles = fs.scan(testDir, "**" .. path.separator .. "*.test.lua")
+	local testFiles = fs.scan(testsDir, "**" .. path.separator .. "*.test.lua")
 
 	if filters and #filters > 0 then
+		-- Test files execute as compiled Lua; map any .tl/.moon filter (e.g.
+		-- `lde test -- tests/foo.test.tl`) onto the compiled .lua name.
+		for i, filter in ipairs(filters) do
+			filters[i] = filter:gsub("%.tl$", ".lua"):gsub("%.moon$", ".lua")
+		end
 		for i, filter in ipairs(filters) do
 			local first = filter:sub(1, 1)
 			if first == "." or first == "/" or (ffi.os == "Windows" and filter:match("^%a:\\")) then
@@ -424,7 +457,7 @@ local function runTests(package, reporter, filters, opts)
 	local totalSkipped  = 0
 
 	for _, relativePath in ipairs(testFiles) do
-		local testFile = path.join(testDir, relativePath)
+		local testFile = path.join(testsDir, relativePath)
 
 		if reporter and reporter.onFileStart then reporter.onFileStart(relativePath) end
 

@@ -55,3 +55,30 @@ test.it("runs a bare .moon file outside a package", function()
 
 	fs.rmdir(tmpDir)
 end)
+
+test.it("runs Moonscript (.moon) test files via lde test", function()
+	local tmpDir = path.join(env.tmpdir(), "lde-moon-test-files")
+	fs.rmdir(tmpDir)
+	fs.mkdir(tmpDir)
+	fs.mkdir(path.join(tmpDir, "src"))
+	fs.mkdir(path.join(tmpDir, "tests"))
+	fs.write(path.join(tmpDir, "lde.json"), json.encode({ name = "moontests", version = "0.1.0" }))
+	fs.write(path.join(tmpDir, "src", "init.lua"), "return true")
+	fs.write(path.join(tmpDir, "tests", "a.test.moon"), util.dedent([[
+		t = require("lde-test")
+		t.it "moon test passes", ->
+			t.equal 40 + 2, 42
+	]]))
+
+	local ok, out = ldecli({ "test" }, tmpDir)
+	test.truthy(ok)
+	test.includes(out or "", "moon test passes")
+
+	-- Compiled to Lua under target/tests; no raw .moon survives (like src/ builds).
+	local testsTarget = path.join(tmpDir, "target", "tests")
+	test.truthy(fs.exists(path.join(testsTarget, "a.test.lua")))
+	test.falsy(fs.exists(path.join(testsTarget, "a.test.moon")))
+	test.falsy(fs.islink(testsTarget))
+
+	fs.rmdir(tmpDir)
+end)

@@ -6,6 +6,7 @@ local fs = require("fs")
 local env = require("env")
 local path = require("path")
 local json = require("json")
+local util = require("util")
 
 local tmpBase = path.join(env.tmpdir(), "lde-build-tests")
 
@@ -964,6 +965,101 @@ test.it("runTests with path-like filter containing glob resolves and matches", f
 	test.equal(results.failures, 0)
 	test.equal(#results.files, 1)
 	test.equal(results.files[1].file, "sub" .. path.separator .. "two.test.lua")
+end)
+
+--
+-- runTests: Teal (.tl) and Moonscript (.moon) test files are compiled to Lua
+-- in target/tests before running, mirroring how build() compiles src/.
+--
+
+test.it("runTests compiles Teal (.tl) test files before running", function()
+	local dir = makePackageWithSrc("runtests-teal", { ["init.lua"] = 'return true' })
+
+	local testsDir = path.join(dir, "tests")
+	fs.mkdir(testsDir)
+	fs.write(path.join(testsDir, "a.test.tl"), [[
+local t = require("lde-test")
+t.it("teal test passes", function()
+	t.equal(40 + 2, 42)
+end)
+]])
+
+	local pkg = lde.Package.open(dir)
+	local results = pkg:runTests()
+
+	test.equal(results.failures, 0)
+	test.equal(#results.files, 1)
+	-- The runner reports the compiled .lua name, not the .tl source.
+	test.equal(results.files[1].file, "a.test.lua")
+	-- Compiled Lua landed in target/tests as a real dir (not a symlink).
+	test.truthy(fs.exists(targetTestsFile(dir, "a.test.lua")))
+	test.falsy(fs.islink(path.join(dir, "target", "tests")))
+end)
+
+test.it("runTests compiles Moonscript (.moon) test files before running", function()
+	local dir = makePackageWithSrc("runtests-moon", { ["init.lua"] = 'return true' })
+
+	local testsDir = path.join(dir, "tests")
+	fs.mkdir(testsDir)
+	fs.write(path.join(testsDir, "a.test.moon"), util.dedent([[
+		t = require("lde-test")
+		t.it "moon test passes", ->
+			t.equal 40 + 2, 42
+	]]))
+
+	local pkg = lde.Package.open(dir)
+	local results = pkg:runTests()
+
+	test.equal(results.failures, 0)
+	test.equal(#results.files, 1)
+	test.equal(results.files[1].file, "a.test.lua")
+	test.truthy(fs.exists(targetTestsFile(dir, "a.test.lua")))
+	-- Moonscript sources don't survive in the compiled output.
+	test.falsy(fs.exists(targetTestsFile(dir, "a.test.moon")))
+end)
+
+test.it("runTests maps .tl filters onto the compiled test file", function()
+	local dir = makePackageWithSrc("runtests-filter-tl", { ["init.lua"] = 'return true' })
+
+	local testsDir = path.join(dir, "tests")
+	fs.mkdir(testsDir)
+	fs.write(path.join(testsDir, "foo.test.tl"), [[
+local t = require("lde-test")
+t.it("foo runs", function() end)
+]])
+	fs.write(path.join(testsDir, "bar.test.lua"), filterTestFile)
+
+	local pkg = lde.Package.open(dir)
+	local results = pkg:runTests(nil, { "foo.test.tl" })
+
+	test.equal(results.failures, 0)
+	test.equal(#results.files, 1)
+	test.equal(results.files[1].file, "foo.test.lua")
+end)
+
+test.it("runTests swaps a compiled target/tests back to a symlink for pure-Lua tests", function()
+	local dir = makePackageWithSrc("runtests-src-lang-to-lua", { ["init.lua"] = 'return true' })
+
+	local testsDir = path.join(dir, "tests")
+	fs.mkdir(testsDir)
+	fs.write(path.join(testsDir, "a.test.tl"), [[
+local t = require("lde-test")
+t.it("teal runs", function() end)
+]])
+
+	local pkg = lde.Package.open(dir)
+	test.equal(pkg:runTests().failures, 0)
+	test.truthy(fs.exists(targetTestsFile(dir, "a.test.lua")))
+
+	-- Drop the .tl test, add a plain Lua one: target/tests must go back to
+	-- being a symlink instead of serving the stale compiled copy.
+	fs.rmdir(testsDir)
+	fs.mkdir(testsDir)
+	fs.write(path.join(testsDir, "b.test.lua"), filterTestFile)
+
+	test.equal(pkg:runTests().failures, 0)
+	test.equal(#pkg:runTests().files, 1)
+	test.truthy(fs.islink(path.join(dir, "target", "tests")))
 end)
 
 test.it(
