@@ -71,6 +71,22 @@ lde test --watch "unit/*"
 
 The runner watches `src/` and `tests/`, and also picks up edits to `lde.json` and `build.lua`, so dependency or build-script changes trigger a re-run too. It works from a package directory or from a workspace root with multiple packages.
 
+### Coverage
+
+Pass `--coverage` to measure how much of your package's source your tests exercise:
+
+```sh
+lde test --coverage
+```
+
+The runner instruments the package's own modules (`src/`) with a line hook and prints a per-file report — executed lines, total executable lines, and a percentage — followed by a suite-wide total. Only files under the package's `src/` are measured; dependencies and the test framework itself are excluded. Blank and comment-only lines don't count as executable.
+
+```sh
+lde test --coverage "unit/*"
+```
+
+Coverage works with file filters and multi-package runs (each package gets its own report). Because line hooks disable the JIT, coverage runs are slower than normal test runs. Coverage is not supported for rockspec-based packages that use an external runner (busted).
+
 ## lde-test
 
 This is a minimal testing library that comes bundled with lde. You can require it in your test files and use its simple API to write tests.

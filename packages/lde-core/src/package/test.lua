@@ -1,11 +1,12 @@
-local fs      = require("fs")
-local path    = require("path")
-local env     = require("env")
-local ffi     = require("ffi")
-local lua     = require("lua-sys")
-local process = require("process")
-local rocked  = require("rocked")
-local ldetest = require("lde-test.test")
+local fs             = require("fs")
+local path           = require("path")
+local env            = require("env")
+local ffi            = require("ffi")
+local lua            = require("lua-sys")
+local process        = require("process")
+local rocked         = require("rocked")
+local ldetest        = require("lde-test.test")
+local coverageModule = require("lde-core.coverage")
 
 ---@class lde.TestFileResult
 ---@field file    string
@@ -21,6 +22,7 @@ local ldetest = require("lde-test.test")
 ---@field error    string?
 ---@field external boolean? # true when tests ran under an external runner (busted)
 ---@field exitCode number? # exit code of the external runner
+---@field coverage lde.Coverage? # line coverage collected during the run (--coverage)
 
 local function getLuaPathsForPackage(pkg)
 	local modulesDir = pkg:getModulesDir()
@@ -47,8 +49,9 @@ end
 ---@param luaPath    string
 ---@param luaCPath   string
 ---@param reporter   lde.TestReporter?
+---@param coverage   lde.Coverage? # shared line-coverage collector, nil disables
 ---@return lde.TestFileResult
-local function runTestFile(testFile, luaPath, luaCPath, reporter)
+local function runTestFile(testFile, luaPath, luaCPath, reporter, coverage)
 	local source, readErr = fs.read(testFile)
 	if not source then
 		return { file = testFile, results = {}, error = "Could not read: " .. (readErr or "?") }
@@ -61,6 +64,14 @@ local function runTestFile(testFile, luaPath, luaCPath, reporter)
 	local pkg   = g.package
 	pkg.path    = luaPath
 	pkg.cpath   = luaCPath
+
+	-- Instrument every executed line of the package's own source. The hook
+	-- fires on all guest code (deps, framework, stdlib too); the collector
+	-- filters to the package's files. Installing it disables the guest JIT,
+	-- which is expected — coverage runs are interpreted.
+	if coverage then
+		state:setHook(function(event, info) coverage:hook(event, info) end, "line")
+	end
 
 	-- Inject lde-test into the guest (framework source + reporter wiring) and
 	-- grab the suite runner to invoke once the test file has been evaluated.
@@ -259,8 +270,10 @@ end
 ---@param package  lde.Package
 ---@param reporter lde.TestReporter?
 ---@param filters  string[]?
+---@param opts     { coverage: boolean? }?
 ---@return lde.TestResults
-local function runTests(package, reporter, filters)
+local function runTests(package, reporter, filters, opts)
+	opts = opts or {}
 	package:installDependencies()
 	package:installDevDependencies()
 	package:build()
@@ -269,6 +282,16 @@ local function runTests(package, reporter, filters)
 	-- lde-test files.
 	if package.isRockspec then
 		return runRockspecTests(package, filters)
+	end
+
+	-- In-scope files for coverage: the package's built output (target/<name>,
+	-- where require resolves its own modules) and src/ (for direct loads).
+	local coverage
+	if opts.coverage then
+		coverage = coverageModule.new({
+			package:getTargetDir() .. path.separator,
+			package:getSrcDir() .. path.separator,
+		}, package:getDir())
 	end
 
 	local testDir = package:getTestDir()
@@ -329,7 +352,7 @@ local function runTests(package, reporter, filters)
 
 		if reporter and reporter.onFileStart then reporter.onFileStart(relativePath) end
 
-		local fileResult = runTestFile(testFile, luaPath, luaCPath, reporter)
+		local fileResult = runTestFile(testFile, luaPath, luaCPath, reporter, coverage)
 		fileResult.file  = relativePath
 
 		local failCount = 0
@@ -358,7 +381,8 @@ local function runTests(package, reporter, filters)
 		files    = files,
 		total    = totalTests,
 		failures = totalFailures,
-		skipped  = totalSkipped
+		skipped  = totalSkipped,
+		coverage = coverage,
 	}
 end
 

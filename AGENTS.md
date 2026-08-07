@@ -67,7 +67,9 @@ Commit `lde.lock`. Never commit `target/`.
 
 ```sh
 lde run             # run the package entry point
-lde test            # run all *.test.lua files
+lde test             # run all *.test.lua files
+lde test --coverage  # run tests and print a per-file line coverage report
+lde test --watch     # re-run tests on file changes
 lde compile         # compile to a single executable
 lde -e "..."        # run a Lua expression in project context
 lde ./file.lua      # run a file in project context

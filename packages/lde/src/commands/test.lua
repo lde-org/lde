@@ -256,12 +256,79 @@ local function printSummary(failures, passed, total, skipped)
 	end
 end
 
+---@param percent number
+---@return string
+local function percentColor(percent)
+	if percent >= 90 then return "green" end
+	if percent >= 70 then return "yellow" end
+	return "red"
+end
+
+-- Print a per-file line coverage report. Files show as src/ paths (modules
+-- load from target/<name>, the built copy of src/), sorted worst-first.
+---@param pkg lde.Package
+---@param coverage lde.Coverage
+local function printCoverage(pkg, coverage)
+	local files, totalExecutable, totalCovered = coverage:compute()
+	if #files == 0 then
+		ansi.printf("  {yellow}Coverage: no source files were loaded")
+		return
+	end
+
+	local pkgDir = pkg:getDir()
+	local targetPrefix = path.join("target", pkg:getName()) .. path.separator
+
+	---@type { file: string, executable: number, covered: number, percent: number }[]
+	local rows = {}
+	for _, f in ipairs(files) do
+		local rel = path.relative(pkgDir, f.file) or f.file
+		if rel:sub(1, #targetPrefix) == targetPrefix then
+			rel = path.join("src", rel:sub(#targetPrefix + 1))
+		end
+		rows[#rows + 1] = {
+			file = rel,
+			executable = f.executable,
+			covered = f.covered,
+			percent = f.executable > 0 and f.covered / f.executable * 100 or 0,
+		}
+	end
+	table.sort(rows, function(a, b)
+		if a.percent ~= b.percent then return a.percent < b.percent end
+		return a.file < b.file
+	end)
+
+	print()
+	ansi.printf("  {bold}Coverage")
+	print("  " .. ansi.colorize("gray", string.rep("─", 54)))
+	for _, r in ipairs(rows) do
+		-- The color token is spliced into the format string at runtime so
+		-- ansi.format resolves it; {%s} would survive gsub and print literally.
+		local color = percentColor(r.percent)
+		ansi.printf("  {gray}%-38s{reset} %d/%d {gray}lines{reset}  {" .. color .. "}%.1f%%",
+			r.file, r.covered, r.executable, r.percent)
+	end
+	print("  " .. ansi.colorize("gray", string.rep("─", 54)))
+	local totalPercent = totalExecutable > 0 and totalCovered / totalExecutable * 100 or 0
+	local totalColor = percentColor(totalPercent)
+	ansi.printf("  Total: {" .. totalColor .. "}%d/%d{reset} lines ({gray}%.1f%%{reset})",
+		totalCovered, totalExecutable, totalPercent)
+end
+
+-- Print a notice when coverage was requested but the runner can't provide it.
+---@param results lde.TestResults
+local function printCoverageNotice(results)
+	if results.external then
+		ansi.printf("  {yellow}Coverage is not supported for rockspec (busted) tests")
+	end
+end
+
 --- Re-run `lde test` whenever the project's source or tests change.
 --- The watcher only covers src/, tests/, and the package root (non-recursive,
 --- filtered to lde.json/build.lua) so the target/ churn from running the tests
 --- never triggers a re-run.
 ---@param filters string[]
-local function runWatch(filters)
+---@param coverage boolean?
+local function runWatch(filters, coverage)
 	local dirty = false
 	local watchers = {}
 
@@ -308,6 +375,7 @@ local function runWatch(filters)
 	end
 
 	local spawnArgs = { "test" }
+	if coverage then spawnArgs[#spawnArgs + 1] = "--coverage" end
 	for _, f in ipairs(filters) do spawnArgs[#spawnArgs + 1] = f end
 
 	local function spawnChild()
@@ -338,6 +406,7 @@ end
 ---@param args clap.Args
 local function test(args)
 	local watch = args:flag("watch")
+	local coverage = args:flag("coverage")
 
 	-- Collect remaining positional args as test file filter globs
 	local filters = {}
@@ -348,7 +417,7 @@ local function test(args)
 	end
 
 	if watch then
-		runWatch(filters)
+		runWatch(filters, coverage)
 		return
 	end
 
@@ -406,7 +475,7 @@ local function test(args)
 			ansi.printf("{gray}%s", pkg:getName())
 			print()
 			local reporter = makeReporter(pkg:getDir())
-			local results = pkg:runTests(reporter, filters)
+			local results = pkg:runTests(reporter, filters, { coverage = coverage })
 			if results.error then
 				ansi.printf("  {red}%s", results.error)
 				hadFailures = true
@@ -430,6 +499,13 @@ local function test(args)
 				totalSkipped = totalSkipped + (results.skipped or 0)
 				if results.failures > 0 then hadFailures = true end
 			end
+			if coverage then
+				if results.coverage then
+					printCoverage(pkg, results.coverage)
+				else
+					printCoverageNotice(results)
+				end
+			end
 			print()
 		end
 
@@ -444,7 +520,7 @@ local function test(args)
 	end
 
 	local reporter = makeReporter(package:getDir())
-	local results = package:runTests(reporter, filters)
+	local results = package:runTests(reporter, filters, { coverage = coverage })
 	if results.error then
 		ansi.printf("{red}%s", results.error)
 		print()
@@ -458,6 +534,7 @@ local function test(args)
 		else
 			ansi.printf("{green}Tests: passed")
 		end
+		if coverage then printCoverageNotice(results) end
 		print()
 		os.exit(results.exitCode ~= 0 and 1 or 0)
 		return
@@ -466,6 +543,13 @@ local function test(args)
 	end
 	print()
 	printSummary(results.failures, results.total - results.failures, results.total, results.skipped or 0)
+	if coverage then
+		if results.coverage then
+			printCoverage(package, results.coverage)
+		else
+			printCoverageNotice(results)
+		end
+	end
 	if results.failures > 0 then
 		os.exit(1)
 	end
