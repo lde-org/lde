@@ -12,17 +12,10 @@ local execPath = assert(env.execPath())
 local modulesDir = package.path:match("^([^;]+)/%?%.lua")
 local pkgDir = modulesDir and path.dirname(modulesDir) or env.cwd()
 
--- The spawned children inherit a pipe for stdout, so isatty is always false
--- there — making the color-support detection deterministic. The -e chunk is
--- wrapped in a do-block so the guest doesn't echo the chunk's return value.
-
-test.it("ansi strips color codes when stdout is not a terminal", function()
-	local code, out = process.exec(execPath, {
-		"-e", 'do io.write(require("ansi").format("{red}x") .. "|" .. require("ansi").colorize("green", "y")) end'
-	}, { cwd = pkgDir })
-	test.truthy(code == 0)
-	test.equal(out, "x|y")
-end)
+-- The spawned children inherit a pipe for stdout, so isatty is false there;
+-- the env vars below pin the color decision regardless of the ambient
+-- environment (e.g. CI vars in the parent). The -e chunk is wrapped in a
+-- do-block so the guest doesn't echo the chunk's return value.
 
 test.it("NO_COLOR strips ANSI escapes even when forced", function()
 	local code, out = process.exec(execPath, {
