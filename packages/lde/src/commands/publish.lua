@@ -1,4 +1,5 @@
 local ansi = require("ansi")
+local curl = require("curl-sys")
 local git2 = require("git2-sys")
 local json = require("json")
 local process = require("process")
@@ -12,6 +13,35 @@ local function urlEncode(s)
 	return s:gsub("([^%w%-_%.~])", function(c)
 		return string.format("%%%02X", string.byte(c))
 	end)
+end
+
+local function registryRawBase()
+	return (REGISTRY_REPO:gsub("%.git$", ""):gsub("^https://github%.com/", "https://raw.githubusercontent.com/"))
+end
+
+--- Fetches the live registry portfile for a package, if one exists.
+---@param name string
+---@return lde.Portfile? portfile # nil when the package has never been published
+---@return string? err # transport/parse errors that prevented checking
+local function fetchExistingPortfile(name)
+	local url = registryRawBase() .. "/master/packages/" .. name .. ".json"
+
+	local res, getErr = curl.get(url)
+	if not res then
+		return nil, getErr or ("failed to fetch " .. url)
+	end
+	if res.status == 404 then
+		return nil, nil
+	end
+	if res.status ~= 200 then
+		return nil, "registry returned HTTP " .. res.status
+	end
+
+	local ok, portfile = pcall(json.decode, res.body)
+	if not ok or type(portfile) ~= "table" then
+		return nil, "registry returned malformed portfile for '" .. name .. "'"
+	end
+	return portfile, nil
 end
 
 local function openBrowser(url)
@@ -59,8 +89,21 @@ local function publish(args)
 
 	local branch = repo:currentBranch() or "master"
 
-	local versions = {}
-	json.addField(versions, config.version, commit)
+	-- Preserve previously published version commits: fetch the live portfile
+	-- (if any) and merge its versions with the new one. All other fields are
+	-- rebuilt fresh from the current package below.
+	local existing, fetchErr = fetchExistingPortfile(config.name)
+	if fetchErr then
+		ansi.printf("{yellow}Could not check registry for existing versions: %s", fetchErr)
+	end
+
+	local versions = (existing and type(existing.versions) == "table") and existing.versions or {}
+	if versions[config.version] then
+		-- Re-publishing the same version: update the pinned commit in place.
+		versions[config.version] = commit
+	else
+		json.addField(versions, config.version, commit)
+	end
 
 	local portfile = {}
 	json.addField(portfile, "name", config.name)
