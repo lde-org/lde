@@ -60,6 +60,9 @@ return M
 
 	local ok, out = ldecli({ "test", "--coverage" }, tmpDir)
 	test.truthy(ok, "lde test --coverage failed: " .. tostring(out))
+	-- GitHub Actions forces ANSI colors on even when stdout is a pipe, so strip
+	-- escape sequences before matching on content and column layout.
+	out = out:gsub("\27%[[0-9;]*m", "")
 	test.includes(out, "Coverage")
 	-- Modules load from target/<name> but are shown as src/ paths.
 	test.includes(out, "src/init.lua")

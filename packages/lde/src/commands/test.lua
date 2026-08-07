@@ -294,6 +294,9 @@ local function printCoverage(pkg, coverage)
 		if rel:sub(1, #targetPrefix) == targetPrefix then
 			rel = path.join("src", rel:sub(#targetPrefix + 1))
 		end
+		-- Display paths with forward slashes on every platform; path.relative
+		-- and path.join use the OS separator (backslashes on Windows).
+		rel = rel:gsub("\\", "/")
 		rows[#rows + 1] = {
 			file = rel,
 			executable = f.executable,
