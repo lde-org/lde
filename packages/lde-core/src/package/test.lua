@@ -2,6 +2,8 @@ local fs             = require("fs")
 local path           = require("path")
 local env            = require("env")
 local ffi            = require("ffi")
+local json           = require("json")
+local util           = require("util")
 local lua            = require("lua-sys")
 local process        = require("process")
 local rocked         = require("rocked")
@@ -267,6 +269,68 @@ local function runRockspecTests(package, filters)
 	}
 end
 
+---@class lde.TestsStampFile
+---@field size number
+---@field mtime number
+---@field hash string
+
+--- Stamp file written inside the target/tests copy. Records the size, mtime,
+--- and fnv1a hash of every file under tests/ so the copy is only refreshed
+--- when the source actually changed — the same approach build.lua uses for
+--- build inputs.
+local TEST_STAMP_FILE = ".lde-tests-stamp"
+local TEST_STAMP_VERSION = 1
+
+---@param stampPath string
+---@return table<string, lde.TestsStampFile>
+local function readTestsStamp(stampPath)
+	local content = fs.read(stampPath)
+	if not content then return {} end
+	local ok, decoded = pcall(json.decode, content)
+	if not ok or type(decoded) ~= "table" or decoded.version ~= TEST_STAMP_VERSION or type(decoded.files) ~= "table" then
+		return {}
+	end
+	return decoded.files
+end
+
+--- Compare tests/ against the stored stamp. Files whose size+mtime are
+--- unchanged reuse the stored hash; anything else is re-hashed. Returns
+--- whether the copy is stale and the current per-file state to persist.
+---@param testDir string
+---@param stored table<string, lde.TestsStampFile>
+---@return boolean changed
+---@return table<string, lde.TestsStampFile> current
+local function checkTestsInputs(testDir, stored)
+	local current = {}
+	local changed = false
+	for _, rel in ipairs(fs.scan(testDir, "**")) do
+		local relKey = rel:gsub("\\", "/")
+		local abs = path.join(testDir, rel)
+		local stat = fs.stat(abs)
+		if not stat then
+			changed = true
+			goto continue
+		end
+		local size, mtime = tonumber(stat.size) or 0, tonumber(stat.modifyTime) or 0
+		local prev = stored[relKey]
+		if prev and prev.size == size and prev.mtime == mtime then
+			-- Fast path: size + mtime unchanged, the stored hash is still valid.
+			current[relKey] = prev
+		else
+			local content = fs.read(abs)
+			local hash = content and util.fnv1a(content) or ""
+			changed = changed or not prev or prev.hash ~= hash
+			current[relKey] = { size = size, mtime = mtime, hash = hash }
+		end
+		::continue::
+	end
+	-- Files that were inputs to the last copy but no longer exist.
+	for relKey in pairs(stored) do
+		if not current[relKey] then changed = true end
+	end
+	return changed, current
+end
+
 ---@param package  lde.Package
 ---@param reporter lde.TestReporter?
 ---@param filters  string[]?
@@ -307,14 +371,26 @@ local function runTests(package, reporter, filters, opts)
 
 	local luaPath, luaCPath = getLuaPathsForPackage(package)
 
-	-- Expose tests/ via target/tests so test files can require each other
+	-- Expose tests/ via target/tests so test files can require each other.
+	-- Build-script packages get a copy (a symlink could be shadowed or wiped
+	-- by the build output); like build inputs, it's stamped so it's refreshed
+	-- only when tests/ actually changed — edits to tests/ (e.g. helpers under
+	-- tests/lib) are never served stale, but unchanged runs don't re-copy.
 	local targetTestsDir = path.join(package:getModulesDir(), "tests")
-	if not fs.exists(targetTestsDir) then
-		if package:hasBuildScript() then
+	if package:hasBuildScript() then
+		local stampPath = path.join(targetTestsDir, TEST_STAMP_FILE)
+		local changed, current = checkTestsInputs(testDir, readTestsStamp(stampPath))
+		if changed or not fs.exists(targetTestsDir) then
+			if fs.islink(targetTestsDir) then
+				fs.delete(targetTestsDir)
+			elseif fs.exists(targetTestsDir) then
+				fs.rmdir(targetTestsDir)
+			end
 			fs.copy(testDir, targetTestsDir)
-		else
-			fs.mklink(testDir, targetTestsDir)
+			fs.write(stampPath, json.encode({ version = TEST_STAMP_VERSION, files = current }))
 		end
+	elseif not fs.exists(targetTestsDir) then
+		fs.mklink(testDir, targetTestsDir)
 	end
 
 	local testFiles = fs.scan(testDir, "**" .. path.separator .. "*.test.lua")

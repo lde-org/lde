@@ -209,9 +209,11 @@ test.it("lde --lua rebuilds arg for the script after -e chunks", function()
 end)
 
 test.it("lde --lua -i enters an interactive REPL", function()
-	-- stdin hits EOF immediately under process.exec; the prompt still proves
-	-- the REPL branch was taken.
-	local ok, out = ldecli { "--lua", "-e", "io.write('pre')", "-i" }
+	-- The REPL reads stdin; without explicit stdin the child inherits the test
+	-- runner's stdin and blocks forever when that's a live terminal/pipe, so
+	-- close it immediately (empty write + EOF) to prove the prompt prints and
+	-- the REPL loop terminates.
+	local ok, out = ldecli({ "--lua", "-e", "io.write('pre')", "-i" }, nil, { stdin = "" })
 	test.truthy(ok)
 	test.includes(out, "pre")
 	test.includes(out, ">")
