@@ -147,8 +147,37 @@ local function runString(package, code, args, vars, cwd)
 	return runStringWithLuaCLI(package, code, args, vars, engine, cwd)
 end
 
+--- Build the package, install its dependencies, and create an isolated guest
+--- state with the package's target/ on package.path/cpath — the same setup
+--- lde run uses. The caller keeps the state open to drive it (eval chunks, a
+--- REPL loop, ...); call cleanup() and state:close() when done.
+---
+---@param package lde.Package
+---@param opts lde.ExecuteOptions?
+---@return lua.State state
+---@return lua.Table g      # live proxy of the guest globals
+---@return fun()     cleanup # restores cwd and env vars on the host
+local function createStateForPackage(package, opts)
+	package:build()
+	package:installDependencies()
+
+	opts = opts or {}
+	local luaPath, luaCPath = getLuaPathsForPackage(package)
+
+	return runtime.createState({
+		args = opts.args,
+		cwd = opts.cwd,
+		env = opts.env,
+		packagePath = luaPath,
+		packageCPath = luaCPath,
+		preload = opts.preload,
+		globals = opts.globals,
+	})
+end
+
 run.runFile = runFile
 run.runString = runString
+run.createState = createStateForPackage
 run.getLuaPaths = getLuaPathsForPackage
 
 return run

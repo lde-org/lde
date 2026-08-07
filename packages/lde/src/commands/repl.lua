@@ -2,90 +2,82 @@ local ansi      = require("ansi")
 local readline  = require("readline")
 local highlight = require("readline.highlight")
 
-local lde       = require("lde-core")
-local run       = require("lde-core.package.run")
+local lde     = require("lde-core")
+local runtime = require("lde-core.runtime")
+
+---@param v any
+---@return boolean
+local function isGuestValue(v)
+	if type(v) ~= "table" then return false end
+	local mt = getmetatable(v)
+	return mt ~= nil and rawget(mt, "_is_lua_value") == true
+end
 
 ---@param _args clap.Args
 local function repl(_args)
 	ansi.printf("{blue}{bold}lde repl{reset} — LuaJIT interactive shell")
 	ansi.printf("{gray}Type {bold}exit(){reset}{gray} or press Ctrl+C to quit.\n")
 
-	local savedPath, savedCPath = package.path, package.cpath
-
-	local builtinModules = {
-		package = true, string = true, table = true, math = true, io = true,
-		os = true, debug = true, coroutine = true, bit = true, jit = true,
-		ffi = true, ["jit.opt"] = true, ["jit.util"] = true,
-		["jit.p"] = true, ["jit.profile"] = true, ["string.buffer"] = true
+	local globals = {
+		exit = function(code) os.exit(code or 0) end,
 	}
 
-	local function clearNonBuiltins(t)
-		local saved = {}
-		for k, v in pairs(t) do
-			saved[k] = v
-			if not builtinModules[k] then t[k] = nil end
-		end
-		return saved
-	end
-
-	local function restoreTable(t, saved)
-		for k in pairs(t) do t[k] = nil end
-		for k, v in pairs(saved) do t[k] = v end
-	end
-
-	local savedLoaded, savedPreload ---@type table, table
-
 	local pkg = lde.Package.open()
+	local state, g, cleanup
 	if pkg then
-		pkg:build()
-		pkg:installDependencies()
-
-		local luaPath, luaCPath = run.getLuaPaths(pkg)
-		package.path = luaPath .. savedPath
-		package.cpath = luaCPath .. savedCPath
+		-- Build + install + guest state with the package's target/ on the
+		-- module paths — the same setup lde run uses.
+		state, g, cleanup = pkg:createState({ args = { [0] = "repl" }, globals = globals })
 
 		local config = pkg:readConfig()
 		ansi.printf("{gray}Project: {green}%s {gray}(%s)", config.name or "unknown", pkg:getDir())
+	else
+		state, g, cleanup = runtime.createState({ args = { [0] = "repl" }, globals = globals })
 	end
-
-	-- Build and install run before this so they can require lde's own modules;
-	-- only the interactive session gets a clean require cache.
-	savedLoaded  = clearNonBuiltins(package.loaded)
-	savedPreload = clearNonBuiltins(package.preload)
+	g["_ENV"] = g
 
 	local buffer = ""
 
-	local G = setmetatable({}, { __index = _G })
-	G._ENV = G
-	G.exit = function(code) os.exit(code or 0) end
-
-	local function pretty(val, indent, seen)
+	local function pretty(val, indent, seen, depth)
 		indent = indent or 0
-		seen = seen or {}
+		seen   = seen or {}
+		depth  = depth or 0
 		local t = type(val)
 		if t == "string" then
 			return ansi.format("{green}\"" .. val:gsub('"', '\\"') .. "\"")
 		elseif t ~= "table" then
 			return ansi.format("{yellow}" .. tostring(val))
-		elseif seen[val] then
+		end
+
+		local guest = isGuestValue(val)
+		if guest and val._type ~= "table" then
+			-- guest thread/userdata — nothing to walk
+			return ansi.format("{yellow}%s", tostring(val))
+		end
+		if not guest and seen[val] then
 			return ansi.format("{gray}<circular>")
 		end
+		if depth >= 10 then
+			return ansi.format("{gray}{...}")
+		end
 		seen[val] = true
-		local pad = string.rep("  ", indent)
+
+		local pad   = string.rep("  ", indent)
 		local inner = string.rep("  ", indent + 1)
 		local items = {}
-		for k, v in pairs(val) do
+		local iter  = guest and val.pairs or pairs
+		for k, v in iter(val) do
 			local key = type(k) == "string"
 				and ansi.format("{cyan}" .. k .. "{reset}")
 				or ansi.format("{magenta}[" .. tostring(k) .. "]{reset}")
-			items[#items + 1] = inner .. key .. " = " .. pretty(v, indent + 1, seen)
+			items[#items + 1] = inner .. key .. " = " .. pretty(v, indent + 1, seen, depth + 1)
 		end
 		seen[val] = nil
 		if #items == 0 then return "{}" end
 		return "{\n" .. table.concat(items, ",\n") .. "\n" .. pad .. "}"
 	end
 
-	-- Desugar local and const declarations so names persist in G across lines:
+	-- Desugar local and const declarations so names persist in g across lines:
 	--   `local function name(...)` → `function name(...)` (lands in the chunk env)
 	--   `local x, y = ...`         → `x, y = ...`
 	--   `const x, y = ...`         → `x, y = ...` (const is a soft keyword, so a
@@ -108,7 +100,7 @@ local function repl(_args)
 		if dot then
 			local obj_path = word:sub(1, dot - 1)
 			prefix = word:sub(dot + 1)
-			obj = G
+			obj = g
 			for part in obj_path:gmatch("[%a_][%w_]*") do
 				if type(obj) == "table" then
 					obj = obj[part]
@@ -124,20 +116,24 @@ local function repl(_args)
 
 		local candidates, seen = {}, {}
 		local function scan(t)
-			for k in pairs(t) do
+			local function visit(k)
 				if type(k) == "string" and not seen[k]
 					and k:sub(1, #prefix) == prefix and k ~= prefix then
 					seen[k] = true
 					candidates[#candidates + 1] = k
 				end
 			end
+			if isGuestValue(t) then
+				for k in t:pairs() do visit(k) end
+			else
+				for k in pairs(t) do visit(k) end
+			end
 		end
 
 		if obj then
 			scan(obj)
 		else
-			scan(G)
-			scan(_G)
+			scan(g)
 		end
 
 		if #candidates == 0 then return nil end
@@ -155,36 +151,21 @@ local function repl(_args)
 
 		buffer = buffer == "" and delocal(line) or (buffer .. "\n" .. delocal(line))
 
-		-- Try as an expression first ("return ..."), then as a statement. The
-		-- error must come from the statement parse: an `a or b` expression only
-		-- yields one value, so a bare `or` would always lose the error message
-		-- and break <eof> detection for multi-line chunks.
-		local chunk, err = loadstring("return " .. buffer, "repl")
-		if not chunk then
-			chunk, err = loadstring(buffer, "repl")
-		end
-
-		if chunk then
-			setfenv(chunk, G)
-			local ok, result = pcall(chunk)
-			if ok then
-				if result ~= nil then ansi.printf("{gray}={reset} %s", pretty(result)) end
-			else
-				ansi.printf("{red}%s", tostring(result))
-			end
+		local chunk = state:load(buffer, "repl")
+		local ok, result = chunk:pcall()
+		if ok then
+			if result ~= nil then ansi.printf("{gray}={reset} %s", pretty(result)) end
 			buffer = ""
-		elseif err and err:find("<eof>") then
+		elseif tostring(result):find("<eof>") then
 			-- incomplete, keep buffering
 		else
-			ansi.printf("{red}%s", tostring(err))
+			ansi.printf("{red}%s", tostring(result))
 			buffer = ""
 		end
 	end
 
-	package.path = savedPath
-	package.cpath = savedCPath
-	restoreTable(package.loaded, savedLoaded)
-	restoreTable(package.preload, savedPreload)
+	state:close()
+	cleanup()
 end
 
 return repl

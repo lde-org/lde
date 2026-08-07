@@ -287,6 +287,7 @@ Package.compile = require("lde-core.package.compile")
 local run = require("lde-core.package.run")
 Package.runFile = run.runFile
 Package.runString = run.runString
+Package.createState = run.createState
 Package.runTests = require("lde-core.package.test")
 
 ---@param name string # Name of a script defined in lde.json scripts table

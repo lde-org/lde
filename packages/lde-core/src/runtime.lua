@@ -154,7 +154,7 @@ end
 
 ---@class lde.ExecuteOptions
 ---@field env          table<string, string>?
----@field args         string[]?
+---@field args         string[]?  # positional args; args[0] is arg[0] (chunk name / script path)
 ---@field globals      table<string, any>?
 ---@field packagePath  string?
 ---@field packageCPath string?
@@ -163,21 +163,17 @@ end
 ---@field profile      boolean?
 ---@field flamegraph   string?
 
---- Run Lua source inside a fresh lua-sys guest state.
+--- Create a fresh isolated guest state with the standard lde runtime setup:
+--- cwd/env handling, package.path/cpath, preloads, injected globals, and arg[].
+--- This is the single source of truth for the guest environment — callers keep
+--- the state open to drive it (eval chunks, a REPL loop, ...). Call cleanup()
+--- to restore the host cwd/env and state:close() to free the guest.
 ---
---- The guest receives:
----   • package.path / package.cpath pointing at the package's target/
----   • arg[] populated from opts.args (arg[0] = chunkName)
----   • opts.env entries applied to the host process environment (shared with guest)
----   • opts.preload entries registered as package.preload host callbacks
----   • opts.globals entries written into guest _G
----
----@param source    string  Lua source code to run
----@param chunkName string  Label shown in error traces
----@param opts      lde.ExecuteOptions?
----@return boolean ok
----@return any ...  error message on failure, return values on success
-local function executeSource(source, chunkName, opts)
+---@param opts lde.ExecuteOptions?
+---@return lua.State state
+---@return lua.Table g      # live proxy of the guest globals
+---@return fun()     cleanup # restores cwd and env vars on the host
+local function createState(opts)
 	opts = opts or {}
 
 	-- Change cwd on the host process (guest inherits the same OS environment)
@@ -228,12 +224,38 @@ local function executeSource(source, chunkName, opts)
 		end
 	end
 
-	-- Populate arg[]. toLua coerces the table automatically.
-	local args = opts.args or {}
+	-- Populate arg[] — args[0] is arg[0] (the chunk name / script path),
+	-- args[1..] are the positional arguments.
+	local args   = opts.args or {}
 	local argTbl = state:table()
-	argTbl[0] = chunkName
+	argTbl[0]   = args[0] or "?"
 	for i, v in ipairs(args) do argTbl[i] = v end
 	g.arg = argTbl
+
+	return state, g, cleanup
+end
+
+--- Run Lua source inside a fresh lua-sys guest state (see createState for
+--- the environment setup).
+---
+---@param source    string  Lua source code to run
+---@param chunkName string  Label shown in error traces
+---@param opts      lde.ExecuteOptions?
+---@return boolean ok
+---@return any ...  error message on failure, return values on success
+local function executeSource(source, chunkName, opts)
+	opts = opts or {}
+	local args = opts.args or {}
+
+	local state, _, cleanup = createState({
+		args = { [0] = chunkName, unpack(args) },
+		cwd = opts.cwd,
+		env = opts.env,
+		packagePath = opts.packagePath,
+		packageCPath = opts.packageCPath,
+		preload = opts.preload,
+		globals = opts.globals,
+	})
 
 	-- Start profiler if requested
 	local stopProfiler
@@ -343,40 +365,16 @@ local function executeLuaCLI(args, opts)
 		return false, "no script or -e chunk given after --lua"
 	end
 
-	-- Change cwd on the host process (guest inherits the same OS environment)
-	local oldCwd
-	if opts.cwd then
-		oldCwd = env.cwd()
-		env.chdir(opts.cwd)
-	end
-
-	-- Apply env vars; save originals for restore
-	local oldEnvVars = {}
-	if opts.env then
-		for k, v in pairs(opts.env) do
-			oldEnvVars[k] = env.var(k)
-			env.set(k, v)
-		end
-	end
-
-	local function cleanup()
-		for k, v in pairs(oldEnvVars) do env.set(k, v) end
-		if oldCwd then env.chdir(oldCwd) end
-	end
-
-	-- Fresh isolated state
-	local state = lua.new()
-	local g = state:globals()
-	local pkg = g.package
-	if opts.packagePath  then pkg.path  = opts.packagePath  end
-	if opts.packageCPath then pkg.cpath = opts.packageCPath end
-
 	-- arg[0] = the script path (real Lua semantics); -e chunks see the same
 	-- table the script would.
-	local argTbl = state:table()
-	argTbl[0] = script or "-e"
-	for j, v in ipairs(scriptArgs) do argTbl[j] = v end
-	g.arg = argTbl
+	scriptArgs[0] = script or "-e"
+	local state, _, cleanup = createState({
+		args = scriptArgs,
+		cwd = opts.cwd,
+		env = opts.env,
+		packagePath = opts.packagePath,
+		packageCPath = opts.packageCPath,
+	})
 
 	local ok, r = true, nil
 	for _, code in ipairs(eChunks) do
@@ -433,6 +431,7 @@ local function executeLuaCLI(args, opts)
 end
 
 return {
+	createState   = createState,
 	executeFile   = executeFile,
 	executeString = executeString,
 	executeLuaCLI = executeLuaCLI,
