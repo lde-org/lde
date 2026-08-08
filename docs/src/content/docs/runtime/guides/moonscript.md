@@ -12,10 +12,12 @@ Moonscript support ships built-in to lde. Any `.moon` files in your `src` dir wi
 1. Run this and cd into it:
 
 ```sh
-lde new ./hello-moon
+lde new --language moonscript ./hello-moon
 ```
 
-2. Replace `src/init.lua` with `src/init.moon`:
+The scaffold writes `src/init.moon` as the entry point; no other configuration is needed as `.moon` files compile to Lua automatically.
+
+2. Replace `src/init.moon` with:
 
 ```moonscript src/init.moon
 greet = require("hello-moon.greet")

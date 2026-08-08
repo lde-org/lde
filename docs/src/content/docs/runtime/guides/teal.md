@@ -12,10 +12,12 @@ Teal support ships built-in to lde. Any `.tl` files in your `src` dir will autom
 1. Run this and cd into it:
 
 ```sh
-lde new ./hello-teal
+lde new --language teal ./hello-teal
 ```
 
-2. Replace `src/init.lua` with `src/init.tl`:
+The scaffold writes `src/init.tl` as the entry point, adds a `check` script to `lde.json` so `lde check` runs the Teal compiler's checker, and drops in a `tlconfig.lua` with `target/` on the include path.
+
+2. Replace `src/init.tl` with:
 
 ```lua src/init.tl
 local greet = require("hello-teal.greet")

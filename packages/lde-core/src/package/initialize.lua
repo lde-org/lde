@@ -224,22 +224,116 @@ local function isInsideGitRepo(dir)
 	return false
 end
 
+---@class lde.Package.InitOptions
+---@field type "blank"|"library"? # blank = runnable hello-world app (default), library = module entry point
+---@field language "lua"|"teal"|"moonscript"? # default "lua"; teal adds a `check` script and tlconfig.lua
+---@field name string? # manifest name override (default: directory basename)
+
+---@param projectType "blank"|"library"
+---@param language "lua"|"teal"|"moonscript"
+---@return string
+local function entryContent(projectType, language)
+	if projectType == "library" then
+		if language == "teal" then
+			return util.dedent([[
+				local M = {}
+
+				---Greets a name with a friendly message.
+				function M.greet(name: string): string
+					return "Hello, " .. name .. "!"
+				end
+
+				return M
+			]])
+		elseif language == "moonscript" then
+			return util.dedent([[
+				M = {}
+
+				-- Greets a name with a friendly message.
+				M.greet = (name) -> "Hello, " .. name .. "!"
+
+				return M
+			]])
+		else
+			return util.dedent([[
+				local M = {}
+
+				---Greets a name with a friendly message.
+				---@param name string
+				---@return string
+				function M.greet(name)
+					return "Hello, " .. name .. "!"
+				end
+
+				return M
+			]])
+		end
+	end
+
+	if language == "teal" then
+		return util.dedent([[
+			local name: string = "world"
+			print("Hello, " .. name .. "!")
+		]])
+	elseif language == "moonscript" then
+		return util.dedent([[
+			print "Hello, world!"
+		]])
+	end
+
+	return "print('Hello, world!')"
+end
+
 --- Initializes a package at the given directory.
 --- If the directory already contains an lde.json, this will throw an error to avoid overwriting existing packages.
 ---@param dir string
-local function initPackage(dir)
+---@param opts lde.Package.InitOptions?
+local function initPackage(dir, opts)
+	opts = opts or {}
+
+	local projectType = opts.type or "blank"
+	if projectType ~= "blank" and projectType ~= "library" then
+		error("Unknown project type: " .. projectType .. " (expected 'blank' or 'library')")
+	end
+
+	local language = opts.language or "lua"
+	if language ~= "lua" and language ~= "teal" and language ~= "moonscript" then
+		error("Unknown language: " .. language .. " (expected 'lua', 'teal', or 'moonscript')")
+	end
+
+	local packageName = path.basename(dir)
+	if opts.name and opts.name ~= "" then
+		packageName = opts.name --[[@as string]]
+		if packageName:find("[%s/\\]") then
+			error("Invalid package name: '" .. packageName .. "' (no spaces or path separators)")
+		end
+	end
+	if packageName == "tests" then
+		error("The name 'tests' is reserved for the test fixtures directory (target/tests during lde test); choose another name")
+	end
+
 	local configPath = path.join(dir, "lde.json")
 	if fs.exists(configPath) then
 		error("Directory already contains lde.json: " .. dir)
 	end
 
-	fs.write(configPath, util.dedent([[
-		{
-			"name": "]] .. path.basename(dir) .. [[",
-			"version": "0.1.0",
-			"dependencies": {}
-		}
-	]]))
+	if not fs.isdir(dir) then
+		fs.mkdir(dir)
+	end
+
+	local configLines = {
+		"\t{",
+		'\t\t"name": "' .. packageName .. '",',
+		'\t\t"version": "0.1.0",',
+	}
+	if language == "teal" then
+		configLines[#configLines + 1] = '\t\t"scripts": {'
+		configLines[#configLines + 1] = '\t\t\t"check": "tl check -I target src/init.tl"'
+		configLines[#configLines + 1] = '\t\t},'
+	end
+	configLines[#configLines + 1] = '\t\t"dependencies": {}'
+	configLines[#configLines + 1] = '\t}'
+	fs.write(configPath, table.concat(configLines, "\n"))
 
 	local idealGitignore = util.dedent([[
 		/target/
@@ -258,6 +352,17 @@ local function initPackage(dir)
 		if not string.find(content, "/target/", 1, true) then
 			content = content .. "\n" .. idealGitignore
 			fs.write(gitignorePath, content)
+		end
+	end
+
+	if language == "teal" then
+		local tlconfigPath = path.join(dir, "tlconfig.lua")
+		if not fs.exists(tlconfigPath) then
+			fs.write(tlconfigPath, util.dedent([[
+				return {
+					include_dir = { "target" },
+				}
+			]]))
 		end
 	end
 
@@ -300,8 +405,12 @@ local function initPackage(dir)
 
 	local src = package:getSrcDir()
 	if not fs.exists(src) then
+		local entryFile = language == "teal" and "init.tl"
+			or language == "moonscript" and "init.moon"
+			or "init.lua"
+
 		fs.mkdir(src)
-		fs.write(path.join(src, "init.lua"), "print('Hello, world!')")
+		fs.write(path.join(src, entryFile), entryContent(projectType, language))
 	end
 
 	-- Write agent instructions if a known coding agent is present

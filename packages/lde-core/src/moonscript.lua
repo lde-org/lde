@@ -126,5 +126,6 @@ end
 M.compileFile = compileFile
 M.hasMoon = hasMoon
 M.compileDir = compileDir
+M.ensureMoon = ensureMoon
 
 return M

@@ -123,3 +123,147 @@ test.it("Package.init skips git init when inside a nested subdir of a git repo",
 
 	test.falsy(fs.exists(path.join(nestedDir, ".git")), "should not create nested .git")
 end)
+
+test.it("Package.init library type exposes a module from init.lua", function()
+	fs.mkdir(tmpBase)
+	local dir = path.join(tmpBase, "lib-project")
+	fs.mkdir(dir)
+
+	lde.Package.init(dir, { type = "library" })
+
+	local content = fs.read(path.join(dir, "src", "init.lua"))
+	test.truthy(content)
+	test.includes(content, "local M = {}")
+	test.includes(content, "return M")
+end)
+
+test.it("Package.init blank type keeps the hello-world entry point", function()
+	fs.mkdir(tmpBase)
+	local dir = path.join(tmpBase, "blank-project")
+	fs.mkdir(dir)
+
+	lde.Package.init(dir, { type = "blank" })
+
+	local content = fs.read(path.join(dir, "src", "init.lua"))
+	test.truthy(content)
+	test.includes(content, "print('Hello, world!')")
+end)
+
+test.it("Package.init teal projects write a .tl entry point, check script, and tlconfig.lua", function()
+	fs.mkdir(tmpBase)
+	local dir = path.join(tmpBase, "teal-project")
+	fs.mkdir(dir)
+
+	lde.Package.init(dir, { language = "teal" })
+
+	test.truthy(fs.isfile(path.join(dir, "src", "init.tl")))
+	test.falsy(fs.exists(path.join(dir, "src", "init.lua")))
+
+	local pkg = lde.Package.open(dir)
+	local config = pkg:readConfig()
+	local check = config.scripts and config.scripts.check
+	test.truthy(check)
+	if check then
+		test.includes(check, "tl check -I target")
+	end
+
+	test.truthy(fs.isfile(path.join(dir, "tlconfig.lua")))
+	local tlconfig = fs.read(path.join(dir, "tlconfig.lua"))
+	test.includes(tlconfig, "include_dir")
+end)
+
+test.it("Package.init moonscript projects write a .moon entry point and no extra scaffolding", function()
+	fs.mkdir(tmpBase)
+	local dir = path.join(tmpBase, "moon-project")
+	fs.mkdir(dir)
+
+	lde.Package.init(dir, { language = "moonscript" })
+
+	test.truthy(fs.isfile(path.join(dir, "src", "init.moon")))
+	test.falsy(fs.exists(path.join(dir, "src", "init.lua")))
+
+	local pkg = lde.Package.open(dir)
+	local config = pkg:readConfig()
+	test.falsy(config.scripts)
+	test.falsy(fs.exists(path.join(dir, "tlconfig.lua")))
+end)
+
+test.it("Package.init combines type and language for library modules", function()
+	fs.mkdir(tmpBase)
+	local dir = path.join(tmpBase, "teal-lib")
+	fs.mkdir(dir)
+
+	lde.Package.init(dir, { type = "library", language = "teal" })
+
+	local content = fs.read(path.join(dir, "src", "init.tl"))
+	test.truthy(content)
+	test.includes(content, "return M")
+
+	local moonDir = path.join(tmpBase, "moon-lib")
+	fs.mkdir(moonDir)
+	lde.Package.init(moonDir, { type = "library", language = "moonscript" })
+
+	local moonContent = fs.read(path.join(moonDir, "src", "init.moon"))
+	test.truthy(moonContent)
+	test.includes(moonContent, "return M")
+end)
+
+test.it("Package.init rejects unknown types and languages", function()
+	fs.mkdir(tmpBase)
+	local badType = path.join(tmpBase, "bad-type")
+	fs.mkdir(badType)
+	local ok, err = pcall(lde.Package.init, badType, { type = "bogus" })
+	test.falsy(ok)
+	test.truthy(err)
+
+	local badLang = path.join(tmpBase, "bad-lang")
+	fs.mkdir(badLang)
+	local ok2, err2 = pcall(lde.Package.init, badLang, { language = "rust" })
+	test.falsy(ok2)
+	test.truthy(err2)
+end)
+
+test.it("Package.init honors a name override in the manifest", function()
+	fs.mkdir(tmpBase)
+	local dir = path.join(tmpBase, "dir-name")
+	fs.mkdir(dir)
+
+	lde.Package.init(dir, { name = "custom-name" })
+
+	local pkg = lde.Package.open(dir)
+	test.equal(pkg:getName(), "custom-name")
+end)
+
+test.it("Package.init rejects names with spaces or separators", function()
+	fs.mkdir(tmpBase)
+	local dir = path.join(tmpBase, "bad-name")
+	fs.mkdir(dir)
+
+	local ok, err = pcall(lde.Package.init, dir, { name = "bad name" })
+	test.falsy(ok)
+	test.truthy(err)
+
+	local ok2, err2 = pcall(lde.Package.init, dir, { name = "bad/name" })
+	test.falsy(ok2)
+	test.truthy(err2)
+end)
+
+test.it("Package.init rejects the reserved 'tests' name", function()
+	fs.mkdir(tmpBase)
+	local dir = path.join(tmpBase, "reserved-name")
+	fs.mkdir(dir)
+
+	local ok, err = pcall(lde.Package.init, dir, { name = "tests" })
+	test.falsy(ok)
+	test.truthy(err)
+	if err then
+		test.includes(tostring(err), "reserved")
+	end
+
+	-- The directory basename is checked too.
+	local testsDir = path.join(tmpBase, "tests")
+	fs.mkdir(testsDir)
+	local ok2, err2 = pcall(lde.Package.init, testsDir)
+	test.falsy(ok2)
+	test.truthy(err2)
+end)

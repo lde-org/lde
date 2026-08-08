@@ -87,6 +87,7 @@ local ansi = {}
 --- | "white"
 --- | "gray"
 --- | "bold"
+--- | "underline"
 --- | "bg_red"
 --- | "bg_green"
 --- | "bg_yellow"
@@ -108,6 +109,7 @@ local colors = {
 	white = "\27[37m",
 	gray = "\27[90m",
 	bold = "\27[1m",
+	underline = "\27[4m",
 	bg_red = "\27[41m",
 	bg_green = "\27[42m",
 	bg_yellow = "\27[43m",

@@ -150,5 +150,6 @@ end
 M.compileFile = compileFile
 M.hasTeal = hasTeal
 M.compileDir = compileDir
+M.ensureTL = ensureTL
 
 return M

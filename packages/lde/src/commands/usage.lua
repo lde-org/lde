@@ -57,14 +57,24 @@ local commands = {
 		},
 	},
 	new = {
-		usage = "lde new <name>",
-		description = "Create a new project directory with a package skeleton.",
-		arguments = "<name>  Project name, also used as the directory name",
+		usage = "lde new [<name>] [--type <blank|library>] [--language <lua|teal|moonscript>] [--name <pkg>]",
+		description = "Create a new project directory with a package skeleton. Prompts interactively for the project name, type, language, and package name; flags skip the prompts.",
+		arguments = "<name>  Project name, also used as the directory name (prompted for when omitted)",
+		options = {
+			["--type"] = { arg = "blank|library", desc = "Scaffold a blank runnable app or a library module (default: blank)" },
+			["--language"] = { arg = "lua|teal|moonscript", desc = "Entry point language; teal adds a check script and tlconfig.lua (default: lua)" },
+			["--name"] = { arg = "pkg", desc = "Manifest name (default: the directory name)" },
+		},
 	},
 	init = {
-		usage = "lde init [<path>]",
-		description = "Initialize a directory as an lde project (defaults to the current directory).",
+		usage = "lde init [<path>] [--type <blank|library>] [--language <lua|teal|moonscript>] [--name <pkg>]",
+		description = "Initialize a directory as an lde project (defaults to the current directory). Prompts for project type, language, and package name interactively, unless flags are given.",
 		arguments = "<path>  Directory to initialize (default: current directory)",
+		options = {
+			["--type"] = { arg = "blank|library", desc = "Scaffold a blank runnable app or a library module (default: blank)" },
+			["--language"] = { arg = "lua|teal|moonscript", desc = "Entry point language; teal adds a check script and tlconfig.lua (default: lua)" },
+			["--name"] = { arg = "pkg", desc = "Manifest name (default: the directory name)" },
+		},
 	},
 	upgrade = {
 		usage = "lde upgrade",
@@ -188,7 +198,7 @@ local fileFlags = { "--outfile" }
 
 -- Flags that take a value: completion suppresses suggestions for the value
 -- position (shells handle the common cases listed above).
-local valueFlags = { "-C", "--cwd", "--tree", "--path", "--git", "--branch", "--commit", "--version", "--outfile", "--flamegraph" }
+local valueFlags = { "-C", "--cwd", "--tree", "--path", "--git", "--branch", "--commit", "--version", "--outfile", "--flamegraph", "--type", "--language", "--name" }
 
 -- Canonical command names in display order.
 local names = { "help", "run", "x", "repl", "test", "new", "init", "upgrade", "sync", "install", "uninstall", "add", "remove", "tree", "update", "outdated", "publish", "compile", "bundle", "completion" }

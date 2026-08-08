@@ -11,11 +11,14 @@ The days of fiddling with Lua and Luarocks setups are over. Provide users a sing
 
 ## Getting Started
 
-Create a new project with `lde new ./myproject` (or `lde init`).
+Create a new project with `lde new ./myproject` (or `lde init`). The scaffold asks interactively what kind of project you want (a blank app or a library module) and which language to use — Lua, [Teal](/docs/runtime/guides/teal), or [MoonScript](/docs/runtime/guides/moonscript) — then installs the compiler for you. Pass `--type`, `--language`, and `--name` to skip the prompts:
 
 ```sh
 lde new myproject && cd myproject
 echo "print('Hello, world!')" > ./src/init.lua
+
+# Non-interactive:
+lde new ./hello-teal --language teal --name hello-teal
 ```
 
 ## Adding Dependencies
