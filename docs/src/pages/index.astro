@@ -368,26 +368,22 @@ const features = [
 				</p>
 			</div>
 
-			<div class="flex flex-col items-center gap-12 md:flex-row-reverse md:items-center md:gap-16">
-				<!-- Platform logos -->
-				<div class="relative shrink-0">
-					<div class="grid grid-cols-2 gap-x-10 gap-y-8 items-center">
-						<a href="/download" class="flex items-center justify-center" aria-label="Download for Windows">
-							<Icon name="simple-icons:windows" class="size-14 md:size-20 text-[#0078d4] transition-all duration-300 hover:scale-110 hover:drop-shadow-[0_0_16px_currentColor]" />
-						</a>
-						<a href="/download" class="flex items-center justify-center" aria-label="Download for macOS">
-							<Icon name="simple-icons:apple" class="size-14 md:size-20 text-black dark:text-white transition-all duration-300 hover:scale-110 hover:drop-shadow-[0_0_16px_currentColor]" />
-						</a>
-						<a href="/download" class="flex items-center justify-center" aria-label="Download for Linux">
-							<Icon name="simple-icons:linux" class="size-14 md:size-20 text-[#fcc624] transition-all duration-300 hover:scale-110 hover:drop-shadow-[0_0_16px_currentColor]" />
-						</a>
-						<a href="/download" class="flex items-center justify-center" aria-label="Download for Android">
-							<Icon name="simple-icons:android" class="size-14 md:size-20 text-[#3ddc84] transition-all duration-300 hover:scale-110 hover:drop-shadow-[0_0_16px_currentColor]" />
-						</a>
-					</div>
-				</div>
+			<div class="relative">
+				<!-- Platform logos scattered around the bullets -->
+				<a href="/download" aria-label="Download for Windows" class="absolute left-0 top-2 -rotate-12 md:-left-20 md:-top-10">
+					<Icon name="simple-icons:windows" class="size-12 md:size-16 text-[#0078d4] transition-all duration-300 hover:scale-110 hover:drop-shadow-[0_0_16px_currentColor]" />
+				</a>
+				<a href="/download" aria-label="Download for macOS" class="absolute z-20 right-0 top-6 rotate-[14deg] md:-right-4 md:top-2">
+					<Icon name="simple-icons:apple" class="size-10 md:size-12 text-black dark:text-white transition-all duration-300 hover:scale-110 hover:drop-shadow-[0_0_16px_currentColor]" />
+				</a>
+				<a href="/download" aria-label="Download for Linux" class="absolute bottom-2 left-1 rotate-[8deg] md:bottom-10 md:-left-20">
+					<Icon name="simple-icons:linux" class="size-11 md:size-14 text-[#fcc624] transition-all duration-300 hover:scale-110 hover:drop-shadow-[0_0_16px_currentColor]" />
+				</a>
+				<a href="/download" aria-label="Download for Android" class="absolute z-20 bottom-0 right-1 -rotate-[10deg] md:bottom-6 md:-right-4">
+					<Icon name="simple-icons:android" class="size-10 md:size-13 text-[#3ddc84] transition-all duration-300 hover:scale-110 hover:drop-shadow-[0_0_16px_currentColor]" />
+				</a>
 
-				<ul class="space-y-4 text-lg">
+				<ul class="relative z-10 space-y-4 text-lg">
 					<li class="flex items-start gap-4 p-6">
 						<span class="mt-1 inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white shadow-sm">
 							<svg xmlns="http://www.w3.org/2000/svg" class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
@@ -663,7 +659,7 @@ const features = [
 			<div class="text-center mb-12">
 				<h2 id="benchmarks" class="text-4xl md:text-5xl font-bold tracking-tight scroll-mt-20">Is it fast?</h2>
 				<p class="mt-4 text-black/50 dark:text-white/50">
-					Move fast and we'll keep up.
+					Move fast. We'll keep up.
 				</p>
 			</div>
 			<BenchmarkChart client:idle />
