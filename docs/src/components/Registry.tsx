@@ -5,7 +5,6 @@ import {
 	useRef,
 	useCallback,
 } from "preact/hooks";
-import { CopyButton } from "./CopyButton";
 
 interface Package {
 	name: string;
@@ -13,75 +12,112 @@ interface Package {
 	authors: string[];
 	latest: string | null;
 	git: string;
+	lastUpdated: string | null;
 }
 
 const REGISTRY_URL =
 	"https://raw.githubusercontent.com/lde-org/registry/refs/heads/dist/index.json";
 
-function PackageCard({ pkg }: { pkg: Package }) {
-	const installCmd = `lde add ${pkg.name}`;
-	const repoName = pkg.git
-		.replace(/\.git$/, "")
-		.replace(/\/$/, "")
-		.split("/")
-		.slice(-2)
-		.join("/");
+// Curated order for the "Featured" column. Packages not listed here follow alphabetically.
+const FEATURED = ["hood", "cowsay", "dotenv"];
 
+// Rows reserved per column, filled with skeleton placeholders when empty.
+const COLUMN_SLOTS = 10;
+
+function byName(a: Package, b: Package) {
+	return a.name.localeCompare(b.name);
+}
+
+function byLastUpdated(a: Package, b: Package) {
+	const ta = a.lastUpdated ? new Date(a.lastUpdated).getTime() : 0;
+	const tb = b.lastUpdated ? new Date(b.lastUpdated).getTime() : 0;
+	if (tb !== ta) return tb - ta;
+	return byName(a, b);
+}
+
+function CompactCard({ pkg }: { pkg: Package }) {
 	return (
 		<a
 			href={`/registry/${pkg.name}/`}
-			class="flex flex-col gap-3 p-5 rounded-xl border border-black/10 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.02] hover:bg-black/[0.04] dark:hover:bg-white/[0.04] transition"
+			class="group flex items-center justify-between gap-3 px-4 py-3 bg-black/[0.02] dark:bg-white/[0.02] hover:bg-black/[0.04] dark:hover:bg-white/[0.04] transition"
 		>
-			<div class="flex items-start justify-between gap-3">
-				<div class="flex items-center gap-2 flex-wrap">
-					<span class="font-semibold text-base">{pkg.name}</span>
-					{pkg.latest && (
-						<span class="text-xs font-mono px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-500 border border-blue-500/20">
-							v{pkg.latest}
-						</span>
-					)}
-				</div>
-				<a
-					href={pkg.git}
-					target="_blank"
-					rel="noopener noreferrer"
-					onClick={(e) => e.stopPropagation()}
-					class="shrink-0 opacity-40 hover:opacity-100 transition-opacity mt-0.5"
-					title={repoName}
-				>
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						class="size-4"
-						viewBox="0 0 24 24"
-						fill="currentColor"
-					>
-						<path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.44 9.8 8.21 11.39.6.11.82-.26.82-.58v-2.03c-3.34.73-4.04-1.61-4.04-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.09-.74.08-.73.08-.73 1.2.08 1.84 1.24 1.84 1.24 1.07 1.83 2.81 1.3 3.49 1 .11-.78.42-1.3.76-1.6-2.67-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.13-.3-.54-1.52.12-3.18 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 0 1 3-.4c1.02 0 2.04.14 3 .4 2.29-1.55 3.3-1.23 3.3-1.23.66 1.66.25 2.88.12 3.18.77.84 1.24 1.91 1.24 3.22 0 4.61-2.81 5.63-5.48 5.92.43.37.81 1.1.81 2.22v3.29c0 .32.22.7.83.58C20.57 21.8 24 17.3 24 12c0-6.63-5.37-12-12-12z" />
-					</svg>
-				</a>
+			<div class="min-w-0">
+				<span class="block font-semibold text-sm truncate">{pkg.name}</span>
+				{pkg.description && (
+					<span class="block text-xs text-black/50 dark:text-white/50 truncate mt-0.5">
+						{pkg.description}
+					</span>
+				)}
 			</div>
-
-			{pkg.description && (
-				<p class="text-sm text-black/60 dark:text-white/60 leading-relaxed">
-					{pkg.description}
-				</p>
-			)}
-
-			<div class="flex items-center gap-2 mt-1 rounded-lg bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 px-3 py-2">
-				<code class="text-xs font-mono flex-1 text-black/70 dark:text-white/70">
-					{installCmd}
-				</code>
-				<CopyButton getText={() => installCmd} />
+			<div class="flex items-center gap-2 shrink-0">
+				{pkg.latest && (
+					<span class="text-xs font-mono text-blue-500 dark:text-blue-400">
+						v{pkg.latest}
+					</span>
+				)}
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					class="size-4 text-black/25 dark:text-white/25 group-hover:text-blue-500 dark:group-hover:text-blue-400 transition"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+				>
+					<path d="m9 18 6-6-6-6" />
+				</svg>
 			</div>
 		</a>
+	);
+}
+
+function Column({
+	title,
+	packages,
+}: {
+	title: string;
+	packages: Package[];
+}) {
+	// Always reserve COLUMN_SLOTS rows so columns stay balanced even when a
+	// section has fewer packages (or none at all) yet.
+	const rows: (Package | null)[] = [
+		...packages,
+		...Array.from(
+			{ length: Math.max(0, COLUMN_SLOTS - packages.length) },
+			() => null,
+		),
+	];
+	return (
+		<div class="flex flex-col min-w-0">
+			<h2 class="text-sm font-semibold mb-2">{title}</h2>
+			<div class="flex flex-col divide-y divide-black/8 dark:divide-white/8 border border-black/10 dark:border-white/10">
+				{rows.map((pkg, i) =>
+					pkg ? (
+						<CompactCard key={pkg.name} pkg={pkg} />
+					) : (
+						<div
+							key={`empty-${i}`}
+							class="flex items-center justify-center h-16 bg-black/[0.02] dark:bg-white/[0.02] text-black/30 dark:text-white/30 select-none"
+						>
+							—
+						</div>
+					),
+				)}
+			</div>
+		</div>
 	);
 }
 
 export default function Registry() {
 	const [packages, setPackages] = useState<Package[]>([]);
 	const [query, setQuery] = useState("");
+	const [activeIdx, setActiveIdx] = useState(0);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const searchRef = useRef<HTMLInputElement>(null);
+	const searchWrapRef = useRef<HTMLDivElement>(null);
+	const listRef = useRef<HTMLUListElement>(null);
 
 	const handleKeyDown = useCallback((e: KeyboardEvent) => {
 		const target = e.target as HTMLElement;
@@ -99,15 +135,25 @@ export default function Registry() {
 		return () => document.removeEventListener("keydown", handleKeyDown);
 	}, [handleKeyDown]);
 
+	// Close the dropdown when clicking anywhere outside the search box.
+	useEffect(() => {
+		const handler = (e: MouseEvent) => {
+			if (!searchWrapRef.current?.contains(e.target as Node)) {
+				setQuery("");
+			}
+		};
+		document.addEventListener("mousedown", handler);
+		return () => document.removeEventListener("mousedown", handler);
+	}, []);
+
 	useEffect(() => {
 		fetch(REGISTRY_URL)
 			.then((r) => {
-				if (!r.ok)
-					throw new Error(`Failed to fetch registry (${r.status})`);
+				if (!r.ok) throw new Error(`Failed to fetch registry (${r.status})`);
 				return r.json();
 			})
 			.then((data: Package[]) => {
-				setPackages(data.sort((a, b) => a.name.localeCompare(b.name)));
+				setPackages(data.sort(byName));
 				setLoading(false);
 			})
 			.catch((e) => {
@@ -116,9 +162,11 @@ export default function Registry() {
 			});
 	}, []);
 
+	const searching = query.trim() !== "";
+
 	const filtered = useMemo(() => {
 		const q = query.trim().toLowerCase();
-		if (!q) return packages;
+		if (!q) return [];
 		return packages.filter(
 			(p) =>
 				p.name.toLowerCase().includes(q) ||
@@ -126,12 +174,56 @@ export default function Registry() {
 		);
 	}, [packages, query]);
 
+	const featured = useMemo(() => {
+		const byNameMap = new Map(packages.map((p) => [p.name, p]));
+		const ordered = FEATURED.map((n) => byNameMap.get(n)).filter(
+			Boolean,
+		) as Package[];
+		const rest = packages
+			.filter((p) => !FEATURED.includes(p.name))
+			.sort(byName);
+		return [...ordered, ...rest];
+	}, [packages]);
+
+	const latestUpdated = useMemo(
+		() => [...packages].sort(byLastUpdated),
+		[packages],
+	);
+
+	// The registry index doesn't expose an "added" date yet, so "New" falls
+	// back to most recently updated as the closest signal available.
+	const newest = latestUpdated;
+
+	// Reset the highlighted result when the query changes.
+	useEffect(() => setActiveIdx(0), [query]);
+
+	// Keep the highlighted result in view while navigating with the keyboard.
+	useEffect(() => {
+		const el = listRef.current?.children[activeIdx] as HTMLElement | undefined;
+		el?.scrollIntoView({ block: "nearest" });
+	}, [activeIdx]);
+
+	const handleInputKeyDown = (e: KeyboardEvent) => {
+		if (e.key === "ArrowDown" && filtered.length > 0) {
+			e.preventDefault();
+			setActiveIdx((i) => Math.min(i + 1, filtered.length - 1));
+		} else if (e.key === "ArrowUp" && filtered.length > 0) {
+			e.preventDefault();
+			setActiveIdx((i) => Math.max(i - 1, 0));
+		} else if (e.key === "Enter" && filtered[activeIdx]) {
+			window.location.href = `/registry/${filtered[activeIdx].name}/`;
+		} else if (e.key === "Escape") {
+			setQuery("");
+		}
+	};
+
 	return (
 		<div class="flex flex-col gap-6">
-			<div class="relative">
+			{/* Search + dropdown */}
+			<div ref={searchWrapRef} class="relative">
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
-					class="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-black/40 dark:text-white/40 pointer-events-none"
+					class="absolute left-4 top-1/2 -translate-y-1/2 size-5 text-black/40 dark:text-white/40 pointer-events-none"
 					viewBox="0 0 24 24"
 					fill="none"
 					stroke="currentColor"
@@ -144,15 +236,77 @@ export default function Registry() {
 				</svg>
 				<input
 					ref={searchRef}
-					autoFocus
 					type="text"
 					placeholder="Search packages..."
 					value={query}
-					onInput={(e) =>
-						setQuery((e.target as HTMLInputElement).value)
-					}
-					class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-black/15 dark:border-white/15 bg-black/5 dark:bg-white/5 outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 transition text-sm placeholder:text-black/30 dark:placeholder:text-white/30"
+					onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
+					onKeyDown={handleInputKeyDown}
+					class="w-full pl-12 pr-4 py-4 text-base border border-black/15 dark:border-white/15 bg-black/5 dark:bg-white/5 outline-none focus:border-blue-600/60 focus:ring-2 focus:ring-blue-600/20 transition placeholder:text-black/30 dark:placeholder:text-white/30"
 				/>
+				{searching && !loading && !error && (
+					<div class="absolute left-0 right-0 top-full z-20 bg-white dark:bg-gray-950 border border-black/15 dark:border-white/15 shadow-xl shadow-black/10 dark:shadow-black/40">
+						{filtered.length === 0 ? (
+							<div class="px-4 py-8 text-center text-sm text-black/40 dark:text-white/40">
+								No packages found for "{query.trim()}"
+							</div>
+						) : (
+							<ul ref={listRef} class="max-h-80 overflow-y-auto py-1">
+								{filtered.map((pkg, i) => (
+									<li key={pkg.name}>
+										<a
+											href={`/registry/${pkg.name}/`}
+											onMouseEnter={() => setActiveIdx(i)}
+											class={`flex flex-col gap-0.5 px-4 py-2.5 transition ${
+												i === activeIdx
+													? "bg-blue-500/10"
+													: "hover:bg-black/5 dark:hover:bg-white/5"
+											}`}
+										>
+											<span class="flex items-baseline gap-2">
+												<span class="text-sm font-medium truncate">
+													{pkg.name}
+												</span>
+												{pkg.latest && (
+													<span class="text-xs font-mono text-blue-500 dark:text-blue-400 shrink-0">
+														v{pkg.latest}
+													</span>
+												)}
+											</span>
+											{pkg.description && (
+												<span class="text-xs text-black/50 dark:text-white/50 truncate">
+													{pkg.description}
+												</span>
+											)}
+										</a>
+									</li>
+								))}
+							</ul>
+						)}
+					</div>
+				)}
+			</div>
+
+			{/* Publish CTA */}
+			<div class="flex justify-center mb-24">
+				<a
+					href="/registry/publish/"
+					class="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium bg-blue-600 text-white hover:bg-blue-500 transition"
+				>
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						class="size-4"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					>
+						<path d="M5 12h14" />
+						<path d="M12 5v14" />
+					</svg>
+					Publish a package
+				</a>
 			</div>
 
 			{loading && (
@@ -168,25 +322,17 @@ export default function Registry() {
 			)}
 
 			{!loading && !error && (
-				<>
-					<p class="text-sm text-black/40 dark:text-white/40">
-						{filtered.length}{" "}
-						{filtered.length === 1 ? "package" : "packages"}
-						{query && ` matching "${query}"`}
-					</p>
-
-					{filtered.length === 0 ? (
-						<div class="flex items-center justify-center py-20 text-sm text-black/40 dark:text-white/40">
-							No packages found for "{query}"
-						</div>
-					) : (
-						<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-							{filtered.map((pkg) => (
-								<PackageCard key={pkg.name} pkg={pkg} />
-							))}
-						</div>
-					)}
-				</>
+				<div class="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8 items-start">
+					<Column
+						title="Featured"
+						packages={featured.slice(0, COLUMN_SLOTS)}
+					/>
+					<Column
+						title="Latest Updated"
+						packages={latestUpdated.slice(0, COLUMN_SLOTS)}
+					/>
+					<Column title="New" packages={newest.slice(0, COLUMN_SLOTS)} />
+				</div>
 			)}
 		</div>
 	);

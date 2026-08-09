@@ -112,13 +112,13 @@ export default function Search() {
 		<>
 			<button
 				onClick={() => setOpen(true)}
-				class="flex items-center gap-2 px-3.5 py-2 rounded-lg border border-black/20 dark:border-white/20 bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 transition text-sm text-black/70 dark:text-white/60"
+				class="flex items-center gap-2 px-3.5 py-2 border border-black/20 dark:border-white/20 bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 transition text-sm text-black/70 dark:text-white/60 cursor-pointer"
 			>
 				<svg xmlns="http://www.w3.org/2000/svg" class="size-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
 					<circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
 				</svg>
 				<span class="hidden sm:inline">Search</span>
-				<kbd class="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border border-black/20 dark:border-white/20 text-xs font-mono leading-none">
+				<kbd class="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 border border-black/20 dark:border-white/20 text-xs font-mono leading-none">
 					<span class="text-[10px]">⌘</span>K
 				</kbd>
 			</button>
@@ -130,10 +130,10 @@ export default function Search() {
 						onClick={(e) => e.target === e.currentTarget && setOpen(false)}
 					>
 					{/* Backdrop */}
-					<div class="absolute inset-0 bg-black/40 dark:bg-black/60 backdrop-blur-sm" onClick={() => setOpen(false)} />
+					<div class="absolute inset-0 bg-black/20 dark:bg-black/30" onClick={() => setOpen(false)} />
 
 					{/* Modal */}
-					<div class="relative w-full max-w-lg bg-gray-950 rounded-2xl shadow-2xl border border-white/10 overflow-hidden">
+					<div class="relative w-full max-w-lg bg-gray-950 shadow-2xl border border-white/10 overflow-hidden">
 						<div class="flex items-center gap-3 px-4 border-b border-white/8">
 							<svg xmlns="http://www.w3.org/2000/svg" class="size-4 shrink-0 text-white/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
 								<circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
@@ -178,7 +178,7 @@ export default function Search() {
 														class="text-sm font-medium text-white/85"
 														dangerouslySetInnerHTML={{ __html: highlight(doc.title, query) }}
 													/>
-													<span class={`text-[10px] font-medium px-1.5 py-0.5 rounded uppercase tracking-wide ${doc.type === "blog" ? "bg-purple-500/10 text-purple-400" : "bg-blue-500/10 text-blue-400"}`}>
+													<span class={`text-[10px] font-medium px-1.5 py-0.5 rounded ${doc.type === "blog" ? "bg-purple-500/10 text-purple-400" : "bg-blue-500/10 text-blue-400"}`}>
 														{doc.type}
 													</span>
 												</div>

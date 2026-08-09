@@ -281,10 +281,10 @@ export default function DownloadPanel() {
 							setPlatform(pl.id);
 							setArch(detectArch(pl.id));
 						}}
-						class={`cursor-pointer flex flex-col items-center gap-2 p-4 rounded-xl border transition-all text-sm font-medium ${
+						class={`cursor-pointer flex flex-col items-center gap-2 p-4 border transition-all text-sm font-medium ${
 							platform === pl.id
-								? "border-blue-500/50 bg-blue-500/[0.06] text-blue-400"
-								: "border-black/10 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.02] text-black/60 dark:text-white/50 hover:border-blue-500/30 hover:bg-blue-500/[0.03]"
+								? "border-blue-600/50 bg-blue-500/[0.06] text-blue-400"
+								: "border-black/10 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.02] text-black/60 dark:text-white/50 hover:border-blue-600/30 hover:bg-blue-500/[0.03]"
 						}`}
 					>
 						{pl.icon}
@@ -294,21 +294,18 @@ export default function DownloadPanel() {
 			</div>
 
 			{/* Panel */}
-			<div class="rounded-2xl border border-black/10 dark:border-white/10 overflow-hidden">
+			<div class="border border-black/10 dark:border-white/10 overflow-hidden">
 				{/* Arch + nightly row */}
 				<div class="flex flex-wrap items-center gap-2 px-6 py-4 border-b border-black/8 dark:border-white/8 bg-black/[0.02] dark:bg-white/[0.02]">
-					<span class="hidden sm:inline text-xs text-black/40 dark:text-white/30 font-medium uppercase tracking-wide mr-2">
-						Arch
-					</span>
 					{p.arches.map((a) => (
 						<button
 							key={a}
 							type="button"
 							onClick={() => setArch(a)}
-							class={`cursor-pointer px-3 py-1 rounded-lg text-sm border transition-all ${
+							class={`cursor-pointer px-3 py-1 text-sm border transition-all ${
 								arch === a
-									? "border-blue-500/50 bg-blue-500/[0.06] text-blue-400"
-									: "border-black/10 dark:border-white/10 text-black/50 dark:text-white/40 hover:border-blue-500/30 hover:text-blue-400"
+									? "border-blue-600/50 bg-blue-500/[0.06] text-blue-400"
+									: "border-black/10 dark:border-white/10 text-black/50 dark:text-white/40 hover:border-blue-600/30 hover:text-blue-400"
 							}`}
 						>
 							{a}
@@ -317,7 +314,7 @@ export default function DownloadPanel() {
 					<button
 						type="button"
 						onClick={() => setNightly((n) => !n)}
-						class={`cursor-pointer ml-auto px-3 py-1 rounded-lg text-sm border transition-all ${
+						class={`cursor-pointer ml-auto px-3 py-1 text-sm border transition-all ${
 							nightly
 								? "border-amber-500/50 bg-amber-500/[0.06] text-amber-400"
 								: "border-black/10 dark:border-white/10 text-black/50 dark:text-white/40 hover:border-amber-500/30 hover:text-amber-400"
@@ -337,7 +334,7 @@ export default function DownloadPanel() {
 									{m.icon}
 									{m.label}
 								</div>
-								<div class="flex items-center gap-2 px-4 py-3 rounded-lg bg-black/5 dark:bg-white/5 border border-black/8 dark:border-white/8 font-mono text-sm min-w-0">
+								<div class="flex items-center gap-2 px-4 py-3 bg-black/5 dark:bg-white/5 border border-black/8 dark:border-white/8 font-mono text-sm min-w-0">
 									<span class="text-blue-400 select-none shrink-0">
 										$
 									</span>

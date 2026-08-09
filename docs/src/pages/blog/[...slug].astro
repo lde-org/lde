@@ -61,7 +61,7 @@ const tocHeadings = headings.filter((h) => h.depth <= 3);
 				class="hidden xl:block fixed w-48"
 				style="top: calc(72px + 5rem); right: max(2rem, calc((100vw - 48rem) / 2 - 16rem));"
 			>
-				<p class="text-xs font-semibold uppercase tracking-wider text-black/40 dark:text-white/40 mb-3">
+				<p class="text-xs font-semibold text-black/40 dark:text-white/40 mb-3">
 					On this page
 				</p>
 				<ul class="border-l border-black/10 dark:border-white/10">
@@ -93,7 +93,7 @@ const tocHeadings = headings.filter((h) => h.depth <= 3);
 			function setActive(slug: string) {
 				links.forEach((l) => {
 					const active = l.dataset.tocSlug === slug;
-					l.classList.toggle("border-blue-500", active);
+					l.classList.toggle("border-blue-600", active);
 					l.classList.toggle("text-blue-500", active);
 					l.classList.toggle("dark:text-blue-400", active);
 					l.classList.toggle("border-transparent", !active);

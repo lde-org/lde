@@ -5,27 +5,34 @@ order: 0
 
 # Introduction
 
-LDE is a package manager, runtime, test runner and bundler for Lua. It ships as a single executable with LuaJIT bundled in for you.
+lde is a package manager, runtime, test runner and bundler for Lua. It ships as a single executable with LuaJIT bundled in for you.
 
-The days of fiddling with Lua and Luarocks setups are over. Provide users a single binary without dependencies of your project with a simple `lde compile`!
+The days of fiddling with lua and luarocks setups are over.
+
+Provide users a single binary without dependencies of your project with a simple `lde compile`!
 
 ## Getting Started
 
-Create a new project with `lde new ./myproject` (or `lde init`). The scaffold asks interactively what kind of project you want (a blank app or a library module) and which language to use — Lua, [Teal](/docs/runtime/guides/teal), or [MoonScript](/docs/runtime/guides/moonscript) — then installs the compiler for you. Pass `--type`, `--language`, and `--name` to skip the prompts:
+Create a new project with `lde new` (or `lde init` in an existing directory).
+
+It'll first ask you what package name you'd want and if you want to write a library or a `blank` package.
+
+For now, choose `blank`. Additionally, it will also ask what language you want to use.
+
+Choose `lua` for now, but you choose and learn about [Teal](/docs/runtime/guides/teal) and [MoonScript](/docs/runtime/guides/moonscript) later.
 
 ```sh
 lde new myproject && cd myproject
 echo "print('Hello, world!')" > ./src/init.lua
-
-# Non-interactive:
-lde new ./hello-teal --language teal --name hello-teal
 ```
 
 ## Adding Dependencies
 
-Add dependencies with a simple `lde add` which supports git, registry and luarocks dependencies all in one!
+Adding dependencies is as simple as `lde add`.
 
-Dependencies are resolved locally to your project for easy access to lua without polluting your PATH, or needing some kind of virtual environment.
+It supports the [lde registry](/registry), [luarocks](/docs/package-manager/dependencies/luarocks-support/), and direct git dependencies if you want to avoid a registry entirely.
+
+Dependencies are resolved locally to your project for easy access to lua without polluting your PATH, or needing some kind of virtual environment. (But they are cached and reused globally for performance and to save space)
 
 ```sh
 lde add hood --git https://github.com/codebycruz/hood
@@ -34,7 +41,9 @@ lde add rocks:luasocket
 
 ## Running Your Project
 
-LDE ships with a runtime. You can run your project's entrypoint with `lde run`. To use an external lua engine like Lua 5.4, [see this article](/docs/runtime/guides/using-other-lua).
+We aren't just dealing with a package manager here. You want to be able to run your code..
+
+Running `lde run` will run your project's entrypoint using the embedded LuaJIT engine.
 
 ```sh
 lde run
@@ -60,11 +69,15 @@ ldx cowsay hi
                ||     ||
 ```
 
+This is the equivalent of manually installing the package, then going into the directory and running `lde run`.
+
 ## Test Your Code
 
-LDE can **test** your code with `lde test`. LDE ships a minimal built-in test framework, required as `lde-test`, which accompanies the default test executor which simply runs every file inside of your `tests` folder.
+If you can run your code with lde, you should be able to test that it works.
 
-```lua
+That's why lde ships with a minimal built-in test framework, known as `lde-test`.
+
+```lua tests/example.test.lua
 local test = require('lde-test')
 
 test.it("should add numbers", function()
@@ -76,9 +89,19 @@ test.it("should not be equal", function()
 end)
 ```
 
+Simply write this file, and then run `lde test` to see the results.
+
+You can also get [test coverage](/docs/test-runner/getting-started/test-runner/) to ensure you're testing your full codebase with `lde test --coverage`.
+
 ## Compile Your Code
 
-LDE can **compile** your code into a single executable. Users don't need any dependencies to run your project, just run `lde compile` and go!
+Now, we can add dependencies, run and even test our code. But this is all pointless if our code stays on our machine!
+
+How do we give it to our users? What about run it on a server?
+
+Thankfully, lde can **compile** your code into a single executable, including all of its dependencies.
+
+This can be done with `lde compile`, and the output executable will need no dependencies, not even lua.
 
 ## Next Steps
 

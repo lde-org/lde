@@ -112,7 +112,7 @@ export default function PackageDetail({ name: nameProp }: { name: string }) {
 				<div class="flex items-center gap-3 flex-wrap">
 					<h1 class="text-3xl font-bold">{name}</h1>
 					{latest && (
-						<span class="text-sm font-mono px-2 py-1 rounded-lg bg-blue-500/10 text-blue-500 border border-blue-500/20">
+						<span class="text-sm font-mono px-2 py-1 rounded-lg bg-blue-500/10 text-blue-500 border border-blue-600/20">
 							v{latest}
 						</span>
 					)}
@@ -161,7 +161,7 @@ export default function PackageDetail({ name: nameProp }: { name: string }) {
 
 			{/* Install */}
 			<div class="flex flex-col gap-2">
-				<h2 class="text-sm font-semibold uppercase tracking-wider text-black/40 dark:text-white/40">
+				<h2 class="text-sm font-semibold text-black/40 dark:text-white/40">
 					Install
 				</h2>
 				<div class="flex items-center gap-2 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 px-4 py-3">
@@ -173,7 +173,7 @@ export default function PackageDetail({ name: nameProp }: { name: string }) {
 			{/* Repository */}
 			{git && (
 				<div class="flex flex-col gap-2">
-					<h2 class="text-sm font-semibold uppercase tracking-wider text-black/40 dark:text-white/40">
+					<h2 class="text-sm font-semibold text-black/40 dark:text-white/40">
 						Repository
 					</h2>
 					<a
@@ -198,7 +198,7 @@ export default function PackageDetail({ name: nameProp }: { name: string }) {
 			{/* Dependencies */}
 			{deps && deps.length > 0 && (
 				<div class="flex flex-col gap-2">
-					<h2 class="text-sm font-semibold uppercase tracking-wider text-black/40 dark:text-white/40">
+					<h2 class="text-sm font-semibold text-black/40 dark:text-white/40">
 						Dependencies
 					</h2>
 					<div class="flex flex-wrap gap-2">
@@ -206,7 +206,7 @@ export default function PackageDetail({ name: nameProp }: { name: string }) {
 							<a
 								key={name}
 								href={`/registry/${name}/`}
-								class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-mono border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 hover:border-blue-500/40 hover:text-blue-500 transition-colors"
+								class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-mono border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 hover:border-blue-600/40 hover:text-blue-500 transition-colors"
 							>
 								{name}
 								<span class="text-black/30 dark:text-white/30">
@@ -220,7 +220,7 @@ export default function PackageDetail({ name: nameProp }: { name: string }) {
 
 			{/* Versions */}
 			<div class="flex flex-col gap-2">
-				<h2 class="text-sm font-semibold uppercase tracking-wider text-black/40 dark:text-white/40">
+				<h2 class="text-sm font-semibold text-black/40 dark:text-white/40">
 					Versions
 				</h2>
 				{versions === null ? (
@@ -243,7 +243,7 @@ export default function PackageDetail({ name: nameProp }: { name: string }) {
 										v{version}
 									</span>
 									{version === latest && (
-										<span class="text-[10px] font-medium px-1.5 py-0.5 rounded bg-green-500/10 text-green-500 border border-green-500/20 uppercase tracking-wide">
+										<span class="text-[10px] font-medium px-1.5 py-0.5 rounded bg-green-500/10 text-green-500 border border-green-500/20">
 											latest
 										</span>
 									)}

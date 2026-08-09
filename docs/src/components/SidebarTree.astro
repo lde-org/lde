@@ -1,5 +1,4 @@
 ---
-import { Icon } from "astro-icon/components";
 
 export interface TreeItem {
 	label: string;
@@ -39,9 +38,8 @@ function isActive(href?: string): boolean {
 							{item.label}
 						</a>
 					) : (
-						<div class="flex items-center gap-2 px-3 py-1 mb-1">
-							{item.icon && <Icon name={item.icon} class="size-3.5 shrink-0 text-gray-400 dark:text-gray-500" />}
-							<span class="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">{item.label}</span>
+						<div class="px-3 py-1 mb-1">
+							<span class="text-xs font-semibold text-gray-400 dark:text-gray-500">{item.label}</span>
 						</div>
 					)}
 					{item.children && (

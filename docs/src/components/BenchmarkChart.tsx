@@ -28,7 +28,7 @@ const benchmarks = [
 ];
 
 const COLORS: Record<string, { bar: string; text: string; label: string }> = {
-	lde:      { bar: "bg-blue-500",                     text: "text-blue-500 dark:text-blue-400",   label: "text-white/80" },
+	lde:      { bar: "bg-blue-600",                     text: "text-blue-500 dark:text-blue-400",   label: "text-white/80" },
 	luarocks: { bar: "bg-slate-300/70 dark:bg-slate-500",  text: "text-slate-500 dark:text-slate-500", label: "text-black/50 dark:text-white/80" },
 	lx:       { bar: "bg-slate-200/80 dark:bg-slate-600",  text: "text-slate-500 dark:text-slate-500", label: "text-black/50 dark:text-white/80" },
 };
@@ -70,7 +70,7 @@ export default function BenchmarkChart() {
 	}, [phase, current]);
 
 	return (
-		<div ref={ref} class="rounded-2xl border border-black/10 dark:border-white/10 overflow-hidden">
+		<div ref={ref} class="border border-black/10 dark:border-white/10 overflow-hidden">
 			{/* Header with tabs */}
 			<div class="flex items-center justify-between px-4 sm:px-6 pt-5 pb-0 border-b border-black/8 dark:border-white/8">
 				<div class="flex gap-0.5 sm:gap-1">
@@ -79,9 +79,9 @@ export default function BenchmarkChart() {
 							key={i}
 							type="button"
 							onClick={() => switchTab(i)}
-							class={`px-2 sm:px-3 py-2 cursor-pointer transition-colors text-xs sm:text-sm rounded-t-lg border-b-2 -mb-px font-medium whitespace-nowrap ${
+							class={`px-2 sm:px-3 py-2 cursor-pointer transition-colors text-xs sm:text-sm border-b-2 -mb-px font-medium whitespace-nowrap ${
 								i === current
-									? "border-blue-500 text-black dark:text-white"
+									? "border-blue-600 text-black dark:text-white"
 									: "border-transparent text-black/40 dark:text-white/35 hover:text-black/70 dark:hover:text-white/60"
 							}`}
 						>
@@ -133,9 +133,9 @@ export default function BenchmarkChart() {
 							</div>
 
 							{/* Bar track */}
-							<div class="h-7 rounded-lg bg-black/5 dark:bg-white/5 overflow-hidden relative">
+							<div class="h-7 bg-black/5 dark:bg-white/5 overflow-hidden relative">
 								<div
-									class={`h-full rounded-lg flex items-center justify-end pr-2 ${c.bar}`}
+									class={`h-full flex items-center justify-end pr-2 ${c.bar}`}
 									style={{
 										width: playing ? `${pct}%` : "0%",
 										transition: playing ? `width ${duration}ms ease-out` : "none",

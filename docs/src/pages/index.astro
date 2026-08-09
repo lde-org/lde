@@ -21,9 +21,7 @@ const comparison = [
 	{ feature: "Compile to executable", href: "/docs/bundler/guides/compiling", subtitle: "Compile <1mB programs that run anywhere", values: ["y", "n", "n"] },
 	{ feature: "Git deps", href: "/docs/package-manager/dependencies/dependencies", subtitle: "Also supports monorepos", values: ["y", "y", "n"] },
 	{ feature: "Monorepo support", href: "/docs/package-manager/guides/monorepos", subtitle: "Run commands across workspaces with proper package typings", values: ["y", "y", "n"] },
-	{ feature: "Registry deps", href: "/docs/package-manager/dependencies/registry", subtitle: "Also supports luarocks", values: ["y:lde", "y:luarocks", "y:luarocks"] },
 	{ feature: "Custom Registry", href: "/docs/package-manager/guides/custom-registry", subtitle: "A modern, fast registry", values: ["y", "n", "y"] },
-	{ feature: "Lockfile", href: "/docs/package-manager/getting-started/project-structure", subtitle: "For reproducible builds", values: ["y", "y", "y"] },
 	{ feature: "Lua build scripts", href: "/docs/package-manager/dependencies/build-scripts", subtitle: "Supports custom build scripts", values: ["a:build.lua", "rockspec", "rockspec"] },
 	{ feature: "Teal support", href: "/docs/runtime/guides/teal", subtitle: "First class support without configuration", values: ["y", "n", "n"] },
 	{ feature: "MoonScript support", href: "/docs/runtime/guides/moonscript", subtitle: "First class support without configuration", values: ["y", "n", "n"] },
@@ -36,28 +34,28 @@ const features = [
 		href: "/docs/runtime/getting-started/runtime",
 		icon: `<polyline points="4 17 10 11 4 5"></polyline><line x1="12" x2="20" y1="19" y2="19"></line>`,
 		title: "Runtime",
-		desc: "LuaJIT built-in, works cross-platform including Windows. Interactive REPL inside your project context.",
+		desc: "Cross platform latest LuaJIT served hot and ready.<br/>No painful build needed.",
 		cmd: "lde ./file.lua",
 	},
 	{
 		href: "/docs/package-manager/getting-started/quick-start",
 		icon: `<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>`,
 		title: "Package Manager",
-		desc: "LuaRocks compatible. <code class=\"text-blue-400\">build.lua</code> scripts for preprocessing. Works with LÖVE and other runtimes.",
+		desc: "Download packages from lde or luarocks, build on any platform.<br/>Yes, even Windows.",
 		cmd: "lde add <package>",
 	},
 	{
 		href: "/docs/test-runner/getting-started/test-runner",
 		icon: `<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline>`,
 		title: "Test Runner",
-		desc: "Simple and minimal. Ships as <code class=\"text-blue-400\">lde-test</code> built-in to the lde runtime. Just <code class=\"text-blue-400\">require(\"lde-test\")</code>.",
+		desc: "A fast, minimal test runner with coverage, profiling, and monorepo support.",
 		cmd: "lde test",
 	},
 	{
 		href: "/docs/bundler/getting-started/single-file-apps",
 		icon: `<path d="M12 2L2 7l10 5 10-5-10-5z"></path><path d="M2 17l10 5 10-5"></path><path d="M2 12l10 5 10-5"></path>`,
 		title: "Bundler & Compiler",
-		desc: "Bundle into a single Lua file or compile to a standalone binary under 1mB. No Lua required on the target machine.",
+		desc: "Compile to &lt;1mB binaries and run on any machine.<br/>It's that easy.",
 		cmd: "lde compile",
 	},
 ];
@@ -114,6 +112,14 @@ const features = [
 			</svg>
 		</div>
 
+		<!-- Shooting stars -->
+		<div class="absolute inset-0 pointer-events-none select-none overflow-hidden" aria-hidden="true">
+			<span class="shooting-star" style="left: 80%; top: -40px; animation-duration: 14s;"></span>
+			<span class="shooting-star" style="left: 92%; top: -80px; animation-duration: 18s; animation-delay: -6s;"></span>
+			<span class="shooting-star" style="left: 60%; top: -60px; animation-duration: 23s; animation-delay: -13s;"></span>
+			<span class="shooting-star" style="left: 70%; top: -25px; animation-duration: 29s; animation-delay: -21s;"></span>
+		</div>
+
 		<!-- Hero content -->
 		<div class="relative z-10 flex flex-col lg:flex-row items-center justify-center gap-16 xl:gap-24 w-full max-w-7xl mx-auto">
 
@@ -124,19 +130,18 @@ const features = [
 				{latestRelease && (
 					<a
 						href={`/blog/${latestRelease.id}`}
-						class="mb-6 inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-blue-500/30 bg-blue-500/10 text-blue-400 text-xs font-medium hover:bg-blue-500/20 transition-colors"
+						class="mb-6 inline-flex items-center gap-2 px-3 py-1.5 border border-blue-600/30 bg-blue-500/10 text-white text-xs font-medium hover:bg-blue-500/20 transition-colors"
 					>
-						<span class="size-1.5 rounded-full bg-blue-400 animate-pulse"></span>
 						{latestRelease.data.title} is out
-						<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+						<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 text-blue-300 animate-bounce-x"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
 					</a>
 				)}
 
 				<h1 class="text-5xl md:text-6xl xl:text-7xl font-bold tracking-tight leading-[1.05]">
-					Lua Done
+					Lua Done{" "}
 					<span class="relative inline-block">
-						<span class="relative z-10 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-400">Easy</span>
-						<span class="absolute inset-x-0 bottom-1 h-[3px] bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full"></span>
+						Easy
+						<span class="absolute inset-x-0 bottom-1 -z-10 h-[3px] bg-blue-600"></span>
 					</span>
 				</h1>
 
@@ -151,13 +156,10 @@ const features = [
 
 			<!-- Right: terminal demo -->
 			<div class="relative hidden lg:flex items-center justify-center">
-				<!-- Orbital rings -->
-				<div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 size-[520px] rounded-full border border-slate-400/15 dark:border-slate-500/20 pointer-events-none"></div>
-				<div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 size-[700px] rounded-full border border-slate-400/8 dark:border-slate-500/12 pointer-events-none"></div>
 				<!-- Glow behind terminal -->
 				<div class="absolute inset-0 bg-blue-500/15 dark:bg-blue-500/12 rounded-full blur-2xl scale-75 pointer-events-none"></div>
 				<div class="relative z-10">
-					<TerminalDemo client:idle />
+					<TerminalDemo client:load />
 				</div>
 			</div>
 		</div>
@@ -172,7 +174,6 @@ const features = [
 	<section class="w-full border-t border-black/8 dark:border-white/8 px-6 py-24">
 		<div class="max-w-7xl mx-auto">
 			<div class="text-center mb-16">
-				<p class="text-blue-400 text-sm font-semibold uppercase tracking-widest mb-3">Everything included</p>
 				<h2 id="features" class="text-4xl md:text-5xl font-bold tracking-tight scroll-mt-20">One tool, all of Lua</h2>
 				<p class="mt-4 text-black/50 dark:text-white/40 text-lg max-w-xl mx-auto">
 					Write, test, and ship Lua in a single simple install.
@@ -183,22 +184,25 @@ const features = [
 				{features.map((f, i) => (
 					<a
 						href={f.href}
-						class="feature-card group relative rounded-2xl border border-black/8 dark:border-white/8 bg-black/[0.02] dark:bg-white/[0.02] p-8 hover:border-blue-500/40 hover:bg-blue-500/[0.04] transition-all duration-300 flex flex-col gap-5 overflow-hidden"
+						class="feature-card glow-card group relative border border-black/8 dark:border-white/8 bg-black/[0.02] dark:bg-white/[0.02] p-8 hover:border-blue-600/40 hover:bg-blue-500/[0.04] transition-all duration-300 flex flex-col gap-5 overflow-hidden"
 					>
 						<!-- Top shimmer on hover -->
 						<div class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-blue-500/70 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
 
-						<div class="flex items-start gap-4">
-							<div class="shrink-0 size-11 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 group-hover:bg-blue-500/15 transition-colors">
-								<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" set:html={f.icon} />
-							</div>
-							<div class="min-w-0">
-								<h3 class="text-base font-semibold mb-1.5">{f.title}</h3>
-								<p class="text-sm text-black/50 dark:text-white/40 leading-relaxed" set:html={f.desc} />
-							</div>
+						<!-- Cursor glow -->
+						<div class="glow-spot pointer-events-none absolute size-44 -translate-x-1/2 -translate-y-1/2 rounded-full bg-blue-600/10 dark:bg-blue-600/15 blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+
+						<!-- Icon top right -->
+						<div class="absolute top-8 right-8 size-11 bg-blue-500/10 border border-blue-600/20 flex items-center justify-center text-blue-400 group-hover:bg-blue-500/15 transition-colors">
+							<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" set:html={f.icon} />
 						</div>
 
-						<code class="mt-auto text-xs text-blue-400 bg-blue-500/10 border border-blue-500/15 px-3 py-2 rounded-lg w-fit font-mono">
+						<div class="min-w-0 pr-16">
+							<h3 class="text-lg font-semibold mb-1.5">{f.title}</h3>
+							<p class="text-md text-black/50 dark:text-white/40 leading-relaxed" set:html={f.desc} />
+						</div>
+
+						<code class="mt-auto text-sm text-blue-400 bg-blue-500/10 border border-blue-600/15 px-3 py-2 w-fit font-mono">
 							$ {f.cmd}
 						</code>
 					</a>
@@ -211,10 +215,9 @@ const features = [
 	<section class="w-full border-t border-black/8 dark:border-white/8 px-6 py-24">
 		<div class="max-w-3xl mx-auto">
 			<div class="text-center mb-12">
-				<p class="text-blue-400 text-sm font-semibold uppercase tracking-widest mb-3">Comparison</p>
-				<h2 id="compare" class="text-4xl md:text-5xl font-bold tracking-tight scroll-mt-20">How does lde compare?</h2>
+				<h2 id="compare" class="text-4xl md:text-5xl font-bold tracking-tight scroll-mt-20">Can it compare?</h2>
 				<p class="mt-4 text-black/50 dark:text-white/40">
-					Corrections welcome via <a class="underline text-blue-400 hover:text-blue-300 transition-colors" href="https://github.com/lde-org/lde/pulls">pull request</a>.
+					We strive to provide the best developer experience.
 				</p>
 			</div>
 
@@ -225,14 +228,14 @@ const features = [
 					<thead>
 						<tr>
 							<th scope="col" class="text-left px-6 py-4 font-medium text-black/35 dark:text-white/25 w-[40%]"></th>
-							<th scope="col" class="text-left px-6 py-4 font-semibold text-blue-400">
-								<span class="inline-flex items-center gap-2 rounded-full px-3 py-1 text-[0.8125rem] ring-1 ring-blue-500/15">
+							<th scope="col" class="text-center px-6 py-4 font-semibold text-blue-400">
+								<span class="inline-flex items-center gap-2 text-[0.8125rem]">
 									<img src="/lde-nospace.svg" class="h-5 opacity-90" alt="" />
 									lde
 								</span>
 							</th>
-							<th scope="col" class="text-left px-6 py-4 font-medium text-black/60 dark:text-white/50">lux</th>
-							<th scope="col" class="text-left px-6 py-4 font-medium text-black/60 dark:text-white/50">luarocks</th>
+							<th scope="col" class="text-center px-6 py-4 font-medium text-black/60 dark:text-white/50">lux</th>
+							<th scope="col" class="text-center px-6 py-4 font-medium text-black/60 dark:text-white/50">luarocks</th>
 						</tr>
 					</thead>
 					<tbody>
@@ -265,15 +268,14 @@ const features = [
 								</th>
 								{cols.map((val, i) => {
 									const blue = i === 0;
-									const base = `px-6 py-4 align-middle ${blue ? "text-blue-400 font-medium" : "text-black/70 dark:text-white/55"}`;
-									if (val === "y") return <td class={base}><span class="inline-flex size-7 items-center justify-center rounded-full bg-emerald-500/14 text-emerald-700 dark:text-emerald-300 font-bold ring-1 ring-emerald-600/20 dark:ring-emerald-400/20">✓</span></td>;
-									if (val === "n") return <td class={base}><span class="inline-flex size-7 items-center justify-center rounded-full bg-red-500/12 text-red-700 dark:text-red-300 font-bold ring-1 ring-red-600/20 dark:ring-red-400/20">✗</span></td>;
-									if (val === "wip") return <td class={base}><span class="inline-flex size-7 items-center justify-center rounded-full bg-amber-500/18 text-amber-800 dark:text-amber-300 font-bold ring-1 ring-amber-600/20 dark:ring-amber-400/20">!</span></td>;
+									const base = `px-6 py-4 align-middle text-center ${blue ? "text-blue-400 font-medium" : "text-black/70 dark:text-white/55"}`;
+									if (val === "y") return <td class={base}><span class="inline-flex size-7 items-center justify-center rounded-full bg-emerald-500/14 text-emerald-700 dark:text-emerald-300 ring-1 ring-emerald-600/20 dark:ring-emerald-400/20"><svg xmlns="http://www.w3.org/2000/svg" class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span></td>;
+									if (val === "n") return <td class={base}><span class="inline-flex size-7 items-center justify-center rounded-full bg-red-500/12 text-red-700 dark:text-red-300 ring-1 ring-red-600/20 dark:ring-red-400/20"><svg xmlns="http://www.w3.org/2000/svg" class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></span></td>;
+									if (val === "wip") return <td class={base}><span class="inline-flex size-7 items-center justify-center rounded-full bg-amber-500/18 text-amber-800 dark:text-amber-300 ring-1 ring-amber-600/20 dark:ring-amber-400/20"><svg xmlns="http://www.w3.org/2000/svg" class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg></span></td>;
 									if (val.startsWith("y:")) return (
 										<td class={base}>
-											<span class="inline-flex items-center gap-2 rounded-full bg-emerald-500/14 px-2.5 py-1 ring-1 ring-emerald-600/20 dark:ring-emerald-400/20">
-												<span class="text-emerald-700 dark:text-emerald-300 font-bold">✓</span>
-												<span class="text-xs text-emerald-800/80 dark:text-emerald-200/80">{val.slice(2)}</span>
+											<span title={val.slice(2)} class="inline-flex size-7 items-center justify-center rounded-full bg-emerald-500/14 text-emerald-700 dark:text-emerald-300 ring-1 ring-emerald-600/20 dark:ring-emerald-400/20">
+												<svg xmlns="http://www.w3.org/2000/svg" class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
 											</span>
 										</td>
 									);
@@ -306,8 +308,8 @@ const features = [
 						const cls = blue ? "text-blue-500 dark:text-blue-400 font-semibold" : "text-black/65 dark:text-white/55";
 						if (val === "y") return <span class="text-emerald-700 dark:text-emerald-300 font-bold">Yes</span>;
 						if (val === "n") return <span class="text-red-700 dark:text-red-300 font-bold">No</span>;
-						if (val === "wip") return <span class="text-amber-800 dark:text-amber-300 font-bold">!</span>;
-						if (val.startsWith("y:")) return <span class="inline-flex items-baseline gap-1.5"><span class="text-emerald-700 dark:text-emerald-300 font-bold">Yes</span><span class="text-[11px] text-black/45 dark:text-white/35">{val.slice(2)}</span></span>;
+						if (val === "wip") return <svg xmlns="http://www.w3.org/2000/svg" class="size-4 text-amber-800 dark:text-amber-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>;
+						if (val.startsWith("y:")) return <span title={val.slice(2)} class="text-emerald-700 dark:text-emerald-300 font-bold">Yes</span>;
 						if (val.startsWith("a:")) return <a href={href} class="text-blue-500 dark:text-blue-400 font-semibold underline">{val.slice(2)}</a>;
 						return <span class={cls}>{val}</span>;
 					};
@@ -337,16 +339,16 @@ const features = [
 							</p>
 							{subtitle && <p class="mb-3 text-xs text-black/40 dark:text-white/30">{subtitle}</p>}
 							<div class="grid grid-cols-3 gap-3 text-sm">
-								<div class="flex flex-col gap-1">
-									<span class="text-[10px] text-blue-500 dark:text-blue-400 font-semibold uppercase tracking-[0.18em]">lde</span>
+								<div class="flex flex-col gap-1 items-center text-center">
+									<span class="text-[10px] text-blue-500 dark:text-blue-400 font-semibold">lde</span>
 									{renderVal(lde as string, true)}
 								</div>
-								<div class="flex flex-col gap-1">
-									<span class="text-[10px] text-black/35 dark:text-white/25 uppercase tracking-[0.18em]">lux</span>
+								<div class="flex flex-col gap-1 items-center text-center">
+									<span class="text-[10px] text-black/35 dark:text-white/25">lux</span>
 									{renderVal(lux as string)}
 								</div>
-								<div class="flex flex-col gap-1">
-									<span class="text-[10px] text-black/35 dark:text-white/25 uppercase tracking-[0.18em]">luarocks</span>
+								<div class="flex flex-col gap-1 items-center text-center">
+									<span class="text-[10px] text-black/35 dark:text-white/25">luarocks</span>
 									{renderVal(luarocks as string)}
 								</div>
 							</div>
@@ -361,10 +363,17 @@ const features = [
 	<section class="w-full border-t border-black/8 dark:border-white/8 px-6 py-24">
 		<div class="max-w-3xl mx-auto">
 			<div class="text-center mb-12">
-				<p class="text-blue-400 text-sm font-semibold uppercase tracking-widest mb-3">Performance</p>
-				<h2 id="benchmarks" class="text-4xl md:text-5xl font-bold tracking-tight scroll-mt-20">Are we fast yet?</h2>
+				<h2 id="benchmarks" class="text-4xl md:text-5xl font-bold tracking-tight scroll-mt-20">Is it fast?</h2>
 				<p class="mt-4 text-black/50 dark:text-white/40">
-					Averages over 5 runs on Linux x86-64. Lower is better.
+					Benchmarks run in GitHub CI according to{" "}
+					<a
+						class="underline text-blue-400 hover:text-blue-300 transition-colors"
+						href="https://github.com/lde-org/lde/blob/master/.github/workflows/benchmark.yml"
+						target="_blank"
+						rel="noopener noreferrer"
+					>
+						benchmarks.yml
+					</a>
 				</p>
 			</div>
 			<BenchmarkChart client:idle />
@@ -375,8 +384,7 @@ const features = [
 	<section class="w-full border-t border-black/8 dark:border-white/8 px-6 py-24">
 		<div class="max-w-5xl mx-auto">
 			<div class="text-center mb-12">
-				<p class="text-blue-400 text-sm font-semibold uppercase tracking-widest mb-3">Get started</p>
-				<h2 id="learn" class="text-4xl md:text-5xl font-bold tracking-tight scroll-mt-20">Ready to dive in?</h2>
+				<h2 id="learn" class="text-4xl md:text-5xl font-bold tracking-tight scroll-mt-20">Take it for a spin.</h2>
 				<p class="mt-4 text-black/50 dark:text-white/40 text-lg">
 					Read the docs or catch up on the latest from the blog.
 				</p>
@@ -385,14 +393,14 @@ const features = [
 			<div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
 				<a
 					href="/docs/general/getting-started/introduction"
-					class="group relative rounded-2xl border border-black/10 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.02] hover:border-blue-500/40 hover:bg-blue-500/[0.04] transition-all duration-300 p-6 flex flex-col overflow-hidden"
+					class="glow-card group relative border border-black/10 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.02] hover:border-blue-600/40 hover:bg-blue-500/[0.04] transition-all duration-300 p-6 flex flex-col overflow-hidden"
 				>
-					<div class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-blue-500/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+					<div class="glow-spot pointer-events-none absolute size-44 -translate-x-1/2 -translate-y-1/2 rounded-full bg-blue-600/10 dark:bg-blue-600/15 blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
 					<div class="flex items-start justify-between gap-3">
 						<span class="text-xl font-semibold">
 							Documentation
 						</span>
-						<div class="size-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 shrink-0 self-start">
+						<div class="size-10 bg-blue-500/10 border border-blue-600/20 flex items-center justify-center text-blue-400 shrink-0 self-start">
 							<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
 						</div>
 					</div>
@@ -405,12 +413,13 @@ const features = [
 
 				<a
 					href="/blog"
-					class="group relative rounded-2xl border border-black/10 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.02] hover:border-blue-500/40 hover:bg-blue-500/[0.04] transition-all duration-300 p-6 flex flex-col overflow-hidden"
+					class="glow-card group relative border border-black/10 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.02] hover:border-blue-600/40 hover:bg-blue-500/[0.04] transition-all duration-300 p-6 flex flex-col overflow-hidden"
 				>
 					<div class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-blue-500/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+					<div class="glow-spot pointer-events-none absolute size-44 -translate-x-1/2 -translate-y-1/2 rounded-full bg-blue-600/10 dark:bg-blue-600/15 blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
 					<div class="flex items-start justify-between gap-3">
 						<span class="text-xl font-semibold">Blog</span>
-						<div class="size-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 shrink-0 self-start">
+						<div class="size-10 bg-blue-600/10 border border-blue-600/20 flex items-center justify-center text-blue-400 shrink-0 self-start">
 							<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 0-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8"/><path d="M15 18h-5"/><path d="M10 6h8v4h-8V6Z"/></svg>
 						</div>
 					</div>
@@ -458,6 +467,18 @@ const features = [
 		cards.forEach((c, i) => {
 			(c as HTMLElement).style.transitionDelay = `${i * 70}ms`;
 			observer.observe(c);
+		});
+
+		// Cursor-following glow on cards
+		const glowCards = document.querySelectorAll(".glow-card");
+		glowCards.forEach((card) => {
+			const spot = card.querySelector<HTMLElement>(".glow-spot");
+			if (!spot) return;
+			card.addEventListener("mousemove", (e) => {
+				const rect = card.getBoundingClientRect();
+				spot.style.left = `${e.clientX - rect.left}px`;
+				spot.style.top = `${e.clientY - rect.top}px`;
+			});
 		});
 	</script>
 </Layout>

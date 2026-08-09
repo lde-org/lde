@@ -1,0 +1,119 @@
+---
+import Layout from "../../layouts/Layout.astro";
+---
+
+<Layout
+	title="Publish a package"
+	description="How to publish a package to the lde registry."
+>
+	<div class="max-w-3xl mx-auto px-4 sm:px-6 py-16 w-full">
+		<a
+			href="/registry/"
+			class="inline-flex items-center gap-1.5 text-sm text-black/50 dark:text-white/50 hover:text-blue-500 transition-colors mb-8"
+		>
+			<svg
+				xmlns="http://www.w3.org/2000/svg"
+				class="size-3.5"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2.5"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+			>
+				<polyline points="15 18 9 12 15 6" />
+			</svg>
+			Registry
+		</a>
+
+		<h1 class="text-4xl font-bold tracking-tight">Publish a package</h1>
+		<p class="mt-4 text-black/60 dark:text-white/60 leading-relaxed max-w-2xl">
+			Getting your package into the lde registry is three steps. Everything
+			flows through GitHub. So no accounts, tokens, or credentials on a
+			third-party website.
+		</p>
+
+		<ol class="mt-12 flex flex-col gap-10">
+			<li class="flex gap-5">
+				<span
+					class="shrink-0 size-9 flex items-center justify-center bg-blue-600 text-white text-sm font-bold select-none"
+				>1</span>
+				<div class="min-w-0">
+					<h2 class="text-lg font-semibold">Push your package to GitHub</h2>
+					<p class="mt-1.5 text-sm text-black/60 dark:text-white/60 leading-relaxed">
+						Any public git repository works. Make sure the root of your
+						project has an{" "}
+						<code class="font-mono text-xs px-1.5 py-0.5 bg-black/5 dark:bg-white/10">lde.json</code>{" "}
+						manifest with your package's name, version and description.
+					</p>
+					<pre class="mt-3 font-mono text-xs text-black/80 dark:text-white/80 bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 px-4 py-3 overflow-x-auto">git push origin main</pre>
+				</div>
+			</li>
+			<li class="flex gap-5">
+				<span
+					class="shrink-0 size-9 flex items-center justify-center bg-blue-600 text-white text-sm font-bold select-none"
+				>2</span>
+				<div class="min-w-0">
+					<h2 class="text-lg font-semibold">
+						Run <code class="font-mono">lde publish</code> inside the project
+					</h2>
+					<p class="mt-1.5 text-sm text-black/60 dark:text-white/60 leading-relaxed">
+						<code class="font-mono text-xs px-1.5 py-0.5 bg-black/5 dark:bg-white/10">lde publish</code>{" "}
+						reads your{" "}
+						<code class="font-mono text-xs px-1.5 py-0.5 bg-black/5 dark:bg-white/10">lde.json</code>{" "}
+						and opens a pre-filled pull request to the{" "}
+						<a
+							href="https://github.com/lde-org/registry"
+							target="_blank"
+							rel="noopener noreferrer"
+							class="text-blue-500 hover:text-blue-400 underline underline-offset-2"
+						>
+							lde registry
+						</a>{" "}
+						repository.
+					</p>
+					<pre class="mt-3 font-mono text-xs text-black/80 dark:text-white/80 bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 px-4 py-3 overflow-x-auto">lde publish</pre>
+				</div>
+			</li>
+			<li class="flex gap-5">
+				<span
+					class="shrink-0 size-9 flex items-center justify-center bg-blue-600 text-white text-sm font-bold select-none"
+				>3</span>
+				<div class="min-w-0">
+					<h2 class="text-lg font-semibold">Submit the pull request</h2>
+					<p class="mt-1.5 text-sm text-black/60 dark:text-white/60 leading-relaxed">
+						Once merged, your package goes live in the registry. Publishing
+						updates works the same way. Bump the version and run{" "}
+						<code class="font-mono text-xs px-1.5 py-0.5 bg-black/5 dark:bg-white/10">lde publish</code>{" "}
+						again.
+					</p>
+				</div>
+			</li>
+		</ol>
+
+		<div class="mt-14 pt-8 border-t border-black/10 dark:border-white/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+			<p class="text-sm text-black/40 dark:text-white/40">
+				Want the full details, including security notes?
+			</p>
+			<a
+				href="/docs/package-manager/guides/publishing-to-lde"
+				class="inline-flex items-center gap-1.5 text-sm font-medium text-blue-500 hover:text-blue-400 transition-colors"
+			>
+				Read the publishing guide
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					class="size-3.5"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+				>
+					<path d="M5 12h14" />
+					<path d="m12 5 7 7-7 7" />
+				</svg>
+			</a>
+		</div>
+	</div>
+</Layout>

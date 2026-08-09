@@ -12,6 +12,7 @@ const entries = [
 	{ display: "Docs", href: "/docs/general/getting-started/introduction" },
 	{ display: "Blog", href: "/blog/" },
 	{ display: "Registry", href: "/registry/" },
+	{ display: "Download", href: "/download" },
 ];
 
 const pathname = Astro.url.pathname;
@@ -30,19 +31,30 @@ function isActive(href: string) {
 			href="/"
 			class="font-semibold text-2xl tracking-tight p-2 md:p-4 flex items-center gap-2.5"
 		>
-			<img src="/lde.svg" alt="lde logo" class="size-9 object-contain" />
+			<span class="relative inline-flex">
+				<span class="absolute inset-0 rounded-full bg-white/20 blur-xl" aria-hidden="true"></span>
+				<img
+					src="/lde.svg"
+					alt="lde logo"
+					class="relative size-9 object-contain"
+				/>
+			</span>
 			lde
 		</a>
 
 		<!-- Desktop nav links -->
-		<div class="hidden md:flex ml-16 h-full flex-row items-center gap-5">
+		<div class="hidden md:flex ml-16 h-full flex-row items-stretch">
 			{
 				entries.map((entry) => (
 					<a
 						href={entry.href}
-						class={`hover:bg-gray-800/50 font-medium dark:hover:bg-white/20 p-4 transition border-b-2 ${isActive(entry.href) ? "border-blue-500" : "border-transparent"}`}
+						class={`group relative flex h-full items-center overflow-hidden px-4 font-medium transition-colors duration-200 ${isActive(entry.href) ? "text-white" : "hover:text-white"}`}
 					>
-						{entry.display}
+						<span
+							class={`absolute inset-0 bg-blue-600 transition-transform duration-200 ease-out ${isActive(entry.href) ? "translate-y-0" : "translate-y-full group-hover:translate-y-0"}`}
+							aria-hidden="true"
+						></span>
+						<span class="relative">{entry.display}</span>
 					</a>
 				))
 			}
@@ -53,12 +65,6 @@ function isActive(href: string) {
 		</div>
 
 		<div class="flex items-center gap-0 md:gap-2">
-			<a
-				href="/download"
-				class="hidden md:inline-flex px-4 py-2 bg-blue-500/15 border border-blue-500/40 text-blue-600 dark:text-blue-400 text-sm font-medium rounded-lg backdrop-blur-md"
-			>
-				Download
-			</a>
 			<a
 				href="/discord"
 				target="_blank"
@@ -214,7 +220,7 @@ function isActive(href: string) {
 			entries.map((entry) => (
 				<a
 					href={entry.href}
-					class={`flex items-center px-2 py-3 font-medium hover:bg-black/5 dark:hover:bg-white/5 rounded-md transition ${isActive(entry.href) ? "text-blue-500" : ""}`}
+					class={`flex items-center px-2 py-3 font-medium rounded-md transition ${isActive(entry.href) ? "bg-blue-500/15 text-blue-500" : "hover:bg-black/5 dark:hover:bg-white/5"}`}
 				>
 					{entry.display}
 				</a>
@@ -223,12 +229,6 @@ function isActive(href: string) {
 		<div
 			class="flex items-center gap-3 px-2 pt-3 pb-1 border-t border-black/10 dark:border-white/10 mt-1"
 		>
-			<a
-				href="/download"
-				class="px-4 py-2 bg-blue-500/15 border border-blue-500/40 text-blue-600 dark:text-blue-400 text-sm font-medium rounded-lg"
-			>
-				Download
-			</a>
 			<a
 				href="/discord"
 				target="_blank"

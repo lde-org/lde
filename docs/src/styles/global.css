@@ -2,6 +2,82 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+@theme {
+	--animate-bounce-x: bounce-x 1s ease-in-out infinite;
+
+	@keyframes bounce-x {
+		0%,
+		100% {
+			transform: translateX(0);
+		}
+		50% {
+			transform: translateX(4px);
+		}
+	}
+}
+
+/* Fast shooting stars for the homepage hero */
+	.shooting-star {
+		position: absolute;
+		width: 120px;
+		height: 1.5px;
+		border-radius: 9999px;
+		background: linear-gradient(
+			to right,
+			rgba(100, 116, 139, 0.55) 0%,
+			rgba(100, 116, 139, 0.25) 30%,
+			rgba(100, 116, 139, 0) 100%
+		);
+		opacity: 0;
+		animation: shoot 6s ease-in-out infinite;
+		will-change: transform, opacity;
+	}
+
+	.dark .shooting-star {
+		background: linear-gradient(
+			to right,
+			rgba(226, 232, 240, 0.6) 0%,
+			rgba(226, 232, 240, 0.28) 30%,
+			rgba(226, 232, 240, 0) 100%
+		);
+	}
+
+	.shooting-star:nth-child(2n) {
+		background: linear-gradient(
+			to right,
+			rgba(37, 99, 235, 0.5) 0%,
+			rgba(37, 99, 235, 0.22) 30%,
+			rgba(37, 99, 235, 0) 100%
+		);
+	}
+
+	.dark .shooting-star:nth-child(2n) {
+		background: linear-gradient(
+			to right,
+			rgba(96, 165, 250, 0.55) 0%,
+			rgba(96, 165, 250, 0.25) 30%,
+			rgba(96, 165, 250, 0) 100%
+		);
+	}
+
+@keyframes shoot {
+	0% {
+		transform: translate3d(0, 0, 0) rotate(-35deg);
+		opacity: 0;
+	}
+	3% {
+		opacity: 1;
+	}
+	8% {
+		transform: translate3d(-70vw, 40vw, 0) rotate(-35deg);
+		opacity: 0;
+	}
+	100% {
+		transform: translate3d(-70vw, 40vw, 0) rotate(-35deg);
+		opacity: 0;
+	}
+}
+
 :root {
 	--astro-code-color-text: #24292e;
 	--astro-code-color-background: transparent;
@@ -94,7 +170,7 @@ html {
 }
 
 .markdown pre {
-	@apply my-4 rounded-lg text-sm leading-relaxed overflow-x-auto bg-gray-50 border border-gray-200;
+	@apply my-4 text-sm leading-relaxed overflow-x-auto bg-gray-50 border border-gray-200;
 	padding: 2.5rem 1rem 1rem;
 
 	@variant dark {
