@@ -179,6 +179,56 @@ interface GitTreeNode {
 	size?: number;
 }
 
+// A nested node in the file tree — children are the entries directly inside
+// a directory.
+interface TreeNode extends GitTreeNode {
+	children: TreeNode[];
+}
+
+// Build a nested tree from the flat GitHub trees API response. Entries come
+// back with full paths ("src/init.lua"); parent directories the API didn't
+// include explicitly are synthesized so every file still nests under its
+// folders.
+function buildTree(entries: GitTreeNode[]): TreeNode[] {
+	const nodes = new Map<string, TreeNode>();
+	const ensure = (path: string): TreeNode => {
+		let node = nodes.get(path);
+		if (!node) {
+			node = { path, type: "tree", children: [] };
+			nodes.set(path, node);
+		}
+		return node;
+	};
+
+	// Create a node for every entry, normalizing trailing slashes.
+	for (const entry of entries) {
+		const path = entry.path.replace(/\/+$/, "");
+		const node = ensure(path);
+		node.type = entry.type;
+		if (entry.type === "blob") node.size = entry.size;
+	}
+
+	// Link each node under its parent directory.
+	const root: TreeNode[] = [];
+	for (const [path, node] of nodes) {
+		const slash = path.lastIndexOf("/");
+		if (slash === -1) root.push(node);
+		else ensure(path.slice(0, slash)).children.push(node);
+	}
+
+	// Directories first, then files — both alphabetical, per level.
+	const sortLevel = (level: TreeNode[]) => {
+		level.sort((a, b) => {
+			if (a.type !== b.type) return a.type === "tree" ? -1 : 1;
+			return a.path.localeCompare(b.path);
+		});
+		for (const node of level)
+			if (node.type === "tree") sortLevel(node.children);
+	};
+	sortLevel(root);
+	return root;
+}
+
 export default function PackageDetail({ name: nameProp }: { name: string }) {
 	const [name, setName] = useState(nameProp);
 
@@ -323,13 +373,65 @@ export default function PackageDetail({ name: nameProp }: { name: string }) {
 		.slice(-2)
 		.join("/");
 
-	// Sorted tree: directories first, then files, both alphabetically.
-	const displayTree = (tree ?? [])
-		.map((n) => ({ ...n, depth: n.path.split("/").length - 1 }))
-		.sort((a, b) => {
-			if (a.type !== b.type) return a.type === "tree" ? -1 : 1;
-			return a.path.localeCompare(b.path);
-		});
+	const treeNodes = tree ? buildTree(tree) : [];
+
+	// Recursively render a directory row followed by its children, each level
+	// indented further so files nest under their containing folders.
+	const renderTreeNode = (
+		node: TreeNode,
+		depth: number,
+	): preact.JSX.Element[] => [
+		<a
+			key={node.path}
+			href={treeLink(node)}
+			target="_blank"
+			rel="noopener noreferrer"
+			class="flex items-center gap-2 px-3 py-1.5 hover:bg-black/[0.03] dark:hover:bg-white/[0.03] transition-colors"
+			style={{ paddingLeft: `calc(0.75rem + ${depth * 16}px)` }}
+		>
+			{node.type === "tree" ? (
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					aria-hidden="true"
+					class="size-3.5 shrink-0 text-blue-500/70"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+				>
+					<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
+				</svg>
+			) : (
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					aria-hidden="true"
+					class="size-3.5 shrink-0 text-black/35 dark:text-white/30"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+				>
+					<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
+					<path d="M14 2v4a2 2 0 0 0 2 2h4" />
+				</svg>
+			)}
+			<span class="font-mono text-xs truncate">
+				{node.path.split("/").pop()}
+			</span>
+			{node.type === "blob" && node.size != null && (
+				<span class="ml-auto pl-3 text-[11px] text-black/30 dark:text-white/30 shrink-0">
+					{formatSize(node.size)}
+				</span>
+			)}
+		</a>,
+		...(node.type === "tree"
+			? node.children.flatMap((child) => renderTreeNode(child, depth + 1))
+			: []),
+	];
 
 	const treeLink = (node: GitTreeNode) =>
 		`https://github.com/${repo?.owner}/${repo?.repo}/${
@@ -462,60 +564,9 @@ export default function PackageDetail({ name: nameProp }: { name: string }) {
 								<p class="text-sm text-red-600/80 dark:text-red-400/80">
 									{treeError}
 								</p>
-							) : displayTree.length > 0 ? (
+							) : treeNodes.length > 0 ? (
 								<div class="border border-black/10 dark:border-white/10 divide-y divide-black/5 dark:divide-white/5 max-h-[28rem] overflow-y-auto">
-									{displayTree.map((node) => (
-										<a
-											key={node.path}
-											href={treeLink(node)}
-											target="_blank"
-											rel="noopener noreferrer"
-											class="flex items-center gap-2 px-3 py-1.5 hover:bg-black/[0.03] dark:hover:bg-white/[0.03] transition-colors"
-											style={{
-												paddingLeft: `calc(0.75rem + ${node.depth * 16}px)`,
-											}}
-										>
-											{node.type === "tree" ? (
-												<svg
-													xmlns="http://www.w3.org/2000/svg"
-													aria-hidden="true"
-													class="size-3.5 shrink-0 text-blue-500/70"
-													viewBox="0 0 24 24"
-													fill="none"
-													stroke="currentColor"
-													stroke-width="2"
-													stroke-linecap="round"
-													stroke-linejoin="round"
-												>
-													<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
-												</svg>
-											) : (
-												<svg
-													xmlns="http://www.w3.org/2000/svg"
-													aria-hidden="true"
-													class="size-3.5 shrink-0 text-black/35 dark:text-white/30"
-													viewBox="0 0 24 24"
-													fill="none"
-													stroke="currentColor"
-													stroke-width="2"
-													stroke-linecap="round"
-													stroke-linejoin="round"
-												>
-													<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
-													<path d="M14 2v4a2 2 0 0 0 2 2h4" />
-												</svg>
-											)}
-											<span class="font-mono text-xs truncate">
-												{node.path.split("/").pop()}
-											</span>
-											{node.type === "blob" &&
-												node.size != null && (
-													<span class="ml-auto pl-3 text-[11px] text-black/30 dark:text-white/30 shrink-0">
-														{formatSize(node.size)}
-													</span>
-												)}
-										</a>
-									))}
+									{treeNodes.flatMap((node) => renderTreeNode(node, 0))}
 								</div>
 							) : (
 								<p class="text-sm text-black/40 dark:text-white/40">

@@ -72,28 +72,61 @@ function CompactCard({ pkg }: { pkg: Package }) {
 	);
 }
 
+// Gray skeleton bar with a highlight that sweeps left to right.
+function SkeletonBar({ className }: { className: string }) {
+	return (
+		<div
+			class={`relative overflow-hidden bg-black/10 dark:bg-white/10 ${className}`}
+		>
+			<div class="absolute inset-y-0 left-0 w-full animate-shimmer bg-gradient-to-r from-transparent via-white/60 dark:via-white/25 to-transparent" />
+		</div>
+	);
+}
+
+// Skeleton row mirroring the layout of a CompactCard.
+function SkeletonRow() {
+	return (
+		<div
+			aria-hidden="true"
+			class="flex items-center justify-between gap-3 px-4 py-3 bg-black/[0.02] dark:bg-white/[0.02]"
+		>
+			<div class="min-w-0 flex-1 flex flex-col gap-2">
+				<SkeletonBar className="h-4 w-2/3 max-w-40" />
+				<SkeletonBar className="h-3.5 w-1/2 max-w-52" />
+			</div>
+			<SkeletonBar className="h-4 w-12 shrink-0" />
+		</div>
+	);
+}
+
 function Column({
 	title,
 	packages,
+	loading = false,
 }: {
 	title: string;
 	packages: Package[];
+	loading?: boolean;
 }) {
 	// Always reserve COLUMN_SLOTS rows so columns stay balanced even when a
 	// section has fewer packages (or none at all) yet.
-	const rows: (Package | null)[] = [
-		...packages,
-		...Array.from(
-			{ length: Math.max(0, COLUMN_SLOTS - packages.length) },
-			() => null,
-		),
-	];
+	const rows: (Package | null)[] = loading
+		? Array.from({ length: COLUMN_SLOTS }, () => null)
+		: [
+				...packages,
+				...Array.from(
+					{ length: Math.max(0, COLUMN_SLOTS - packages.length) },
+					() => null,
+				),
+			];
 	return (
 		<div class="flex flex-col min-w-0">
 			<h2 class="text-sm font-semibold mb-2">{title}</h2>
 			<div class="flex flex-col divide-y divide-black/8 dark:divide-white/8 border border-black/10 dark:border-white/10">
 				{rows.map((pkg, i) =>
-					pkg ? (
+					loading ? (
+						<SkeletonRow key={`skeleton-${i}`} />
+					) : pkg ? (
 						<CompactCard key={pkg.name} pkg={pkg} />
 					) : (
 						<div
@@ -310,8 +343,14 @@ export default function Registry() {
 			</div>
 
 			{loading && (
-				<div class="flex items-center justify-center py-20 text-sm text-black/40 dark:text-white/40">
-					Loading registry…
+				<div
+					class="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8 items-start"
+					role="status"
+					aria-label="Loading registry"
+				>
+					<Column title="Featured" packages={[]} loading />
+					<Column title="Latest Updated" packages={[]} loading />
+					<Column title="New" packages={[]} loading />
 				</div>
 			)}
 
