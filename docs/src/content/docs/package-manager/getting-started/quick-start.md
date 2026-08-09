@@ -18,7 +18,7 @@ lde new myproject && cd myproject
 For this example, we'll import the `path` library from lde itself.
 
 ```sh
-lde add path --git https://github.com/codebycruz/lde
+lde add path --git https://github.com/lde-org/path
 ```
 
 ## Write your main file
@@ -38,4 +38,4 @@ lde run
 # 'hello/world'
 ```
 
-That's it. It's that simple. You just ran your project with a dependency from an entirely remote git repository stored in a monorepo, with all the heavy lifting done by lde!
+That's it. It's that simple. You just ran your project with a dependency from an entirely remote git repository, with all the heavy lifting done by lde!

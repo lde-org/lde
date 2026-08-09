@@ -28,9 +28,15 @@ This can be automated with the `lde add` command. For git dependencies, do `lde 
 
 Simply remove the entry from your `lde.json`, or use `lde remove <name>`.
 
-## Running your program with dependencies
+## Installing dependencies
 
-You can use `lde install` to build all of your dependencies to a folder `./target/` inside of your project.
+Use `lde sync` to build all of your dependencies into a `./target/` folder inside of your project. It installs from the lockfile when possible, and `--locked` installs strictly from the lockfile (refusing to drift from it). `--production` skips dev dependencies.
+
+```sh
+lde sync
+lde sync --locked      # install from the lockfile only
+lde sync --production  # skip dev dependencies
+```
 
 If you're just running a normal Lua project, you can simply use `lde run` which will configure lua automatically to resolve dependencies from your /target/ directory automatically.
 

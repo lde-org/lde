@@ -26,7 +26,7 @@ lde upgrade --force
 You can use the --version flag to specify a specific version to upgrade to, which is useful if you want to downgrade or upgrade to a specific pre-release.
 
 ```bash
-lde upgrade --version=0.6.0
+lde upgrade --version=0.10.0
 ```
 
 ## Upgrading to Nightly

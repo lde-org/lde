@@ -30,4 +30,4 @@ For more info, read about [C Module Support](/docs/package-manager/dependencies/
 
 ## Publishing to LDE
 
-Refer to the [Publishing to LDE](/docs/package-manager/guides/publishing-to-lpm) guide!
+Refer to the [Publishing to LDE](/docs/package-manager/guides/publishing-to-lde) guide!
