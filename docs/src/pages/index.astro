@@ -1,5 +1,6 @@
 ---
 import Layout from "../layouts/Layout.astro";
+import { Icon } from "astro-icon/components";
 import InstallTabs from "../components/InstallTabs";
 import TerminalDemo from "../components/TerminalDemo";
 import { GITHUB_RELEASES_URL, GITHUB_URL } from "../data/info";
@@ -174,7 +175,7 @@ const features = [
 		<div class="max-w-7xl mx-auto">
 			<div class="text-center mb-16">
 				<h2 id="features" class="text-4xl md:text-5xl font-bold tracking-tight scroll-mt-20">One tool, <i>all</i> of Lua</h2>
-				<p class="mt-4 text-black/50 dark:text-white/40 text-lg max-w-xl mx-auto">
+				<p class="mt-4 text-black/50 dark:text-white/50 text-lg max-w-xl mx-auto">
 					Write, test, and ship Lua in a single simple install.
 				</p>
 			</div>
@@ -210,205 +211,12 @@ const features = [
 		</div>
 	</section>
 
-	<!-- ─── TOOLS ───────────────────────────────────────────────────────── -->
-	<section class="w-full border-t border-black/8 dark:border-white/8 px-6 py-24">
-		<div class="max-w-7xl mx-auto">
-			<div class="text-center mb-16">
-				<h2 id="tools" class="text-4xl md:text-5xl font-bold tracking-tight scroll-mt-20">The tools you've always wanted</h2>
-				<p class="mt-4 text-black/50 dark:text-white/40 text-lg max-w-xl mx-auto">
-					Everything you need, built into one binary.
-				</p>
-			</div>
-
-			<div class="grid grid-cols-1 md:grid-cols-3 gap-5">
-				<!-- Test Runner -->
-				<a
-					href="/docs/test-runner/getting-started/test-runner"
-					class="glow-card group relative border border-black/8 dark:border-white/8 bg-black/[0.02] dark:bg-white/[0.02] p-8 flex flex-col gap-6 overflow-hidden hover:border-blue-600/40 hover:bg-blue-500/[0.04] transition-all duration-300"
-				>
-					<div class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-blue-500/70 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-					<div class="glow-spot pointer-events-none absolute size-44 -translate-x-1/2 -translate-y-1/2 rounded-full bg-blue-600/10 dark:bg-blue-600/15 blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-
-					<h3 class="text-lg font-semibold flex items-center gap-3">
-						<span class="size-8 bg-blue-500/10 border border-blue-600/20 flex items-center justify-center text-blue-400 shrink-0">
-							<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-						</span>
-						Test Runner
-					</h3>
-
-					<!-- test run in the background -->
-					<div class="absolute inset-x-0 inset-y-0 flex items-center opacity-20 pointer-events-none select-none" aria-hidden="true">
-						<div class="w-full px-8 font-mono text-[10px] leading-snug">
-							<div class="text-black/60 dark:text-white/60"><span class="text-emerald-600 dark:text-emerald-400">✓</span> <span class="font-semibold text-black/60 dark:text-white/60">add.test.lua</span></div>
-							<div class="text-black/60 dark:text-white/60"><span class="text-emerald-600 dark:text-emerald-400">✓</span> lde add creates the dependencies field <span class="text-black/30 dark:text-white/30">(3ms)</span></div>
-							<div class="text-black/60 dark:text-white/60"><span class="text-emerald-600 dark:text-emerald-400">✓</span> lde add --dev --git adds a git dep <span class="text-black/30 dark:text-white/30">(4ms)</span></div>
-							<div class="text-black/60 dark:text-white/60"><span class="text-emerald-600 dark:text-emerald-400">✓</span> lde remove removes the dep entry <span class="text-black/30 dark:text-white/30">(3ms)</span></div>
-							<div class="mt-1 text-[11px]"><span class="font-semibold text-emerald-600 dark:text-emerald-400">3 passed</span>, <span class="text-cyan-600 dark:text-cyan-400">3 total</span></div>
-							<div class="mt-1 text-black/40 dark:text-white/40">coverage <span class="text-emerald-600 dark:text-emerald-400">100.0%</span> <span class="text-emerald-600 dark:text-emerald-400">████████████████</span><span class="text-black/20 dark:text-white/20">░░</span></div>
-						</div>
-					</div>
-
-					<ul class="relative mt-auto space-y-2.5">
-						<li class="flex items-start gap-2.5 text-sm text-black/70 dark:text-white/60">
-							<span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white">
-								<svg xmlns="http://www.w3.org/2000/svg" class="size-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-							</span>
-							<span>Runs fast</span>
-						</li>
-						<li class="flex items-start gap-2.5 text-sm text-black/70 dark:text-white/60">
-							<span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white">
-								<svg xmlns="http://www.w3.org/2000/svg" class="size-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-							</span>
-							<span>Coverage supported</span>
-						</li>
-						<li class="flex items-start gap-2.5 text-sm text-black/70 dark:text-white/60">
-							<span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white">
-								<svg xmlns="http://www.w3.org/2000/svg" class="size-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-							</span>
-							<span>Source output with errors</span>
-						</li>
-					</ul>
-				</a>
-
-				<!-- Profiler -->
-				<a
-					href="/docs/runtime/guides/profiling"
-					class="glow-card group relative border border-black/8 dark:border-white/8 bg-black/[0.02] dark:bg-white/[0.02] p-8 flex flex-col gap-6 overflow-hidden hover:border-blue-600/40 hover:bg-blue-500/[0.04] transition-all duration-300"
-				>
-					<div class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-blue-500/70 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-					<div class="glow-spot pointer-events-none absolute size-44 -translate-x-1/2 -translate-y-1/2 rounded-full bg-blue-600/10 dark:bg-blue-600/15 blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-
-					<h3 class="text-lg font-semibold flex items-center gap-3">
-						<span class="size-8 bg-blue-500/10 border border-blue-600/20 flex items-center justify-center text-blue-400 shrink-0">
-							<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
-						</span>
-						Profiler
-					</h3>
-
-					<!-- profiler output + flamegraph in the background -->
-					<div class="absolute inset-x-0 inset-y-0 flex items-center opacity-20 pointer-events-none select-none" aria-hidden="true">
-						<!-- flamegraph, bleeding to the card edges -->
-						<div class="absolute inset-x-0 bottom-0 flex h-24 items-end gap-[2px]">
-							{[
-								{ h: 35, c: "bg-amber-400" },
-								{ h: 55, c: "bg-orange-400" },
-								{ h: 40, c: "bg-amber-500" },
-								{ h: 75, c: "bg-orange-500" },
-								{ h: 50, c: "bg-amber-400" },
-								{ h: 65, c: "bg-orange-400" },
-								{ h: 35, c: "bg-amber-500" },
-								{ h: 85, c: "bg-orange-500" },
-								{ h: 45, c: "bg-amber-400" },
-								{ h: 60, c: "bg-orange-400" },
-								{ h: 30, c: "bg-amber-500" },
-								{ h: 70, c: "bg-orange-500" },
-								{ h: 40, c: "bg-amber-400" },
-								{ h: 80, c: "bg-orange-500" },
-								{ h: 50, c: "bg-amber-400" },
-								{ h: 60, c: "bg-orange-400" },
-								{ h: 35, c: "bg-amber-500" },
-								{ h: 70, c: "bg-orange-400" },
-								{ h: 45, c: "bg-amber-500" },
-								{ h: 78, c: "bg-orange-500" },
-							].map(({ h, c }) => <div class={`flex-1 ${c}`} style={`height:${h}%`}></div>)}
-						</div>
-						<div class="relative w-full px-8 font-mono text-[10px] leading-snug">
-							<div class="text-black/40 dark:text-white/40">Profile · <span class="text-cyan-600 dark:text-cyan-400">~25ms</span> · 25 samples @ 1ms</div>
-							<div class="text-black/20 dark:text-white/20">──────────────────────────────────────────</div>
-							<div class="mt-0.5 font-semibold text-black/60 dark:text-white/60">VM State</div>
-							<div class="text-yellow-600 dark:text-yellow-400">Interpreted  <span class="text-yellow-600 dark:text-yellow-400">█</span><span class="text-black/20 dark:text-white/20">░░░░░░░░░░░░░░░░░░░</span>  <span class="text-black/40 dark:text-white/40">4.0%</span></div>
-							<div class="text-cyan-600 dark:text-cyan-400">C code       <span class="text-cyan-600 dark:text-cyan-400">████████████████</span><span class="text-black/20 dark:text-white/20">░░░░</span>  <span class="text-black/40 dark:text-white/40">80.0%</span></div>
-							<div class="text-fuchsia-600 dark:text-fuchsia-400">JIT compiler <span class="text-fuchsia-600 dark:text-fuchsia-400">███</span><span class="text-black/20 dark:text-white/20">░░░░░░░░░░░░░░░░░░░</span>  <span class="text-black/40 dark:text-white/40">16.0%</span></div>
-							<div class="mt-0.5 font-semibold text-black/60 dark:text-white/60">Hotspots</div>
-							<div class="text-black/20 dark:text-white/20">──────────────────────────────────────────</div>
-							<div class="text-black/60 dark:text-white/60"><span class="text-red-600 dark:text-red-400">51.9%</span>  <span class="text-black/30 dark:text-white/30">~14ms</span>    init.lua</div>
-							<div class="text-black/60 dark:text-white/60"><span class="text-yellow-600 dark:text-yellow-400">7.4%</span>   <span class="text-black/30 dark:text-white/30">~2ms</span>     skipWS</div>
-							<div class="text-black/60 dark:text-white/60"><span class="text-black/50 dark:text-white/50">3.7%</span>   <span class="text-black/30 dark:text-white/30">~1ms</span>     materialise</div>
-						</div>
-					</div>
-
-					<ul class="relative mt-auto space-y-2.5">
-						<li class="flex items-start gap-2.5 text-sm text-black/70 dark:text-white/60">
-							<span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white">
-								<svg xmlns="http://www.w3.org/2000/svg" class="size-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-							</span>
-							<span>No overhead with LuaJIT's profiler</span>
-						</li>
-						<li class="flex items-start gap-2.5 text-sm text-black/70 dark:text-white/60">
-							<span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white">
-								<svg xmlns="http://www.w3.org/2000/svg" class="size-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-							</span>
-							<span>Show hot loops and if code is JIT compiled</span>
-						</li>
-						<li class="flex items-start gap-2.5 text-sm text-black/70 dark:text-white/60">
-							<span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white">
-								<svg xmlns="http://www.w3.org/2000/svg" class="size-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-							</span>
-							<span>Generate flamegraphs</span>
-						</li>
-					</ul>
-				</a>
-
-				<!-- Interactive REPL -->
-				<a
-					href="/docs/runtime/guides/repl"
-					class="glow-card group relative border border-black/8 dark:border-white/8 bg-black/[0.02] dark:bg-white/[0.02] p-8 flex flex-col gap-6 overflow-hidden hover:border-blue-600/40 hover:bg-blue-500/[0.04] transition-all duration-300"
-				>
-					<div class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-blue-500/70 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-					<div class="glow-spot pointer-events-none absolute size-44 -translate-x-1/2 -translate-y-1/2 rounded-full bg-blue-600/10 dark:bg-blue-600/15 blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-
-					<h3 class="text-lg font-semibold flex items-center gap-3">
-						<span class="size-8 bg-blue-500/10 border border-blue-600/20 flex items-center justify-center text-blue-400 shrink-0">
-							<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" x2="20" y1="19" y2="19"></line></svg>
-						</span>
-						Interactive REPL
-					</h3>
-
-					<!-- repl usage in the background -->
-					<div class="absolute inset-x-0 inset-y-0 flex items-center opacity-20 pointer-events-none select-none" aria-hidden="true">
-						<div class="w-full px-8 font-mono text-[10px] leading-snug">
-							<div class="text-[11px] text-black/60 dark:text-white/60"><span class="font-semibold text-blue-600 dark:text-blue-400">lde repl</span> — LuaJIT interactive shell</div>
-							<div class="text-black/40 dark:text-white/40">Type exit() or press Ctrl+C to quit.</div>
-							<div class="mt-0.5 text-black/60 dark:text-white/60"><span class="text-blue-600 dark:text-blue-400">></span> x = 40 + 2</div>
-							<div class="text-black/60 dark:text-white/60"><span class="text-blue-600 dark:text-blue-400">></span> return x</div>
-							<div class="text-amber-600 dark:text-amber-300"><span class="text-black/30 dark:text-white/30">=</span> 42</div>
-							<div class="text-black/60 dark:text-white/60"><span class="text-blue-600 dark:text-blue-400">></span> string.upp<span class="text-black/25 dark:text-white/25">er</span></div>
-							<div class="text-black/60 dark:text-white/60"><span class="text-blue-600 dark:text-blue-400">></span> string.upper("hello")</div>
-							<div class="text-emerald-600 dark:text-emerald-400"><span class="text-black/30 dark:text-white/30">=</span> "HELLO"</div>
-						</div>
-					</div>
-
-					<ul class="relative mt-auto space-y-2.5">
-						<li class="flex items-start gap-2.5 text-sm text-black/70 dark:text-white/60">
-							<span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white">
-								<svg xmlns="http://www.w3.org/2000/svg" class="size-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-							</span>
-							<span>Runs inside of your project</span>
-						</li>
-						<li class="flex items-start gap-2.5 text-sm text-black/70 dark:text-white/60">
-							<span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white">
-								<svg xmlns="http://www.w3.org/2000/svg" class="size-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-							</span>
-							<span>Autocompletion of values</span>
-						</li>
-						<li class="flex items-start gap-2.5 text-sm text-black/70 dark:text-white/60">
-							<span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white">
-								<svg xmlns="http://www.w3.org/2000/svg" class="size-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-							</span>
-							<span>Syntax highlighting</span>
-						</li>
-					</ul>
-				</a>
-			</div>
-		</div>
-	</section>
-
 	<!-- ─── COMPARISON ───────────────────────────────────────────────────── -->
 	<section class="w-full border-t border-black/8 dark:border-white/8 px-6 py-24">
 		<div class="max-w-3xl mx-auto">
 			<div class="text-center mb-12">
 				<h2 id="compare" class="text-4xl md:text-5xl font-bold tracking-tight scroll-mt-20">Can it compare?</h2>
-				<p class="mt-4 text-black/50 dark:text-white/40">
+				<p class="mt-4 text-black/50 dark:text-white/50">
 					We strive to provide the best DX.
 				</p>
 			</div>
@@ -554,9 +362,260 @@ const features = [
 	<section class="w-full border-t border-black/8 dark:border-white/8 px-6 py-24">
 		<div class="max-w-3xl mx-auto">
 			<div class="text-center mb-12">
-				<h2 id="lua" class="text-4xl md:text-5xl font-bold tracking-tight scroll-mt-20">Written in Lua.</h2>
-				<p class="mt-4 text-black/50 dark:text-white/40">
-					Not in C, not in Teal, not in Rust.
+				<h2 id="windows" class="text-4xl md:text-5xl font-bold tracking-tight scroll-mt-20">Fully cross platform</h2>
+				<p class="mt-4 text-black/50 dark:text-white/50">
+					This has historically been a pain point for lua and luarocks. Not for lde.
+				</p>
+			</div>
+
+			<div class="flex flex-col items-center gap-12 md:flex-row-reverse md:items-center md:gap-16">
+				<!-- Platform logos -->
+				<div class="relative shrink-0">
+					<div class="grid grid-cols-2 gap-x-10 gap-y-8 items-center">
+						<a href="/download" class="flex items-center justify-center" aria-label="Download for Windows">
+							<Icon name="simple-icons:windows" class="size-14 md:size-20 text-[#0078d4] transition-all duration-300 hover:scale-110 hover:drop-shadow-[0_0_16px_currentColor]" />
+						</a>
+						<a href="/download" class="flex items-center justify-center" aria-label="Download for macOS">
+							<Icon name="simple-icons:apple" class="size-14 md:size-20 text-black dark:text-white transition-all duration-300 hover:scale-110 hover:drop-shadow-[0_0_16px_currentColor]" />
+						</a>
+						<a href="/download" class="flex items-center justify-center" aria-label="Download for Linux">
+							<Icon name="simple-icons:linux" class="size-14 md:size-20 text-[#fcc624] transition-all duration-300 hover:scale-110 hover:drop-shadow-[0_0_16px_currentColor]" />
+						</a>
+						<a href="/download" class="flex items-center justify-center" aria-label="Download for Android">
+							<Icon name="simple-icons:android" class="size-14 md:size-20 text-[#3ddc84] transition-all duration-300 hover:scale-110 hover:drop-shadow-[0_0_16px_currentColor]" />
+						</a>
+					</div>
+				</div>
+
+				<ul class="space-y-4 text-lg">
+					<li class="flex items-start gap-4 p-6">
+						<span class="mt-1 inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white shadow-sm">
+							<svg xmlns="http://www.w3.org/2000/svg" class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+						</span>
+						<span class="text-black/75 dark:text-white/65 leading-relaxed">Tests are run on every platform to ensure conformance.</span>
+					</li>
+					<li class="flex items-start gap-4 p-6">
+						<span class="mt-1 inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white shadow-sm">
+							<svg xmlns="http://www.w3.org/2000/svg" class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+						</span>
+						<span class="text-black/75 dark:text-white/65 leading-relaxed">Compile your code to executables for users without any dependencies.</span>
+					</li>
+					<li class="flex items-start gap-4 p-6">
+						<span class="mt-1 inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white shadow-sm">
+							<svg xmlns="http://www.w3.org/2000/svg" class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+						</span>
+						<span class="text-black/75 dark:text-white/65 leading-relaxed">A small toolchain (~30mb) is installed automatically to build packages seamlessly (Windows Only).</span>
+					</li>
+					<li class="flex items-start gap-4 p-6">
+						<span class="mt-1 inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white shadow-sm">
+							<svg xmlns="http://www.w3.org/2000/svg" class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+						</span>
+						<span class="text-black/75 dark:text-white/65 leading-relaxed">Termux is supported and tested actively in CI.</span>
+					</li>
+				</ul>
+			</div>
+		</div>
+	</section>
+
+	<!-- ─── TOOLS ───────────────────────────────────────────────────────── -->
+	<section class="w-full border-t border-black/8 dark:border-white/8 px-6 py-24">
+		<div class="max-w-7xl mx-auto">
+			<div class="text-center mb-16">
+				<h2 id="tools" class="text-4xl md:text-5xl font-bold tracking-tight scroll-mt-20">The tools you've always wanted</h2>
+				<p class="mt-4 text-black/50 dark:text-white/50 text-lg max-w-xl mx-auto">
+					Everything you need, built into one binary.
+				</p>
+			</div>
+
+			<div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+				<!-- Test Runner -->
+				<a
+					href="/docs/test-runner/getting-started/test-runner"
+					class="glow-card group relative border border-black/8 dark:border-white/8 bg-black/[0.02] dark:bg-white/[0.02] p-8 flex flex-col gap-6 overflow-hidden hover:border-blue-600/40 hover:bg-blue-500/[0.04] transition-all duration-300"
+				>
+					<div class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-blue-500/70 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+					<div class="glow-spot pointer-events-none absolute size-44 -translate-x-1/2 -translate-y-1/2 rounded-full bg-blue-600/10 dark:bg-blue-600/15 blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+
+					<h3 class="text-lg font-semibold flex items-center gap-3">
+						<span class="size-8 bg-blue-500/10 border border-blue-600/20 flex items-center justify-center text-blue-400 shrink-0">
+							<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+						</span>
+						Test Runner
+					</h3>
+
+					<!-- test run in the background -->
+					<div class="absolute inset-x-0 inset-y-0 flex items-center opacity-20 pointer-events-none select-none" aria-hidden="true">
+						<div class="w-full px-8 font-mono text-[10px] leading-snug">
+							<div class="text-black/60 dark:text-white/60"><span class="text-emerald-600 dark:text-emerald-400">✓</span> <span class="font-semibold text-black/60 dark:text-white/60">add.test.lua</span></div>
+							<div class="text-black/60 dark:text-white/60"><span class="text-emerald-600 dark:text-emerald-400">✓</span> lde add creates the dependencies field <span class="text-black/30 dark:text-white/30">(3ms)</span></div>
+							<div class="text-black/60 dark:text-white/60"><span class="text-emerald-600 dark:text-emerald-400">✓</span> lde add --dev --git adds a git dep <span class="text-black/30 dark:text-white/30">(4ms)</span></div>
+							<div class="text-black/60 dark:text-white/60"><span class="text-emerald-600 dark:text-emerald-400">✓</span> lde remove removes the dep entry <span class="text-black/30 dark:text-white/30">(3ms)</span></div>
+							<div class="mt-1 text-[11px]"><span class="font-semibold text-emerald-600 dark:text-emerald-400">3 passed</span>, <span class="text-cyan-600 dark:text-cyan-400">3 total</span></div>
+							<div class="mt-1 text-black/40 dark:text-white/40">coverage <span class="text-emerald-600 dark:text-emerald-400">100.0%</span> <span class="text-emerald-600 dark:text-emerald-400">████████████████</span><span class="text-black/20 dark:text-white/20">░░</span></div>
+						</div>
+					</div>
+
+					<ul class="relative mt-auto space-y-2.5">
+						<li class="flex items-start gap-2.5 text-sm text-black/70 dark:text-white/60">
+							<span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white">
+								<svg xmlns="http://www.w3.org/2000/svg" class="size-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+							</span>
+							<span>Runs fast</span>
+						</li>
+						<li class="flex items-start gap-2.5 text-sm text-black/70 dark:text-white/60">
+							<span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white">
+								<svg xmlns="http://www.w3.org/2000/svg" class="size-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+							</span>
+							<span>Coverage supported</span>
+						</li>
+						<li class="flex items-start gap-2.5 text-sm text-black/70 dark:text-white/60">
+							<span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white">
+								<svg xmlns="http://www.w3.org/2000/svg" class="size-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+							</span>
+							<span>Source output with errors</span>
+						</li>
+					</ul>
+				</a>
+
+				<!-- Profiler -->
+				<a
+					href="/docs/runtime/guides/profiling"
+					class="glow-card group relative border border-black/8 dark:border-white/8 bg-black/[0.02] dark:bg-white/[0.02] p-8 flex flex-col gap-6 overflow-hidden hover:border-blue-600/40 hover:bg-blue-500/[0.04] transition-all duration-300"
+				>
+					<div class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-blue-500/70 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+					<div class="glow-spot pointer-events-none absolute size-44 -translate-x-1/2 -translate-y-1/2 rounded-full bg-blue-600/10 dark:bg-blue-600/15 blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+
+					<h3 class="text-lg font-semibold flex items-center gap-3">
+						<span class="size-8 bg-blue-500/10 border border-blue-600/20 flex items-center justify-center text-blue-400 shrink-0">
+							<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+						</span>
+						Profiler
+					</h3>
+
+					<!-- profiler output + flamegraph in the background -->
+					<div class="absolute inset-x-0 inset-y-0 flex items-center opacity-20 pointer-events-none select-none" aria-hidden="true">
+						<div class="relative w-full px-8 font-mono text-[10px] leading-snug whitespace-pre">
+							<div class="text-black/40 dark:text-white/40">Profile · <span class="text-cyan-600 dark:text-cyan-400">~25ms</span> · 25 samples @ 1ms</div>
+							<div class="text-black/20 dark:text-white/20">──────────────────────────────────────────</div>
+							<div class="mt-0.5 font-semibold text-black/60 dark:text-white/60">VM State</div>
+							<div class="text-yellow-600 dark:text-yellow-400">Interpreted   <span class="text-yellow-600 dark:text-yellow-400">█</span><span class="text-black/20 dark:text-white/20">░░░░░░░░░░░░░░░░░░░</span>  <span class="text-black/40 dark:text-white/40">  4.0%</span></div>
+							<div class="text-cyan-600 dark:text-cyan-400">C code        <span class="text-cyan-600 dark:text-cyan-400">████████████████</span><span class="text-black/20 dark:text-white/20">░░░░</span>  <span class="text-black/40 dark:text-white/40"> 80.0%</span></div>
+							<div class="text-fuchsia-600 dark:text-fuchsia-400">JIT compiler  <span class="text-fuchsia-600 dark:text-fuchsia-400">███</span><span class="text-black/20 dark:text-white/20">░░░░░░░░░░░░░░░░░░░</span>  <span class="text-black/40 dark:text-white/40"> 16.0%</span></div>
+							<div class="mt-0.5 font-semibold text-black/60 dark:text-white/60">Hotspots</div>
+							<div class="text-black/20 dark:text-white/20">──────────────────────────────────────────</div>
+							<div class="text-black/60 dark:text-white/60"><span class="text-red-600 dark:text-red-400"> 51.9%</span>  <span class="text-black/30 dark:text-white/30">~14ms</span>    init.lua</div>
+							<div class="text-black/60 dark:text-white/60"><span class="text-yellow-600 dark:text-yellow-400">  7.4%</span>  <span class="text-black/30 dark:text-white/30">~2ms</span>     skipWS</div>
+							<div class="text-black/60 dark:text-white/60"><span class="text-black/50 dark:text-white/50">  3.7%</span>  <span class="text-black/30 dark:text-white/30">~1ms</span>     materialise</div>
+						</div>
+						<!-- flamegraph atop the profiler output, bleeding to the card edges -->
+						<div class="absolute inset-x-0 bottom-0 flex h-24 items-end gap-[2px]">
+							{[
+								{ h: 35, c: "bg-amber-400/70" },
+								{ h: 55, c: "bg-orange-400/70" },
+								{ h: 40, c: "bg-amber-500/70" },
+								{ h: 75, c: "bg-orange-500/70" },
+								{ h: 50, c: "bg-amber-400/70" },
+								{ h: 65, c: "bg-orange-400/70" },
+								{ h: 35, c: "bg-amber-500/70" },
+								{ h: 85, c: "bg-orange-500/70" },
+								{ h: 45, c: "bg-amber-400/70" },
+								{ h: 60, c: "bg-orange-400/70" },
+								{ h: 30, c: "bg-amber-500/70" },
+								{ h: 70, c: "bg-orange-500/70" },
+								{ h: 40, c: "bg-amber-400/70" },
+								{ h: 80, c: "bg-orange-500/70" },
+								{ h: 50, c: "bg-amber-400/70" },
+								{ h: 60, c: "bg-orange-400/70" },
+								{ h: 35, c: "bg-amber-500/70" },
+								{ h: 70, c: "bg-orange-400/70" },
+								{ h: 45, c: "bg-amber-500/70" },
+								{ h: 78, c: "bg-orange-500/70" },
+							].map(({ h, c }) => <div class={`flex-1 ${c}`} style={`height:${h}%`}></div>)}
+						</div>
+					</div>
+
+					<ul class="relative mt-auto space-y-2.5">
+						<li class="flex items-start gap-2.5 text-sm text-black/70 dark:text-white/60">
+							<span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white">
+								<svg xmlns="http://www.w3.org/2000/svg" class="size-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+							</span>
+							<span>No overhead with LuaJIT's profiler</span>
+						</li>
+						<li class="flex items-start gap-2.5 text-sm text-black/70 dark:text-white/60">
+							<span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white">
+								<svg xmlns="http://www.w3.org/2000/svg" class="size-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+							</span>
+							<span>Show hot loops and if code is JIT compiled</span>
+						</li>
+						<li class="flex items-start gap-2.5 text-sm text-black/70 dark:text-white/60">
+							<span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white">
+								<svg xmlns="http://www.w3.org/2000/svg" class="size-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+							</span>
+							<span>Generate flamegraphs</span>
+						</li>
+					</ul>
+				</a>
+
+				<!-- Interactive REPL -->
+				<a
+					href="/docs/runtime/guides/repl"
+					class="glow-card group relative border border-black/8 dark:border-white/8 bg-black/[0.02] dark:bg-white/[0.02] p-8 flex flex-col gap-6 overflow-hidden hover:border-blue-600/40 hover:bg-blue-500/[0.04] transition-all duration-300"
+				>
+					<div class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-blue-500/70 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+					<div class="glow-spot pointer-events-none absolute size-44 -translate-x-1/2 -translate-y-1/2 rounded-full bg-blue-600/10 dark:bg-blue-600/15 blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+
+					<h3 class="text-lg font-semibold flex items-center gap-3">
+						<span class="size-8 bg-blue-500/10 border border-blue-600/20 flex items-center justify-center text-blue-400 shrink-0">
+							<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" x2="20" y1="19" y2="19"></line></svg>
+						</span>
+						Interactive REPL
+					</h3>
+
+					<!-- repl usage in the background -->
+					<div class="absolute inset-x-0 inset-y-0 flex items-center opacity-20 pointer-events-none select-none" aria-hidden="true">
+						<div class="w-full px-8 font-mono text-[10px] leading-snug">
+							<div class="text-[11px] text-black/60 dark:text-white/60"><span class="font-semibold text-blue-600 dark:text-blue-400">lde repl</span> — LuaJIT interactive shell</div>
+							<div class="text-black/40 dark:text-white/40">Type exit() or press Ctrl+C to quit.</div>
+							<div class="mt-0.5 text-black/60 dark:text-white/60"><span class="text-blue-600 dark:text-blue-400">></span> x = 40 + 2</div>
+							<div class="text-black/60 dark:text-white/60"><span class="text-blue-600 dark:text-blue-400">></span> return x</div>
+							<div class="text-amber-600 dark:text-amber-300"><span class="text-black/30 dark:text-white/30">=</span> 42</div>
+							<div class="text-black/60 dark:text-white/60"><span class="text-blue-600 dark:text-blue-400">></span> string.upp<span class="text-black/25 dark:text-white/25">er</span></div>
+							<div class="text-black/60 dark:text-white/60"><span class="text-blue-600 dark:text-blue-400">></span> string.upper("hello")</div>
+							<div class="text-emerald-600 dark:text-emerald-400"><span class="text-black/30 dark:text-white/30">=</span> "HELLO"</div>
+						</div>
+					</div>
+
+					<ul class="relative mt-auto space-y-2.5">
+						<li class="flex items-start gap-2.5 text-sm text-black/70 dark:text-white/60">
+							<span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white">
+								<svg xmlns="http://www.w3.org/2000/svg" class="size-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+							</span>
+							<span>Runs inside of your project</span>
+						</li>
+						<li class="flex items-start gap-2.5 text-sm text-black/70 dark:text-white/60">
+							<span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white">
+								<svg xmlns="http://www.w3.org/2000/svg" class="size-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+							</span>
+							<span>Autocompletion of values</span>
+						</li>
+						<li class="flex items-start gap-2.5 text-sm text-black/70 dark:text-white/60">
+							<span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white">
+								<svg xmlns="http://www.w3.org/2000/svg" class="size-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+							</span>
+							<span>Syntax highlighting</span>
+						</li>
+					</ul>
+				</a>
+			</div>
+		</div>
+	</section>
+
+	<section class="w-full border-t border-black/8 dark:border-white/8 px-6 py-24">
+		<div class="max-w-3xl mx-auto">
+			<div class="text-center mb-12">
+				<h2 id="lua" class="text-4xl md:text-5xl font-bold tracking-tight scroll-mt-20">Written in Lua</h2>
+				<p class="mt-4 text-black/50 dark:text-white/50">
+					Not in C, not in Rust, not in Zig.
 				</p>
 			</div>
 
@@ -591,7 +650,7 @@ const features = [
 						<span class="mt-1 inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white shadow-sm">
 							<svg xmlns="http://www.w3.org/2000/svg" class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
 						</span>
-						<span class="text-black/75 dark:text-white/65 leading-relaxed"><a href={`${GITHUB_URL}/pulls`} target="_blank" rel="noopener noreferrer" class="text-blue-500 dark:text-blue-400 underline hover:text-blue-600 dark:hover:text-blue-300 transition-colors">Contribute to the project</a> in your favorite language.</span>
+						<span class="text-black/75 dark:text-white/65 leading-relaxed"><a href={`${GITHUB_URL}/pulls`} target="_blank" rel="noopener noreferrer" class="text-blue-500 dark:text-blue-400 underline hover:text-blue-600 dark:hover:text-blue-300 transition-colors">Contribute</a> to the project in your favorite language.</span>
 					</li>
 				</ul>
 			</div>
@@ -603,7 +662,7 @@ const features = [
 		<div class="max-w-3xl mx-auto">
 			<div class="text-center mb-12">
 				<h2 id="benchmarks" class="text-4xl md:text-5xl font-bold tracking-tight scroll-mt-20">Is it fast?</h2>
-				<p class="mt-4 text-black/50 dark:text-white/40">
+				<p class="mt-4 text-black/50 dark:text-white/50">
 					Move fast and we'll keep up.
 				</p>
 			</div>
@@ -627,7 +686,7 @@ const features = [
 		<div class="max-w-5xl mx-auto">
 			<div class="text-center mb-12">
 				<h2 id="learn" class="text-4xl md:text-5xl font-bold tracking-tight scroll-mt-20">Take it for a spin.</h2>
-				<p class="mt-4 text-black/50 dark:text-white/40 text-lg">
+				<p class="mt-4 text-black/50 dark:text-white/50 text-lg">
 					Read the docs or catch up on the latest from the blog.
 				</p>
 			</div>
