@@ -9,14 +9,14 @@
 		"astro": "astro"
 	},
 	"dependencies": {
-		"@astrojs/cloudflare": "^13.1.1",
-		"@astrojs/preact": "^5.0.0",
+		"@astrojs/cloudflare": "^14.2.0",
+		"@astrojs/preact": "^6.0.2",
 		"@astrojs/rss": "^4.0.17",
-		"@iconify-json/lucide": "^1.2.98",
-		"@iconify-json/simple-icons": "^1.2.74",
+		"@iconify-json/lucide": "^1.2.122",
+		"@iconify-json/simple-icons": "^1.2.93",
 		"@tailwindcss/vite": "^4.2.1",
-		"@vercel/og": "^0.11.1",
-		"astro": "^6.0.4",
+		"@vercel/og": "^1.0.1",
+		"astro": "^7.2.0",
 		"astro-icon": "^1.1.5",
 		"preact": "^10.29.0",
 		"tailwindcss": "^4.2.1"
