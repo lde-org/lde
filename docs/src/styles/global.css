@@ -281,6 +281,13 @@ html {
 	}
 }
 
-.markdown img {
-	@apply rounded-lg my-4;
-}
+	.markdown img {
+		@apply rounded-lg my-4;
+	}
+
+	/* README bodies rendered from the registry package pages (via marked).
+	   Docs code blocks reserve top padding for a language label; README
+	   blocks don't have one, so collapse it. */
+	.markdown.readme pre {
+		padding: 0.9rem 1rem;
+	}
