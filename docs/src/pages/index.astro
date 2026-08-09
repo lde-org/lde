@@ -359,6 +359,53 @@ const features = [
 		</div>
 	</section>
 
+	<section class="w-full border-t border-black/8 dark:border-white/8 px-6 py-24">
+		<div class="max-w-3xl mx-auto">
+			<div class="text-center mb-12">
+				<h2 id="lua" class="text-4xl md:text-5xl font-bold tracking-tight scroll-mt-20">Written in Lua</h2>
+				<p class="mt-4 text-black/50 dark:text-white/40">
+					Not in C, not in Teal, not in Rust.
+				</p>
+			</div>
+
+			<div class="flex flex-col items-center gap-12 md:flex-row-reverse md:items-center md:gap-16">
+				<!-- Glowing Lua logo -->
+				<div class="relative shrink-0">
+					<div class="lua-glow absolute -inset-8 rounded-full bg-blue-600/15 dark:bg-blue-600/20 blur-3xl" aria-hidden="true"></div>
+					<img
+						src="/lua-logo.svg"
+						alt="Lua logo"
+						class="relative w-36 md:w-44 drop-shadow-[0_0_24px_rgba(37,99,235,0.35)] dark:drop-shadow-[0_0_24px_rgba(59,130,246,0.45)]"
+						width="947"
+						height="947"
+						loading="lazy"
+					/>
+				</div>
+
+				<ul class="space-y-4 text-lg">
+					<li class="flex items-start gap-4 p-6">
+						<span class="mt-1 inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white shadow-sm">
+							<svg xmlns="http://www.w3.org/2000/svg" class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+						</span>
+						<span class="text-black/75 dark:text-white/65 leading-relaxed">We believe in Lua. Using any other language would be giving up.</span>
+					</li>
+					<li class="flex items-start gap-4 p-6">
+						<span class="mt-1 inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white shadow-sm">
+							<svg xmlns="http://www.w3.org/2000/svg" class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+						</span>
+						<span class="text-black/75 dark:text-white/65 leading-relaxed">Improvements to lde mean improvements to Lua.</span>
+					</li>
+					<li class="flex items-start gap-4 p-6">
+						<span class="mt-1 inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white shadow-sm">
+							<svg xmlns="http://www.w3.org/2000/svg" class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+						</span>
+						<span class="text-black/75 dark:text-white/65 leading-relaxed">Contribute to the project in your favorite language.</span>
+					</li>
+				</ul>
+			</div>
+		</div>
+	</section>
+
 	<!-- ─── BENCHMARKS ───────────────────────────────────────────────────── -->
 	<section class="w-full border-t border-black/8 dark:border-white/8 px-6 py-24">
 		<div class="max-w-3xl mx-auto">
@@ -448,6 +495,21 @@ const features = [
 		.feature-card.visible {
 			opacity: 1;
 			transform: translateY(0);
+		}
+
+		.lua-glow {
+			animation: lua-pulse 4s ease-in-out infinite;
+		}
+		@keyframes lua-pulse {
+			0%,
+			100% {
+				opacity: 0.3;
+				transform: scale(1);
+			}
+			50% {
+				opacity: 0.65;
+				transform: scale(1.05);
+			}
 		}
 	</style>
 
