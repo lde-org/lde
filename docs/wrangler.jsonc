@@ -1,6 +1,6 @@
 {
   "name": "lde",
-  "compatibility_date": "2026-02-18",
+  "compatibility_date": "2026-03-01",
   "main": "@astrojs/cloudflare/entrypoints/server",
   "compatibility_flags": ["nodejs_compat"],
   "assets": {
