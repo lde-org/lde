@@ -118,35 +118,50 @@ function resolveAssetUrl(
 	return `https://raw.githubusercontent.com/${repo.owner}/${repo.repo}/${ref}/${clean}`;
 }
 
-function escapeAttr(s: string): string {
-	return s.replace(/"/g, "&quot;");
+// Rewrite a relative README link to its GitHub blob URL at the pinned ref.
+function resolveLinkUrl(
+	href: string,
+	repo: GitHubRepo | null,
+	ref: string,
+): string {
+	if (
+		!repo ||
+		/^(https?:)?\/\//.test(href) ||
+		href.startsWith("mailto:") ||
+		href.startsWith("tel:") ||
+		href.startsWith("data:") ||
+		href.startsWith("#")
+	)
+		return href;
+	const clean = href.replace(/^\.\//, "").replace(/^\/+/, "");
+	return `https://github.com/${repo.owner}/${repo.repo}/blob/${ref}/${clean}`;
 }
 
-// Render a README with marked (GFM) and sanitize the result. Relative image
-// sources are resolved against the package's raw GitHub URLs so they display
-// without needing to rewrite the README itself.
+// Render a README with marked (GFM) and sanitize the result, then resolve
+// relative image and link URLs against the package's GitHub URLs at the
+// pinned ref so they work outside the repo page.
 function renderReadme(
 	src: string,
 	repo: GitHubRepo | null,
 	ref: string,
 ): string {
-	const md = new Marked({
-		gfm: true,
-		renderer: {
-			image({ href, title, text }) {
-				return `<img src="${escapeAttr(
-					resolveAssetUrl(href, repo, ref),
-				)}" alt="${escapeAttr(text)}"${title ? ` title="${escapeAttr(title)}"` : ""}>`;
-			},
-		},
-	});
-	return DOMPurify.sanitize(md.parse(src) as string).replace(
-		// Raw HTML <img> tags bypass the markdown renderer entirely, so
-		// rewrite their relative srcs here as well.
-		/(<img\b[^>]*\bsrc=["'])([^"']+)(["'])/g,
-		(_m, pre, imgSrc, post) =>
-			pre + resolveAssetUrl(imgSrc, repo, ref) + post,
+	const html = DOMPurify.sanitize(
+		new Marked({ gfm: true }).parse(src) as string,
 	);
+	if (!repo) return html;
+	// This runs after sanitizing, so only safe URLs remain; rewriting a
+	// relative URL into an absolute one cannot reintroduce anything.
+	return html
+		.replace(
+			/(<img\b[^>]*\bsrc=["'])([^"']+)(["'])/g,
+			(_m, pre, val, post) =>
+				pre + resolveAssetUrl(val, repo, ref) + post,
+		)
+		.replace(
+			/(<a\b[^>]*\bhref=["'])([^"']+)(["'])/g,
+			(_m, pre, val, post) =>
+				pre + resolveLinkUrl(val, repo, ref) + post,
+		);
 }
 
 
