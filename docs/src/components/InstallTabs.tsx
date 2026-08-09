@@ -46,7 +46,6 @@ export default function InstallTabs() {
 
 	return (
 		<div class="flex flex-col gap-4">
-			<h2 class="text-xl font-medium">Install latest version</h2>
 			<div class="max-w-full border border-gray-200 dark:border-gray-700 overflow-hidden">
 				<div class="flex items-center border-b border-gray-200 dark:border-gray-700">
 					{tabs.map((tab) => {
