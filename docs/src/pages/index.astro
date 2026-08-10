@@ -130,7 +130,7 @@ const features = [
 				{latestRelease && (
 					<a
 						href={`/blog/${latestRelease.id}`}
-						class="mb-6 inline-flex items-center gap-2 px-3 py-1.5 border border-blue-600/30 bg-blue-500/10 text-white text-xs font-medium hover:bg-blue-500/20 transition-colors"
+						class="mb-6 inline-flex items-center gap-2 px-3 py-1.5 border border-blue-600/30 bg-blue-500/10 text-white text-sm font-medium hover:bg-blue-500/20 transition-colors"
 					>
 						{latestRelease.data.title} is out
 						<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 text-blue-300 animate-bounce-x"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
@@ -145,8 +145,8 @@ const features = [
 					</span>
 				</h1>
 
-				<p class="mt-6 text-lg text-black/60 dark:text-white/55 leading-relaxed max-w-md">
-					A cross platform package manager, runtime, test runner and compiler that turns your programs into single executables in &lt; <span class="text-black/80 dark:text-white/80 font-medium">1mB</span>.
+				<p class="mt-6 text-xl text-black/60 dark:text-white/80 leading-relaxed max-w-lg">
+					A cross platform package manager, runtime, test runner and compiler to turn your programs into &lt; <span class="text-black/80 dark:text-white/80 font-medium">1mB</span>  binaries.
 				</p>
 
 				<div class="mt-8 w-full">
@@ -175,7 +175,7 @@ const features = [
 		<div class="max-w-7xl mx-auto">
 			<div class="text-center mb-16">
 				<h2 id="features" class="text-4xl md:text-5xl font-bold tracking-tight scroll-mt-20">One tool, <i>all</i> of Lua</h2>
-				<p class="mt-4 text-black/50 dark:text-white/50 text-lg max-w-xl mx-auto">
+				<p class="mt-4 text-black/50 dark:text-white/60 text-lg max-w-xl mx-auto">
 					Write, test, and ship Lua in a single simple install.
 				</p>
 			</div>
@@ -216,8 +216,8 @@ const features = [
 		<div class="max-w-3xl mx-auto">
 			<div class="text-center mb-12">
 				<h2 id="compare" class="text-4xl md:text-5xl font-bold tracking-tight scroll-mt-20">Can it compare?</h2>
-				<p class="mt-4 text-black/50 dark:text-white/50">
-					We strive to provide the best DX.
+				<p class="mt-4 text-lg text-black/50 dark:text-white/60">
+					Everything you need and more comes out of the box.
 				</p>
 			</div>
 
@@ -229,7 +229,7 @@ const features = [
 						<tr>
 							<th scope="col" class="text-left px-6 py-4 font-medium text-black/35 dark:text-white/25 w-[40%]"></th>
 							<th scope="col" class="text-center px-6 py-4 font-semibold text-blue-400">
-								<span class="inline-flex items-center gap-2 text-[0.8125rem]">
+								<span class="inline-flex items-center gap-2 text-[0.8125rem] font-brand">
 									<img src="/lde-nospace.svg" class="h-5 opacity-90" alt="" />
 									lde
 								</span>
@@ -340,7 +340,7 @@ const features = [
 							{subtitle && <p class="mb-3 text-xs text-black/40 dark:text-white/30">{subtitle}</p>}
 							<div class="grid grid-cols-3 gap-3 text-sm">
 								<div class="flex flex-col gap-1 items-center text-center">
-									<span class="text-[10px] text-blue-500 dark:text-blue-400 font-semibold">lde</span>
+									<span class="text-[10px] text-blue-500 dark:text-blue-400 font-semibold font-brand">lde</span>
 									{renderVal(lde as string, true)}
 								</div>
 								<div class="flex flex-col gap-1 items-center text-center">
@@ -363,8 +363,8 @@ const features = [
 		<div class="max-w-3xl mx-auto">
 			<div class="text-center mb-12">
 				<h2 id="windows" class="text-4xl md:text-5xl font-bold tracking-tight scroll-mt-20">Fully cross platform</h2>
-				<p class="mt-4 text-black/50 dark:text-white/50">
-					This has historically been a pain point for lua and luarocks. Not for lde.
+				<p class="mt-4 text-lg text-black/50 dark:text-white/60">
+					This is a pain point for lua and luarocks. Not for lde.
 				</p>
 			</div>
 
@@ -418,7 +418,7 @@ const features = [
 		<div class="max-w-7xl mx-auto">
 			<div class="text-center mb-16">
 				<h2 id="tools" class="text-4xl md:text-5xl font-bold tracking-tight scroll-mt-20">The tools you've always wanted</h2>
-				<p class="mt-4 text-black/50 dark:text-white/50 text-lg max-w-xl mx-auto">
+				<p class="mt-4 text-black/50 dark:text-white/60 text-lg max-w-xl mx-auto">
 					Everything you need, built into one binary.
 				</p>
 			</div>
@@ -610,7 +610,7 @@ const features = [
 		<div class="max-w-3xl mx-auto">
 			<div class="text-center mb-12">
 				<h2 id="lua" class="text-4xl md:text-5xl font-bold tracking-tight scroll-mt-20">Written in Lua</h2>
-				<p class="mt-4 text-black/50 dark:text-white/50">
+				<p class="mt-4 text-black/50 dark:text-white/60 text-lg">
 					Not in C, not in Rust, not in Zig.
 				</p>
 			</div>
@@ -657,9 +657,9 @@ const features = [
 	<section class="w-full border-t border-black/8 dark:border-white/8 px-6 py-24">
 		<div class="max-w-3xl mx-auto">
 			<div class="text-center mb-12">
-				<h2 id="benchmarks" class="text-4xl md:text-5xl font-bold tracking-tight scroll-mt-20">Is it fast?</h2>
-				<p class="mt-4 text-black/50 dark:text-white/50">
-					Move fast. We'll keep up.
+				<h2 id="benchmarks" class="text-4xl md:text-5xl font-bold tracking-tight scroll-mt-20">Move fast. We'll keep up.</h2>
+				<p class="mt-4 text-lg text-black/50 dark:text-white/60">
+					You shouldn't wait on your tools. They should wait on you.
 				</p>
 			</div>
 			<BenchmarkChart client:idle />

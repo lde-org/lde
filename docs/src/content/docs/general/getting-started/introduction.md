@@ -19,7 +19,7 @@ It'll first ask you what package name you'd want and if you want to write a libr
 
 For now, choose `blank`. Additionally, it will also ask what language you want to use.
 
-Choose `lua` for now, but you choose and learn about [Teal](/docs/runtime/guides/teal) and [MoonScript](/docs/runtime/guides/moonscript) later.
+Choose `lua` for now, but you can choose and learn about [Teal](/docs/runtime/guides/teal) and [MoonScript](/docs/runtime/guides/moonscript) later.
 
 ```sh
 lde new myproject && cd myproject

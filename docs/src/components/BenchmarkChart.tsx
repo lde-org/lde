@@ -118,7 +118,7 @@ export default function BenchmarkChart() {
 										? <img src="/lde-nospace.svg" class="h-4 -mt-0.5" alt="" />
 										: <span class={`font-medium ${c.text}`}>{r.tool}</span>
 									}
-									{isLde && <span class={`font-semibold ${c.text}`}>lde</span>}
+									{isLde && <span class={`font-brand font-semibold ${c.text}`}>lde</span>}
 								</div>
 								<div class="flex items-center gap-3">
 									{!isFastest && (
