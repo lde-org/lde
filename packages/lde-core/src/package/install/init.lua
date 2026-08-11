@@ -414,19 +414,16 @@ handlers.archive = {
 	---@param n lde.install.Node
 	open = function(n)
 		local c = content(n) --[[@as lde.install.ContentPlan]]
-		-- .src.rock archives contain a rockspec + possibly a source subdir
+		-- .src.rock archives contain a rockspec + the source tree; the source is
+		-- either a subdir next to the rockspec or the nested archive (extracted by
+		-- materializeSrcRock).
 		local pkgDir, rockspecPath = c.dir, n.depInfo.rockspec
 		if n.depInfo.archive:match("%.src%.rock$") and not n.depInfo.rockspec then
-			local iter = fs.readdir(c.dir --[[@as string]])
-			if iter then
-				for entry in iter do
-					if entry.type == "file" and entry.name:match("%.rockspec$") then
-						rockspecPath = path.join(c.dir --[[@as string]], entry.name)
-					elseif entry.type == "dir" and pkgDir == c.dir then
-						pkgDir = path.join(c.dir --[[@as string]], entry.name)
-					end
-				end
+			local srcDir, srcRockspec, merr = lde.util.materializeSrcRock(c.dir --[[@as string]])
+			if not srcDir then
+				error("Failed to load archive dependency '" .. n.alias .. "': " .. (merr or "unknown error"))
 			end
+			pkgDir, rockspecPath = srcDir, srcRockspec
 		end
 		local pkg, err = lde.Package.open(pkgDir, rockspecPath)
 		if not pkg then error("Failed to load archive dependency '" .. n.alias .. "': " .. (err or "")) end

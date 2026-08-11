@@ -4,7 +4,6 @@ local lde = require("lde-core")
 local resolvePackage = require("lde.util.resolve")
 
 local fs = require("fs")
-local path = require("path")
 local rocked = require("rocked")
 
 --- Overlapped install for `install rocks:<name>`: the root package's .src.rock
@@ -66,25 +65,22 @@ local function installRocks(name)
 	local ok, spec = rocked.parse(content)
 	if not ok then error("Failed to parse rockspec '" .. rockspecUrl .. "': " .. tostring(spec)) end
 
-	-- Open the package from the cached rockspec; its source dir is materialized
-	-- by the rootExtract hook inside installDependencies once the content batch
-	-- has drained (the .src.rock finished downloading long before then). deps
-	-- are read from the package (isRoot install, so the .installed fast path
-	-- applies on warm trees).
-	local pkgDir = path.join(archiveDir, spec.package or rocksName)
-	local pkg, perr = lde.Package.openRockspec(pkgDir, rockspecUrl)
+	-- Wait for the .src.rock download, then extract it and open the package
+	-- from the real source tree inside (a source subdir, or the nested archive
+	-- extracted alongside the rockspec). The package must be opened from that
+	-- tree: dependencies install into the package's target/ and bin scripts are
+	-- copied from the sources, so building from a made-up directory would
+	-- silently produce an empty install with no bin.
+	download.waitBackground(archiveFile)
+	local exOk, exErr = lde.global.extractArchive(srcUrl, archiveFile, archiveDir)
+	if not exOk then
+		error("Failed to extract '" .. srcUrl .. "': " .. (exErr or "unknown error"))
+	end
+
+	local pkg, perr = lde.util.openSrcRock(archiveDir, srcUrl)
 	if not pkg then error(perr) end
 
-	pkg:installDependencies(nil, nil, nil, {
-		rootExtract = function()
-			download.waitBackground(archiveFile)
-			local ok2, e2 = lde.global.extractArchive(srcUrl, archiveFile, archiveDir)
-			if not ok2 then
-				error("Failed to extract '" .. srcUrl .. "': " .. (e2 or "unknown error"))
-			end
-		end,
-	})
-
+	pkg:installDependencies()
 	pkg:build()
 	lde.global.writeWrapper(pkg:getName(), nil, name)
 

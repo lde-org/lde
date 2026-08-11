@@ -552,20 +552,22 @@ function global.findNamedPackageIn(dir, name)
 end
 
 --- Writes the platform-appropriate wrapper script into ~/.lde/tools/.
+--- The `--` separator stops lde's own arg parser from swallowing tool args that
+--- start with a dash (e.g. `tl --help`), so they are passed through to the tool.
 ---@param toolName string
----@param packageDir string
+---@param packageDir string? # nil for rocks: tools (resolved from the registry)
 ---@param packageName string
 function global.writeWrapper(toolName, packageDir, packageName)
 	local toolsDir = global.getToolsDir()
 	local invocation = packageDir
-		and ("lde x --path '" .. packageDir .. "' " .. packageName)
-		or ("lde x " .. packageName)
+		and ("lde x --path '" .. packageDir .. "' " .. packageName .. " --")
+		or ("lde x " .. packageName .. " --")
 
 	if jit.os == "Windows" then
 		local wrapperPath = path.join(toolsDir, toolName .. ".cmd")
 		local winInvocation = packageDir
-			and ('lde x --path \\"' .. packageDir .. '\\" ' .. packageName)
-			or ("lde x " .. packageName)
+			and ('lde x --path \\"' .. packageDir .. '\\" ' .. packageName .. " --")
+			or ("lde x " .. packageName .. " --")
 
 		if not fs.write(wrapperPath, "@echo off\n" .. winInvocation .. " %*\n") then
 			error("Failed to write wrapper script: " .. wrapperPath)

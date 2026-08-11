@@ -252,38 +252,10 @@ function util.openLuarocksPackage(name, version)
 
 	if arch == "src" then
 		local archiveDir = lde.global.getOrInitArchive(url)
-		-- .src.rock extracts with the rockspec at root; source may be a subdir or a nested archive.
-		-- Scan once to find the rockspec, a source subdir, and any nested archive.
-		local rockspecPath, srcDir, nestedArchive
-		local iter = fs.readdir(archiveDir)
-		if iter then
-			for entry in iter do
-				if entry.type == "file" and entry.name:match("%.rockspec$") then
-					rockspecPath = path.join(archiveDir, entry.name)
-				elseif entry.type == "dir" and not srcDir then
-					srcDir = path.join(archiveDir, entry.name)
-				elseif entry.type == "file" and (entry.name:match("%.zip$") or entry.name:match("%.tar%.[gbx]z2?$")) then
-					nestedArchive = path.join(archiveDir, entry.name)
-				end
-			end
-		end
-		if not rockspecPath then
-			return nil, nil, "No rockspec found in src rock for '" .. name .. "'"
-		end
-
-		-- If no subdir was found but a nested archive was, extract it now.
-		if not srcDir and nestedArchive then
-			srcDir = nestedArchive:gsub("%.tar%.[gbx]z2?$", ""):gsub("%.zip$", "")
-			if not fs.isdir(srcDir) then
-				fs.mkdir(srcDir)
-				local ok2, err2 = Archive().new(nestedArchive):extract(srcDir, { stripComponents = true })
-				if not ok2 then
-					return nil, nil, "Failed to extract nested archive in src rock '" .. name .. "': " .. (err2 or "")
-				end
-			end
-		end
-
-		local pkg, err = lde.Package.openRockspec(srcDir or archiveDir, rockspecPath)
+		-- .src.rock extracts with the rockspec at root; the source is either a
+		-- subdir next to the rockspec or the nested archive (materialized by
+		-- openSrcRock).
+		local pkg, err = util.openSrcRock(archiveDir, url)
 		if not pkg then
 			return nil, nil, "Failed to load src rock '" .. name .. "': " .. (err or "")
 		end
@@ -334,12 +306,18 @@ function util.findNamedPackage(dir, packageName, rockspec)
 	return nil, "No lde.json with name '" .. packageName .. "' found in: " .. dir
 end
 
---- Opens the package inside an extracted .src.rock archive: finds the rockspec,
---- a source subdir, and any nested archive (extracting it if needed).
----@param archiveDir string
----@param url string
----@return lde.Package?, string?
-function util.openSrcRock(archiveDir, url)
+--- Materializes the source tree inside an extracted .src.rock cache dir and
+--- returns where the package should be opened from. A .src.rock is a zip of the
+--- rockspec plus the source: either an unpacked tree (a subdir next to the
+--- rockspec, e.g. tl) or the original source archive (a nested .zip/.tar.gz,
+--- e.g. cerulean). When a nested archive is present it is authoritative — it is
+--- extracted (once) over any stray subdirs, which may be artifacts of earlier
+--- installs (e.g. a package dir left behind by an interrupted run).
+---@param archiveDir string # extracted .src.rock directory
+---@return string? srcDir # directory to open the package from
+---@return string? rockspecPath
+---@return string? err
+function util.materializeSrcRock(archiveDir)
 	local rockspecPath, srcDir, nestedArchive
 	local iter = fs.readdir(archiveDir)
 	if iter then
@@ -354,22 +332,36 @@ function util.openSrcRock(archiveDir, url)
 		end
 	end
 	if not rockspecPath then
-		return nil, "No rockspec found in src rock for '" .. (url or "?") .. "'"
+		return nil, nil, "No rockspec found in src rock"
 	end
 
-	-- If no subdir was found but a nested archive was, extract it now.
-	if not srcDir and nestedArchive then
-		srcDir = nestedArchive:gsub("%.tar%.[gbx]z2?$", ""):gsub("%.zip$", "")
-		if not fs.isdir(srcDir) then
-			fs.mkdir(srcDir)
-			local ok2, err2 = Archive().new(nestedArchive):extract(srcDir, { stripComponents = true })
+	if nestedArchive then
+		local dir = nestedArchive:gsub("%.tar%.[gbx]z2?$", ""):gsub("%.zip$", "")
+		if not fs.isdir(dir) then
+			fs.mkdir(dir)
+			local ok2, err2 = Archive().new(nestedArchive):extract(dir, { stripComponents = true })
 			if not ok2 then
-				return nil, "Failed to extract nested archive in src rock: " .. (err2 or "")
+				return nil, nil, "Failed to extract nested archive in src rock: " .. (err2 or "")
 			end
 		end
+		srcDir = dir
 	end
 
-	return lde.Package.openRockspec(srcDir or archiveDir, rockspecPath)
+	return srcDir or archiveDir, rockspecPath, nil
+end
+
+--- Opens the package inside an extracted .src.rock archive: finds the rockspec
+--- and materializes the source tree (a source subdir, or the nested archive
+--- extracted alongside the rockspec when the rock ships one).
+---@param archiveDir string
+---@param url string
+---@return lde.Package?, string?
+function util.openSrcRock(archiveDir, url)
+	local srcDir, rockspecPath, err = util.materializeSrcRock(archiveDir)
+	if not srcDir then
+		return nil, (err or "unknown error") .. " for '" .. (url or "?") .. "'"
+	end
+	return lde.Package.openRockspec(srcDir, rockspecPath)
 end
 
 return util

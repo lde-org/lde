@@ -523,7 +523,9 @@ local function openRockspec(dir, rockspecPath)
 				end
 				local destDir = path.dirname(destAbs)
 				if not fs.isdir(destDir) then fs.mkdirAll(destDir) end
-				fs.copy(path.join(dir, src), destAbs)
+				if not fs.copy(path.join(dir, src), destAbs) then
+					return nil, "Failed to copy module source '" .. src .. "' for module '" .. modname .. "'"
+				end
 			end
 
 			---@type { child: process.Child?, modname: string }[]
@@ -591,7 +593,9 @@ local function openRockspec(dir, rockspecPath)
 					local binDest = path.join(outputDir, binName)
 					local binDestDir = path.dirname(binDest)
 					if not fs.isdir(binDestDir) then fs.mkdirAll(binDestDir) end
-					fs.copy(path.join(dir, v), binDest)
+					if not fs.copy(path.join(dir, v), binDest) then
+						return nil, "Failed to copy bin '" .. binName .. "' from '" .. v .. "'"
+					end
 				end
 
 				for modname, src in pairs(installLuaFiles) do
