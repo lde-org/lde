@@ -523,8 +523,12 @@ local function openRockspec(dir, rockspecPath)
 				end
 				local destDir = path.dirname(destAbs)
 				if not fs.isdir(destDir) then fs.mkdirAll(destDir) end
-				if not fs.copy(path.join(dir, src), destAbs) then
-					return nil, "Failed to copy module source '" .. src .. "' for module '" .. modname .. "'"
+				-- fs.copy returns true even when the write silently failed (e.g. a
+				-- module path colliding with the package's own target/<name> dir), so
+				-- verify the file actually landed.
+				local srcAbs = path.join(dir, src)
+				if not fs.copy(srcAbs, destAbs) or not fs.isfile(destAbs) then
+					return nil, "Failed to install module source '" .. src .. "' for module '" .. modname .. "'"
 				end
 			end
 
@@ -593,8 +597,9 @@ local function openRockspec(dir, rockspecPath)
 					local binDest = path.join(outputDir, binName)
 					local binDestDir = path.dirname(binDest)
 					if not fs.isdir(binDestDir) then fs.mkdirAll(binDestDir) end
-					if not fs.copy(path.join(dir, v), binDest) then
-						return nil, "Failed to copy bin '" .. binName .. "' from '" .. v .. "'"
+					local binSrc = path.join(dir, v)
+					if not fs.copy(binSrc, binDest) or not fs.isfile(binDest) then
+						return nil, "Failed to install bin '" .. binName .. "' from '" .. v .. "'"
 					end
 				end
 

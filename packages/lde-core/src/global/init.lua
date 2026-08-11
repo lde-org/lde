@@ -411,6 +411,11 @@ end
 
 --- Downloads and extracts an archive URL (.zip, .tar.gz, .tar.bz2, etc.) into the cache.
 --- Uses `tar -xf` which auto-detects format on all platforms (bsdtar on Windows 10+).
+---
+--- Failure-safe: a failed download/extract removes the partially-created cache dir
+--- so the next run re-downloads instead of trusting an empty/partial dir. A
+--- concurrent install may finish (and delete the .archive file) while this
+--- download is in flight; the extracted dir is reused in that case.
 ---@param url string
 ---@return string dir
 function global.getOrInitArchive(url)
@@ -418,6 +423,8 @@ function global.getOrInitArchive(url)
 	if not fs.exists(archiveDir) then
 		local filename = url:match("([^/]+)$") or url
 		local bar = lde.verbose and ansi.progress("Downloading " .. filename) or nil
+		-- Created up front: curl.download opens archiveDir .. ".archive" directly,
+		-- so the parent must exist. Removed again on failure (see below).
 		fs.mkdir(archiveDir)
 
 		local archiveFile = archiveDir .. ".archive"
@@ -435,16 +442,43 @@ function global.getOrInitArchive(url)
 			}
 		end
 
-		local ok, dlErr = curl().download(url, archiveFile, dlOpts)
+		local function download()
+			local ok, dlErr = curl().download(url, archiveFile, dlOpts)
+			if not ok then return nil, dlErr end
+			if not fs.exists(archiveFile) then
+				-- A concurrent install extracted and deleted the .archive file while
+				-- we were downloading; reuse its extracted dir when it's ready.
+				local iter = fs.readdir(archiveDir)
+				if iter then
+					for _ in iter do
+						return true, nil
+					end
+				end
+				return nil, "download did not produce a file"
+			end
+			return true, nil
+		end
+
+		-- One retry: GitHub release assets redirect to expiring CDN URLs, which
+		-- can fail transiently on the first attempt.
+		local ok, dlErr = download()
+		if not ok then
+			ok, dlErr = download()
+		end
 		if not ok then
 			if bar then bar:fail("Downloading " .. filename) end
-			error("Failed to download archive '" .. url .. "': " .. (dlErr or ""))
+			-- Don't leave a partial cache dir behind: the next run re-downloads.
+			fs.rmdir(archiveDir)
+			error("Failed to download archive '" .. url .. "': " .. (dlErr or "unknown error"))
 		end
 
 		local ok2, err2 = global.extractArchive(url, archiveFile, archiveDir)
 		if not ok2 then
 			if bar then bar:fail("Downloading " .. filename) end
-			error("Failed to extract archive '" .. url .. "': " .. (err2 or ""))
+			-- Same cleanup on extract failure: an empty/partial dir must not make
+			-- every later run skip the download.
+			fs.rmdir(archiveDir)
+			error("Failed to extract archive '" .. url .. "': " .. (err2 or "unknown error"))
 		end
 
 		if bar then bar:done("Downloaded " .. filename) end

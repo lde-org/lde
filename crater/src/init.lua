@@ -256,6 +256,7 @@ local EXCLUDE_MODULES = {
 	["pl.strict"] = true, -- enabling global strict mode is its whole purpose
 	["luacheck.main"] = true, -- CLI entry; runs main() + os.exit when required
 	["luacheck.vendor.sha1.bit32_ops"] = true, -- impl-selected; needs undeclared bit32
+	["luarocks.build.treesitter-parser"] = true, -- LuaRocks build backend; requires luarocks.fs/dir/path/util which only exist in the build sandbox
 	["resty.openssl.auxiliary.nginx_c"] = true, -- C side of the nginx aux module, compiled into OpenResty (references ngx_* C symbols)
 	["resty.openssl.auxiliary.nginx"] = true, -- requires the global `ngx`; OpenResty-only
 	["resty.openssl.ssl"] = true, -- hard-requires resty.openssl.auxiliary.nginx
@@ -272,8 +273,9 @@ local EXCLUDE_MODULES = {
 
 --- Module name prefixes that are example/test programs rather than libraries.
 --- luasocket ships samples/ and test/ via copy_directories; the files open
---- sockets and loop forever when required (e.g. samples.mcsend).
-local EXCLUDE_PREFIXES = { "samples.", "test." }
+--- sockets and loop forever when required (e.g. samples.mcsend). json.lua ships
+--- bench/ — benchmark scripts that run (and crash) when required.
+local EXCLUDE_PREFIXES = { "samples.", "test.", "bench." }
 
 --- Functional checks for well-known APIs. Values are Lua expressions over the
 --- module value `m`; they are spliced into the generated smoke script. Failures
@@ -602,6 +604,13 @@ for _, r in ipairs(results) do
 		csvField(r.errors and r.errors[1] or ""),
 	}, ",")
 end
-local csvPath = path.join(SCRATCH, "results.csv")
-fs.write(csvPath, table.concat(csv, "\n") .. "\n")
-ansi.printf("\nCSV results written to {cyan}%s{reset}", csvPath)
+	local csvPath = path.join(SCRATCH, "results.csv")
+	fs.write(csvPath, table.concat(csv, "\n") .. "\n")
+	ansi.printf("\nCSV results written to {cyan}%s{reset}", csvPath)
+
+	-- Fail the run when any package failed or was only partially verified, so
+	-- regressions are caught by the exit code (e.g. in CI).
+	if failedPkgs > 0 or partialPkgs > 0 then
+		ansi.printf("{red}%d package(s) failed or were only partially verified{reset}", failedPkgs + partialPkgs)
+		os.exit(1)
+	end

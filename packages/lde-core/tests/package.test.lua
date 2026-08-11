@@ -7,6 +7,7 @@ local env = require("env")
 local path = require("path")
 local json = require("json")
 local process = require("process")
+local Archive = require("archive")
 
 local tmpBase = path.join(env.tmpdir(), "lde-package-tests")
 
@@ -414,4 +415,63 @@ test.it("getDependencyPath returns path for git dep with commit", function()
 	test.falsy(err)
 	test.truthy(depPath:find("foo"))
 	test.truthy(depPath:find("abc123"))
+end)
+
+--
+-- .src.rock materialization (cerulean regression)
+--
+
+--- Build a fake extracted .src.rock cache dir: a rockspec, the original source
+--- archive, and a stray leftover `<name>/` dir like a buggy install would leave.
+test.it("materializeSrcRock prefers the nested archive over a leftover package dir", function()
+	local base = path.join(tmpBase, "srcrock-nested")
+	fs.rmdir(base)
+	fs.mkdir(base)
+
+	fs.write(path.join(base, "ceru-1.0-1.rockspec"), [[
+rockspec_format = "3.0"
+package = "ceru"
+version = "1.0-1"
+source = { url = "https://example.com/ceru-1.0.tar.gz" }
+build = {
+  type = "builtin",
+  modules = { ceru = "src/init.lua" },
+  install = { bin = { ceru = "bin/ceru" } },
+}
+]])
+
+	-- The nested archive holds the real source tree (stripComponents=true drops
+	-- the ceru-1.0/ top-level dir on extraction).
+	local arch = Archive.new({
+		["ceru-1.0/src/init.lua"] = "return require('ceru.cli').run()",
+		["ceru-1.0/bin/ceru"] = "#!/usr/bin/env lua\nrequire('ceru')\n",
+	})
+	local ok, err = arch:save(path.join(base, "ceru-1.0.tar.gz"))
+	test.truthy(ok, err or "failed to write nested archive")
+
+	-- The stray dir a broken install left behind: a stale stamp and no sources.
+	fs.mkdirAll(path.join(base, "ceru", "target", "ceru"))
+	fs.write(path.join(base, "ceru", "target", "ceru", ".lde-built"), "stale")
+
+	local srcDir, rockspecPath, merr = lde.util.materializeSrcRock(base)
+	test.truthy(srcDir, merr or "materializeSrcRock failed")
+	test.falsy(merr)
+	test.equal(rockspecPath, path.join(base, "ceru-1.0-1.rockspec"))
+	-- The nested archive is extracted and wins over the leftover dir.
+	test.equal(srcDir, path.join(base, "ceru-1.0"))
+	test.truthy(fs.isfile(path.join(srcDir, "src", "init.lua")))
+	test.truthy(fs.isfile(path.join(srcDir, "bin", "ceru")))
+
+	-- openSrcRock opens a real package from it, and the build materializes the
+	-- custom bin name (cerulean's rockspec installs bin "ceru").
+	local pkg, perr = lde.util.openSrcRock(base, "https://luarocks.org/ceru-1.0-1.src.rock")
+	test.truthy(pkg, perr or "openSrcRock failed")
+	test.equal(pkg:getName(), "ceru")
+	local config = pkg:readConfig()
+	test.equal(config.bin, "ceru")
+
+	local built, derr = pkg:build()
+	test.truthy(built, derr or "build failed")
+	test.truthy(fs.isfile(path.join(srcDir, "target", "ceru", "ceru")))
+	test.truthy(fs.isfile(path.join(srcDir, "target", "ceru", "init.lua")))
 end)
