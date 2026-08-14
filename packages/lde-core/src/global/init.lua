@@ -349,15 +349,21 @@ end
 
 --- Ensures a git repo is cached locally (via tarball for recognized hosts,
 --- shallow git clone otherwise). Always resolves to a specific commit.
+--- With `offline`, never touches the network: the commit must be given and the
+--- repo must already be in the cache, otherwise it errors.
 --- Returns the cache directory and the pinned commit.
 ---@param repoName string
 ---@param repoUrl string
 ---@param branch string?
 ---@param commit string?
+---@param offline boolean?
 ---@return string repoDir
 ---@return string commit
-function global.getOrInitGitRepo(repoName, repoUrl, branch, commit)
+function global.getOrInitGitRepo(repoName, repoUrl, branch, commit, offline)
 	if not commit then
+		if offline then
+			error("offline: cannot resolve '" .. (branch or "HEAD") .. "' for " .. repoUrl)
+		end
 		local sha, err = resolveGitRef(repoUrl, branch)
 		if not sha then
 			error("Failed to resolve '" .. (branch or "HEAD") .. "' for " .. repoUrl .. ": " .. (err or ""))
@@ -366,6 +372,9 @@ function global.getOrInitGitRepo(repoName, repoUrl, branch, commit)
 	end
 
 	local repoDir = global.getGitRepoDir(repoName, commit)
+	if offline and not fs.exists(repoDir) then
+		error("offline: '" .. repoName .. "' is not cached locally (run once online to cache it)")
+	end
 	if not fs.exists(repoDir) then
 		local hostType = isRecognizedGitHost(repoUrl)
 		if hostType then
@@ -446,15 +455,21 @@ end
 
 --- Downloads and extracts an archive URL (.zip, .tar.gz, .tar.bz2, etc.) into the cache.
 --- Uses `tar -xf` which auto-detects format on all platforms (bsdtar on Windows 10+).
+--- With `offline`, never touches the network: the archive must already be
+--- cached, otherwise it errors.
 ---
 --- Failure-safe: a failed download/extract removes the partially-created cache dir
 --- so the next run re-downloads instead of trusting an empty/partial dir. A
 --- concurrent install may finish (and delete the .archive file) while this
 --- download is in flight; the extracted dir is reused in that case.
 ---@param url string
+---@param offline boolean?
 ---@return string dir
-function global.getOrInitArchive(url)
+function global.getOrInitArchive(url, offline)
 	local archiveDir = global.getArchiveDir(url)
+	if offline and not fs.exists(archiveDir) then
+		error("offline: archive is not cached locally (run once online to cache it): " .. url)
+	end
 	if not fs.exists(archiveDir) then
 		local filename = url:match("([^/]+)$") or url
 		local bar = lde.verbose and ansi.progress("Downloading " .. filename) or nil
@@ -622,6 +637,9 @@ end
 --- Writes the platform-appropriate wrapper script into ~/.lde/tools/.
 --- The `--` separator stops lde's own arg parser from swallowing tool args that
 --- start with a dash (e.g. `tl --help`), so they are passed through to the tool.
+--- Registry/rocks tools run with `--offline`: they're resolved from the cache
+--- at ~/.lde and fail if the package isn't cached, instead of updating the
+--- registry on every invocation.
 ---@param toolName string
 ---@param packageDir string? # nil for rocks: tools (resolved from the registry)
 ---@param packageName string
@@ -629,7 +647,7 @@ function global.writeWrapper(toolName, packageDir, packageName)
 	local toolsDir = global.getToolsDir()
 	local invocation = packageDir
 		and ("lde x --path '" .. packageDir .. "' " .. packageName .. " --")
-		or ("lde x " .. packageName .. " --")
+		or ("lde x " .. packageName .. " --offline --")
 
 	if jit.os == "Windows" then
 		local wrapperPath = path.join(toolsDir, toolName .. ".cmd")
@@ -637,7 +655,7 @@ function global.writeWrapper(toolName, packageDir, packageName)
 		-- path is wrapped in " directly.
 		local winInvocation = packageDir
 			and ('lde x --path "' .. packageDir .. '" ' .. packageName .. " --")
-			or ("lde x " .. packageName .. " --")
+			or ("lde x " .. packageName .. " --offline --")
 
 		if not fs.write(wrapperPath, "@echo off\n" .. winInvocation .. " %*\n") then
 			error("Failed to write wrapper script: " .. wrapperPath)

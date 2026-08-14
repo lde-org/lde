@@ -25,6 +25,16 @@ ldx triangle --git https://github.com/codebycruz/hood
 
 This clones the hood repository, resolves the triangle package, and then instantly runs the package. You can do this with --path dependencies as well.
 
+### Offline
+
+Registry and luarocks lookups normally refresh their metadata on every run. If you're offline (or just want to avoid the network), pass `--offline`:
+
+```bash
+lde x triangle --offline
+```
+
+`--offline` resolves the package strictly from the local cache at `~/.lde` and fails with a clear error if it isn't cached yet — run it once online to populate the cache. Installed tools already run this way: `lde install` writes wrappers that invoke `lde x <name> --offline`.
+
 ## lde install
 
 But this is quite tedious if you need to repeatedly run this tool, so you can install tools to your PATH.

@@ -37,11 +37,12 @@ local commands = {
 		},
 	},
 	x = {
-		usage = "lde x <name>[@<version>] [args...]",
+		usage = "lde x <name>[@<version>] [--offline] [args...]",
 		description = "Run a package from the registry, a git repo, or a local path without adding it as a dependency.",
 		options = {
 			["--git"] = { arg = "url", desc = "Run a package cloned from a git repository" },
 			["--path"] = { arg = "dir", desc = "Run a package from a local directory" },
+			["--offline"] = { desc = "Resolve from the local cache only; fail instead of updating the registry" },
 		},
 	},
 	repl = {

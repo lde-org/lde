@@ -22,7 +22,7 @@ local function x(args)
 	local userCwd = env.cwd()
 
 	if not args:peek() then
-		ansi.printf("{red}Usage: lde x <name>[@<version>] [args...]")
+		ansi.printf("{red}Usage: lde x <name>[@<version>] [--offline] [args...]")
 		ansi.printf("{red}       lde x --git <repo-url> [package-name] [args...]")
 		ansi.printf("{red}       lde x --path <dir> [package-name] [args...]")
 		return
