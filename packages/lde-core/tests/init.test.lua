@@ -172,6 +172,92 @@ test.it("Package.init teal projects write a .tl entry point, check script, and t
 	test.includes(tlconfig, "include_dir")
 end)
 
+--
+-- Package.init: existing-file branches (never overwrite user files)
+--
+
+test.it("Package.init appends to an existing .gitignore that lacks /target/", function()
+	fs.mkdir(tmpBase)
+	local dir = path.join(tmpBase, "gitignore-append")
+	fs.mkdir(dir)
+	fs.write(path.join(dir, ".gitignore"), "node_modules/\n")
+
+	lde.Package.init(dir)
+
+	local content = fs.read(path.join(dir, ".gitignore"))
+	test.includes(content, "node_modules/")
+	test.includes(content, "/target/")
+end)
+
+test.it("Package.init leaves a .gitignore that already ignores target/ alone", function()
+	fs.mkdir(tmpBase)
+	local dir = path.join(tmpBase, "gitignore-keep")
+	fs.mkdir(dir)
+	fs.write(path.join(dir, ".gitignore"), "/target/\n/lde.lock\n")
+
+	lde.Package.init(dir)
+
+	test.equal(fs.read(path.join(dir, ".gitignore")), "/target/\n/lde.lock\n")
+end)
+
+test.it("Package.init does not overwrite an existing src/ entry point", function()
+	fs.mkdir(tmpBase)
+	local dir = path.join(tmpBase, "src-exists")
+	fs.mkdir(dir)
+	fs.mkdir(path.join(dir, "src"))
+	fs.write(path.join(dir, "src", "init.lua"), 'return "mine"')
+
+	lde.Package.init(dir)
+
+	test.equal(fs.read(path.join(dir, "src", "init.lua")), 'return "mine"')
+end)
+
+test.it("Package.init does not overwrite an existing tlconfig.lua", function()
+	fs.mkdir(tmpBase)
+	local dir = path.join(tmpBase, "tlconfig-exists")
+	fs.mkdir(dir)
+	fs.write(path.join(dir, "tlconfig.lua"), "return { custom = true }")
+
+	lde.Package.init(dir, { language = "teal" })
+
+	test.equal(fs.read(path.join(dir, "tlconfig.lua")), "return { custom = true }")
+end)
+
+test.it("Package.init does not overwrite an existing .luarc.json", function()
+	fs.mkdir(tmpBase)
+	local dir = path.join(tmpBase, "luarc-exists")
+	fs.mkdir(dir)
+	fs.write(path.join(dir, ".luarc.json"), "{}")
+
+	lde.Package.init(dir)
+
+	test.equal(fs.read(path.join(dir, ".luarc.json")), "{}")
+end)
+
+test.skipIf(jit.os == "Windows")("Package.init writes CLAUDE.md when a coding agent is on PATH", function()
+	-- Fake a `claude` binary so hasBinary() finds it; the agent template is only
+	-- written when a known agent is present.
+	local binDir = path.join(tmpBase, "fake-bin")
+	fs.rmdir(binDir)
+	fs.mkdir(binDir)
+	fs.write(path.join(binDir, "claude"), "#!/bin/sh\nexit 0\n")
+	fs.chmod(path.join(binDir, "claude"), tonumber("755", 8))
+
+	local oldPath = env.var("PATH") or ""
+	env.set("PATH", binDir .. ":" .. oldPath)
+
+	local ok, err = pcall(function()
+		local dir = path.join(tmpBase, "agent-template")
+		fs.mkdir(dir)
+		lde.Package.init(dir)
+		test.truthy(fs.isfile(path.join(dir, "CLAUDE.md")), "CLAUDE.md should be written for claude users")
+		test.truthy(fs.read(path.join(dir, "CLAUDE.md")):find("package manager and toolkit for Lua", 1, true))
+	end)
+
+	env.set("PATH", oldPath)
+	if not ok then error(err) end
+end)
+
 test.it("Package.init moonscript projects write a .moon entry point and no extra scaffolding", function()
 	fs.mkdir(tmpBase)
 	local dir = path.join(tmpBase, "moon-project")

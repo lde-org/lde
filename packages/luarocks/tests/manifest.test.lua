@@ -227,3 +227,78 @@ repository = {
 	test.truthy(url:find("mypkg-2.0.0-1.src.rock", 1, true))
 	test.equal(arch, "src")
 end)
+
+--
+-- satisfies: version constraint comparisons
+--
+
+test.it("satisfies orders by numeric parts and revision", function()
+	test.truthy(luarocks.satisfies("1.8.0-1", ">=", "1.7.0-2"))
+	test.falsy(luarocks.satisfies("1.7.0-2", ">=", "1.8.0-1"))
+	test.truthy(luarocks.satisfies("1.8.0-2", ">", "1.8.0-1"), "revision must sort: 1.8.0-2 > 1.8.0-1")
+	test.falsy(luarocks.satisfies("1.8.0-1", ">", "1.8.0-2"))
+	test.truthy(luarocks.satisfies("1.10.0-1", ">", "1.9.0-1"), "10 must sort after 9 (numeric, not lexicographic)")
+end)
+
+test.it("satisfies handles the comparison operators", function()
+	test.truthy(luarocks.satisfies("1.5.0-1", "<=", "1.5.0-1"))
+	test.truthy(luarocks.satisfies("1.5.0-1", "<", "1.6.0-1"))
+	test.truthy(luarocks.satisfies("1.5.0-1", "==", "1.5.0-1"))
+	test.truthy(luarocks.satisfies("1.5.0-1", "=", "1.5.0-1"))
+	test.truthy(luarocks.satisfies("1.5.0-1", "~=", "1.6.0-1"))
+	test.falsy(luarocks.satisfies("1.5.0-1", "~", "1.5.0-1"), "unknown operators never satisfy")
+end)
+
+test.it("satisfies treats a missing revision as 0 (0.5-0 satisfies >= 0.5)", function()
+	test.truthy(luarocks.satisfies("0.5-0", ">=", "0.5"))
+	test.truthy(luarocks.satisfies("0.5", "==", "0.5-0"))
+end)
+
+test.it("satisfies implements pessimistic ~> constraints", function()
+	test.truthy(luarocks.satisfies("1.2.5-1", "~>", "1.2"))
+	test.falsy(luarocks.satisfies("1.3.0-1", "~>", "1.2"), "~> 1.2 must exclude 1.3")
+	test.truthy(luarocks.satisfies("1.9.0-1", "~>", "1"))
+	test.falsy(luarocks.satisfies("2.0.0-1", "~>", "1"), "~> 1 must exclude 2.x")
+end)
+
+--
+-- constraint-aware URL/version resolution
+--
+
+test.it("getUrl honors a version constraint", function()
+	local m = Manifest.new(MANIFEST)
+	-- luasystem has 0.4.5-1 and 0.5.0-1; >= 0.4 picks 0.5.0-1.
+	local url, arch, err = luarocks.getUrl(m, "luasystem", ">= 0.4")
+	test.equal(err, nil)
+	test.equal(arch, "src")
+	test.truthy(url:find("luasystem-0.5.0-1.src.rock", 1, true))
+
+	-- A constraint excluding every version reports no match.
+	local none, noneArch, noneErr = luarocks.getUrl(m, "luasystem", "> 99")
+	test.equal(none, nil)
+	test.equal(noneArch, nil)
+	test.truthy(noneErr)
+end)
+
+test.it("getBest returns the version, rockspec, and src URLs for the best match", function()
+	local m = Manifest.new(MANIFEST)
+	local version, rockspecUrl, srcUrl, err = luarocks.getBest(m, "luafilesystem", ">= 1.7")
+	test.equal(err, nil)
+	test.equal(version, "1.8.0-1")
+	test.truthy(rockspecUrl:find("luafilesystem-1.8.0-1.rockspec", 1, true))
+	test.truthy(srcUrl:find("luafilesystem-1.8.0-1.src.rock", 1, true))
+end)
+
+test.it("listBest returns versions sorted descending, filtered by constraint", function()
+	local m = Manifest.new(MANIFEST)
+	local all = luarocks.listBest(m, "luafilesystem")
+	test.equal(#all, 2)
+	test.equal(all[1].version, "1.8.0-1")
+	test.equal(all[2].version, "1.7.0-2")
+
+	local constrained = luarocks.listBest(m, "luafilesystem", ">= 1.8")
+	test.equal(#constrained, 1)
+	test.equal(constrained[1].version, "1.8.0-1")
+
+	test.equal(#luarocks.listBest(m, "doesnotexist"), 0)
+end)
