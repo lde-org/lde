@@ -17,10 +17,11 @@ end
 --- Resolves --git, --path, or a registry/rocks: name to a Package.
 --- Returns pkg, err, extraName (the popped sub-package name for git/path)
 ---@param args clap.Args
+---@param parsed { git: string?, path: string? }? # Pre-consumed --git/--path values (the install command peeks them to decide its project-install branch)
 ---@return lde.Package?, string?, string?
-local function resolvePackage(args)
-	local gitUrl = args:option("git")
-	local localPath = args:option("path")
+local function resolvePackage(args, parsed)
+	local gitUrl = parsed and parsed.git or args:option("git")
+	local localPath = parsed and parsed.path or args:option("path")
 	local userCwd = env.cwd()
 
 	if gitUrl then

@@ -89,8 +89,13 @@ end
 
 ---@param args clap.Args
 local function install(args)
+	-- The option() calls consume their values; capture them up front so the
+	-- project-install check and resolvePackage can both see them.
+	local gitUrl = args:option("git")
+	local pathDir = args:option("path")
+
 	-- No flags and no name = install deps for current project
-	if not args:option("git") and not args:option("path") and not args:peek() then
+	if not gitUrl and not pathDir and not args:peek() then
 		local pkg, err = lde.Package.open()
 		if not pkg then
 			ansi.printf("{red}%s", err)
@@ -136,7 +141,7 @@ local function install(args)
 		return
 	end
 
-	local pkg, err = resolvePackage(args)
+	local pkg, err = resolvePackage(args, { git = gitUrl, path = pathDir })
 	if not pkg then error(err) end
 
 	pkg:build()
