@@ -329,7 +329,10 @@ function Package:runScript(name, capture)
 	local shell = jit.os == "Windows" and { "cmd", "/c" } or { "sh", "-c" }
 	local code, stdout, stderr = process.exec(shell[1], { shell[2], scripts[name] }, opts)
 	if code == 0 then return true, stdout or stderr end
-	if stdout or stderr then return nil, stdout or stderr end
+	-- process.exec returns empty strings (not nil) when the child wrote nothing;
+	-- treat those as absent so a silent failure reports its exit code.
+	if stdout and stdout ~= "" then return nil, stdout end
+	if stderr and stderr ~= "" then return nil, stderr end
 	return nil, "Script exited with " .. (code and ("exit code " .. tostring(code)) or "an unknown error")
 end
 

@@ -233,4 +233,5 @@ end
 ---@field build fun(package: lde.Package, destinationPath: string?): boolean?, lde.install.DeferredBuild?
 ---@field isStale fun(package: lde.Package, destinationPath: string): boolean
 
+---@type lde.packageBuild
 return { build = buildPackage, isStale = isStale }
