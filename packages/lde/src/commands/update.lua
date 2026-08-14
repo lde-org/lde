@@ -57,7 +57,7 @@ local function update(args)
 
 		if not depInfo then
 			ansi.printf("{red}Unknown dependency: %s", name)
-			return
+			os.exit(1)
 		end
 
 		local results = pkg:updateDependencies({ [name] = depInfo })
