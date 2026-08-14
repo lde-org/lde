@@ -144,6 +144,25 @@ end
 local lde = require("lde-core")
 lde.verbose = true
 
+-- Hidden build worker: run a package's build.lua in a subprocess so the
+-- install scheduler can overlap independent native builds (see
+-- lde-core/package/build.lua). Invoked as: lde __build-pkg <pkgDir> <outDir>.
+if commandName == "__build-pkg" then
+	local pkgDir = assert(args:pop(), "__build-pkg: missing package dir")
+	local outDir = assert(args:pop(), "__build-pkg: missing output dir")
+	local pkg, perr = lde.Package.open(pkgDir)
+	if not pkg then
+		io.stderr:write("__build-pkg: " .. (perr or "failed to open package") .. "\n")
+		os.exit(1)
+	end
+	local ok, berr = pkg:runBuildScript(outDir)
+	if not ok then
+		io.stderr:write("__build-pkg: " .. (berr or "build failed") .. "\n")
+		os.exit(1)
+	end
+	return
+end
+
 if evalCode then
 	local pkg = lde.Package.open()
 	local ok, result

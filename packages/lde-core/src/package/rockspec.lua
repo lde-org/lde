@@ -635,8 +635,15 @@ local function openRockspec(dir, rockspecPath)
 
 			if #nativeChildren > 0 then
 				-- Async mode: the install build loop polls the children, then
-				-- calls this finalizer (which verifies exit codes + stamps).
-				return nil, nil, finishNative
+				-- finalizes (verifies exit codes + stamps). poll() reports when all
+				-- gcc children have exited so the loop can finalize promptly.
+				local function pollNative()
+					for _, nc in ipairs(nativeChildren) do
+						if nc.child:poll() == nil then return nil end
+					end
+					return true
+				end
+				return nil, nil, { poll = pollNative, finalize = finishNative }
 			end
 			return finishNative()
 		elseif buildType == "command" then

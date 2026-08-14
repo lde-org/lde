@@ -25,6 +25,10 @@ end
 ---@field downloads integer # content artifacts actually downloaded (0 = nothing to fetch)
 ---@field builds integer # build scripts actually run (0 = nothing to compile)
 
+---@class lde.install.DeferredBuild
+---@field poll fun(): boolean? # true once the spawned build finished, nil while still running
+---@field finalize fun(): boolean?, string? # waits for the build, verifies it, and stamps; true on success
+
 --- Returns a string key that uniquely identifies a dependency's source.
 ---@param entry lde.Lockfile.Dependency
 ---@param pkg lde.Package
@@ -814,7 +818,19 @@ end
 local function makeBuildScheduler(ctx)
 	local asyncBuild = require("lde-core.util.async-build")
 
-	---@type { alias: string, finalize: fun(): boolean?, string? }[]
+	-- Cross-platform sleep used while polling spawned build workers so the
+	-- loop doesn't busy-wait between checks.
+	local ffi = require("ffi")
+	local sleep
+	if jit.os == "Windows" then
+		pcall(ffi.cdef, "void Sleep(unsigned long dwMilliseconds);")
+		sleep = function(ms) ffi.C.Sleep(ms) end
+	else
+		pcall(ffi.cdef, "int usleep(unsigned int usec);")
+		sleep = function(ms) ffi.C.usleep(ms * 1000) end
+	end
+
+	---@type { alias: string, build: lde.install.DeferredBuild }[]
 	local pending = {}
 	---@type table<string, boolean>
 	local done = {}      -- alias -> build finished or skipped
@@ -845,9 +861,9 @@ local function makeBuildScheduler(ctx)
 	end
 
 	--- Run a deferred finalizer once its spawned compiles finished.
-	---@param job { alias: string, finalize: fun(): boolean?, string? }
+	---@param job { alias: string, build: lde.install.DeferredBuild }
 	local function finalizeJob(job)
-		local ok, err = job.finalize()
+		local ok, err = job.build.finalize()
 		if not ok then
 			error("Build failed for '" .. job.alias .. "': " .. tostring(err))
 		end
@@ -893,7 +909,7 @@ local function makeBuildScheduler(ctx)
 
 		local built, deferred = entry.pkg:build(dest)
 		if deferred then
-			pending[#pending + 1] = { alias = alias, finalize = deferred }
+			pending[#pending + 1] = { alias = alias, build = deferred }
 		else
 			if built then ctx.builds = ctx.builds + 1 end
 			done[alias] = true
@@ -933,12 +949,30 @@ local function makeBuildScheduler(ctx)
 		pumpQueue()
 	end
 
-	--- Wait for all spawned compiles, then build whatever is left.
+	--- Wait for all spawned compiles, then build whatever is left. Finalize
+	--- each job as soon as its children exit (rather than in spawn order) so
+	--- progress bars report accurate elapsed times and dependents unblock
+	--- promptly.
 	function scheduler.finish()
-		for _, job in ipairs(pending) do
-			finalizeJob(job)
+		while #pending > 0 do
+			local progressed = false
+			local i = 1
+			while i <= #pending do
+				local job = pending[i]
+				if job.build.poll() ~= nil then
+					table.remove(pending, i)
+					finalizeJob(job)
+					progressed = true
+					-- finalizeJob may pump the queue and append new jobs; keep
+					-- this index to re-check the element that shifted into it.
+				else
+					i = i + 1
+				end
+			end
+			if not progressed then
+				sleep(20)
+			end
 		end
-		pending = {}
 		pumpQueue()
 		asyncBuild.finish()
 	end

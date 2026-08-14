@@ -3,9 +3,12 @@ local path = require("path")
 local ansi = require("ansi")
 local json = require("json")
 local util = require("util")
+local process = require("process")
+local env = require("env")
 local lde = require("lde-core")
 local teal = require("lde-core.teal")
 local moonscript = require("lde-core.moonscript")
+local asyncBuild = require("lde-core.util.async-build")
 
 ---@type table<lde.Package, boolean>
 local currentlyBuilding = setmetatable({}, { __mode = "k" })
@@ -100,7 +103,7 @@ end
 ---@param package lde.Package
 ---@param destinationPath string?
 ---@return boolean built # true when a build script actually ran (and finished)
----@return (fun(): boolean?, string?)? deferred # finalizer for async native builds (rockspec builtin with spawned gcc)
+---@return lde.install.DeferredBuild? deferred # finalizer for async native builds (rockspec builtin or a build.lua subprocess)
 local function buildPackage(package, destinationPath)
 	if currentlyBuilding[package] then return false end
 	currentlyBuilding[package] = true
@@ -110,7 +113,7 @@ local function buildPackage(package, destinationPath)
 	local target = path.dirname(destinationPath)
 	if not fs.isdir(target) then fs.mkdir(target) end
 
-	---@type (fun(): boolean?, string?)?
+	---@type lde.install.DeferredBuild?
 	local deferred = nil
 	-- Default to "changed" (build must run): rockspec packages have no
 	-- build.lua, so checkInputs never runs and their buildfn gates on its own
@@ -134,21 +137,60 @@ local function buildPackage(package, destinationPath)
 		if inputsChanged then
 			local alreadyDone = alreadyBuilt[destinationPath] or fs.exists(path.join(destinationPath, ".lde-built"))
 			local p = (lde.verbose and not alreadyDone) and ansi.progress("Building " .. package:getName()) or nil
-			local ok, err, asyncFinalizer = package:runBuildScript(destinationPath)
-			if not ok and not asyncFinalizer then
-				if p then p:fail("Building " .. package:getName()) end
-				error("Build script failed for package '" .. package:getName() .. "': " .. err)
-			end
-			if p and not asyncFinalizer then p:done("Built " .. package:getName()) end
-			deferred = asyncFinalizer
-			built = true
-			alreadyBuilt[destinationPath] = true
-		end
 
-		-- Record the input state after a successful build (or a confirmed
-		-- no-change run) so the next build can skip.
-		if current then
-			fs.write(stampPath, json.encode({ version = STAMP_VERSION, files = current }))
+			-- Record the input state after a successful build (or a confirmed
+			-- no-change run) so the next build can skip. For the subprocess path
+			-- this runs in the finalizer after the child exits successfully.
+			local writeStamp = function()
+				if current then
+					fs.write(stampPath, json.encode({ version = STAMP_VERSION, files = current }))
+				end
+			end
+
+			-- A build.lua runs its whole script (fetch → extract → configure →
+			-- compile) synchronously through os.execute, which blocks the host
+			-- LuaJIT. During the install build pass run it in a subprocess so
+			-- independent native builds overlap — the same win rockspec builds
+			-- already get from spawning gcc async. buildfn (rockspec) packages
+			-- keep their own async-gcc path.
+			if asyncBuild.isActive() and package.buildfn == nil and fs.exists(package:getBuildScriptPath()) then
+				local ldeBin = assert(env.execPath(), "no executable path")
+				local child, serr = process.spawn(ldeBin,
+					{ "__build-pkg", package:getDir(), destinationPath },
+					{ stdout = "inherit", stderr = "inherit" })
+				if not child then
+					if p then p:fail("Building " .. package:getName()) end
+					error("Failed to spawn build worker for '" .. package:getName() .. "': " .. (serr or "spawn failed"))
+				end
+				built = true
+				alreadyBuilt[destinationPath] = true
+				deferred = {
+					poll = function()
+						if child:poll() == nil then return nil end
+						return true
+					end,
+					finalize = function()
+						local code = child:wait()
+						if code ~= 0 then
+							return nil, "build worker exited with code " .. tostring(code)
+						end
+						writeStamp()
+						if p then p:done("Built " .. package:getName()) end
+						return true
+					end,
+				}
+			else
+				local ok, err, asyncFinalizer = package:runBuildScript(destinationPath)
+				if not ok and not asyncFinalizer then
+					if p then p:fail("Building " .. package:getName()) end
+					error("Build script failed for package '" .. package:getName() .. "': " .. err)
+				end
+				if p and not asyncFinalizer then p:done("Built " .. package:getName()) end
+				deferred = asyncFinalizer
+				built = true
+				alreadyBuilt[destinationPath] = true
+				if not asyncFinalizer then writeStamp() end
+			end
 		end
 	else
 		-- Clear any previous output (symlink from a no-build-script run, or a
