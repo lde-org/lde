@@ -4,6 +4,7 @@ local fs = require("fs")
 local env = require("env")
 local path = require("path")
 local json = require("json")
+local process = require("process")
 
 local ldecli = require("tests.lib.ldecli")
 
@@ -144,4 +145,47 @@ test.it("lde add removes the dep entry from lde.lock if present", function()
 	local lock = json.decode(lockRaw)
 	test.falsy(lock.dependencies["mypkg"], "stale lockfile entry should be removed after lde add")
 	test.falsy(fs.exists(path.join(dir, "target", ".installed")), ".installed should be deleted")
+end)
+
+test.it("lde add --git records the dep and sync pins the commit in the lockfile", function()
+	-- Local repo so the whole flow is offline (lsRemote + clone on local paths).
+	local repoDir = path.join(tmpBase, "add-git-repo")
+	fs.rmdir(repoDir)
+	fs.mkdir(repoDir)
+	fs.mkdir(path.join(repoDir, "src"))
+	fs.write(path.join(repoDir, "src", "init.lua"), 'return "add-git"')
+	fs.write(path.join(repoDir, "lde.json"), json.encode({
+		name = "addgit",
+		version = "0.1.0",
+		dependencies = {}
+	}))
+	assert(process.exec("git", { "init", "-q" }, { cwd = repoDir }), "git init failed")
+	process.exec("git", { "add", "-A" }, { cwd = repoDir })
+	local code = process.exec(
+		"git", { "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "init" },
+		{ cwd = repoDir })
+	assert(code == 0, "git commit failed: " .. tostring(code))
+
+	local dir = makeProject("add-git-test")
+	local ok, out = ldecli({ "add", "addgit", "--git", repoDir }, dir)
+	test.truthy(ok, "lde add --git failed: " .. tostring(out))
+
+	local config = json.decode(fs.read(path.join(dir, "lde.json")))
+	test.truthy(config.dependencies["addgit"], "addgit should be in dependencies")
+	test.equal(config.dependencies["addgit"].git, repoDir)
+
+	-- The commit is auto-pinned at install time, not by add itself.
+	local lockPath = path.join(dir, "lde.lock")
+	if fs.exists(lockPath) then
+		local lockBefore = json.decode(fs.read(lockPath))
+		test.falsy(lockBefore.dependencies["addgit"], "add must not pin the commit yet")
+	end
+
+	local ok2, out2 = ldecli({ "sync" }, dir)
+	test.truthy(ok2, "sync failed: " .. tostring(out2))
+	local lockAfter = json.decode(fs.read(path.join(dir, "lde.lock")))
+	local entry = lockAfter.dependencies["addgit"]
+	test.truthy(entry and entry.commit, "commit must be auto-pinned after sync")
+	test.truthy(entry.commit:match("^%x+$"), "expected a hex commit sha")
+	test.truthy(fs.exists(path.join(dir, "target", "addgit", "init.lua")))
 end)

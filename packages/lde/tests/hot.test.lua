@@ -37,6 +37,22 @@ local function waitForLog(logPath, needle, timeoutMs)
 	return false
 end
 
+-- Poll the file until it contains at least `count` occurrences of `needle`.
+---@param logPath string
+---@param needle string
+---@param count number
+---@param timeoutMs number
+local function waitForCount(logPath, needle, count, timeoutMs)
+	local deadline = os.time() + timeoutMs / 1000
+	while os.time() < deadline do
+		local content = fs.read(logPath) or ""
+		local _, n = content:gsub(needle, "")
+		if n >= count then return true end
+		sleep(50)
+	end
+	return false
+end
+
 -- Spawn the lde binary for a --hot/--watch session, run fn, then always kill
 -- the child (even when fn errors, so a failed test can't leak a watcher).
 ---@param args string[]
@@ -129,5 +145,71 @@ end)
 		-- The counter must be 1: --watch tears down the state and re-creates it,
 		-- so _G.runs starts over even though the module picked up v2.
 		test.truthy(waitForLog(logFile, "run v2 runs=1", 15000), "watch restart did not reset the state")
+	end)
+end)
+
+test.it("lde run --hot rebuilds and reloads a build.lua package", function()
+	local dir = makePackage("pkg-hot-build")
+	-- defaultBuildFn copies src/ into the output dir first, then runs build.lua;
+	-- the preReload hook re-runs this on every hot reload (stamp-gated).
+	fs.write(path.join(dir, "src", "utilmod.lua"), 'return "v1"')
+	fs.write(path.join(dir, "build.lua"), [==[
+local f = assert(io.open(os.getenv("LDE_OUTPUT_DIR") .. "/init.lua", "w"))
+f:write([[
+local u = require("pkg-hot-build.utilmod")
+_G.runs = (_G.runs or 0) + 1
+local f = assert(io.open(arg[1], "a"))
+f:write("build-hot " .. u .. " runs=" .. _G.runs .. "\n")
+f:close()
+]])
+f:close()
+]==])
+
+	local logFile = path.join(tmpBase, "pkg-hot-build.log")
+	fs.write(logFile, "")
+
+	withChild({ "run", "--hot", "--", logFile }, dir, function()
+		test.truthy(waitForLog(logFile, "build-hot v1 runs=1", 15000), "initial run missing from log")
+
+		-- Change the dep module: the preReload rebuild must refresh the copy in
+		-- target/ (the stamp sees the src change) before the reload re-runs.
+		-- Different size so the mtime/size fast path can't mask the change.
+		fs.write(path.join(dir, "src", "utilmod.lua"), 'return "version-2"')
+
+		test.truthy(waitForLog(logFile, "build-hot version-2 runs=2", 15000),
+			"hot reload did not rebuild and reload the changed module")
+	end)
+end)
+
+test.it("lde test --watch re-runs the suite when a test file changes", function()
+	local dir = makePackage("pkg-test-watch")
+	fs.mkdir(path.join(dir, "tests"))
+	-- The test file counts its own executions in the package dir (the runner's
+	-- cwd), so the watcher's re-runs are observable without capturing stdout.
+	fs.write(path.join(dir, "tests", "counter.test.lua"), [[
+local test = require("lde-test")
+local f = assert(io.open("watch-count.txt", "a"))
+f:write("x")
+f:close()
+test.it("passes", function() end)
+]])
+	local countPath = path.join(dir, "watch-count.txt")
+	fs.write(countPath, "")
+
+	withChild({ "test", "--watch" }, dir, function()
+		test.truthy(waitForLog(countPath, "x", 15000), "initial test run missing")
+		test.equal(fs.read(countPath), "x")
+
+		-- Touch the test file: the watcher must re-run the suite.
+		fs.write(path.join(dir, "tests", "counter.test.lua"), [[
+local test = require("lde-test")
+local f = assert(io.open("watch-count.txt", "a"))
+f:write("x")
+f:close()
+test.it("passes", function() end)
+-- touched
+]])
+
+		test.truthy(waitForCount(countPath, "x", 2, 15000), "test suite did not re-run after the file changed")
 	end)
 end)

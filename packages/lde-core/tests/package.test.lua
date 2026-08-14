@@ -475,3 +475,85 @@ build = {
 	test.truthy(fs.isfile(path.join(srcDir, "target", "ceru", "ceru")))
 	test.truthy(fs.isfile(path.join(srcDir, "target", "ceru", "init.lua")))
 end)
+
+--
+-- Package:runScript (lde.json scripts)
+--
+
+test.it("Package:runScript runs a shell script and captures its output", function()
+	local dir = makePackageDir("script-capture", {
+		name = "script-capture",
+		version = "0.1.0",
+		dependencies = {},
+		scripts = { greet = "echo hello-script" }
+	})
+
+	local pkg = lde.Package.open(dir)
+	local ok, out = pkg:runScript("greet", true)
+	test.truthy(ok, "runScript failed")
+	test.includes(out or "", "hello-script")
+end)
+
+test.it("Package:runScript runs with the package directory as cwd", function()
+	local dir = makePackageDir("script-cwd", {
+		name = "script-cwd",
+		version = "0.1.0",
+		dependencies = {},
+		scripts = { pwd = "pwd" }
+	})
+
+	local pkg = lde.Package.open(dir)
+	local ok, out = pkg:runScript("pwd", true)
+	test.truthy(ok)
+	-- pwd may return a symlink-resolved path; check the basename matches.
+	local normalized = (out or ""):gsub("%s+$", "")
+	test.truthy(normalized:find("script%-cwd$"), "script ran in the wrong cwd: " .. tostring(out))
+end)
+
+test.it("Package:runScript reports a non-zero exit", function()
+	local dir = makePackageDir("script-fail", {
+		name = "script-fail",
+		version = "0.1.0",
+		dependencies = {},
+		scripts = { boom = "exit 3" }
+	})
+
+	local pkg = lde.Package.open(dir)
+	local ok, out = pkg:runScript("boom", true)
+	test.falsy(ok)
+	test.includes(out or "", "exit code 3")
+end)
+
+test.it("Package:runScript errors for an unknown script name", function()
+	local dir = makePackageDir("script-missing", {
+		name = "script-missing",
+		version = "0.1.0",
+		dependencies = {},
+		scripts = { known = "true" }
+	})
+
+	local pkg = lde.Package.open(dir)
+	local ok, err = pcall(pkg.runScript, pkg, "missing")
+	test.falsy(ok)
+	test.includes(tostring(err), "No script named")
+end)
+
+--
+-- Legacy lpm.json manifest
+--
+
+test.it("Package.open picks up the legacy lpm.json manifest", function()
+	local dir = path.join(tmpBase, "lpm-legacy")
+	fs.mkdir(tmpBase)
+	fs.mkdir(dir)
+	fs.write(path.join(dir, "lpm.json"), json.encode({
+		name = "lpm-legacy",
+		version = "0.1.0",
+		dependencies = {}
+	}))
+
+	local pkg, err = lde.Package.open(dir)
+	test.truthy(pkg, err or "open failed")
+	test.equal(pkg:getName(), "lpm-legacy")
+	test.equal(path.basename(pkg:getConfigPath()), "lpm.json")
+end)

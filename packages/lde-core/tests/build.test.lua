@@ -708,6 +708,105 @@ test.it("installDependencies installs transitive dependencies", function()
 	test.truthy(fs.exists(path.join(rootDir, "target", "leaf-dep")))
 end)
 
+--
+-- Archive dependencies (URL -> download -> extract -> open)
+--
+
+test.it("installDependencies materializes a cached archive dependency", function()
+	-- The archive cache dir is keyed by URL; pre-populating it (as if the
+	-- download+extract already happened) makes this fully offline while still
+	-- exercising the archive dep resolution, lock entry, and build pass.
+	local url = "https://example.com/archive-dep-1.0.tar.gz"
+	local archiveDir = lde.global.getArchiveDir(url)
+	fs.rmdir(archiveDir)
+	fs.mkdirAll(archiveDir)
+	fs.write(path.join(archiveDir, "lde.json"), json.encode({
+		name = "archive-dep",
+		version = "0.1.0",
+		dependencies = {}
+	}))
+	fs.mkdir(path.join(archiveDir, "src"))
+	fs.write(path.join(archiveDir, "src", "init.lua"), 'return "from-archive"')
+
+	local mainDir = path.join(tmpBase, "archive-main")
+	fs.mkdir(mainDir)
+	fs.mkdir(path.join(mainDir, "src"))
+	fs.write(path.join(mainDir, "src", "init.lua"), 'return true')
+	fs.write(path.join(mainDir, "lde.json"), json.encode({
+		name = "archive-main",
+		version = "0.1.0",
+		dependencies = {
+			["archive-dep"] = { archive = url }
+		}
+	}))
+
+	local pkg = lde.Package.open(mainDir)
+	pkg:installDependencies()
+
+	test.truthy(fs.exists(path.join(mainDir, "target", "archive-dep", "init.lua")))
+	local lockfile = pkg:readLockfile()
+	test.truthy(lockfile)
+	local entry = lockfile:getDependency("archive-dep")
+	test.truthy(entry)
+	test.equal(entry.archive, url)
+
+	local ok, err = pkg:runString('assert(require("archive-dep") == "from-archive")')
+	test.truthy(ok, tostring(err))
+end)
+
+test.it("installDependencies treats a wiped archive cache as a fresh install", function()
+	-- Same setup as above, but the archive cache dir and the materialized dep
+	-- are both deleted afterwards: the next install must not report cached.
+	local url = "https://example.com/archive-dep-2.tar.gz"
+	local archiveDir = lde.global.getArchiveDir(url)
+	fs.rmdir(archiveDir)
+	fs.mkdirAll(archiveDir)
+	fs.write(path.join(archiveDir, "lde.json"), json.encode({
+		name = "archive-dep-2",
+		version = "0.1.0",
+		dependencies = {}
+	}))
+	fs.mkdir(path.join(archiveDir, "src"))
+	fs.write(path.join(archiveDir, "src", "init.lua"), 'return "v1"')
+
+	local mainDir = path.join(tmpBase, "archive-wipe-main")
+	fs.mkdir(mainDir)
+	fs.mkdir(path.join(mainDir, "src"))
+	fs.write(path.join(mainDir, "src", "init.lua"), 'return true')
+	fs.write(path.join(mainDir, "lde.json"), json.encode({
+		name = "archive-wipe-main",
+		version = "0.1.0",
+		dependencies = {
+			["archive-dep-2"] = { archive = url }
+		}
+	}))
+
+	local pkg = lde.Package.open(mainDir)
+	pkg:installDependencies()
+	test.truthy(fs.exists(path.join(mainDir, "target", "archive-dep-2", "init.lua")))
+
+	-- Wipe the cache dir + the materialized dep, like a user deleting the tar
+	-- cache manually: installIsIntact must fall back to a full install. (The
+	-- cache is pre-populated again so this stays offline.) Delete the link with
+	-- fs.delete: after the cache dir is gone the target link dangles and
+	-- fs.rmdir's fs.exists pre-check would no-op on it.
+	fs.rmdir(archiveDir)
+	fs.delete(path.join(mainDir, "target", "archive-dep-2"))
+	fs.mkdirAll(archiveDir)
+	fs.mkdir(path.join(archiveDir, "src"))
+	fs.write(path.join(archiveDir, "src", "init.lua"), 'return "v1"')
+	-- The package metadata must come back too (the cache dir was fully wiped).
+	fs.write(path.join(archiveDir, "lde.json"), json.encode({
+		name = "archive-dep-2",
+		version = "0.1.0",
+		dependencies = {}
+	}))
+
+	local result = pkg:installDependencies()
+	test.falsy(result.cached, "archive dep must be re-materialized after a cache wipe")
+	test.equal(fs.read(path.join(mainDir, "target", "archive-dep-2", "init.lua")), 'return "v1"')
+end)
+
 -- Regression: path deps pointing to the same package from different relative starting
 -- points must not be treated as conflicts.
 test.it("installDependencies does not conflict when two deps reference the same path package differently", function()
