@@ -4,6 +4,7 @@ import DOMPurify from "dompurify";
 import { CopyButton } from "./CopyButton";
 import { usePortfile } from "../hooks/usePortfile";
 import { useRegistry } from "../hooks/useRegistry";
+import { highlightCodeBlocks, highlightFile, isViewableFile } from "../lib/highlight";
 
 // Fetch with a localStorage cache: returns cached data when fresh, otherwise
 // fetches and stores the result. Used for the README and repo tree fetches so
@@ -109,17 +110,22 @@ function refScope(ref: string): "branch" | "commit" {
 	return SHA_RE.test(ref) ? "commit" : "branch";
 }
 
-// Raw file URL at a pinned ref (branch, tag, commit SHA, or HEAD).
-function repoRawUrl(repo: Repo, ref: string, path: string): string {
+// Raw file URL at a pinned ref (branch, tag, commit SHA, or HEAD). Codeberg's
+// raw and GitLab's -/raw endpoints send no CORS headers, so those hosts fetch
+// through their CORS-enabled APIs; GitHub's and Bitbucket's raw endpoints
+// allow cross-origin reads directly.
+function repoFileUrl(repo: Repo, ref: string, path: string): string {
 	switch (repo.host) {
 		case "github":
-			return `https://raw.githubusercontent.com/${repo.owner}/${repo.repo}/${ref}/${path}`;
-		case "gitlab":
-			return `https://gitlab.com/${repo.owner}/${repo.repo}/-/raw/${ref}/${path}`;
+			return `https://raw.githubusercontent.com/${repo.owner}/${repo.repo}/${ref}/${encodeURI(path)}`;
+		case "gitlab": {
+			const project = encodeURIComponent(`${repo.owner}/${repo.repo}`);
+			return `https://gitlab.com/api/v4/projects/${project}/repository/files/${encodeURIComponent(path)}/raw?ref=${encodeURIComponent(ref)}`;
+		}
 		case "codeberg":
-			return `https://codeberg.org/${repo.owner}/${repo.repo}/raw/${refScope(ref)}/${ref}/${path}`;
+			return `https://codeberg.org/api/v1/repos/${repo.owner}/${repo.repo}/raw/${encodeURI(path)}?ref=${encodeURIComponent(ref)}`;
 		case "bitbucket":
-			return `https://bitbucket.org/${repo.owner}/${repo.repo}/raw/${ref}/${path}`;
+			return `https://bitbucket.org/${repo.owner}/${repo.repo}/raw/${ref}/${encodeURI(path)}`;
 	}
 }
 
@@ -143,22 +149,9 @@ function repoWebUrl(
 }
 
 // Resolve a README.md URL for a supported host, pinned to the given ref
-// (commit SHA, branch, or HEAD). Codeberg's raw and GitLab's -/raw endpoints
-// send no CORS headers, so those hosts fetch through their CORS-enabled APIs;
-// GitHub's and Bitbucket's raw endpoints allow cross-origin reads directly.
+// (commit SHA, branch, or HEAD).
 function repoReadmeUrl(repo: Repo, ref: string): string {
-	switch (repo.host) {
-		case "github":
-			return `https://raw.githubusercontent.com/${repo.owner}/${repo.repo}/${ref}/README.md`;
-		case "gitlab": {
-			const project = encodeURIComponent(`${repo.owner}/${repo.repo}`);
-			return `https://gitlab.com/api/v4/projects/${project}/repository/files/README.md/raw?ref=${encodeURIComponent(ref)}`;
-		}
-		case "codeberg":
-			return `https://codeberg.org/api/v1/repos/${repo.owner}/${repo.repo}/raw/README.md?ref=${encodeURIComponent(ref)}`;
-		case "bitbucket":
-			return `https://bitbucket.org/${repo.owner}/${repo.repo}/raw/${ref}/README.md`;
-	}
+	return repoFileUrl(repo, ref, "README.md");
 }
 
 // Rewrite a relative README image path to its raw host URL at the pinned
@@ -176,7 +169,7 @@ function resolveAssetUrl(
 	)
 		return href;
 	const clean = href.replace(/^\.\//, "").replace(/^\/+/, "");
-	return repoRawUrl(repo, ref, clean);
+	return repoFileUrl(repo, ref, clean);
 }
 
 // Rewrite a relative README link to its host blob URL at the pinned ref.
@@ -198,16 +191,17 @@ function resolveLinkUrl(
 	return repoWebUrl(repo, ref, clean, "blob");
 }
 
-// Render a README with marked (GFM) and sanitize the result, then resolve
-// relative image and link URLs against the package's host URLs at the pinned
-// ref so they work outside the repo page.
+// Render a README with marked (GFM), sanitize the result, highlight code
+// blocks (declared language when known, auto-detected otherwise), then
+// resolve relative image and link URLs against the package's host URLs at the
+// pinned ref so they work outside the repo page.
 function renderReadme(
 	src: string,
 	repo: Repo | null,
 	ref: string,
 ): string {
-	const html = DOMPurify.sanitize(
-		new Marked({ gfm: true }).parse(src) as string,
+	const html = highlightCodeBlocks(
+		DOMPurify.sanitize(new Marked({ gfm: true }).parse(src) as string),
 	);
 	if (!repo) return html;
 	// This runs after sanitizing, so only safe URLs remain; rewriting a
@@ -415,6 +409,12 @@ export default function PackageDetail({ name: nameProp }: { name: string }) {
 	const [treeLoading, setTreeLoading] = useState(false);
 	const [treeError, setTreeError] = useState<string | null>(null);
 
+	// Inline file viewer: the file row selected in the Files tab.
+	const [selectedFile, setSelectedFile] = useState<GitTreeNode | null>(null);
+	const [fileContent, setFileContent] = useState<string | null>(null);
+	const [fileLoading, setFileLoading] = useState(false);
+	const [fileError, setFileError] = useState<string | null>(null);
+
 	const description = portfile?.description ?? pkg?.description ?? null;
 	const authors = portfile?.authors ?? pkg?.authors ?? [];
 	const git = portfile?.git ?? pkg?.git ?? "";
@@ -460,6 +460,7 @@ export default function PackageDetail({ name: nameProp }: { name: string }) {
 		setTree(null);
 		setTreeLoading(false);
 		setTreeError(null);
+		setSelectedFile(null);
 		if (tab !== "files" || !repo) return;
 		setTreeLoading(true);
 		fetchFileTree(repo, treeRef)
@@ -472,6 +473,44 @@ export default function PackageDetail({ name: nameProp }: { name: string }) {
 				setTreeLoading(false);
 			});
 	}, [tab, repo?.host, repo?.owner, repo?.repo, treeRef]);
+
+	// Fetch the selected file's contents for the inline viewer via the host's
+	// CORS-enabled raw endpoint. Cached per URL — file contents are immutable
+	// per ref, so they're held for a day.
+	useEffect(() => {
+		setFileContent(null);
+		setFileError(null);
+		setFileLoading(false);
+		if (!selectedFile || !repo) return;
+		if (!isViewableFile(selectedFile.path)) {
+			setFileError("Binary files can't be previewed");
+			return;
+		}
+		setFileLoading(true);
+		const url = repoFileUrl(repo, treeRef, selectedFile.path);
+		cachedFetch<string | null>(
+			`lde-file:${url}`,
+			url,
+			24 * 60 * 60 * 1000,
+			(r) => r.text(),
+		)
+			.then((text) => {
+				setFileLoading(false);
+				if (text == null) {
+					setFileError("Failed to load file");
+					return;
+				}
+				if (text.includes("\0")) {
+					setFileError("This file appears to be binary");
+					return;
+				}
+				setFileContent(text);
+			})
+			.catch((e: Error) => {
+				setFileLoading(false);
+				setFileError(e.message);
+			});
+	}, [selectedFile, repo?.host, repo?.owner, repo?.repo, treeRef]);
 
 	// Rendered README HTML — memoized so marked only re-parses when the
 	// source or the pinned ref changes.
@@ -516,58 +555,106 @@ export default function PackageDetail({ name: nameProp }: { name: string }) {
 	const treeNodes = tree ? buildTree(tree) : [];
 
 	// Recursively render a directory row followed by its children, each level
-	// indented further so files nest under their containing folders.
+	// indented further so files nest under their containing folders. Files are
+	// buttons that open the inline viewer; directories link to the host.
 	const renderTreeNode = (
 		node: TreeNode,
 		depth: number,
 	): preact.JSX.Element[] => [
-		<a
+		<div
 			key={node.path}
-			href={treeLink(node)}
-			target="_blank"
-			rel="noopener noreferrer"
 			class="flex items-center gap-2 px-3 py-1.5 hover:bg-black/[0.03] dark:hover:bg-white/[0.03] transition-colors"
 			style={{ paddingLeft: `calc(0.75rem + ${depth * 16}px)` }}
 		>
 			{node.type === "tree" ? (
-				<svg
-					xmlns="http://www.w3.org/2000/svg"
-					aria-hidden="true"
-					class="size-3.5 shrink-0 text-blue-500/70"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
+				<a
+					href={treeLink(node)}
+					target="_blank"
+					rel="noopener noreferrer"
+					class="flex items-center gap-2 flex-1 min-w-0"
 				>
-					<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
-				</svg>
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						aria-hidden="true"
+						class="size-3.5 shrink-0 text-blue-500/70"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					>
+						<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
+					</svg>
+					<span class="font-mono text-xs truncate">
+						{node.path.split("/").pop()}
+					</span>
+				</a>
 			) : (
-				<svg
-					xmlns="http://www.w3.org/2000/svg"
-					aria-hidden="true"
-					class="size-3.5 shrink-0 text-black/35 dark:text-white/30"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
+				<button
+					type="button"
+					onClick={() =>
+						setSelectedFile((cur) =>
+							cur?.path === node.path ? null : node,
+						)
+					}
+					class={`flex items-center gap-2 flex-1 min-w-0 text-left cursor-pointer ${
+						selectedFile?.path === node.path
+							? "text-blue-500"
+							: ""
+					}`}
 				>
-					<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
-					<path d="M14 2v4a2 2 0 0 0 2 2h4" />
-				</svg>
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						aria-hidden="true"
+						class="size-3.5 shrink-0 text-black/35 dark:text-white/30"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					>
+						<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
+						<path d="M14 2v4a2 2 0 0 0 2 2h4" />
+					</svg>
+					<span class="font-mono text-xs truncate">
+						{node.path.split("/").pop()}
+					</span>
+					{node.size != null && (
+						<span class="ml-auto pl-3 text-[11px] text-black/30 dark:text-white/30 shrink-0">
+							{formatSize(node.size)}
+						</span>
+					)}
+				</button>
 			)}
-			<span class="font-mono text-xs truncate">
-				{node.path.split("/").pop()}
-			</span>
-			{node.type === "blob" && node.size != null && (
-				<span class="ml-auto pl-3 text-[11px] text-black/30 dark:text-white/30 shrink-0">
-					{formatSize(node.size)}
-				</span>
+			{node.type === "blob" && (
+				<a
+					href={treeLink(node)}
+					target="_blank"
+					rel="noopener noreferrer"
+					aria-label="Open file on host"
+					class="shrink-0 text-black/30 dark:text-white/30 hover:text-blue-500 transition-colors"
+				>
+					<span class="sr-only">Open file on host</span>
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						aria-hidden="true"
+						class="size-3.5"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					>
+						<path d="M15 3h6v6" />
+						<path d="M10 14 21 3" />
+						<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+					</svg>
+				</a>
 			)}
-		</a>,
+		</div>,
 		...(node.type === "tree"
 			? node.children.flatMap((child) => renderTreeNode(child, depth + 1))
 			: []),
@@ -582,6 +669,17 @@ export default function PackageDetail({ name: nameProp }: { name: string }) {
 					node.type === "tree" ? "tree" : "blob",
 			  )
 			: "";
+
+	// Highlighted HTML for the selected file (null = render plain text). Very
+	// large files skip highlighting to keep the viewer responsive.
+	const fileLines = fileContent ? fileContent.split("\n").length : 0;
+	const fileHtml = useMemo(
+		() =>
+			fileContent && fileContent.length <= 100_000
+				? highlightFile(fileContent, selectedFile?.path ?? "")
+				: null,
+		[fileContent, selectedFile?.path],
+	);
 
 	return (
 		<div class="flex flex-col gap-8">
@@ -698,7 +796,89 @@ export default function PackageDetail({ name: nameProp }: { name: string }) {
 					{/* Files */}
 					{tab === "files" && (
 						<div class="pt-6">
-							{!repo ? (
+							{selectedFile ? (
+								/* File viewer replaces the tree; Back returns to it. */
+								<div class="border border-black/10 dark:border-white/10">
+									<div class="flex h-10 items-center gap-2 px-2 border-b border-black/10 dark:border-white/10">
+										<button
+											type="button"
+											onClick={() => setSelectedFile(null)}
+											class="inline-flex items-center gap-1 px-2 text-xs font-medium leading-none text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 rounded transition-colors cursor-pointer shrink-0"
+										>
+											<svg
+												xmlns="http://www.w3.org/2000/svg"
+												aria-hidden="true"
+												class="size-3.5"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2"
+												stroke-linecap="round"
+												stroke-linejoin="round"
+											>
+												<path d="m12 19-7-7 7-7" />
+												<path d="M19 12H5" />
+											</svg>
+											Back
+										</button>
+										<code class="font-mono text-xs leading-none flex-1 min-w-0 truncate">
+											{selectedFile.path}
+										</code>
+										<CopyButton getText={() => fileContent ?? ""} />
+										<a
+											href={treeLink(selectedFile)}
+											target="_blank"
+											rel="noopener noreferrer"
+											aria-label="Open file on host"
+											class="shrink-0 text-black/30 dark:text-white/30 hover:text-blue-500 transition-colors"
+										>
+											<span class="sr-only">Open file on host</span>
+											<svg
+												xmlns="http://www.w3.org/2000/svg"
+												aria-hidden="true"
+												class="size-3.5"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2"
+												stroke-linecap="round"
+												stroke-linejoin="round"
+											>
+												<path d="M15 3h6v6" />
+												<path d="M10 14 21 3" />
+												<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+											</svg>
+										</a>
+									</div>
+									{fileLoading ? (
+										<div class="h-32 animate-pulse bg-black/5 dark:bg-white/5" />
+									) : fileError ? (
+										<p class="px-4 py-3 text-sm text-red-600/80 dark:text-red-400/80">
+											{fileError}
+										</p>
+									) : fileContent == null ? null : (
+										<div class="flex max-h-[32rem] overflow-auto">
+											<pre
+												aria-hidden="true"
+												class="shrink-0 select-none py-4 pl-4 pr-3 text-right font-mono text-xs leading-relaxed text-black/25 dark:text-white/25 border-r border-black/5 dark:border-white/5"
+											>
+												{Array.from({ length: fileLines }, (_, i) => i + 1).join("\n")}
+											</pre>
+											<pre class="flex-1 min-w-0 py-4 pl-4 pr-6 font-mono text-xs leading-relaxed">
+												{fileHtml ? (
+													<code
+														class="hljs"
+														dangerouslySetInnerHTML={{ __html: fileHtml }}
+													/>
+												) : (
+													<code>{fileContent}</code>
+												)}
+											</pre>
+										</div>
+										)
+										}
+									</div>
+								) : !repo ? (
 								<p class="text-sm text-black/40 dark:text-white/40">
 									File browsing is only available for GitHub-, GitLab-,
 									Codeberg-, and Bitbucket-hosted packages.
