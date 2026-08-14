@@ -87,6 +87,16 @@ lde test --coverage "unit/*"
 
 Coverage works with file filters and multi-package runs (each package gets its own report). Because line hooks disable the JIT, coverage runs are slower than normal test runs. Coverage is not supported for rockspec-based packages that use an external runner (busted).
 
+### Coverage JSON
+
+Pass `--json` to write the same report as machine-readable JSON for tooling and CI:
+
+```sh
+lde test --coverage --json coverage.json
+```
+
+`--json` implies `--coverage`, and a bare `--json` defaults to `coverage.json`. The file follows `schemas/lde.coverage.schema.json` and contains the combined totals plus one entry per package — each with its per-file rows (`executable`, `covered`, `percent`) sorted worst-first, so the least-tested modules come first. In a multi-package run all packages land in a single file, making it easy to diff coverage between commits or gate a CI step on a minimum percentage.
+
 ## lde-test
 
 This is a minimal testing library that comes bundled with lde. You can require it in your test files and use its simple API to write tests.

@@ -30,6 +30,16 @@ lde run --flamegraph
 
 The file is `profile.html`. It is self-contained — open it in any browser, hover over a frame to see its share, and click a frame to zoom. Use `--flamegraph=out.html` to write elsewhere.
 
+## JSON output
+
+`lde run --json` writes the raw sampled data as JSON for tooling and CI:
+
+```sh
+lde run --json profile.json
+```
+
+Like `--flamegraph`, a bare `--json` defaults to `profile.json`; combine with `--profile` to also print the text report. The file follows `schemas/lde.profile.schema.json` and contains the sample total, the VM state breakdown, the hotspot table, and the folded call stacks — the same data the flamegraph is built from, so tools can render their own views or compare runs without parsing the HTML.
+
 ## Profiling scripts
 
 The profiler works for loose scripts too:
@@ -48,4 +58,4 @@ lde run --profile --flamegraph -- -C packages/foo test
 
 ## Limitations
 
-`--profile` and `--flamegraph` are not supported with `--hot` or `--watch`.
+`--profile`, `--flamegraph`, and `--json` are not supported with `--hot` or `--watch`.
