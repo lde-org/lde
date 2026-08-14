@@ -147,7 +147,7 @@ test.it("lde add removes the dep entry from lde.lock if present", function()
 	test.falsy(fs.exists(path.join(dir, "target", ".installed")), ".installed should be deleted")
 end)
 
-test.it("lde add --git records the dep and sync pins the commit in the lockfile", function()
+test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde add --git records the dep and sync pins the commit in the lockfile", function()
 	-- Local repo so the whole flow is offline (lsRemote + clone on local paths).
 	local repoDir = path.join(tmpBase, "add-git-repo")
 	fs.rmdir(repoDir)

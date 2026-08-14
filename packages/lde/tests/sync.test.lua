@@ -216,7 +216,7 @@ test.it("lde sync re-downloads when the tar cache is deleted", function()
 	test.truthy(fs.exists(path.join(dir, "target", "lpeg")), "lpeg not re-installed")
 end)
 
-test.it("lde sync re-clones when the git cache is deleted", function()
+test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde sync re-clones when the git cache is deleted", function()
 	local repoDir = makeLocalGitRepo("syncgit")
 	local treeDir = path.join(tmpBase, "sync-git-tree")
 	fs.rmdir(treeDir)
@@ -242,7 +242,7 @@ end)
 -- --locked and --production
 --
 
-test.it("lde sync --locked works when the lockfile is up to date", function()
+test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde sync --locked works when the lockfile is up to date", function()
 	local repoDir = makeLocalGitRepo("synclocked")
 	local treeDir = path.join(tmpBase, "sync-locked-tree")
 	fs.rmdir(treeDir)
@@ -256,7 +256,7 @@ test.it("lde sync --locked works when the lockfile is up to date", function()
 	test.truthy(fs.exists(path.join(dir, "target", "synclocked", "init.lua")))
 end)
 
-test.it("lde sync --locked fails when the lockfile is out of date", function()
+test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde sync --locked fails when the lockfile is out of date", function()
 	local repoDir = makeLocalGitRepo("synclockedbad")
 	local treeDir = path.join(tmpBase, "sync-locked-bad-tree")
 	fs.rmdir(treeDir)

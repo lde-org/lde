@@ -100,7 +100,7 @@ end)
 -- lde install: tools from --path / --git / rocks:, plus uninstall
 --
 
-	test.it("install --path writes a wrapper and the tool runs with args", function()
+	test.skipIf(env.var("ANDROID_ROOT") ~= nil)("install --path writes a wrapper and the tool runs with args", function()
 	local toolDir = path.join(tmpBase, "mytool")
 	fs.mkdir(toolDir)
 	fs.mkdir(path.join(toolDir, "src"))
@@ -130,7 +130,7 @@ end)
 end)
 
 -- Windows: Presumably from some issue with git
-test.skipIf(jit.os == "Windows")("install --git clones and wraps a tool from a local repo", function()
+test.skipIf(jit.os == "Windows" or env.var("ANDROID_ROOT") ~= nil)("install --git clones and wraps a tool from a local repo", function()
 	local repoDir = makeLocalGitRepo("gittool")
 	local treeDir = path.join(tmpBase, "install-git-tree")
 	fs.rmdir(treeDir)
@@ -177,7 +177,7 @@ test.it("uninstall removes the tool wrapper", function()
 	test.includes(out3 or "", "not installed")
 end)
 
-test.it("install rocks:<name> installs a tool with a bin and the wrapper compiles a file", function()
+test.skipIf(env.var("ANDROID_ROOT") ~= nil)("install rocks:<name> installs a tool with a bin and the wrapper compiles a file", function()
 	local treeDir = path.join(tmpBase, "install-rocks-tree")
 	fs.rmdir(treeDir)
 

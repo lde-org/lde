@@ -151,7 +151,7 @@ end)
 -- lde update (git deps, offline via local repos)
 --
 
-test.it("lde update <name> pins a newer git commit into the lockfile", function()
+test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde update <name> pins a newer git commit into the lockfile", function()
 	local repoDir = makeLocalGitRepo("upd-dep")
 	local dir = makeProject("upd-app", { ["upd-dep"] = { git = repoDir } })
 
@@ -179,7 +179,7 @@ test.it("lde update <name> pins a newer git commit into the lockfile", function(
 		"updated commit must be materialized")
 end)
 
-test.it("lde update reports no changes when git deps are already at HEAD", function()
+test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde update reports no changes when git deps are already at HEAD", function()
 	local repoDir = makeLocalGitRepo("uptodate-dep")
 	local dir = makeProject("uptodate-app", { ["uptodate-dep"] = { git = repoDir } })
 

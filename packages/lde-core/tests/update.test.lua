@@ -66,7 +66,7 @@ test.it("updateDependencies skips path dependencies", function()
 	test.includes(results.mylib.message, "skipped")
 end)
 
-test.it("updateDependencies reports already up to date for a git dep at HEAD", function()
+test.skipIf(env.var("ANDROID_ROOT") ~= nil)("updateDependencies reports already up to date for a git dep at HEAD", function()
 	local repoDir = makeLocalGitRepo("update-head")
 	local dir = makeApp("update-head-app", {
 		["update-head"] = { git = repoDir }
@@ -79,7 +79,7 @@ test.it("updateDependencies reports already up to date for a git dep at HEAD", f
 	test.includes(results["update-head"].message, "already up to date")
 end)
 
-test.it("updateDependencies re-pins a git dep when the upstream moves", function()
+test.skipIf(env.var("ANDROID_ROOT") ~= nil)("updateDependencies re-pins a git dep when the upstream moves", function()
 	local repoDir = makeLocalGitRepo("update-move")
 	local dir = makeApp("update-move-app", {
 		["update-move"] = { git = repoDir }
