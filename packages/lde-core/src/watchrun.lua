@@ -447,4 +447,4 @@ local function run(opts)
 	end
 end
 
-return { run = run }
+return { run = run, bootstrap = BOOTSTRAP }
