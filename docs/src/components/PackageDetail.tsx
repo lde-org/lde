@@ -6,8 +6,8 @@ import { usePortfile } from "../hooks/usePortfile";
 import { useRegistry } from "../hooks/useRegistry";
 
 // Fetch with a localStorage cache: returns cached data when fresh, otherwise
-// fetches and stores the result. Used for the README and GitHub tree fetches
-// so repeat visits don't re-hit the network (or the GitHub API rate limit).
+// fetches and stores the result. Used for the README and repo tree fetches so
+// repeat visits don't re-hit the network (or host API rate limits).
 function cachedFetch<T>(
 	key: string,
 	url: string,
@@ -77,34 +77,95 @@ function formatSize(bytes: number): string {
 	return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-interface GitHubRepo {
+type Host = "github" | "gitlab" | "codeberg" | "bitbucket";
+
+interface Repo {
+	host: Host;
 	owner: string;
 	repo: string;
 }
 
-function githubRepo(git: string): GitHubRepo | null {
+// Parse a package git URL into host + owner + repo. Only hosts with public
+// raw-file endpoints and tree APIs are supported: GitHub, GitLab, Codeberg
+// (Forgejo/Gitea), and Bitbucket.
+const HOSTS: Record<string, Host> = {
+	"github.com": "github",
+	"gitlab.com": "gitlab",
+	"codeberg.org": "codeberg",
+	"bitbucket.org": "bitbucket",
+};
+function parseGitUrl(git: string): Repo | null {
 	const m = git.replace(/\.git$/, "").match(
-		/^https?:\/\/github\.com\/([^/]+)\/([^/]+)/,
+		/^https?:\/\/(github\.com|gitlab\.com|codeberg\.org|bitbucket\.org)\/([^/]+)\/([^/]+)/,
 	);
 	if (!m) return null;
-	return { owner: m[1], repo: m[2] };
+	return { host: HOSTS[m[1]], owner: m[2], repo: m[3] };
 }
 
-// Resolve a raw README.md URL for a GitHub-hosted package, pinned to the
-// given commit (or the default branch when no commit is known).
-function githubReadmeUrl(git: string, commit: string | null): string | null {
-	const repo = githubRepo(git);
-	if (!repo) return null;
-	return `https://raw.githubusercontent.com/${repo.owner}/${repo.repo}/${
-		commit ?? "HEAD"
-	}/README.md`;
+// Codeberg's URLs scope the ref as either a branch or a commit — a 40-char
+// hex string is a commit SHA, anything else (branch, tag, HEAD) is a branch.
+const SHA_RE = /^[0-9a-f]{40}$/;
+function refScope(ref: string): "branch" | "commit" {
+	return SHA_RE.test(ref) ? "commit" : "branch";
 }
 
-// Rewrite a relative README image path to its raw GitHub URL at the pinned
+// Raw file URL at a pinned ref (branch, tag, commit SHA, or HEAD).
+function repoRawUrl(repo: Repo, ref: string, path: string): string {
+	switch (repo.host) {
+		case "github":
+			return `https://raw.githubusercontent.com/${repo.owner}/${repo.repo}/${ref}/${path}`;
+		case "gitlab":
+			return `https://gitlab.com/${repo.owner}/${repo.repo}/-/raw/${ref}/${path}`;
+		case "codeberg":
+			return `https://codeberg.org/${repo.owner}/${repo.repo}/raw/${refScope(ref)}/${ref}/${path}`;
+		case "bitbucket":
+			return `https://bitbucket.org/${repo.owner}/${repo.repo}/raw/${ref}/${path}`;
+	}
+}
+
+// Web URL for browsing a file (blob) or directory (tree) at a pinned ref.
+function repoWebUrl(
+	repo: Repo,
+	ref: string,
+	path: string,
+	kind: "blob" | "tree",
+): string {
+	switch (repo.host) {
+		case "github":
+			return `https://github.com/${repo.owner}/${repo.repo}/${kind}/${ref}/${path}`;
+		case "gitlab":
+			return `https://gitlab.com/${repo.owner}/${repo.repo}/-/${kind}/${ref}/${path}`;
+		case "codeberg":
+			return `https://codeberg.org/${repo.owner}/${repo.repo}/src/${refScope(ref)}/${ref}/${path}`;
+		case "bitbucket":
+			return `https://bitbucket.org/${repo.owner}/${repo.repo}/src/${ref}/${path}`;
+	}
+}
+
+// Resolve a README.md URL for a supported host, pinned to the given ref
+// (commit SHA, branch, or HEAD). Codeberg's raw and GitLab's -/raw endpoints
+// send no CORS headers, so those hosts fetch through their CORS-enabled APIs;
+// GitHub's and Bitbucket's raw endpoints allow cross-origin reads directly.
+function repoReadmeUrl(repo: Repo, ref: string): string {
+	switch (repo.host) {
+		case "github":
+			return `https://raw.githubusercontent.com/${repo.owner}/${repo.repo}/${ref}/README.md`;
+		case "gitlab": {
+			const project = encodeURIComponent(`${repo.owner}/${repo.repo}`);
+			return `https://gitlab.com/api/v4/projects/${project}/repository/files/README.md/raw?ref=${encodeURIComponent(ref)}`;
+		}
+		case "codeberg":
+			return `https://codeberg.org/api/v1/repos/${repo.owner}/${repo.repo}/raw/README.md?ref=${encodeURIComponent(ref)}`;
+		case "bitbucket":
+			return `https://bitbucket.org/${repo.owner}/${repo.repo}/raw/${ref}/README.md`;
+	}
+}
+
+// Rewrite a relative README image path to its raw host URL at the pinned
 // ref. Absolute URLs, anchors, and data: URIs are left untouched.
 function resolveAssetUrl(
 	href: string,
-	repo: GitHubRepo | null,
+	repo: Repo | null,
 	ref: string,
 ): string {
 	if (
@@ -115,13 +176,13 @@ function resolveAssetUrl(
 	)
 		return href;
 	const clean = href.replace(/^\.\//, "").replace(/^\/+/, "");
-	return `https://raw.githubusercontent.com/${repo.owner}/${repo.repo}/${ref}/${clean}`;
+	return repoRawUrl(repo, ref, clean);
 }
 
-// Rewrite a relative README link to its GitHub blob URL at the pinned ref.
+// Rewrite a relative README link to its host blob URL at the pinned ref.
 function resolveLinkUrl(
 	href: string,
-	repo: GitHubRepo | null,
+	repo: Repo | null,
 	ref: string,
 ): string {
 	if (
@@ -134,15 +195,15 @@ function resolveLinkUrl(
 	)
 		return href;
 	const clean = href.replace(/^\.\//, "").replace(/^\/+/, "");
-	return `https://github.com/${repo.owner}/${repo.repo}/blob/${ref}/${clean}`;
+	return repoWebUrl(repo, ref, clean, "blob");
 }
 
 // Render a README with marked (GFM) and sanitize the result, then resolve
-// relative image and link URLs against the package's GitHub URLs at the
-// pinned ref so they work outside the repo page.
+// relative image and link URLs against the package's host URLs at the pinned
+// ref so they work outside the repo page.
 function renderReadme(
 	src: string,
-	repo: GitHubRepo | null,
+	repo: Repo | null,
 	ref: string,
 ): string {
 	const html = DOMPurify.sanitize(
@@ -177,6 +238,103 @@ interface GitTreeNode {
 	path: string;
 	type: "blob" | "tree";
 	size?: number;
+}
+
+const TREE_TTL = 15 * 60 * 1000;
+const PER_PAGE = 100;
+const MAX_PAGES = 25;
+
+// Fetch the flattened file tree of a repo at a pinned ref from the host's
+// tree API:
+//  - GitHub truncates huge trees; keep the top two levels in that case.
+//  - GitLab and Codeberg paginate; fetch until a short (or empty) page.
+//  - Bitbucket flattens with max_depth=0 and paginates with an opaque cursor.
+async function fetchFileTree(repo: Repo, ref: string): Promise<GitTreeNode[]> {
+	switch (repo.host) {
+		case "github": {
+			const url = `https://api.github.com/repos/${repo.owner}/${repo.repo}/git/trees/${ref}?recursive=1`;
+			const data = await cachedFetch<{
+				tree?: GitTreeNode[];
+				truncated?: boolean;
+			}>(
+				`lde-tree:${repo.owner}/${repo.repo}/${ref}`,
+				url,
+				TREE_TTL,
+				(r) => r.json(),
+			);
+			if (!data) throw new Error("GitHub API request failed");
+			const nodes = data.tree ?? [];
+			// Huge repos get truncated — keep only the top two levels so the
+			// listing stays usable.
+			return data.truncated
+				? nodes.filter((n) => n.path.split("/").length <= 2)
+				: nodes;
+		}
+		case "gitlab": {
+			const project = encodeURIComponent(`${repo.owner}/${repo.repo}`);
+			const all: GitTreeNode[] = [];
+			for (let page = 1; page <= MAX_PAGES; page++) {
+				const url = `https://gitlab.com/api/v4/projects/${project}/repository/tree?ref=${encodeURIComponent(ref)}&recursive=true&per_page=${PER_PAGE}&page=${page}`;
+				const entries = await cachedFetch<
+					{ path: string; type: "blob" | "tree"; size?: number }[]
+				>(`lde-tree:${url}`, url, TREE_TTL, (r) => r.json());
+				if (!entries) throw new Error("GitLab API request failed");
+				if (entries.length === 0) break;
+				for (const e of entries)
+					all.push({
+						path: e.path,
+						type: e.type === "tree" ? "tree" : "blob",
+						size: e.size,
+					});
+				if (entries.length < PER_PAGE) break;
+			}
+			return all;
+		}
+		case "codeberg": {
+			const all: GitTreeNode[] = [];
+			for (let page = 1; page <= MAX_PAGES; page++) {
+				const url = `https://codeberg.org/api/v1/repos/${repo.owner}/${repo.repo}/git/trees/${ref}?recursive=true&per_page=${PER_PAGE}&page=${page}`;
+				const data = await cachedFetch<{
+					tree?: { path: string; type: string; size?: number }[];
+				}>(`lde-tree:${url}`, url, TREE_TTL, (r) => r.json());
+				if (!data) throw new Error("Codeberg API request failed");
+				const entries = data.tree ?? [];
+				if (entries.length === 0) break;
+				for (const e of entries)
+					all.push({
+						path: e.path,
+						type: e.type === "tree" ? "tree" : "blob",
+						size: e.size,
+					});
+				if (entries.length < PER_PAGE) break;
+			}
+			return all;
+		}
+		case "bitbucket": {
+			const all: GitTreeNode[] = [];
+			const base = `https://api.bitbucket.org/2.0/repositories/${repo.owner}/${repo.repo}/src/${ref}/?format=json&max_depth=0&pagelen=${PER_PAGE}`;
+			let cursor: string | null = base;
+			for (let pages = 0; pages < MAX_PAGES && cursor; pages++) {
+				const pageUrl: string = cursor;
+				const data: {
+					values?: { path: string; type: string; size?: number }[];
+					next?: string | null;
+				} | null = await cachedFetch<{
+					values?: { path: string; type: string; size?: number }[];
+					next?: string | null;
+				}>(`lde-tree:${pageUrl}`, pageUrl, TREE_TTL, (r) => r.json());
+				if (!data) throw new Error("Bitbucket API request failed");
+				for (const v of data.values ?? []) {
+					if (v.type === "commit_file")
+						all.push({ path: v.path, type: "blob", size: v.size });
+					else if (v.type === "commit_directory")
+						all.push({ path: v.path, type: "tree" });
+				}
+				cursor = data.next ?? null;
+			}
+			return all;
+		}
+	}
 }
 
 // A nested node in the file tree — children are the entries directly inside
@@ -270,13 +428,13 @@ export default function PackageDetail({ name: nameProp }: { name: string }) {
 	const versions = portfile ? sortedVersions(portfile.versions) : null;
 
 	const latestCommit = portfile?.versions?.[latest ?? ""] ?? null;
-	const readmeUrl = githubReadmeUrl(git, latestCommit);
-	const repo = githubRepo(git);
+	const repo = parseGitUrl(git);
 	const treeRef = latestCommit ?? portfile?.branch ?? "HEAD";
+	const readmeUrl = repo ? repoReadmeUrl(repo, latestCommit ?? "HEAD") : null;
 
-	// Try to resolve a README.md from the package's GitHub repo at the
-	// pinned commit of the latest version (falling back to the default branch).
-	// Cached locally — the content is immutable per commit, so it's held for a day.
+	// Try to resolve a README.md from the package's repo at the pinned commit
+	// of the latest version (falling back to the default branch). Cached
+	// locally — the content is immutable per commit, so it's held for a day.
 	useEffect(() => {
 		setReadme(null);
 		setReadmeLoading(false);
@@ -295,49 +453,31 @@ export default function PackageDetail({ name: nameProp }: { name: string }) {
 			.catch(() => setReadmeLoading(false));
 	}, [readmeUrl]);
 
-	// Fetch the full file tree of the latest commit via the GitHub API.
+	// Fetch the full file tree of the latest commit from the host's tree API.
 	// Only fetched once the Files tab is opened, and cached locally for 15
-	// minutes to stay well under the unauthenticated rate limit.
+	// minutes to stay well under unauthenticated rate limits.
 	useEffect(() => {
 		setTree(null);
 		setTreeLoading(false);
 		setTreeError(null);
 		if (tab !== "files" || !repo) return;
 		setTreeLoading(true);
-		const url = `https://api.github.com/repos/${repo.owner}/${repo.repo}/git/trees/${treeRef}?recursive=1`;
-		cachedFetch<{ tree?: GitTreeNode[]; truncated?: boolean }>(
-			`lde-tree:${repo.owner}/${repo.repo}/${treeRef}`,
-			url,
-			15 * 60 * 1000,
-			(r) => r.json(),
-		)
-			.then((data) => {
-				if (!data) {
-					setTreeError("GitHub API request failed");
-					setTreeLoading(false);
-					return;
-				}
-				// Huge repos get truncated — keep only the top two levels
-				// so the listing stays usable.
-				const nodes = data.tree ?? [];
-				setTree(
-					data.truncated
-						? nodes.filter((n) => n.path.split("/").length <= 2)
-						: nodes,
-				);
+		fetchFileTree(repo, treeRef)
+			.then((nodes) => {
+				setTree(nodes);
 				setTreeLoading(false);
 			})
 			.catch((e: Error) => {
 				setTreeError(e.message);
 				setTreeLoading(false);
 			});
-	}, [tab, repo?.owner, repo?.repo, treeRef]);
+	}, [tab, repo?.host, repo?.owner, repo?.repo, treeRef]);
 
 	// Rendered README HTML — memoized so marked only re-parses when the
 	// source or the pinned ref changes.
 	const readmeHtml = useMemo(
 		() => (readme ? renderReadme(readme, repo, treeRef) : null),
-		[readme, repo?.owner, repo?.repo, treeRef],
+		[readme, repo?.host, repo?.owner, repo?.repo, treeRef],
 	);
 
 	if (loading) {
@@ -434,9 +574,14 @@ export default function PackageDetail({ name: nameProp }: { name: string }) {
 	];
 
 	const treeLink = (node: GitTreeNode) =>
-		`https://github.com/${repo?.owner}/${repo?.repo}/${
-			node.type === "tree" ? "tree" : "blob"
-		}/${treeRef}/${node.path}`;
+		repo
+			? repoWebUrl(
+					repo,
+					treeRef,
+					node.path,
+					node.type === "tree" ? "tree" : "blob",
+			  )
+			: "";
 
 	return (
 		<div class="flex flex-col gap-8">
@@ -555,8 +700,8 @@ export default function PackageDetail({ name: nameProp }: { name: string }) {
 						<div class="pt-6">
 							{!repo ? (
 								<p class="text-sm text-black/40 dark:text-white/40">
-									File browsing is only available for
-									GitHub-hosted packages.
+									File browsing is only available for GitHub-, GitLab-,
+									Codeberg-, and Bitbucket-hosted packages.
 								</p>
 							) : treeLoading ? (
 								<div class="h-32 animate-pulse bg-black/5 dark:bg-white/5" />
