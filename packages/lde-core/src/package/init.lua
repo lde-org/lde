@@ -272,7 +272,7 @@ function Package:getName()
 	return self:readConfig().name
 end
 
-Package.build = require("lde-core.package.build")
+Package.build = require("lde-core.package.build").build
 
 ---@param dir string
 ---@param info lde.Package.Config.Dependency

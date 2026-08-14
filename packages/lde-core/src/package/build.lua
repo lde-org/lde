@@ -215,4 +215,22 @@ local function buildPackage(package, destinationPath)
 	return built, deferred
 end
 
-return buildPackage
+--- Whether a build-script package's stamped output is stale against its
+--- current inputs (everything under src/, plus lde.json and build.lua).
+--- Missing output (no stamp) counts as stale. Used by the install fast path
+--- so `lde sync`/`lde run` rebuild a path dep whose source changed even when
+--- the root .installed marker still matches.
+---@param package lde.Package
+---@param destinationPath string
+---@return boolean stale
+local function isStale(package, destinationPath)
+	local stampPath = path.join(destinationPath, STAMP_FILE)
+	local changed, _ = checkInputs(package, stampPath)
+	return changed
+end
+
+---@class lde.packageBuild
+---@field build fun(package: lde.Package, destinationPath: string?): boolean?, lde.install.DeferredBuild?
+---@field isStale fun(package: lde.Package, destinationPath: string): boolean
+
+return { build = buildPackage, isStale = isStale }

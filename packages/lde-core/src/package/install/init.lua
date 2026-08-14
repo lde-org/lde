@@ -7,6 +7,9 @@ local download = require("lde-core.util.download")
 
 local lde = require("lde-core")
 
+-- buildPackage plus the isStale stamp check the install fast path consults.
+local build = require("lde-core.package.build")
+
 --- Copies config-only flags (optional, features) from a config entry onto a lock entry.
 ---@param lockEntry lde.Lockfile.Dependency
 ---@param depInfo lde.Package.Config.Dependency
@@ -987,11 +990,19 @@ end
 --- leaves the git-dep symlinks in target/ dangling, and a deleted target/<alias>
 --- is simply missing. Detecting that here falls back to a full install which
 --- re-downloads and re-materializes, instead of `lde run` failing at require time.
+---
+--- Also verified: path deps with a build.lua whose stamped output is stale
+--- (a src file changed since the last build). The marker can't see that either,
+--- and without the check a stale copy in target/ would be served forever.
+--- Symlinked deps (no build script) and rockspec/Teal/moonscript deps are
+--- always "fresh" here: symlinks track the source, and the others stamp on
+--- their own rockspec content instead of raw sources.
+---@param package lde.Package
 ---@param dependencies table<string, lde.Package.Config.Dependency>
 ---@param enabledOptional table<string, true>
 ---@param modulesDir string
 ---@return boolean
-local function installIsIntact(dependencies, enabledOptional, modulesDir)
+local function installIsIntact(package, dependencies, enabledOptional, modulesDir)
 	if not fs.isdir(modulesDir) then return false end
 
 	for alias, depInfo in pairs(dependencies) do
@@ -1003,6 +1014,19 @@ local function installIsIntact(dependencies, enabledOptional, modulesDir)
 		-- was wiped) reports missing here and forces a reinstall.
 		if not fs.exists(path.join(modulesDir, alias)) then
 			return false
+		end
+		-- Path deps with a build.lua materialize a copy under target/<alias>
+		-- stamped with their input state. If the dep's source moved on, the copy
+		-- must be rebuilt — the root marker can't tell.
+		if depInfo.path then
+			local depDir = path.resolve(package.dir, path.normalize(depInfo.path))
+			if fs.exists(path.join(depDir, "build.lua")) then
+				local ok, depPkg = pcall(lde.Package.open, depDir)
+				local dest = path.join(modulesDir, alias)
+				if not ok or not depPkg or build.isStale(depPkg, dest) then
+					return false
+				end
+			end
 		end
 		::continue::
 	end
@@ -1061,7 +1085,7 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 				-- may still be gone (e.g. `rm -rf ~/.lde/git` dangling the git
 				-- symlinks in target/). Verify the install is intact before trusting
 				-- the marker so `lde run` re-installs instead of failing at require.
-				if installIsIntact(dependencies, enabledOptional, modulesDir) then
+				if installIsIntact(package, dependencies, enabledOptional, modulesDir) then
 					return noopResult()
 				end
 			end
