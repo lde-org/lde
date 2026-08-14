@@ -340,6 +340,177 @@ test.it("installDependencies re-installs when a dep symlink is dangling", functi
 end)
 
 --
+-- installDependencies: build.lua input invalidation for path deps
+--
+
+--- A path dep whose build.lua appends to a marker file in the dep dir, so
+--- tests can count how many times the build actually ran.
+---@param name string
+---@param marker string
+---@return string depDir
+local function makeBuildScriptDep(name, marker)
+	local depDir = makePackageWithSrc(name, {
+		["init.lua"] = 'return "' .. name .. '"'
+	})
+	fs.write(path.join(depDir, "build.lua"), string.format([[
+local f = assert(io.open("%s", "a"))
+f:write("x")
+f:close()
+]], marker))
+	return depDir
+end
+
+--- An app that depends on a path dep by name.
+---@param name string
+---@param depName string
+---@return lde.Package?
+local function makeAppWithDep(name, depName)
+	local mainDir = path.join(tmpBase, name)
+	fs.mkdir(mainDir)
+	fs.mkdir(path.join(mainDir, "src"))
+	fs.write(path.join(mainDir, "src", "init.lua"), 'return true')
+	fs.write(path.join(mainDir, "lde.json"), json.encode({
+		name = name,
+		version = "0.1.0",
+		dependencies = {
+			[depName] = { path = "../" .. depName }
+		}
+	}))
+	return lde.Package.open(mainDir)
+end
+
+test.it("installDependencies skips a path dep's build.lua while its inputs are unchanged", function()
+	makeBuildScriptDep("install-skip-dep", "install-skip-count.txt")
+	local pkg = makeAppWithDep("install-skip-main", "install-skip-dep")
+
+	pkg:installDependencies()
+	test.equal(fs.read(path.join(tmpBase, "install-skip-dep", "install-skip-count.txt")), "x")
+
+	-- locked = true forces the full walk (bypassing the .installed fast path) so
+	-- the stamp check itself is exercised, not just the root marker.
+	pkg:installDependencies(nil, nil, nil, { locked = true })
+	test.equal(fs.read(path.join(tmpBase, "install-skip-dep", "install-skip-count.txt")), "x",
+		"dep build.lua must not re-run while its inputs are unchanged")
+end)
+
+test.it("installDependencies re-runs a path dep's build.lua when its src changes", function()
+	local depDir = makeBuildScriptDep("install-src-dep", "install-src-count.txt")
+	local pkg = makeAppWithDep("install-src-main", "install-src-dep")
+
+	pkg:installDependencies()
+	test.equal(fs.read(path.join(depDir, "install-src-count.txt")), "x")
+
+	-- Different size so the mtime/size fast path can't mask the change.
+	fs.write(path.join(depDir, "src", "init.lua"), 'return 123456')
+	pkg:installDependencies(nil, nil, nil, { locked = true })
+	test.equal(fs.read(path.join(depDir, "install-src-count.txt")), "xx",
+		"dep build.lua must re-run when the dep's source changed")
+end)
+
+test.it("installDependencies re-runs a path dep's build.lua when its build.lua changes", function()
+	local depDir = makeBuildScriptDep("install-script-dep", "install-script-count.txt")
+	local pkg = makeAppWithDep("install-script-main", "install-script-dep")
+
+	pkg:installDependencies()
+	test.equal(fs.read(path.join(depDir, "install-script-count.txt")), "x")
+
+	fs.write(path.join(depDir, "build.lua"), string.format([[
+local f = assert(io.open("%s", "a"))
+f:write("y")
+f:close()
+-- extra line to change the file size
+]], "install-script-count.txt"))
+	pkg:installDependencies(nil, nil, nil, { locked = true })
+	test.equal(fs.read(path.join(depDir, "install-script-count.txt")), "xy",
+		"dep build.lua must re-run when the dep's build.lua changed")
+end)
+
+test.it("installDependencies fast path detects a stale path dep build (src change invalidates the cache)", function()
+	local depDir = makeBuildScriptDep("install-stale-dep", "install-stale-count.txt")
+	local pkg = makeAppWithDep("install-stale-main", "install-stale-dep")
+
+	pkg:installDependencies()
+	test.equal(fs.read(path.join(depDir, "install-stale-count.txt")), "x")
+
+	-- Unchanged: the fast path reports cached.
+	local cached = pkg:installDependencies()
+	test.truthy(cached.cached)
+	test.equal(fs.read(path.join(depDir, "install-stale-count.txt")), "x")
+
+	-- The root lockfile/manifest didn't change, but the dep's source did: the
+	-- .installed marker alone can't see it, so the fast path must fall back to
+	-- a full install that re-runs the dep's build.
+	fs.write(path.join(depDir, "src", "init.lua"), 'return 123456789')
+	local stale = pkg:installDependencies()
+	test.falsy(stale.cached, "install must not report cached when a dep build is stale")
+	test.equal(fs.read(path.join(depDir, "install-stale-count.txt")), "xx",
+		"dep build.lua must re-run when its source changed")
+end)
+
+--
+-- installDependencies: rockspec path dep rebuild stamping
+--
+
+test.it("installDependencies skips a rockspec dep's rebuild while its rockspec is unchanged", function()
+	local rockDir = path.join(tmpBase, "rockspec-stamp")
+	fs.mkdir(rockDir)
+	fs.mkdir(path.join(rockDir, "src"))
+	fs.write(path.join(rockDir, "src", "init.lua"), 'return "v1"')
+	fs.write(path.join(rockDir, "rockspec-stamp-1.0-1.rockspec"), [[
+package = "rockspec-stamp"
+version = "1.0-1"
+source = { url = "https://example.com" }
+build = { type = "builtin", modules = { ["rockspec-stamp"] = "src/init.lua" } }
+]])
+
+	local pkg = makeAppWithDep("rockspec-stamp-main", "rockspec-stamp")
+	pkg:installDependencies()
+	test.truthy(fs.exists(path.join(pkg:getModulesDir(), "rockspec-stamp", ".lde-built")))
+
+	-- Rewrite the rock's source: the stamp keys on the rockspec content, not the
+	-- sources (a published rock is immutable), so the copy must NOT be refreshed.
+	fs.write(path.join(rockDir, "src", "init.lua"), 'return "v2"')
+	pkg:installDependencies(nil, nil, nil, { locked = true })
+	local copied = fs.read(path.join(pkg:getModulesDir(), "rockspec-stamp", "init.lua"))
+	test.includes(copied, "v1")
+	test.falsy(copied:find("v2", 1, true))
+end)
+
+test.it("installDependencies rebuilds a rockspec dep when the rockspec changes", function()
+	local rockDir = path.join(tmpBase, "rockspec-change")
+	fs.mkdir(rockDir)
+	fs.mkdir(path.join(rockDir, "src"))
+	fs.write(path.join(rockDir, "src", "init.lua"), 'return "base"')
+	fs.write(path.join(rockDir, "src", "extra.lua"), 'return "extra"')
+	fs.write(path.join(rockDir, "rockspec-change-1.0-1.rockspec"), [[
+package = "rockspec-change"
+version = "1.0-1"
+source = { url = "https://example.com" }
+build = { type = "builtin", modules = { ["rockspec-change"] = "src/init.lua" } }
+]])
+
+	local pkg = makeAppWithDep("rockspec-change-main", "rockspec-change")
+	pkg:installDependencies()
+	test.truthy(fs.exists(path.join(pkg:getModulesDir(), "rockspec-change", "init.lua")))
+	test.falsy(fs.exists(path.join(pkg:getModulesDir(), "rockspec-change", "extra.lua")))
+
+	-- Adding a module to the rockspec changes its content, so the buildfn stamp
+	-- no longer matches and the build must re-run, copying the new module.
+	fs.write(path.join(rockDir, "rockspec-change-1.0-1.rockspec"), [[
+package = "rockspec-change"
+version = "1.0-1"
+source = { url = "https://example.com" }
+build = { type = "builtin", modules = {
+  ["rockspec-change"] = "src/init.lua",
+  ["rockspec-change.extra"] = "src/extra.lua",
+} }
+]])
+	pkg:installDependencies(nil, nil, nil, { locked = true })
+	test.truthy(fs.exists(path.join(pkg:getModulesDir(), "rockspec-change", "extra.lua")),
+		"rockspec change must invalidate the .lde-built stamp and rebuild")
+end)
+
+--
 -- installDependencies --locked (lockfile-only installs)
 --
 
