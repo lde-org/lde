@@ -430,6 +430,39 @@ test.it("lde run <script> reports a non-zero script exit", function()
 	test.includes(plain(out or ""), "exit code 3")
 end)
 
+test.it("lde <script> -- <args> passes args after -- to the script", function()
+	local dir = makeProject("script-direct-args", nil, {
+		scripts = { greet = "echo direct-script" }
+	})
+
+	local ok, out = cli({ "greet", "--", "a b", "c", "it's" }, dir)
+	test.truthy(ok, "lde <script> -- args failed: " .. tostring(out))
+	-- cmd.exe echo prints its quoted args verbatim; POSIX sh joins with spaces.
+	local _, _, isCmd = require("lde-core").global.getScriptShell()
+	if isCmd then
+		test.includes(out or "", "a b")
+		test.includes(out or "", "it's")
+	else
+		test.includes(out or "", "direct-script a b c it's")
+	end
+end)
+
+test.it("lde run <script> -- <args> passes args after -- to the script", function()
+	local dir = makeProject("run-script-args", nil, {
+		scripts = { greet = "echo run-script" }
+	})
+
+	local ok, out = cli({ "run", "greet", "--", "hello", "world" }, dir)
+	test.truthy(ok, "lde run <script> -- args failed: " .. tostring(out))
+	local _, _, isCmd = require("lde-core").global.getScriptShell()
+	if isCmd then
+		test.includes(out or "", "hello")
+		test.includes(out or "", "world")
+	else
+		test.includes(out or "", "run-script hello world")
+	end
+end)
+
 test.it("lde run <file.lua> runs a loose file inside the package context", function()
 	makeProject("runfile-dep", nil, { name = "runfile-dep" })
 	local dir = makeProject("runfile-app", { ["runfile-dep"] = { path = "../runfile-dep" } })

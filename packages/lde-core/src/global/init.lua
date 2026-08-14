@@ -201,6 +201,24 @@ function global.getMakeBin()
 	return "make"
 end
 
+--- Returns the shell used to run lde.json scripts and shell commands. On
+--- Windows, prefers the bundled toolchain's BusyBox sh so scripts get POSIX
+--- semantics (positional args, quoting) on every platform; falls back to
+--- cmd.exe when no toolchain is installed.
+---@return string bin
+---@return string flag
+---@return boolean isCmd # true when the shell is cmd.exe (double-quote escaping)
+function global.getScriptShell()
+	if jit.os == "Windows" then
+		local shExe = path.join(global.getMingwDir(), "bin", "sh.exe")
+		if fs.exists(shExe) then
+			return shExe, "-c", false
+		end
+		return "cmd", "/c", true
+	end
+	return "sh", "-c", false
+end
+
 function global.getRegistryDir()
 	return path.join(global.getDir(), "registry")
 end

@@ -311,11 +311,24 @@ Package.runString = run.runString
 Package.createState = run.createState
 Package.runTests = require("lde-core.package.test")
 
+--- Quote a single argument for the shell that will run the script so it is
+--- received verbatim: POSIX sh single quotes, cmd.exe double quotes.
+---@param arg string
+---@param isCmd boolean? # cmd.exe escaping instead of POSIX
+---@return string
+local function shellQuote(arg, isCmd)
+	if isCmd then
+		return '"' .. arg:gsub('"', '""') .. '"'
+	end
+	return "'" .. arg:gsub("'", "'\\''") .. "'"
+end
+
 ---@param name string # Name of a script defined in lde.json scripts table
 ---@param capture boolean? # If true, capture stdout/stderr instead of inheriting them
+---@param args string[]? # Extra args appended to the script command (e.g. from `-- <args>`)
 ---@return boolean?
 ---@return string?
-function Package:runScript(name, capture)
+function Package:runScript(name, capture, args)
 	local scripts = self:readConfig().scripts
 	if not scripts or not scripts[name] then
 		error("No script named '" .. name .. "' in lde.json")
@@ -326,8 +339,18 @@ function Package:runScript(name, capture)
 		opts.stderr = "inherit"
 	end
 
-	local shell = jit.os == "Windows" and { "cmd", "/c" } or { "sh", "-c" }
-	local code, stdout, stderr = process.exec(shell[1], { shell[2], scripts[name] }, opts)
+	local shellBin, shellFlag, isCmd = global.getScriptShell()
+
+	local cmd = scripts[name]
+	if args and #args > 0 then
+		local quoted = {}
+		for i = 1, #args do
+			quoted[i] = shellQuote(args[i], isCmd)
+		end
+		cmd = cmd .. " " .. table.concat(quoted, " ")
+	end
+
+	local code, stdout, stderr = process.exec(shellBin, { shellFlag, cmd }, opts)
 	if code == 0 then return true, stdout or stderr end
 	-- process.exec returns empty strings (not nil) when the child wrote nothing;
 	-- treat those as absent so a silent failure reports its exit code.

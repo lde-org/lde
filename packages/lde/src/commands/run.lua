@@ -63,7 +63,7 @@ local function runWithWatcher(pkg, pkgErr, name, scriptArgs, mode)
 
 		ansi.printf("{cyan}Watching %s for changes...", watchDir)
 		while true do
-			local ok, err = pkg:runScript(name)
+			local ok, err = pkg:runScript(name, nil, scriptArgs)
 			if not ok then
 				ansi.printf("{red}Error: %s", err or "Script exited with a non-zero exit code")
 			end
@@ -136,9 +136,12 @@ local function run(args)
 	if dash then
 		if dashPos ~= 0 then
 			name = args:pop()
+			scriptArgs = args:drain(dashPos)
+		else
+			-- -- was first: everything after it is a script arg (drain from 1,
+			-- not 0, which would leave a nil hole at index 1).
+			scriptArgs = args:drain(1)
 		end
-
-		scriptArgs = args:drain(dashPos)
 	else
 		name = args:pop()
 		scriptArgs = args:drain()
@@ -175,7 +178,7 @@ local function run(args)
 	local scripts = pkg:readConfig().scripts
 	local ok, err
 	if name and scripts and scripts[name] then
-		ok, err = pkg:runScript(name)
+		ok, err = pkg:runScript(name, nil, scriptArgs)
 	else
 		ok, err = pkg:runFile(name, scriptArgs, nil, nil, profile, flamegraph, profileJson)
 	end

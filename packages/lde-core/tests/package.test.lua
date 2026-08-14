@@ -524,6 +524,61 @@ test.it("Package:runScript reports a non-zero exit", function()
 	test.includes(out or "", "exit code 3")
 end)
 
+test.it("Package:runScript appends args to the script command", function()
+	local dir = makePackageDir("script-args", {
+		name = "script-args",
+		version = "0.1.0",
+		dependencies = {},
+		scripts = { args = "echo script-args" }
+	})
+
+	local pkg = lde.Package.open(dir)
+	local ok, out = pkg:runScript("args", true, { "hello", "world" })
+	test.truthy(ok, "runScript with args failed: " .. tostring(out))
+	-- cmd.exe echo prints its quoted args verbatim; POSIX sh joins with spaces.
+	local _, _, isCmd = lde.global.getScriptShell()
+	if isCmd then
+		test.includes(out or "", "hello")
+		test.includes(out or "", "world")
+	else
+		test.includes(out or "", "script-args hello world")
+	end
+end)
+
+test.it("Package:runScript shell-quotes args with spaces and quotes", function()
+	local dir = makePackageDir("script-quote", {
+		name = "script-quote",
+		version = "0.1.0",
+		dependencies = {},
+		scripts = { args = "echo script-quote" }
+	})
+
+	local pkg = lde.Package.open(dir)
+	local ok, out = pkg:runScript("args", true, { "a b", "it's" })
+	test.truthy(ok, "runScript with quoted args failed: " .. tostring(out))
+	local _, _, isCmd = lde.global.getScriptShell()
+	if isCmd then
+		test.includes(out or "", "a b")
+		test.includes(out or "", "it's")
+	else
+		test.includes(out or "", "script-quote a b it's")
+	end
+end)
+
+test.it("Package:runScript with no args leaves the script unchanged", function()
+	local dir = makePackageDir("script-noargs", {
+		name = "script-noargs",
+		version = "0.1.0",
+		dependencies = {},
+		scripts = { args = "echo no-args-ran" }
+	})
+
+	local pkg = lde.Package.open(dir)
+	local ok, out = pkg:runScript("args", true, {})
+	test.truthy(ok, "runScript with empty args failed: " .. tostring(out))
+	test.includes(out or "", "no-args-ran")
+end)
+
 test.it("Package:runScript errors for an unknown script name", function()
 	local dir = makePackageDir("script-missing", {
 		name = "script-missing",

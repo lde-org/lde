@@ -235,10 +235,17 @@ else
 	if scripts and scripts[commandName] then
 		---@cast pkg -nil
 
+		-- npm-style: everything after `--` is passed to the script as its args.
+		local scriptArgs = {}
+		local dash, dashPos = args:flag("")
+		if dash then
+			scriptArgs = args:drain(dashPos + 1)
+		end
+
 		pkg:build()
 		pkg:installDependencies()
 
-		local ok, err = pkg:runScript(commandName)
+		local ok, err = pkg:runScript(commandName, nil, scriptArgs)
 		if not ok then
 			error("Script '" .. commandName .. "' failed: " .. (err or "exited with a non-zero exit code"))
 		end
