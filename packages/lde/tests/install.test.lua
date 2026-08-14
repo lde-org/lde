@@ -15,20 +15,16 @@ fs.mkdir(tmpBase)
 local ldeBinDir = path.dirname(assert(env.execPath()))
 
 --- Run a tool wrapper with the lde binary dir prepended to PATH (the wrapper
---- execs `lde x ...`), returning exit code + merged output. Windows wrappers
---- are .cmd files, which must be launched through cmd.exe.
+--- execs `lde x ...`), returning exit code + merged output. The wrapper is
+--- spawned directly on every platform — Windows CreateProcess routes .cmd
+--- files through cmd.exe itself, and an explicit `cmd /c` breaks on arguments
+--- that start with a drive letter ("C:\...").
 ---@param wrapperPath string
 ---@param args string[]
 ---@return number?, string?
 local function runTool(wrapperPath, args)
 	local sep = jit.os == "Windows" and ";" or ":"
-	local cmd, cmdArgs
-	if jit.os == "Windows" then
-		cmd, cmdArgs = "cmd", { "/c", wrapperPath, unpack(args) }
-	else
-		cmd, cmdArgs = wrapperPath, args
-	end
-	local code, stdout, stderr = process.exec(cmd, cmdArgs, {
+	local code, stdout, stderr = process.exec(wrapperPath, args, {
 		env = { PATH = ldeBinDir .. sep .. (os.getenv("PATH") or "") }
 	})
 	return code, (stdout or "") .. (stderr or "")

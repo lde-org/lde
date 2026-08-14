@@ -599,8 +599,10 @@ function global.writeWrapper(toolName, packageDir, packageName)
 
 	if jit.os == "Windows" then
 		local wrapperPath = path.join(toolsDir, toolName .. ".cmd")
+		-- cmd uses plain double quotes (no backslash escapes like sh), so the
+		-- path is wrapped in " directly.
 		local winInvocation = packageDir
-			and ('lde x --path \\"' .. packageDir .. '\\" ' .. packageName .. " --")
+			and ('lde x --path "' .. packageDir .. '" ' .. packageName .. " --")
 			or ("lde x " .. packageName .. " --")
 
 		if not fs.write(wrapperPath, "@echo off\n" .. winInvocation .. " %*\n") then
