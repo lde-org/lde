@@ -39,30 +39,36 @@ local function sanitize(s)
 	return (string.gsub(s, "[^%w_%-]", "_"))
 end
 
---- Returns "github", "gitlab", or nil if the URL is not a recognized git host.
+--- Returns "github", "gitlab", "codeberg", "bitbucket", or nil if the URL is
+--- not a recognized git host (hosts with archive endpoints for tarball downloads).
 ---@param url string
 ---@return string?
 local function isRecognizedGitHost(url)
 	if url:match("^https?://github%.com/") then return "github" end
 	if url:match("^https?://gitlab%.com/") then return "gitlab" end
+	if url:match("^https?://codeberg%.org/") then return "codeberg" end
+	if url:match("^https?://bitbucket%.org/") then return "bitbucket" end
 	return nil
 end
 
 --- Builds a tarball URL for a recognized git host at a given ref.
 ---@param url string  # git clone URL (may have .git suffix or /tree/... paths)
 ---@param ref string  # commit SHA, branch name, or tag
----@param hostType string  # "github" or "gitlab"
+---@param hostType string  # "github", "gitlab", "codeberg", or "bitbucket"
 ---@return string
 local function buildTarballUrl(url, ref, hostType)
 	local base = url:gsub("%.git$", "")
 	base = base:gsub("/tree/.*$", "")
 	base = base:gsub("/$", "")
 
-	if hostType == "github" then
+	if hostType == "github" or hostType == "codeberg" then
+		-- GitHub and Codeberg (Forgejo/Gitea) both serve /archive/<ref>.tar.gz
 		return base .. "/archive/" .. ref .. ".tar.gz"
 	elseif hostType == "gitlab" then
 		local repoName = base:match("/([^/]+)$")
 		return base .. "/-/archive/" .. ref .. "/" .. repoName .. "-" .. ref .. ".tar.gz"
+	elseif hostType == "bitbucket" then
+		return base .. "/get/" .. ref .. ".tar.gz"
 	end
 
 	error("Unknown host type: " .. hostType)
@@ -275,16 +281,44 @@ function global.getGitRepoDir(repoName, commit)
 	return path.join(global.getGitCacheDir(), sanitize(repoName) .. "-" .. sanitize(commit))
 end
 
---- Git clone fallback for unrecognized hosts. Always checks out the specific commit.
+--- Shallow (depth=1) clone without submodules. `branch` may be nil (default
+--- branch) or a branch name. Retries:
+---  1. If `branch` names a tag instead (rockspec source.tag), libgit2's
+---     checkout_branch only accepts branch names — retry on the default branch.
+---  2. Transports without shallow support (e.g. the local transport for
+---     file:///path deps) get a full clone. The caller still checks out the
+---     exact commit either way.
+---@param repoUrl string
+---@param repoDir string
+---@param branch string?
+---@param progress fun(stats: table)?
+---@return any? repo
+---@return string? err
+local function shallowClone(repoUrl, repoDir, branch, progress)
+	local repo, err = git2().clone(repoUrl, repoDir, branch, 1, progress)
+	if not repo and branch then
+		repo, err = git2().clone(repoUrl, repoDir, nil, 1, progress)
+	end
+	if not repo and err and err:find("shallow", 1, true) then
+		-- Only reachable when every shallow attempt failed for lack of shallow
+		-- support, which also means checkout_branch was moot — a plain full
+		-- clone works and the caller pins the exact commit afterwards.
+		repo, err = git2().clone(repoUrl, repoDir, nil, nil, progress)
+	end
+	return repo, err
+end
+
+--- Git clone fallback for unrecognized hosts. Shallow (depth=1), no submodules,
+--- always checks out the specific commit.
 ---@param repoName string
 ---@param repoUrl string
 ---@param commit string
+---@param branch string?
 ---@param progress fun(stats: table)?
-function global.cloneDir(repoName, repoUrl, commit, progress)
+function global.cloneDir(repoName, repoUrl, commit, branch, progress)
 	local repoDir = global.getGitRepoDir(repoName, commit)
-	local repo, err = git2().clone(repoUrl, repoDir, nil, nil, progress)
+	local repo, err = shallowClone(repoUrl, repoDir, branch, progress)
 	if not repo then return nil, err end
-	repo:updateSubmodules(nil, progress)
 	local ok, cerr = repo:checkout(commit)
 	if not ok then return nil, cerr end
 	return true
@@ -313,8 +347,9 @@ local function resolveGitRef(repoUrl, ref)
 	return nil, err
 end
 
---- Ensures a git repo is cached locally (via tarball for GitHub/GitLab, git clone otherwise).
---- Always resolves to a specific commit. Returns the cache directory and the pinned commit.
+--- Ensures a git repo is cached locally (via tarball for recognized hosts,
+--- shallow git clone otherwise). Always resolves to a specific commit.
+--- Returns the cache directory and the pinned commit.
 ---@param repoName string
 ---@param repoUrl string
 ---@param branch string?
@@ -351,7 +386,7 @@ function global.getOrInitGitRepo(repoName, repoUrl, branch, commit)
 					bar:update(ratio, info)
 				end
 			end
-			local ok, err = global.cloneDir(repoName, repoUrl, commit, progress)
+			local ok, err = global.cloneDir(repoName, repoUrl, commit, branch, progress)
 			if not ok then
 				if bar then bar:fail("Cloning " .. repoName) end
 				error("Failed to clone git repository: " .. err)
@@ -391,7 +426,7 @@ function global.planGitRepo(repoName, repoUrl, branch, commit)
 			plan.archiveFile = repoDir .. ".archive"
 		else
 			-- unrecognized host: git clone directly (not parallelizable via curl)
-			plan.clone = { repoName = repoName, repoUrl = repoUrl, commit = commit }
+			plan.clone = { repoName = repoName, repoUrl = repoUrl, commit = commit, branch = branch }
 		end
 	end
 
@@ -554,11 +589,10 @@ function global.getOrCloneRepo(repoName, cloneUrl, branch)
 		if hostType then
 			downloadTarball(cloneUrl, commit, hostType, repoDir, repoName)
 		else
-			local repo, cerr = git2().clone(cloneUrl, repoDir, branch)
+			local repo, cerr = shallowClone(cloneUrl, repoDir, branch)
 			if not repo then
 				error("Failed to clone git repository: " .. (cerr or "unknown error"))
 			end
-			repo:updateSubmodules()
 			local ok, cerr2 = repo:checkout(commit)
 			if not ok then
 				error("Failed to checkout commit: " .. (cerr2 or "unknown error"))

@@ -119,7 +119,7 @@ end
 ---@field tarballUrl string?
 ---@field archiveFile string?
 ---@field url string? -- normalized source URL (set on luarocks fallback plans)
----@field clone { repoName: string, repoUrl: string, commit: string }?
+---@field clone { repoName: string, repoUrl: string, commit: string, branch: string? }?
 
 ---@class lde.install.Node
 ---@field alias string -- key in the parent's dependencies table
@@ -366,8 +366,8 @@ handlers.git = {
 	---@param c lde.install.ContentPlan
 	materialize = function(n, c)
 		if c.kind == "clone" then
-			local clone = n.gitPlan --[[@as lde.install.GitPlan]].clone --[[@as { repoName: string, repoUrl: string, commit: string }]]
-			local ok, err = lde.global.cloneDir(clone.repoName, clone.repoUrl, clone.commit)
+			local clone = n.gitPlan --[[@as lde.install.GitPlan]].clone --[[@as { repoName: string, repoUrl: string, commit: string, branch: string? }]]
+			local ok, err = lde.global.cloneDir(clone.repoName, clone.repoUrl, clone.commit, clone.branch)
 			if not ok then error("Failed to clone git repository: " .. (err or "unknown error")) end
 			return
 		end
@@ -501,8 +501,8 @@ handlers.luarocks = {
 	materialize = function(n, c)
 		if c.kind == "clone" then
 			local fallback = n._fallbackGit --[[@as lde.install.GitPlan]]
-			local clone = fallback.clone --[[@as { repoName: string, repoUrl: string, commit: string }]]
-			local ok, err = lde.global.cloneDir(clone.repoName, clone.repoUrl, clone.commit)
+			local clone = fallback.clone --[[@as { repoName: string, repoUrl: string, commit: string, branch: string? }]]
+			local ok, err = lde.global.cloneDir(clone.repoName, clone.repoUrl, clone.commit, clone.branch)
 			if not ok then error("Failed to clone git repository: " .. (err or "unknown error")) end
 			return
 		end
