@@ -273,21 +273,31 @@ local function percentColor(percent)
 	return "red"
 end
 
--- Print a per-file line coverage report. Files show as src/ paths (modules
--- load from target/<name>, the built copy of src/), sorted worst-first.
+---@class lde.CoverageFileRow
+---@field file string # display path (src/...)
+---@field executable number
+---@field covered number
+---@field percent number
+
+---@class lde.CoverageReport
+---@field package string
+---@field files lde.CoverageFileRow[] # sorted worst-first
+---@field totalExecutable number
+---@field totalCovered number
+---@field percent number
+
+--- Build a per-file coverage report (display paths, sorted worst-first). Shared
+--- by the text printer and the --json emitter so both see identical data.
 ---@param pkg lde.Package
 ---@param coverage lde.Coverage
-local function printCoverage(pkg, coverage)
+---@return lde.CoverageReport
+local function coverageReport(pkg, coverage)
 	local files, totalExecutable, totalCovered = coverage:compute()
-	if #files == 0 then
-		ansi.printf("  {yellow}Coverage: no source files were loaded")
-		return
-	end
 
 	local pkgDir = pkg:getDir()
 	local targetPrefix = path.join("target", pkg:getName()) .. path.separator
 
-	---@type { file: string, executable: number, covered: number, percent: number }[]
+	---@type lde.CoverageFileRow[]
 	local rows = {}
 	for _, f in ipairs(files) do
 		local rel = path.relative(pkgDir, f.file) or f.file
@@ -308,6 +318,29 @@ local function printCoverage(pkg, coverage)
 		if a.percent ~= b.percent then return a.percent < b.percent end
 		return a.file < b.file
 	end)
+
+	return {
+		package = pkg:getName(),
+		files = rows,
+		totalExecutable = totalExecutable,
+		totalCovered = totalCovered,
+		percent = totalExecutable > 0 and totalCovered / totalExecutable * 100 or 0,
+	}
+end
+
+-- Print a per-file line coverage report. Files show as src/ paths (modules
+-- load from target/<name>, the built copy of src/), sorted worst-first.
+---@param pkg lde.Package
+---@param coverage lde.Coverage
+local function printCoverage(pkg, coverage)
+	local report = coverageReport(pkg, coverage)
+	local rows = report.files
+	if #rows == 0 then
+		ansi.printf("  {yellow}Coverage: no source files were loaded")
+		return
+	end
+
+	local totalExecutable, totalCovered = report.totalExecutable, report.totalCovered
 
 	-- Column widths: files left-aligned (min 38 chars), the covered/total
 	-- ratio right-aligned as a unit, so "lines" and the percentage land in
@@ -339,6 +372,37 @@ local function printCoverage(pkg, coverage)
 	-- Right-align the Total's ratio with the rows ("  Total: " is 9 chars).
 	ansi.printf("  Total: %s {gray}lines{reset}  {" .. totalColor .. "}%.1f%%",
 		("%" .. (ratioW + fileW - 6) .. "s"):format(("%d/%d"):format(totalCovered, totalExecutable)), totalPercent)
+end
+
+--- Write one or more per-package coverage reports as JSON for programmatic
+--- analysis (CI, dashboards, finding untested modules). The shape mirrors the
+--- text report: files sorted worst-first, per-package and combined totals.
+---@param reports lde.CoverageReport[]
+---@param jsonPath string
+local function writeCoverageJson(reports, jsonPath)
+	local json = require("json")
+	local totalExecutable, totalCovered = 0, 0
+	for _, r in ipairs(reports) do
+		totalExecutable = totalExecutable + r.totalExecutable
+		totalCovered = totalCovered + r.totalCovered
+	end
+	local data = {
+		version = 1,
+		totalExecutable = totalExecutable,
+		totalCovered = totalCovered,
+		percent = totalExecutable > 0 and totalCovered / totalExecutable * 100 or 0,
+		packages = reports,
+	}
+	local content = json.encode(data)
+	if not content then
+		ansi.printf("{red}Failed to encode coverage JSON")
+		return
+	end
+	if not fs.write(jsonPath, content) then
+		ansi.printf("{red}Failed to write %s", jsonPath)
+		return
+	end
+	ansi.printf("{cyan}Coverage JSON written to %s", jsonPath)
 end
 
 -- Print a notice when coverage was requested but the runner can't provide it.
@@ -434,6 +498,10 @@ end
 local function test(args)
 	local watch = args:flag("watch")
 	local coverage = args:flag("coverage")
+	-- --json <file> writes the coverage report as JSON (implies --coverage).
+	local jsonOut = args:option("json")
+	if not jsonOut and args:flag("json") then jsonOut = "coverage.json" end
+	if jsonOut then coverage = true end
 
 	-- Collect remaining positional args as test file filter globs
 	local filters = {}
@@ -461,6 +529,7 @@ local function test(args)
 		local totalSkipped = 0
 
 		local packages = {}
+		local coverageReports = {} ---@type lde.CoverageReport[]
 		for _, relativePath in ipairs(fs.scan(cwd, "**" .. path.separator .. "lde.json")) do
 			local configPath = path.join(cwd, relativePath)
 			local pkgDir = path.dirname(configPath)
@@ -529,10 +598,16 @@ local function test(args)
 			if coverage then
 				if results.coverage then
 					printCoverage(pkg, results.coverage)
+					coverageReports[#coverageReports + 1] = coverageReport(pkg, results.coverage)
 				else
 					printCoverageNotice(results)
 				end
 			end
+			print()
+		end
+
+		if jsonOut and #coverageReports > 0 then
+			writeCoverageJson(coverageReports, jsonOut)
 			print()
 		end
 
@@ -573,6 +648,10 @@ local function test(args)
 	if coverage then
 		if results.coverage then
 			printCoverage(package, results.coverage)
+			if jsonOut then
+				writeCoverageJson({ coverageReport(package, results.coverage) }, jsonOut)
+				print()
+			end
 		else
 			printCoverageNotice(results)
 		end

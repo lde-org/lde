@@ -1,0 +1,94 @@
+{
+	"$schema": "http://json-schema.org/draft-07/schema#",
+	"title": "lde test coverage report",
+	"description": "Per-file line coverage report written by `lde test --coverage --json <file>` (`--json` implies `--coverage`). When the command runs outside a package it aggregates one entry per package under `packages`.",
+	"type": "object",
+	"additionalProperties": false,
+	"required": ["version", "totalExecutable", "totalCovered", "percent", "packages"],
+	"properties": {
+		"version": {
+			"type": "integer",
+			"const": 1,
+			"description": "Schema version of the report"
+		},
+		"totalExecutable": {
+			"type": "integer",
+			"minimum": 0,
+			"description": "Total executable lines across all packages"
+		},
+		"totalCovered": {
+			"type": "integer",
+			"minimum": 0,
+			"description": "Total covered lines across all packages"
+		},
+		"percent": {
+			"type": "number",
+			"minimum": 0,
+			"maximum": 100,
+			"description": "Overall coverage percentage (totalCovered / totalExecutable * 100); 0 when nothing was executed"
+		},
+		"packages": {
+			"type": "array",
+			"description": "One report per package that loaded in-scope source files",
+			"items": { "$ref": "#/definitions/packageReport" }
+		}
+	},
+	"definitions": {
+		"packageReport": {
+			"type": "object",
+			"additionalProperties": false,
+			"required": ["package", "files", "totalExecutable", "totalCovered", "percent"],
+			"properties": {
+				"package": {
+					"type": "string",
+					"description": "Package name from its manifest"
+				},
+				"files": {
+					"type": "array",
+					"description": "Per-file stats, sorted worst-first (ascending percent)",
+					"items": { "$ref": "#/definitions/fileReport" }
+				},
+				"totalExecutable": {
+					"type": "integer",
+					"minimum": 0
+				},
+				"totalCovered": {
+					"type": "integer",
+					"minimum": 0
+				},
+				"percent": {
+					"type": "number",
+					"minimum": 0,
+					"maximum": 100
+				}
+			}
+		},
+		"fileReport": {
+			"type": "object",
+			"additionalProperties": false,
+			"required": ["file", "executable", "covered", "percent"],
+			"properties": {
+				"file": {
+					"type": "string",
+					"description": "Path relative to the package dir, shown as src/... (modules load from the built target/<name> copy)"
+				},
+				"executable": {
+					"type": "integer",
+					"minimum": 0,
+					"description": "Lines that can hold bytecode (non-blank, non-comment)"
+				},
+				"covered": {
+					"type": "integer",
+					"minimum": 0,
+					"description": "Distinct executable lines executed by the test suite"
+				},
+				"percent": {
+					"type": "number",
+					"minimum": 0,
+					"maximum": 100,
+					"description": "covered / executable * 100; 0 when the file has no executable lines"
+				}
+			}
+		}
+	}
+}

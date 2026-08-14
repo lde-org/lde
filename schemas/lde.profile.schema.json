@@ -1,0 +1,67 @@
+{
+	"$schema": "http://json-schema.org/draft-07/schema#",
+	"title": "lde run profile data",
+	"description": "Sampled profiler data written by `lde run --json <file>` (a bare `--json` implies profiling and defaults to profile.json; `--profile --json` also prints the text report).",
+	"type": "object",
+	"additionalProperties": false,
+	"required": ["version", "intervalMs", "total", "totalMs", "vmstates", "hotspots", "stacks"],
+	"properties": {
+		"version": {
+			"type": "integer",
+			"const": 1,
+			"description": "Schema version of the profile data"
+		},
+		"intervalMs": {
+			"type": "integer",
+			"minimum": 1,
+			"description": "Sampling interval in milliseconds; the profiler takes one sample per interval"
+		},
+		"total": {
+			"type": "integer",
+			"minimum": 0,
+			"description": "Total samples collected during the run"
+		},
+		"totalMs": {
+			"type": "number",
+			"minimum": 0,
+			"description": "Approximate profiled wall time in milliseconds (total * intervalMs)"
+		},
+		"vmstates": {
+			"type": "object",
+			"description": "Sample counts per LuaJIT VM state",
+			"propertyNames": { "pattern": "^[NICGJ]$" },
+			"additionalProperties": {
+				"type": "integer",
+				"minimum": 0
+			}
+		},
+		"hotspots": {
+			"type": "array",
+			"description": "Functions sorted by sample count, descending",
+			"items": {
+				"type": "object",
+				"additionalProperties": false,
+				"required": ["loc", "count"],
+				"properties": {
+					"loc": {
+						"type": "string",
+						"description": "Function name (or chunk label) of the hotspot"
+					},
+					"count": {
+						"type": "integer",
+						"minimum": 0,
+						"description": "Samples attributed to this hotspot"
+					}
+				}
+			}
+		},
+		"stacks": {
+			"type": "object",
+			"description": "Folded call stacks (frames joined by ';') mapped to sample counts; the input the flamegraph tree is built from",
+			"additionalProperties": {
+				"type": "integer",
+				"minimum": 0
+			}
+		}
+	}
+}

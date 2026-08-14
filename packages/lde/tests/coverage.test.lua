@@ -92,3 +92,55 @@ return M
 
 	fs.rmdir(tmpDir)
 end)
+
+test.it("lde test --coverage --json writes programmatically checkable report data", function()
+	local tmpDir = path.join(env.tmpdir(), "lde-coverage-json-test")
+	fs.rmdir(tmpDir)
+	fs.mkdir(tmpDir)
+
+	fs.write(path.join(tmpDir, "lde.json"), json.encode({ name = "covjson", version = "0.1.0" }))
+	fs.mkdir(path.join(tmpDir, "src"))
+	fs.write(path.join(tmpDir, "src", "init.lua"), [[
+local M = {}
+function M.used()
+	return 1
+end
+function M.unused()
+	return 2
+end
+return M
+]])
+	fs.mkdir(path.join(tmpDir, "tests"))
+	fs.write(path.join(tmpDir, "tests", "main.test.lua"), [[
+local t = require("lde-test")
+local m = require("covjson")
+t.it("uses part of the module", function()
+	t.equal(m.used(), 1)
+end)
+]])
+
+	local jsonPath = path.join(tmpDir, "cov.json")
+	fs.delete(jsonPath)
+
+	local ok, out = ldecli({ "test", "--coverage", "--json", jsonPath }, tmpDir)
+	test.truthy(ok, "lde test --coverage --json failed: " .. tostring(out))
+	test.truthy(fs.exists(jsonPath), "coverage JSON not written")
+
+	local data = json.decode(fs.read(jsonPath))
+	test.truthy(data, "coverage JSON must decode")
+	test.equal(data.version, 1)
+	test.equal(#data.packages, 1)
+	test.equal(data.packages[1].package, "covjson")
+
+	-- The fixture has 6 executable lines; only the used() body is hit.
+	local pkg = data.packages[1]
+	test.truthy(pkg.totalExecutable > 0)
+	test.truthy(pkg.totalCovered > 0)
+	test.truthy(pkg.totalCovered < pkg.totalExecutable, "expected partial coverage")
+	test.equal(#pkg.files, 1)
+	test.equal(pkg.files[1].file, "src/init.lua")
+	test.equal(pkg.files[1].covered, pkg.totalCovered)
+	test.truthy(pkg.percent > 0 and pkg.percent < 100)
+
+	fs.rmdir(tmpDir)
+end)

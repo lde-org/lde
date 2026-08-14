@@ -55,6 +55,7 @@ local commands = {
 		options = {
 			["--watch"] = { desc = "Re-run tests on file changes" },
 			["--coverage"] = { desc = "Print a per-file line coverage report" },
+			["--json"] = { arg = "file", desc = "Also write the coverage report as JSON (default: coverage.json; implies --coverage)" },
 		},
 	},
 	new = {
