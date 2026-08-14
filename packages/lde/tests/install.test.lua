@@ -182,17 +182,17 @@ test.skipIf(env.var("ANDROID_ROOT") ~= nil)("install rocks:<name> installs a too
 	fs.rmdir(treeDir)
 
 	local ok, out = ldecli({ "--tree", treeDir, "install", "rocks:moonscript" })
-	test.truthy(ok, "lde install rocks:moonscript failed: " .. tostring(out))
+	assert(ok, "lde install rocks:moonscript failed: " .. tostring(out))
 	test.includes(out or "", "Installed tool")
 
 	local wrapper = wrapperPath(treeDir, "moonscript")
-	test.truthy(fs.exists(wrapper), "wrapper not written")
+	assert(fs.exists(wrapper), "wrapper not written")
 
 	-- The moon bin takes a .moon file; compile-and-run it through the wrapper.
 	local moonFile = path.join(tmpBase, "hello.moon")
 	fs.write(moonFile, 'print "hello from moon"\n')
 	local code, runOut = runTool(wrapper, { moonFile })
-	test.truthy(code == 0, "moon run failed: " .. tostring(runOut))
+	assert(code == 0, "moon run failed: " .. tostring(runOut))
 	test.includes(runOut or "", "hello from moon")
 end)
 

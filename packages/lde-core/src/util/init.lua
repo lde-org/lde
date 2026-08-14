@@ -258,6 +258,20 @@ function util.resolveLuarocksBest(name, constraint)
 	return c.version, c.rockspecUrl, c.srcUrl, nil
 end
 
+--- Finds a materialized .src.rock archive for a package by scanning the tar
+--- cache, for when the URL cache can't resolve the name (offline runs, or the
+--- URL cache entry was lost when the manifest refreshed).
+---@param name string
+---@return string? dir
+local function findCachedSrcRock(name)
+	for _, p in ipairs(fs.scan(lde.global.getTarCacheDir(), "*")) do
+		if path.basename(p):find(name, 1, true) then
+			return p
+		end
+	end
+	return nil
+end
+
 --- Resolves a luarocks package name/version to a Package via the luarocks registry.
 ---@param name string
 ---@param version string?
@@ -265,7 +279,23 @@ end
 ---@return lde.Package?, lde.Lockfile.Dependency?, string?
 function util.openLuarocksPackage(name, version, offline)
 	local url, arch, uerr = util.resolveLuarocksSource(name, version, offline)
-	if not url then return nil, nil, uerr end
+	if not url then
+		-- Offline URL-cache miss: the archive may still be materialized in the
+		-- tar cache even though the URL cache entry was lost.
+		if offline then
+			local dir = findCachedSrcRock(name)
+			if dir then
+				local pkg, err = util.openSrcRock(dir, name)
+				if not pkg then
+					return nil, nil, "Failed to load src rock '" .. name .. "': " .. (err or "")
+				end
+				---@type lde.Lockfile.ArchiveDependency
+				local lockEntry = { archive = dir }
+				return pkg, lockEntry
+			end
+		end
+		return nil, nil, uerr or ("offline: '" .. name .. "' is not cached (run once online to cache it)")
+	end
 
 	if arch == "src" then
 		local archiveDir = lde.global.getOrInitArchive(url, offline)

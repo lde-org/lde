@@ -637,25 +637,40 @@ end
 --- Writes the platform-appropriate wrapper script into ~/.lde/tools/.
 --- The `--` separator stops lde's own arg parser from swallowing tool args that
 --- start with a dash (e.g. `tl --help`), so they are passed through to the tool.
+--- The wrapper execs the exact binary that installed it (env.execPath) rather
+--- than a bare `lde`: PATH may resolve to a different (stale) lde — e.g. CI
+--- builds a fresh binary named lde-dev while the nightly sits on PATH.
 --- Registry/rocks tools run with `--offline`: they're resolved from the cache
 --- at ~/.lde and fail if the package isn't cached, instead of updating the
---- registry on every invocation.
+--- registry on every invocation. When the install used a non-default tree
+--- (`--tree`), the wrapper embeds it so its offline lookups hit the tree's
+--- caches (registry, git, tar) rather than the default user dir.
 ---@param toolName string
 ---@param packageDir string? # nil for rocks: tools (resolved from the registry)
 ---@param packageName string
 function global.writeWrapper(toolName, packageDir, packageName)
 	local toolsDir = global.getToolsDir()
+	local ldeBin = env.execPath() or "lde"
+	local treeFlag = ""
+	if global.getDir() ~= global.getUserDir() then
+		treeFlag = " --tree '" .. global.getDir() .. "'"
+	end
+	-- sh double-quotes the binary path (spaces), cmd needs its own form below.
 	local invocation = packageDir
-		and ("lde x --path '" .. packageDir .. "' " .. packageName .. " --")
-		or ("lde x " .. packageName .. " --offline --")
+		and ("\"" .. ldeBin .. "\" x --path '" .. packageDir .. "' " .. packageName .. treeFlag .. " --")
+		or ("\"" .. ldeBin .. "\" x" .. treeFlag .. " " .. packageName .. " --offline --")
 
 	if jit.os == "Windows" then
 		local wrapperPath = path.join(toolsDir, toolName .. ".cmd")
-		-- cmd uses plain double quotes (no backslash escapes like sh), so the
-		-- path is wrapped in " directly.
+		-- cmd uses plain double quotes (no backslash escapes like sh), so
+		-- paths are wrapped in " directly.
+		local winTreeFlag = ""
+		if global.getDir() ~= global.getUserDir() then
+			winTreeFlag = " --tree \"" .. global.getDir() .. "\""
+		end
 		local winInvocation = packageDir
-			and ('lde x --path "' .. packageDir .. '" ' .. packageName .. " --")
-			or ("lde x " .. packageName .. " --offline --")
+			and ('"' .. ldeBin .. '" x --path "' .. packageDir .. '" ' .. packageName .. winTreeFlag .. " --")
+			or ('"' .. ldeBin .. '" x' .. winTreeFlag .. " " .. packageName .. " --offline --")
 
 		if not fs.write(wrapperPath, "@echo off\n" .. winInvocation .. " %*\n") then
 			error("Failed to write wrapper script: " .. wrapperPath)
