@@ -343,6 +343,49 @@ test.it("lde run --flamegraph writes an HTML flamegraph", function()
 	test.falsy(html:find("__DATA__", 1, true))
 end)
 
+test.it("lde run --json writes programmatically checkable profile data", function()
+	local dir = makeProject("json-cli", nil, {
+		name = "json-cli",
+		bin = "main.lua"
+	})
+	-- A named hotspot so the JSON can be asserted against real content.
+	fs.write(path.join(dir, "src", "main.lua"), [[
+		local function hotspot(n)
+			local s = 0
+			for i = 1, n do s = s + i end
+			return s
+		end
+		for i = 1, 30 do hotspot(2000000) end
+		print("json-done")
+	]])
+	local jsonPath = path.join(tmpBase, "json-cli.json")
+	fs.delete(jsonPath)
+
+	local ok, out = cli({ "run", "--json", jsonPath }, dir)
+	test.truthy(ok, "lde run --json failed: " .. tostring(out))
+	test.includes(out or "", "json-done")
+	test.truthy(fs.exists(jsonPath), "profile JSON not written: " .. tostring(out))
+
+	local data = json.decode(fs.read(jsonPath))
+	test.truthy(data, "profile JSON must decode")
+	test.truthy(data.total > 0, "expected sampled data, got total=" .. tostring(data.total))
+	test.equal(data.version, 1)
+	test.equal(data.intervalMs, 1)
+	test.equal(data.totalMs, data.total)
+	test.truthy(type(data.vmstates) == "table" and next(data.vmstates) ~= nil,
+		"expected vmstate samples")
+	-- The named hotspot must appear with a positive sample count.
+	local hotspot
+	for _, h in ipairs(data.hotspots) do
+		if h.loc == "hotspot" then hotspot = h end
+	end
+	test.truthy(hotspot, "expected a 'hotspot' entry in the profile data")
+	test.truthy(hotspot.count > 0)
+	-- Folded stacks must also be present (flamegraph input).
+	test.truthy(type(data.stacks) == "table" and next(data.stacks) ~= nil,
+		"expected folded stack data")
+end)
+
 --
 -- lde -e in project context
 --

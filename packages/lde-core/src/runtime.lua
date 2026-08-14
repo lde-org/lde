@@ -152,6 +152,39 @@ local function startProfiler(state)
 	end
 end
 
+--- Write the sampled profile data as JSON so tools and tests can consume it
+--- programmatically (the text report and HTML flamegraph are human-facing).
+---@param filePath string
+---@param counts table<string, number> # function -> sample count
+---@param vmstates table<string, number> # vmstate char -> sample count
+---@param stacks table<string, number> # folded stack -> sample count
+---@param total number
+---@return boolean? ok
+---@return string? err
+local function writeProfileJson(filePath, counts, vmstates, stacks, total)
+	local hotspots = {}
+	for loc, count in pairs(counts) do
+		hotspots[#hotspots + 1] = { loc = loc, count = count }
+	end
+	table.sort(hotspots, function(a, b) return a.count > b.count end)
+
+	local json = require("json")
+	local content = json.encode({
+		version = 1,
+		intervalMs = PROFILER_MS_PER_SAMPLE,
+		total = total,
+		totalMs = total * PROFILER_MS_PER_SAMPLE,
+		vmstates = vmstates,
+		hotspots = hotspots,
+		stacks = stacks,
+	})
+	if not content then return nil, "failed to encode profile data" end
+	if not fs.write(filePath, content) then
+		return nil, "failed to write " .. filePath
+	end
+	return true
+end
+
 ---@class lde.ExecuteOptions
 ---@field env          table<string, string>?
 ---@field args         string[]?  # positional args; args[0] is arg[0] (chunk name / script path)
@@ -162,6 +195,7 @@ end
 ---@field cwd          string?
 ---@field profile      boolean?
 ---@field flamegraph   string?
+---@field profileJson  string? # path: also write the sampled data as JSON
 
 --- Create a fresh isolated guest state with the standard lde runtime setup:
 --- cwd/env handling, package.path/cpath, preloads, injected globals, and arg[].
@@ -259,7 +293,7 @@ local function executeSource(source, chunkName, opts)
 
 	-- Start profiler if requested
 	local stopProfiler
-	if opts.profile or opts.flamegraph then
+	if opts.profile or opts.flamegraph or opts.profileJson then
 		stopProfiler = startProfiler(state)
 	end
 
@@ -274,7 +308,7 @@ local function executeSource(source, chunkName, opts)
 			printProfileReport(counts, vmstates, total, opts.cwd or env.cwd())
 		end
 		if opts.flamegraph then
-			local title = chunkName and chunkName:match("[^/\\]+$")
+			local title = chunkName and chunkName:match("[^/\\\\]+$")
 			local fgOk, fgErr = lde.flamegraph.write(
 				stacks, total, PROFILER_MS_PER_SAMPLE, opts.flamegraph, title)
 			if lde.verbose then
@@ -282,6 +316,16 @@ local function executeSource(source, chunkName, opts)
 					ansi.printf("{cyan}Flamegraph written to %s", opts.flamegraph)
 				else
 					ansi.printf("{red}Flamegraph error: %s", fgErr or "unknown error")
+				end
+			end
+		end
+		if opts.profileJson then
+			local jOk, jErr = writeProfileJson(opts.profileJson, counts, vmstates, stacks, total)
+			if lde.verbose then
+				if jOk then
+					ansi.printf("{cyan}Profile JSON written to %s", opts.profileJson)
+				else
+					ansi.printf("{red}Profile JSON error: %s", jErr or "unknown error")
 				end
 			end
 		end

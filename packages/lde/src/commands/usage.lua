@@ -33,6 +33,7 @@ local commands = {
 			["--watch"] = { desc = "Re-run on file changes (fresh state each run)" },
 			["--profile"] = { desc = "Print a flat call profile on exit" },
 			["--flamegraph"] = { arg = "file", desc = "Also write a flamegraph HTML file (default: profile.html)" },
+			["--json"] = { arg = "file", desc = "Also write the profile data as JSON (default: profile.json)" },
 		},
 	},
 	x = {

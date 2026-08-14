@@ -124,9 +124,11 @@ local function run(args)
 	local profile = args:flag("profile")
 	local flamegraph = args:option("flamegraph")
 	if not flamegraph and args:flag("flamegraph") then flamegraph = "profile.html" end
+	local profileJson = args:option("json")
+	if not profileJson and args:flag("json") then profileJson = "profile.json" end
 
-	if (hot or watch) and (profile or flamegraph) then
-		ansi.printf("{red}--profile/--flamegraph cannot be combined with --hot or --watch")
+	if (hot or watch) and (profile or flamegraph or profileJson) then
+		ansi.printf("{red}--profile/--flamegraph/--json cannot be combined with --hot or --watch")
 		return
 	end
 
@@ -175,7 +177,7 @@ local function run(args)
 	if name and scripts and scripts[name] then
 		ok, err = pkg:runScript(name)
 	else
-		ok, err = pkg:runFile(name, scriptArgs, nil, nil, profile, flamegraph)
+		ok, err = pkg:runFile(name, scriptArgs, nil, nil, profile, flamegraph, profileJson)
 	end
 
 	if not ok then

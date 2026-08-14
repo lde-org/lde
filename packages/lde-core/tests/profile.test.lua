@@ -190,6 +190,39 @@ test.it("executeFile with profile=true and flamegraph path both work together", 
 	test.truthy(ok)
 end)
 
+test.it("executeFile with profileJson writes decodable profile data", function()
+	local scriptPath = path.join(tmpBase, "json_script.lua")
+	local outPath    = path.join(tmpBase, "json_out.json")
+	fs.write(scriptPath, [[
+		local function work(n)
+			local s = 0
+			for i = 1, n do s = s + i end
+			return s
+		end
+		for i = 1, 20 do work(1000000) end
+	]])
+
+	local ok = lde.runtime.executeFile(scriptPath, { profileJson = outPath })
+	test.truthy(ok)
+	test.truthy(fs.exists(outPath), "profile JSON not written")
+
+	local json = require("json")
+	local data = json.decode(fs.read(outPath))
+	test.truthy(data, "profile JSON must decode")
+	test.equal(data.version, 1)
+	test.equal(data.intervalMs, 1)
+	test.truthy(data.total > 0, "expected samples, got total=" .. tostring(data.total))
+	test.equal(data.totalMs, data.total)
+	test.truthy(type(data.vmstates) == "table" and next(data.vmstates) ~= nil)
+	test.truthy(type(data.stacks) == "table" and next(data.stacks) ~= nil)
+	local work
+	for _, h in ipairs(data.hotspots) do
+		if h.loc == "work" then work = h end
+	end
+	test.truthy(work, "expected a 'work' hotspot")
+	test.truthy(work.count > 0)
+end)
+
 test.it("executeFile with flamegraph: no crash when script errors", function()
 	local scriptPath = path.join(tmpBase, "fg_error.lua")
 	local outPath    = path.join(tmpBase, "fg_error_out.html")
