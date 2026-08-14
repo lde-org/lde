@@ -61,18 +61,12 @@ function Coverage:hook(event, info)
 	end
 end
 
---- Blank and comment-only lines never produce a line event, so they don't
---- count toward the executable total. Block comments (`--[[ ... ]]`) whose
---- interior lines don't start with "--" are counted as executable — the same
---- simple heuristic other line-hook coverage tools (luacov) accept.
----@param line string
----@return boolean
-local function isExecutableLine(line)
-	local first = line:find("%S")
-	if not first then return false end
-	return line:sub(first, first + 1) ~= "--"
-end
-
+--- Blank lines, comments, and the interiors of multi-line strings / block
+--- comments never produce a line event, so they don't count toward the
+--- executable total. Counting is done with a small Lua lexer that tracks long
+--- bracket state (strings `[[...]]` / `[=[...]=]` and comments `--[[...]]`)
+--- across lines, so string-literal-heavy modules (embedded driver chunks,
+--- HTML templates) aren't penalized with lines that can never be covered.
 ---@param src string
 ---@param out table<number, true>? # receives the executable line numbers
 ---@return number
@@ -80,21 +74,92 @@ local function countExecutableLines(src, out)
 	local n = 0
 	local lineNo = 0
 	local pos = 1
-	while pos <= #src do
+	local len = #src
+	-- Level of the long bracket (string or block comment) we're inside; nil
+	-- when not inside one. A level-0 opener can contain higher-level brackets.
+	local level ---@type number?
+
+	local function charAt(i) return i <= len and string.byte(src, i) or -1 end
+
+	-- Level of a long-bracket opener at i ("[" + n*"=" + "["), or nil.
+	local function openerLevelAt(i)
+		if charAt(i) ~= 91 then return nil end -- '['
+		local j = i + 1
+		while charAt(j) == 61 do j = j + 1 end -- '='
+		if charAt(j) == 91 then return j - i - 1 end -- '['
+		return nil
+	end
+
+	while pos <= len do
 		local nl = src:find("\n", pos, true)
 		lineNo = lineNo + 1
-		local line
-		if nl then
-			line = src:sub(pos, nl - 1)
-			pos = nl + 1
-		else
-			line = src:sub(pos)
-			pos = #src + 1
+		local lineEnd = (nl or len + 1) - 1
+
+		local executable = false
+		-- LuaJIT skips a leading shebang line; it never executes.
+		if not (lineNo == 1 and charAt(pos) == 35) then -- '#'
+			local i = pos
+			while i <= lineEnd do
+				if level then
+					-- Inside a long string/comment: find the matching closer.
+					local lit = "]" .. string.rep("=", level) .. "]"
+					local close = src:find(lit, i, true)
+					if not close or close > lineEnd then
+						break -- still inside; the rest of the line is string/comment
+					end
+					i = close + level + 2
+					level = nil
+					if i > lineEnd then break end -- closer ends the line
+				end
+
+				local c = charAt(i)
+				if c == 45 and charAt(i + 1) == 45 then -- '--'
+					local lvl = openerLevelAt(i + 2)
+					if lvl then
+						level = lvl
+						i = i + 2
+					else
+						break -- line comment to end of line
+					end
+				elseif c == 34 or c == 39 then -- '"' or "'"
+					-- Regular string literal (cannot span lines).
+					local j = i + 1
+					while j <= lineEnd do
+						local sc = charAt(j)
+						if sc == 92 then -- '\\'
+							j = j + 2
+						elseif sc == c then
+							j = j + 1
+							break
+						else
+							j = j + 1
+						end
+					end
+					executable = true
+					i = j
+				elseif c == 91 then -- '['
+					local lvl = openerLevelAt(i)
+					if lvl then
+						level = lvl
+						i = i + lvl + 2
+					else
+						executable = true
+						i = i + 1
+					end
+				elseif c == 32 or c == 9 or c == 13 then -- ' ' '\t' '\r'
+					i = i + 1
+				else
+					executable = true
+					i = i + 1
+				end
+			end
 		end
-		if isExecutableLine(line) then
+
+		if executable then
 			n = n + 1
 			if out then out[lineNo] = true end
 		end
+		pos = (nl or len) + 1
 	end
 	return n
 end

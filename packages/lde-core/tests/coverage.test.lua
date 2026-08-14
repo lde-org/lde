@@ -115,3 +115,64 @@ test.it("compute skips files that can no longer be read", function()
 	test.truthy(totalExec > 0)
 	test.truthy(totalCovered > 0)
 end)
+
+--
+-- Executable-line lexing: comments and string interiors don't count
+--
+
+	test.it("compute excludes multi-line string and block comment interiors", function()
+	local file = path.join(srcDir, "lex-strings.lua")
+	fs.write(file, [==[
+--[[
+block comment interior that looks like code: return 1
+]]
+local s = [[
+string interior that looks like code: return 2
+]]
+local t = { "quoted", 'single' } -- trailing comment
+return s .. t[1]
+]==])
+	-- Executable: 4 (opener line is code), 7 (inline strings + trailing comment),
+	-- 8. Lines 1-3 are the block comment, 5-6 the string content.
+	local cov = Coverage.new({ srcDir .. path.separator }, tmpBase)
+	cov:hook("line", { source = "@" .. file, currentline = 4 })
+	cov:hook("line", { source = "@" .. file, currentline = 8 })
+
+	local files = cov:compute()
+	test.equal(#files, 1)
+	test.equal(files[1].executable, 3)
+	test.equal(files[1].covered, 2)
+end)
+
+	test.it("compute handles nested long bracket levels", function()
+	local file = path.join(srcDir, "lex-levels.lua")
+	fs.write(file, [===[
+local a = [==[
+content with ]=] and ]] that must not close level 2
+]==]
+--[==[
+comment interior with ]=] and ]] not closing
+]==]
+return a
+]===])
+	-- Level-2 string: lines 2-3 are content. Level-2 comment: lines 5-6 are
+	-- content. Executable: 1 (opener) and 7 (return).
+	local cov = Coverage.new({ srcDir .. path.separator }, tmpBase)
+	cov:hook("line", { source = "@" .. file, currentline = 1 })
+	cov:hook("line", { source = "@" .. file, currentline = 7 })
+
+	local files = cov:compute()
+	test.equal(files[1].executable, 2)
+	test.equal(files[1].covered, 2)
+end)
+
+test.it("compute skips a leading shebang line", function()
+	local file = path.join(srcDir, "shebang.lua")
+	fs.write(file, "#!/usr/bin/env luajit\nreturn 42\n")
+	local cov = Coverage.new({ srcDir .. path.separator }, tmpBase)
+	cov:hook("line", { source = "@" .. file, currentline = 2 })
+
+	local files, totalExec, totalCovered = cov:compute()
+	test.equal(totalExec, 1)
+	test.equal(totalCovered, 1)
+end)
