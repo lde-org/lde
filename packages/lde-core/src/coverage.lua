@@ -44,9 +44,12 @@ function Coverage:hook(event, info)
 	local file = src:sub(2)
 	-- Relative chunk names come from dofile/loadfile with relative paths;
 	-- resolve them against the package dir so the prefix filter can match.
+	-- Chunk names use "/" separators on every platform, so the joined path is
+	-- normalized to the native separator ("src/mod.lua" must equal the
+	-- backslash-joined key tests and the hook's own prefixes use).
 	if not (file:sub(1, 1) == "/" or file:sub(1, 1) == "\\" or file:match("^%a:[/\\]")) then
 		if not self.baseDir then return end
-		file = path.join(self.baseDir, file)
+		file = (path.join(self.baseDir, file):gsub("\\", "/")):gsub("/", path.separator)
 	end
 	for i = 1, #self.prefixes do
 		if file:sub(1, #self.prefixes[i]) == self.prefixes[i] then

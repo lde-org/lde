@@ -15,15 +15,31 @@ fs.mkdir(tmpBase)
 local ldeBinDir = path.dirname(assert(env.execPath()))
 
 --- Run a tool wrapper with the lde binary dir prepended to PATH (the wrapper
---- execs `lde x ...`), returning exit code + merged output.
+--- execs `lde x ...`), returning exit code + merged output. Windows wrappers
+--- are .cmd files, which must be launched through cmd.exe.
 ---@param wrapperPath string
 ---@param args string[]
 ---@return number?, string?
 local function runTool(wrapperPath, args)
-	local code, stdout, stderr = process.exec(wrapperPath, args, {
-		env = { PATH = ldeBinDir .. ":" .. (os.getenv("PATH") or "") }
+	local sep = jit.os == "Windows" and ";" or ":"
+	local cmd, cmdArgs
+	if jit.os == "Windows" then
+		cmd, cmdArgs = "cmd", { "/c", wrapperPath, unpack(args) }
+	else
+		cmd, cmdArgs = wrapperPath, args
+	end
+	local code, stdout, stderr = process.exec(cmd, cmdArgs, {
+		env = { PATH = ldeBinDir .. sep .. (os.getenv("PATH") or "") }
 	})
 	return code, (stdout or "") .. (stderr or "")
+end
+
+--- Path of the wrapper writeWrapper produces for a tool: a .cmd on Windows.
+---@param treeDir string
+---@param toolName string
+---@return string
+local function wrapperPath(treeDir, toolName)
+	return path.join(treeDir, "tools", jit.os == "Windows" and (toolName .. ".cmd") or toolName)
 end
 
 --- A local git repo usable as an offline `--git` install source.
@@ -109,7 +125,7 @@ end)
 	test.truthy(ok, "lde install --path failed: " .. tostring(out))
 	test.includes(out or "", "Installed tool")
 
-	local wrapper = path.join(treeDir, "tools", "mytool")
+	local wrapper = wrapperPath(treeDir, "mytool")
 	test.truthy(fs.exists(wrapper), "wrapper not written")
 
 	local code, runOut = runTool(wrapper, { "hello" })
@@ -126,7 +142,7 @@ test.it("install --git clones and wraps a tool from a local repo", function()
 	test.truthy(ok, "lde install --git failed: " .. tostring(out))
 	test.includes(out or "", "Installed tool")
 
-	local wrapper = path.join(treeDir, "tools", "gittool")
+	local wrapper = wrapperPath(treeDir, "gittool")
 	test.truthy(fs.exists(wrapper), "wrapper not written")
 
 	local code, runOut = runTool(wrapper, { "fromgit" })
@@ -150,7 +166,7 @@ test.it("uninstall removes the tool wrapper", function()
 
 	local ok, out = ldecli({ "--tree", treeDir, "install", "rmtool", "--path", toolDir })
 	test.truthy(ok, "lde install failed: " .. tostring(out))
-	local wrapper = path.join(treeDir, "tools", "rmtool")
+	local wrapper = wrapperPath(treeDir, "rmtool")
 	test.truthy(fs.exists(wrapper))
 
 	local ok2, out2 = ldecli({ "--tree", treeDir, "uninstall", "rmtool" })
@@ -172,7 +188,7 @@ test.it("install rocks:<name> installs a tool with a bin and the wrapper compile
 	test.truthy(ok, "lde install rocks:moonscript failed: " .. tostring(out))
 	test.includes(out or "", "Installed tool")
 
-	local wrapper = path.join(treeDir, "tools", "moonscript")
+	local wrapper = wrapperPath(treeDir, "moonscript")
 	test.truthy(fs.exists(wrapper), "wrapper not written")
 
 	-- The moon bin takes a .moon file; compile-and-run it through the wrapper.

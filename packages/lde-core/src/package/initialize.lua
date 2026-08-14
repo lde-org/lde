@@ -2,7 +2,6 @@ local path = require("path")
 local fs = require("fs")
 local util = require("util")
 local ansi = require("ansi")
-local process = require("process")
 
 local git2 = util.lazy(function() return require("git2-sys") end)
 
@@ -198,14 +197,31 @@ Add them with: `lde add <name> --git https://github.com/lde-org/<name>`
 | Tests not found | Test files must match `**/*.test.lua`. They must be in the `tests/` directory. |
 ]])
 
---- Check whether a binary exists on PATH
+--- Check whether a binary exists on PATH. Scans PATH directly instead of
+--- spawning a subprocess: `command -v` is a shell builtin, so execvp can't
+--- find it on minimal systems (CI runners), and checking seven agents with
+--- `where`/`command` subprocesses per Package.init is needlessly slow.
 ---@param name string
 local function hasBinary(name)
-	if process.platform == "win32" then
-		return process.exec("where", { name }) == 0
-	else
-		return process.exec("command", { "-v", name }) == 0
+	local pathVar = os.getenv("PATH") or ""
+	local sep = jit.os == "Windows" and ";" or ":"
+	for dir in pathVar:gmatch("[^" .. sep .. "]+") do
+		if dir ~= "" then
+			local base = path.join(dir, name)
+			if jit.os == "Windows" then
+				if fs.exists(base) or fs.exists(base .. ".exe")
+					or fs.exists(base .. ".cmd") or fs.exists(base .. ".bat") then
+					return true
+				end
+			else
+				local stat = fs.stat(base)
+				if stat and bit.band(stat.mode or 0, 0x49) ~= 0 then -- any exec bit
+					return true
+				end
+			end
+		end
 	end
+	return false
 end
 
 ---@param dir string
@@ -413,11 +429,21 @@ local function initPackage(dir, opts)
 		fs.write(path.join(src, entryFile), entryContent(projectType, language))
 	end
 
-	-- Write agent instructions if a known coding agent is present
-	if hasBinary("claude") then
-		fs.write(path.join(dir, "CLAUDE.md"), AGENT_TEMPLATE)
-	elseif hasBinary("opencode") then
-		fs.write(path.join(dir, "AGENTS.md"), AGENT_TEMPLATE)
+	-- Write agent instructions if a known coding agent is present. claude reads
+	-- CLAUDE.md; every other supported harness reads AGENTS.md, which is
+	-- preferred when several agents are installed.
+	local agentFile
+	for _, agent in ipairs({ "opencode", "dsh", "pi", "zed", "gemini", "codex", "reasonix" }) do
+		if hasBinary(agent) then
+			agentFile = "AGENTS.md"
+			break
+		end
+	end
+	if not agentFile and hasBinary("claude") then
+		agentFile = "CLAUDE.md"
+	end
+	if agentFile then
+		fs.write(path.join(dir, agentFile), AGENT_TEMPLATE)
 	end
 
 	return package

@@ -12,7 +12,10 @@ local fs = require("fs")
 local env = require("env")
 local path = require("path")
 
-local tmpBase = path.join(env.tmpdir(), "lde-watchrun-tests")
+local tmpBase = path.normalize(path.join(env.tmpdir(), "lde-watchrun-tests"))
+-- Normalized: on macOS CI, TMPDIR has a trailing slash, so the raw join would
+-- contain a double separator that path.resolve (used by the bootstrap's abs())
+-- collapses — making recorded keys mismatch the test's own paths.
 fs.rmdir(tmpBase)
 fs.mkdir(tmpBase)
 

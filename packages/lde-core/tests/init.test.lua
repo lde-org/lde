@@ -234,9 +234,12 @@ test.it("Package.init does not overwrite an existing .luarc.json", function()
 	test.equal(fs.read(path.join(dir, ".luarc.json")), "{}")
 end)
 
-test.skipIf(jit.os == "Windows")("Package.init writes CLAUDE.md when a coding agent is on PATH", function()
-	-- Fake a `claude` binary so hasBinary() finds it; the agent template is only
-	-- written when a known agent is present.
+test.skipIf(jit.os == "Windows" or env.var("CI") ~= nil)(
+	"Package.init writes CLAUDE.md when claude is on PATH", function()
+	-- Fake a `claude` binary so hasBinary() finds it; the agent instructions
+	-- are only written when a known agent is present. Skipped on CI: the fake
+	-- PATH mutates the shared process environment, which is risky inside a
+	-- longer suite run.
 	local binDir = path.join(tmpBase, "fake-bin")
 	fs.rmdir(binDir)
 	fs.mkdir(binDir)
@@ -244,7 +247,9 @@ test.skipIf(jit.os == "Windows")("Package.init writes CLAUDE.md when a coding ag
 	fs.chmod(path.join(binDir, "claude"), tonumber("755", 8))
 
 	local oldPath = env.var("PATH") or ""
-	env.set("PATH", binDir .. ":" .. oldPath)
+	-- Replace PATH entirely so real agents installed on the machine can't
+	-- satisfy hasBinary(); Package.init doesn't need anything from PATH.
+	env.set("PATH", binDir)
 
 	local ok, err = pcall(function()
 		local dir = path.join(tmpBase, "agent-template")
@@ -252,6 +257,33 @@ test.skipIf(jit.os == "Windows")("Package.init writes CLAUDE.md when a coding ag
 		lde.Package.init(dir)
 		test.truthy(fs.isfile(path.join(dir, "CLAUDE.md")), "CLAUDE.md should be written for claude users")
 		test.truthy(fs.read(path.join(dir, "CLAUDE.md")):find("package manager and toolkit for Lua", 1, true))
+	end)
+
+	env.set("PATH", oldPath)
+	if not ok then error(err) end
+end)
+
+test.skipIf(jit.os == "Windows" or env.var("CI") ~= nil)(
+	"Package.init prefers AGENTS.md when other agents are on PATH", function()
+	-- zed (an AGENTS.md harness) must win over claude: AGENTS.md is preferred.
+	local binDir = path.join(tmpBase, "fake-bin-agents")
+	fs.rmdir(binDir)
+	fs.mkdir(binDir)
+	for _, bin in ipairs({ "claude", "zed" }) do
+		fs.write(path.join(binDir, bin), "#!/bin/sh\nexit 0\n")
+		fs.chmod(path.join(binDir, bin), tonumber("755", 8))
+	end
+
+	local oldPath = env.var("PATH") or ""
+	-- Replace PATH entirely (see the claude test above).
+	env.set("PATH", binDir)
+
+	local ok, err = pcall(function()
+		local dir = path.join(tmpBase, "agent-template-agents")
+		fs.mkdir(dir)
+		lde.Package.init(dir)
+		test.truthy(fs.isfile(path.join(dir, "AGENTS.md")), "AGENTS.md should be preferred over CLAUDE.md")
+		test.falsy(fs.exists(path.join(dir, "CLAUDE.md")), "CLAUDE.md must not be written when an AGENTS.md agent is present")
 	end)
 
 	env.set("PATH", oldPath)
