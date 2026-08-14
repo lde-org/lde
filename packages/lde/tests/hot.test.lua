@@ -55,11 +55,14 @@ end
 
 -- Spawn the lde binary for a --hot/--watch session, run fn, then always kill
 -- the child (even when fn errors, so a failed test can't leak a watcher).
+-- The child's stdout/stderr are discarded: the tests observe the session
+-- through log files the app writes, and the watcher's "Watching..." /
+-- "Reloaded:" chatter would otherwise pollute the test runner's output.
 ---@param args string[]
 ---@param cwd string
 ---@param fn fun(child: process.Child)
 local function withChild(args, cwd, fn)
-	local child, err = process.spawn(ldePath, args, { cwd = cwd, stdout = "inherit", stderr = "inherit" })
+	local child, err = process.spawn(ldePath, args, { cwd = cwd, stdout = "null", stderr = "null" })
 	if not child then error("spawn failed: " .. tostring(err), 2) end
 	---@cast child process.Child
 	local ok, perr = pcall(fn, child)
