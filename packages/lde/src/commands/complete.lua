@@ -6,6 +6,7 @@
 
 local usage = require("lde.commands.usage")
 local fs = require("fs")
+local json = require("json")
 
 ---@param flag string
 ---@return boolean
@@ -51,6 +52,37 @@ local function fileCandidates(cur)
 	return out
 end
 
+--- Script names defined in the current directory's manifest (lde.json, or the
+--- legacy lpm.json, mirroring configPathAtDir's preference). Returns nil when
+--- there is no readable manifest.
+---@return string[]?
+local function scriptNames()
+	local content = fs.read("lpm.json") or fs.read("lde.json")
+	if not content then return nil end
+	local ok, config = pcall(json.decode, content)
+	if not ok or type(config) ~= "table" then return nil end
+	local scripts = config.scripts
+	if type(scripts) ~= "table" then return nil end
+	local out = {}
+	for name in pairs(scripts) do
+		out[#out + 1] = name
+	end
+	table.sort(out)
+	return out
+end
+
+--- Deduplicate and sort candidates, then emit those matching the current word.
+---@param words string[]
+---@param cur string
+local function emitUnique(words, cur)
+	local seen = {}
+	for _, w in ipairs(words) do seen[w] = true end
+	local names = {}
+	for w in pairs(seen) do names[#names + 1] = w end
+	table.sort(names)
+	emit(names, cur)
+end
+
 local allFlags ---@type string[]?
 local function allFlagNames()
 	if not allFlags then
@@ -86,18 +118,31 @@ local function complete(args)
 		if cur:sub(1, 1) == "-" then
 			emit(allFlagNames(), cur)
 		else
-			-- Offer files only when no command matches the word, so an empty
-			-- line still completes commands without file noise. The first
-			-- positional can be a loose Lua file (`lde ./file.lua`).
+			-- Commands and the project's scripts (`lde dev`); files only when
+			-- neither matches, so an empty line stays command/script-only
+			-- without file noise. The first positional can also be a loose Lua
+			-- file (`lde ./file.lua`).
 			local matched = false
+			local seen = {}
 			for _, w in ipairs(usage.completionNames) do
 				if cur == "" or w:sub(1, #cur) == cur then
-					print(w)
+					seen[w] = true
+					matched = true
+				end
+			end
+			for _, w in ipairs(scriptNames() or {}) do
+				if cur == "" or w:sub(1, #cur) == cur then
+					seen[w] = true
 					matched = true
 				end
 			end
 			if not matched then
 				emit(fileCandidates(cur), cur)
+			else
+				local names = {}
+				for w in pairs(seen) do names[#names + 1] = w end
+				table.sort(names)
+				emit(names, cur)
 			end
 		end
 		return
@@ -140,10 +185,13 @@ local function complete(args)
 		emit(flags, cur)
 	end
 	-- Positional arguments: `run` takes an entry point, a script name, or a
-	-- Lua file path, so offer files there; other commands get none and the
-	-- shells fall back to file completion.
+	-- Lua file path, so offer scripts and files there; other commands get
+	-- none and the shells fall back to file completion.
 	if command == "run" and cur:sub(1, 1) ~= "-" then
-		emit(fileCandidates(cur), cur)
+		local words = {}
+		for _, w in ipairs(scriptNames() or {}) do words[#words + 1] = w end
+		for _, w in ipairs(fileCandidates(cur)) do words[#words + 1] = w end
+		emitUnique(words, cur)
 	end
 end
 

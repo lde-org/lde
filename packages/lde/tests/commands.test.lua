@@ -277,6 +277,69 @@ test.it("lde __complete run suggests files after a boolean flag", function()
 	test.falsy(out2 and out2:find("app%.lua"))
 end)
 
+test.it("lde __complete suggests lde.json script names", function()
+	local dir = makeProject("completion-scripts", nil, {
+		name = "completion-scripts",
+		scripts = { dev = "echo dev", build = "echo build" }
+	})
+	fs.write(path.join(dir, "main.lua"), "return true")
+
+	-- Script names join commands at the first word.
+	local ok, out = cli({ "__complete", "" }, dir)
+	test.truthy(ok)
+	test.includes(out or "", "dev")
+	test.includes(out or "", "build")
+	test.includes(out or "", "run")
+
+	-- Typing a script prefix completes the script.
+	local ok2, out2 = cli({ "__complete", "de" }, dir)
+	test.truthy(ok2)
+	test.includes(out2 or "", "dev")
+	test.falsy(out2:find("main%.lua"))
+
+	-- `lde run` offers scripts and files together.
+	local ok3, out3 = cli({ "__complete", "run", "" }, dir)
+	test.truthy(ok3)
+	test.includes(out3 or "", "dev")
+	test.includes(out3 or "", "main.lua")
+
+	-- Boolean flags do not stop script completion.
+	local ok4, out4 = cli({ "__complete", "run", "--watch", "de" }, dir)
+	test.truthy(ok4)
+	test.includes(out4 or "", "dev")
+end)
+
+test.it("lde __complete dedupes scripts that share a command name", function()
+	local dir = makeProject("completion-script-dup", nil, {
+		name = "completion-script-dup",
+		scripts = { run = "echo run", test = "echo test" }
+	})
+
+	local ok, out = cli({ "__complete", "run" }, dir)
+	test.truthy(ok)
+	local count = 0
+	for line in (out or ""):gmatch("[^\n]+") do
+		if line == "run" then count = count + 1 end
+	end
+	test.equal(count, 1, "command and script with the same name must dedupe")
+end)
+
+test.it("lde __complete reads scripts from a legacy lpm.json", function()
+	local dir = path.join(tmpBase, "completion-lpm")
+	fs.mkdir(dir)
+	fs.mkdir(path.join(dir, "src"))
+	fs.write(path.join(dir, "src", "init.lua"), "return true")
+	fs.write(path.join(dir, "lpm.json"), json.encode({
+		name = "completion-lpm",
+		version = "0.1.0",
+		scripts = { dev = "echo dev" }
+	}))
+
+	local ok, out = cli({ "__complete", "de" }, dir)
+	test.truthy(ok)
+	test.includes(out or "", "dev")
+end)
+
 test.it("lde completion rejects unknown shells", function()
 	local ok, out = cli({ "completion", "tcsh" })
 	test.falsy(ok)
