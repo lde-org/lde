@@ -5,6 +5,7 @@
 -- fall back to file completion.
 
 local usage = require("lde.commands.usage")
+local fs = require("fs")
 
 ---@param flag string
 ---@return boolean
@@ -23,6 +24,31 @@ local function emit(words, cur)
 			print(w)
 		end
 	end
+end
+
+--- List files and directories matching a partial path, for positions where a
+--- Lua file can be passed (`lde <file>`, `lde run <file>`). Directories get a
+--- trailing slash so the shell can drill into them. Returns nothing when the
+--- directory cannot be read.
+---@param cur string
+---@return string[]
+local function fileCandidates(cur)
+	local dir, prefix = cur:match("^(.*[/\\])(.*)$")
+	if not dir then
+		dir, prefix = ".", cur
+	end
+	local entries = fs.readdir(dir)
+	if not entries then return {} end
+	local out = {}
+	for entry in entries do
+		local name = entry.name
+		if prefix == "" or name:sub(1, #prefix) == prefix then
+			local candidate = dir == "." and name or (dir .. name)
+			out[#out + 1] = entry.type == "dir" and (candidate .. "/") or candidate
+		end
+	end
+	table.sort(out)
+	return out
 end
 
 local allFlags ---@type string[]?
@@ -60,16 +86,34 @@ local function complete(args)
 		if cur:sub(1, 1) == "-" then
 			emit(allFlagNames(), cur)
 		else
-			emit(usage.completionNames, cur)
+			-- Offer files only when no command matches the word, so an empty
+			-- line still completes commands without file noise. The first
+			-- positional can be a loose Lua file (`lde ./file.lua`).
+			local matched = false
+			for _, w in ipairs(usage.completionNames) do
+				if cur == "" or w:sub(1, #cur) == cur then
+					print(w)
+					matched = true
+				end
+			end
+			if not matched then
+				emit(fileCandidates(cur), cur)
+			end
 		end
 		return
 	end
 
-	-- Find the command: the first word that isn't an option.
+	-- Find the command: the first word that isn't an option, skipping the
+	-- values of value-taking options (e.g. `-C <dir> run ...`).
 	local command
+	local skipValue = false
 	for i = 1, n - 1 do
 		local w = words[i]
-		if w:sub(1, 1) ~= "-" then
+		if skipValue then
+			skipValue = false
+		elseif isValueFlag(w) then
+			skipValue = true
+		elseif w:sub(1, 1) ~= "-" then
 			command = w
 			break
 		end
@@ -95,7 +139,12 @@ local function complete(args)
 		table.sort(flags)
 		emit(flags, cur)
 	end
-	-- Positional arguments: no suggestions; shells fall back to file completion.
+	-- Positional arguments: `run` takes an entry point, a script name, or a
+	-- Lua file path, so offer files there; other commands get none and the
+	-- shells fall back to file completion.
+	if command == "run" and cur:sub(1, 1) ~= "-" then
+		emit(fileCandidates(cur), cur)
+	end
 end
 
 return complete

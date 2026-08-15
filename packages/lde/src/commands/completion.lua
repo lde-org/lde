@@ -38,12 +38,9 @@ _lde() {
 		fi
 	done
 
-	# Only fall back to file completion once past the command position.
-	if [ "$COMP_CWORD" -le 1 ] || [[ "$cur" == -* ]]; then
-		compopt +o default 2>/dev/null
-	else
-		compopt -o default 2>/dev/null
-	fi
+	# `lde <file>` runs a loose Lua file, so default file completion applies
+	# everywhere; __complete's own candidates take precedence when non-empty.
+	compopt -o default 2>/dev/null
 
 	COMPREPLY=( $(lde __complete "${COMP_WORDS[@]:1}" 2>/dev/null) )
 }

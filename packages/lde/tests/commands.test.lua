@@ -233,6 +233,50 @@ test.it("lde completion bash emits a completion script", function()
 	test.includes(out or "", "complete -F _lde lde")
 end)
 
+test.it("lde __complete offers files where a file can be passed", function()
+	local dir = makeProject("completion-files", nil, { name = "completion-files" })
+	fs.write(path.join(dir, "main.lua"), "return true")
+	fs.mkdir(path.join(dir, "sub"))
+	fs.write(path.join(dir, "sub", "inner.lua"), "return true")
+
+	-- `lde <file>`: loose-file position completes files when no command matches.
+	local ok, out = cli({ "__complete", "./ma" }, dir)
+	test.truthy(ok)
+	test.includes(out or "", "./main.lua")
+
+	-- `lde run <file>`: the run positional completes files, including
+	-- directories with a trailing slash and traversal into them.
+	local ok2, out2 = cli({ "__complete", "run", "sub/i" }, dir)
+	test.truthy(ok2)
+	test.includes(out2 or "", "sub/inner.lua")
+
+	-- A command prefix still completes commands, not files.
+	local ok3, out3 = cli({ "__complete", "ru" }, dir)
+	test.truthy(ok3)
+	test.includes(out3 or "", "run")
+	test.falsy(out3:find("main%.lua"))
+
+	-- An empty first word offers commands only, without file noise.
+	local ok4, out4 = cli({ "__complete", "" }, dir)
+	test.truthy(ok4)
+	test.includes(out4 or "", "run")
+	test.falsy(out4:find("main%.lua"))
+end)
+
+test.it("lde __complete run suggests files after a boolean flag", function()
+	local dir = makeProject("completion-run-flags", nil, { name = "completion-run-flags" })
+	fs.write(path.join(dir, "app.lua"), "return true")
+
+	local ok, out = cli({ "__complete", "run", "--hot", "./ap" }, dir)
+	test.truthy(ok)
+	test.includes(out or "", "./app.lua")
+
+	-- A value-taking flag still suppresses suggestions for its value position.
+	local ok2, out2 = cli({ "__complete", "run", "--flamegraph", "./ap" }, dir)
+	test.truthy(ok2)
+	test.falsy(out2 and out2:find("app%.lua"))
+end)
+
 test.it("lde completion rejects unknown shells", function()
 	local ok, out = cli({ "completion", "tcsh" })
 	test.falsy(ok)
