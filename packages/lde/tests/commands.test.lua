@@ -318,7 +318,9 @@ test.it("lde __complete dedupes scripts that share a command name", function()
 	local ok, out = cli({ "__complete", "run" }, dir)
 	test.truthy(ok)
 	local count = 0
-	for line in (out or ""):gmatch("[^\n]+") do
+	-- Split on either line ending: the child's captured stdout uses \r\n on
+	-- Windows, and the exact match must not see the trailing \r.
+	for line in (out or ""):gmatch("[^\r\n]+") do
 		if line == "run" then count = count + 1 end
 	end
 	test.equal(count, 1, "command and script with the same name must dedupe")
