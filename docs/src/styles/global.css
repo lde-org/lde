@@ -5,8 +5,8 @@
 @theme {
 	--font-sans: "Lato", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
 
-	/* Wordmark keeps the original system font, not Lato */
-	--font-brand: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+	/* Wordmark font: soft, rounded sans for the lde logo text */
+	--font-brand: "Rubik", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
 
 	--animate-bounce-x: bounce-x 1s ease-in-out infinite;
 
