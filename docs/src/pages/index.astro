@@ -65,17 +65,17 @@ const features = [
 <Layout hideGlow>
 <main>
 	<!-- ─── HERO ─────────────────────────────────────────────────────────── -->
-	<section class="relative flex flex-col items-center justify-center overflow-hidden min-h-[calc(100vh-72px)] px-6 py-24">
+	<section class="relative flex flex-col items-center justify-center bg-gray-950 text-white min-h-[calc(100vh-72px)] px-6 py-24">
 
-		<!-- Background glow blobs -->
-		<div class="absolute inset-0 pointer-events-none select-none" aria-hidden="true">
+		<!-- Background glow blobs + star field (extends up behind the navbar) -->
+		<div class="absolute inset-x-0 -top-[72px] h-[calc(100%+72px)] pointer-events-none select-none" aria-hidden="true">
 			<!-- Top-center blue glow -->
-			<div class="absolute top-[-10%] left-1/2 -translate-x-1/2 w-[900px] h-[600px] rounded-full bg-blue-600/10 dark:bg-blue-500/15 blur-[80px]"></div>
+			<div class="absolute top-[-10%] left-1/2 -translate-x-1/2 w-[900px] h-[600px] rounded-full bg-blue-500/15 blur-[80px]"></div>
 			<!-- Bottom accent -->
-			<div class="absolute bottom-0 left-1/4 w-[500px] h-[300px] rounded-full bg-indigo-600/8 dark:bg-indigo-500/10 blur-[70px]"></div>
+			<div class="absolute bottom-0 left-1/4 w-[500px] h-[300px] rounded-full bg-indigo-500/10 blur-[70px]"></div>
 
 			<!-- Star field -->
-			<svg class="absolute inset-0 w-full h-full opacity-60 dark:opacity-100" viewBox="0 0 1400 800" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+			<svg class="absolute inset-0 w-full h-full opacity-100" viewBox="0 0 1400 800" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
 				<defs>
 					<pattern id="stars-a" width="97" height="83" patternUnits="userSpaceOnUse">
 						<circle cx="12" cy="18" r="0.8" fill="#94a3b8"></circle>
@@ -138,15 +138,15 @@ const features = [
 					</a>
 				)}
 
-				<h1 class="text-5xl md:text-6xl xl:text-7xl font-extrabold tracking-tight leading-[1.05]">
+				<h1 class="text-5xl md:text-6xl xl:text-7xl font-extrabold tracking-tight leading-[1.05] text-white">
 					Lua Done{" "}
 					<span class="relative text-blue-600 inline-block">
 						Easy
 					</span>
 				</h1>
 
-				<p class="mt-6 text-xl text-black/60 dark:text-white/80 leading-snug max-w-lg">
-					A cross platform <a href="/docs/package-manager/getting-started/quick-start" class="text-blue-500 dark:text-blue-400 underline underline-offset-2 decoration-blue-500/40 dark:decoration-blue-400/40 hover:text-blue-400 dark:hover:text-blue-300 transition-colors">package manager</a>, <a href="/docs/runtime/getting-started/runtime" class="text-blue-500 dark:text-blue-400 underline underline-offset-2 decoration-blue-500/40 dark:decoration-blue-400/40 hover:text-blue-400 dark:hover:text-blue-300 transition-colors">runtime</a>, test runner and <a href="/docs/bundler/getting-started/single-file-apps" class="text-blue-500 dark:text-blue-400 underline underline-offset-2 decoration-blue-500/40 dark:decoration-blue-400/40 hover:text-blue-400 dark:hover:text-blue-300 transition-colors">compiler</a> to turn your lua into &lt;<span class="text-black/80 dark:text-white/80 font-medium">1mB</span> programs.
+				<p class="mt-6 text-xl text-white/70 leading-snug max-w-lg">
+					A cross platform <a href="/docs/package-manager/getting-started/quick-start" class="text-blue-500 dark:text-blue-400 underline underline-offset-2 decoration-blue-500/40 dark:decoration-blue-400/40 hover:text-blue-400 dark:hover:text-blue-300 transition-colors">package manager</a>, <a href="/docs/runtime/getting-started/runtime" class="text-blue-500 dark:text-blue-400 underline underline-offset-2 decoration-blue-500/40 dark:decoration-blue-400/40 hover:text-blue-400 dark:hover:text-blue-300 transition-colors">runtime</a>, test runner and <a href="/docs/bundler/getting-started/single-file-apps" class="text-blue-500 dark:text-blue-400 underline underline-offset-2 decoration-blue-500/40 dark:decoration-blue-400/40 hover:text-blue-400 dark:hover:text-blue-300 transition-colors">compiler</a> to turn your lua into &lt;<span class="text-white font-medium">1mB</span> executables.
 				</p>
 
 				<div class="mt-8 w-full">
@@ -165,7 +165,7 @@ const features = [
 		</div>
 
 		<!-- Scroll hint -->
-		<div class="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 text-black/25 dark:text-white/20 animate-bounce">
+		<div class="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 text-white/25 animate-bounce">
 			<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
 		</div>
 	</section>

@@ -1,40 +1,103 @@
 ---
 import { Icon } from "astro-icon/components";
-import { GITHUB_URL, LICENSE_URL } from "../data/info";
+import { GITHUB_URL, GITHUB_RELEASES_URL, LICENSE_URL } from "../data/info";
 
-const links = [
-	{ label: "Docs", href: "/docs/getting-started/introduction/" },
-	{ label: "Discord", href: "/discord", external: true },
-	{ label: "GitHub", href: GITHUB_URL, external: true },
-	{ label: "License", href: LICENSE_URL, external: true },
+const columns: { header: string; links: { label: string; href: string; external?: boolean }[] }[] = [
+	{
+		header: "Docs",
+		links: [
+			{ label: "Runtime", href: "/docs/runtime/getting-started/runtime" },
+			{ label: "Package manager", href: "/docs/package-manager/getting-started/quick-start" },
+			{ label: "Test runner", href: "/docs/test-runner/getting-started/test-runner" },
+			{ label: "Bundler & compiler", href: "/docs/bundler/getting-started/single-file-apps" },
+		],
+	},
+	{
+		header: "Guides",
+		links: [
+			{ label: "Getting started", href: "/docs/general/getting-started/introduction" },
+			{ label: "Installation", href: "/docs/general/getting-started/installation" },
+			{ label: "Project structure", href: "/docs/package-manager/getting-started/project-structure" },
+			{ label: "Porting to lde", href: "/docs/package-manager/guides/porting-to-lde" },
+		],
+	},
+	{
+		header: "Project",
+		links: [
+			{ label: "Blog", href: "/blog/" },
+			{ label: "Download", href: "/download" },
+			{ label: "Registry", href: "/registry/" },
+			{ label: "Publish a package", href: "/registry/publish" },
+		],
+	},
+	{
+		header: "Community",
+		links: [
+			{ label: "Discord", href: "/discord", external: true },
+			{ label: "GitHub", href: GITHUB_URL, external: true },
+			{ label: "Releases", href: GITHUB_RELEASES_URL, external: true },
+			{ label: "License", href: LICENSE_URL, external: true },
+		],
+	},
+];
+
+const socials = [
+	{ label: "GitHub", href: GITHUB_URL, icon: "simple-icons:github" },
+	{ label: "Discord", href: "/discord", icon: "simple-icons:discord" },
+	{ label: "RSS", href: "/rss.xml", icon: "simple-icons:rss" },
 ];
 ---
 
 <footer class="border-t border-black/10 dark:border-white/10 mt-auto">
-	<div
-		class="max-w-[90em] mx-auto px-4 md:px-8 py-6 flex flex-col md:flex-row items-center gap-4 md:gap-0 justify-between text-sm opacity-60"
-	>
-		<span class="font-brand">lde</span>
-		<div class="flex flex-wrap justify-center gap-4 md:gap-6">
+	<div class="max-w-[90em] mx-auto px-4 md:px-8 py-12 md:py-16">
+		<!-- Logo + link columns (columns start to the right of the logo) -->
+		<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
+			<div>
+				<a href="/" class="inline-flex items-center gap-2.5">
+					<img src="/lde.svg" alt="lde logo" class="size-8 object-contain" />
+					<span class="font-brand font-semibold text-xl tracking-tight">lde</span>
+				</a>
+				<div class="flex items-center gap-1 mt-4">
+					{
+						socials.map((s) => (
+							<a
+								href={s.href}
+								target={s.href.startsWith("http") ? "_blank" : undefined}
+								rel={s.href.startsWith("http") ? "noopener noreferrer" : undefined}
+								aria-label={s.label}
+								class="inline-flex size-9 items-center justify-center opacity-60 hover:opacity-100 hover:text-blue-500 dark:hover:text-blue-400 transition-all"
+							>
+								<Icon name={s.icon} class="size-5" />
+							</a>
+						))
+					}
+				</div>
+			</div>
 			{
-				links.map((link) => (
-					<a
-						href={link.href}
-						target={link.external ? "_blank" : undefined}
-						rel={link.external ? "noopener noreferrer" : undefined}
-						class="hover:opacity-100 opacity-70 transition-opacity"
-					>
-						{link.label}
-					</a>
+				columns.map((col) => (
+					<div>
+						<h3 class="text-sm font-semibold text-blue-500 dark:text-blue-400 mb-4">
+							{col.header}
+						</h3>
+						<ul class="space-y-1">
+							{
+								col.links.map((link) => (
+									<li>
+										<a
+											href={link.href}
+											target={link.external ? "_blank" : undefined}
+											rel={link.external ? "noopener noreferrer" : undefined}
+											class="text-sm text-black/60 dark:text-white/55 hover:text-blue-500 dark:hover:text-blue-400 transition-colors"
+										>
+											{link.label}
+										</a>
+									</li>
+								))
+							}
+						</ul>
+					</div>
 				))
 			}
-			<a
-				href="/rss.xml"
-				class="hover:opacity-100 opacity-70 transition-opacity flex items-center gap-1.5"
-			>
-				<Icon name="simple-icons:rss" class="size-3.5" />
-				Blog
-			</a>
 		</div>
 	</div>
 </footer>

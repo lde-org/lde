@@ -1,6 +1,4 @@
 ---
-import { Icon } from "astro-icon/components";
-import { GITHUB_URL, GITHUB_RELEASES_URL } from "../data/info";
 import Search from "./Search.tsx";
 
 interface Props {
@@ -24,7 +22,7 @@ function isActive(href: string) {
 ---
 
 <nav
-	class={`sticky top-0 z-50 bg-white/85 dark:bg-gray-950/85 backdrop-blur-md px-4 md:px-6 flex flex-col items-center justify-start border-b border-black/10 dark:border-white/10${hasTabs ? " min-h-[7rem]" : ""}`}
+	class={`sticky top-0 z-50 bg-white/70 dark:bg-gray-950/0 backdrop-blur-md px-4 md:px-6 flex flex-col items-center justify-start border-b border-black/10 dark:border-white/10${hasTabs ? " min-h-[7rem]" : ""}`}
 >
 	<div class="flex flex-row items-center h-[4.5rem] w-full max-w-[90em]">
 		<a
@@ -65,112 +63,6 @@ function isActive(href: string) {
 		</div>
 
 		<div class="flex items-center gap-0 md:gap-2">
-			<a
-				href="/discord"
-				target="_blank"
-				rel="noopener noreferrer"
-				aria-label="Discord"
-				class="hidden md:inline-flex opacity-60 hover:opacity-100 p-2 md:p-4 transition-opacity"
-			>
-				<Icon name="simple-icons:discord" class="size-6" />
-			</a>
-			<a
-				href={GITHUB_URL}
-				target="_blank"
-				rel="noopener noreferrer"
-				aria-label="GitHub"
-				class="hidden md:inline-flex opacity-60 hover:opacity-100 p-2 md:p-4 transition-opacity"
-			>
-				<Icon name="simple-icons:github" class="size-6" />
-			</a>
-			<button
-				id="theme-toggle"
-				aria-label="Toggle dark/light mode"
-				class="opacity-60 hover:opacity-100 p-2 md:p-4 transition-opacity cursor-pointer"
-			>
-				<svg
-					class="icon-moon size-6"
-					xmlns="http://www.w3.org/2000/svg"
-					viewBox="0 0 24 24"
-					fill="currentColor"
-				>
-					<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"
-					></path>
-				</svg>
-				<svg
-					class="icon-sun size-6 hidden"
-					xmlns="http://www.w3.org/2000/svg"
-					viewBox="0 0 24 24"
-					fill="currentColor"
-				>
-					<circle cx="12" cy="12" r="5"></circle>
-					<line
-						x1="12"
-						y1="1"
-						x2="12"
-						y2="3"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"></line>
-					<line
-						x1="12"
-						y1="21"
-						x2="12"
-						y2="23"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"></line>
-					<line
-						x1="4.22"
-						y1="4.22"
-						x2="5.64"
-						y2="5.64"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"></line>
-					<line
-						x1="18.36"
-						y1="18.36"
-						x2="19.78"
-						y2="19.78"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"></line>
-					<line
-						x1="1"
-						y1="12"
-						x2="3"
-						y2="12"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"></line>
-					<line
-						x1="21"
-						y1="12"
-						x2="23"
-						y2="12"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"></line>
-					<line
-						x1="4.22"
-						y1="19.78"
-						x2="5.64"
-						y2="18.36"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"></line>
-					<line
-						x1="18.36"
-						y1="5.64"
-						x2="19.78"
-						y2="4.22"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"></line>
-				</svg>
-			</button>
-
 			<!-- Burger button (mobile only) -->
 			<button
 				id="nav-burger"
@@ -226,28 +118,6 @@ function isActive(href: string) {
 				</a>
 			))
 		}
-		<div
-			class="flex items-center gap-3 px-2 pt-3 pb-1 border-t border-black/10 dark:border-white/10 mt-1"
-		>
-			<a
-				href="/discord"
-				target="_blank"
-				rel="noopener noreferrer"
-				aria-label="Discord"
-				class="opacity-60 hover:opacity-100 p-1 transition-opacity"
-			>
-				<Icon name="simple-icons:discord" class="size-5" />
-			</a>
-			<a
-				href={GITHUB_URL}
-				target="_blank"
-				rel="noopener noreferrer"
-				aria-label="GitHub"
-				class="opacity-60 hover:opacity-100 p-1 transition-opacity"
-			>
-				<Icon name="simple-icons:github" class="size-5" />
-			</a>
-		</div>
 	</div>
 
 	<div class={hasTabs ? "min-h-[2.5rem] w-full" : ""}>
@@ -255,33 +125,6 @@ function isActive(href: string) {
 	</div>
 
 	<script>
-		// Theme toggle
-		const btn = document.getElementById("theme-toggle")!;
-		const html = document.documentElement;
-
-		function updateIcon() {
-			const isDark = html.classList.contains("dark");
-			(btn.querySelector(".icon-moon") as HTMLElement).classList.toggle(
-				"hidden",
-				isDark,
-			);
-			(btn.querySelector(".icon-sun") as HTMLElement).classList.toggle(
-				"hidden",
-				!isDark,
-			);
-		}
-
-		updateIcon();
-
-		btn.addEventListener("click", () => {
-			html.classList.toggle("dark");
-			localStorage.setItem(
-				"theme",
-				html.classList.contains("dark") ? "dark" : "light",
-			);
-			updateIcon();
-		});
-
 		// Burger toggle
 		const burger = document.getElementById("nav-burger")!;
 		const menu = document.getElementById("mobile-menu")!;

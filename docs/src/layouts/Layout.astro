@@ -28,20 +28,9 @@ const ogSlug = Astro.url.pathname.replace(/^\/|\/$/g, "") || "index";
 const ogImage = `${SITE_URL}/og/${ogSlug}.png`;
 ---
 
-<html lang="en" class="overflow-y-scroll">
+<html lang="en" class="dark overflow-y-scroll">
 	<head>
 		<meta charset="utf-8" />
-		<script is:inline>
-			(function () {
-				const stored = localStorage.getItem("theme");
-				const prefersDark = window.matchMedia(
-					"(prefers-color-scheme: dark)",
-				).matches;
-				if (stored === "dark" || (!stored && prefersDark)) {
-					document.documentElement.classList.add("dark");
-				}
-			})();
-		</script>
 		<link rel="icon" type="image/svg+xml" href="/lde-text.svg" />
 		<link rel="preconnect" href="https://fonts.googleapis.com" />
 		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -107,7 +96,7 @@ const ogImage = `${SITE_URL}/og/${ogSlug}.png`;
 		/>
 	</head>
 	<body
-		class="relative overflow-x-hidden antialiased bg-white dark:bg-gray-950 text-black dark:text-white flex flex-col min-h-screen lg:min-w-fit"
+		class="relative overflow-x-clip antialiased bg-white dark:bg-gray-950 text-black dark:text-white flex flex-col min-h-screen lg:min-w-fit"
 	>
 		<!-- Ambient page glow (hidden on index which has its own hero fx) -->
 		{!hideGlow && (
