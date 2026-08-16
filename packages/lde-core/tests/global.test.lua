@@ -26,9 +26,9 @@ end)
 
 test.it("getGitRepoDir sanitizes unsafe characters but keeps namespace slashes", function()
 	local dir = global.getGitRepoDir("my/repo name", "x y")
-	-- Space -> _, "-" separator, but the "/" is preserved so namespaced
-	-- names nest their cache dirs instead of flattening.
-	test.truthy(dir:find("my/repo_name%-x_y$"))
+	-- Space -> _, "-" separator, and the "/" nests the cache dir instead of
+	-- flattening (so namespaced names can't collide with flat ones).
+	test.equal(dir, path.join(global.getGitCacheDir(), "my", "repo_name-x_y"))
 end)
 
 test.it("getGitRepoDir nests namespaced names instead of flattening them", function()

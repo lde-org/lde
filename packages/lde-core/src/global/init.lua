@@ -356,12 +356,13 @@ end
 
 --- Builds the cache directory name for a git repo: <name>-<commit>.
 --- Namespaced names (ns/pkg) nest the cache dir (git/ns/pkg-<commit>) instead
---- of flattening, so they can't collide with a flat package named ns_pkg.
+--- of flattening, so they can't collide with a flat package named ns_pkg. The
+--- "/" is normalized to the OS separator so the nested path is platform-consistent.
 ---@param repoName string
 ---@param commit string
 ---@return string
 function global.getGitRepoDir(repoName, commit)
-	local safeName = (repoName:gsub("[^%w_%-/]", "_"))
+	local safeName = (repoName:gsub("[^%w_%-/]", "_"):gsub("/", path.separator))
 	return path.join(global.getGitCacheDir(), safeName .. "-" .. sanitize(commit))
 end
 
