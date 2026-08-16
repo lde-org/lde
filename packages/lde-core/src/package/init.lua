@@ -223,6 +223,23 @@ function Package:__tostring()
 	return "Package(" .. self.dir .. ")"
 end
 
+--- Merges a lockfile entry onto its config entry: lock pins (commit, resolved
+--- URLs) win, config-only fields (version for registry deps, optional, features)
+--- fill the gaps. The lock entry can't replace the config entry wholesale — a
+--- registry dep's version is only in lde.json, so makeNode would lose the
+--- source type and fail to classify it.
+---@param depInfo lde.Package.Config.Dependency
+---@param locked lde.Lockfile.Dependency
+---@return lde.Package.Config.Dependency
+local function mergeLockedEntry(depInfo, locked)
+	local merged = {}
+	for k, v in pairs(depInfo) do merged[k] = v end
+	for k, v in pairs(locked) do
+		if v ~= nil then merged[k] = v end
+	end
+	return merged
+end
+
 function Package:getDependencies()
 	local deps = self:readConfig().dependencies or {}
 
@@ -235,9 +252,7 @@ function Package:getDependencies()
 	for name, depInfo in pairs(deps) do
 		local locked = lockfile:getDependency(name)
 		if locked then
-			locked.optional = depInfo.optional
-			locked.features = depInfo.features
-			merged[name] = locked
+			merged[name] = mergeLockedEntry(depInfo, locked)
 		else
 			merged[name] = depInfo
 		end
@@ -258,9 +273,7 @@ function Package:getDevDependencies()
 	for name, depInfo in pairs(deps) do
 		local locked = lockfile:getDependency(name)
 		if locked then
-			locked.optional = depInfo.optional
-			locked.features = depInfo.features
-			merged[name] = locked
+			merged[name] = mergeLockedEntry(depInfo, locked)
 		else
 			merged[name] = depInfo
 		end

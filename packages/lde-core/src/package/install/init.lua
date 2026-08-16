@@ -51,7 +51,21 @@ end
 local function applyLock(ctx, alias, depInfo)
 	if ctx.rootLockfile then
 		local locked = ctx.rootLockfile:getDependency(alias)
-		if locked then return withConfigFlags(locked, depInfo) end
+		if locked then
+			locked = withConfigFlags(locked, depInfo)
+			-- Lock entries written before registry deps recorded their git URL only
+			-- carry a commit, so makeNode can't classify them. Fall back to the
+			-- manifest's source fields (keeping any commit pin); the dep re-resolves
+			-- and the next commit rewrites the entry correctly.
+			local entry = locked ---@type any
+			if not (entry.path or entry.git or entry.archive or entry.luarocks or entry.version) then
+				local merged = {}
+				for k, v in pairs(depInfo) do merged[k] = v end
+				if locked.commit then merged.commit = locked.commit end
+				return withConfigFlags(merged, depInfo)
+			end
+			return locked
+		end
 	end
 	-- --locked installs: the lockfile must already pin every non-path dependency.
 	-- Failing loudly instead of resolving a fresh commit/version is what keeps
@@ -118,7 +132,7 @@ end
 ---@field commit string
 ---@field tarballUrl string?
 ---@field archiveFile string?
----@field url string? -- normalized source URL (set on luarocks fallback plans)
+---@field url string? -- resolved source URL (set when the config entry doesn't carry it: luarocks fallbacks, registry deps)
 ---@field clone { repoName: string, repoUrl: string, commit: string, branch: string? }?
 
 ---@class lde.install.Node
@@ -218,6 +232,10 @@ local function makeNode(alias, depInfo, relativeTo, ctx)
 		end
 		local _, commit = lde.global.resolveRegistryVersion(portfile, depInfo.version)
 		local gitPlan = lde.global.planGitRepo(packageName, portfile.git, portfile.branch, commit)
+		-- The config entry only carries the version; the repo URL lives in the
+		-- portfile. Record it on the plan so the lockfile entry can pin the git
+		-- source (without it, a later install can't classify the dep).
+		gitPlan.url = portfile.git
 		return {
 			alias = alias,
 			depInfo = depInfo,
@@ -392,8 +410,10 @@ handlers.git = {
 	---@return lde.Lockfile.Dependency
 	lock = function(n)
 		local gitPlan = n.gitPlan --[[@as lde.install.GitPlan]]
+		-- Registry deps have no git field in their config entry; makeNode records
+		-- the resolved repo URL on the plan (gitPlan.url) so it still gets pinned.
 		return {
-			git = n.depInfo.git,
+			git = gitPlan.url or n.depInfo.git,
 			commit = gitPlan.commit,
 			branch = n.depInfo.branch,
 			name = n.depInfo.name,

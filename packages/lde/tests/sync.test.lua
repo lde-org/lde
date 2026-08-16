@@ -55,15 +55,16 @@ end
 --- A local git repo usable as an offline `git:` dependency (libgit2's
 --- lsRemote/clone both accept plain local paths). Returns the repo dir.
 ---@param name string
+---@param packageName string? # lde.json name (defaults to the dir name)
 ---@return string repoDir
-local function makeLocalGitRepo(name)
+local function makeLocalGitRepo(name, packageName)
 	local repoDir = path.join(tmpBase, name .. "-repo")
 	fs.rmdir(repoDir)
 	fs.mkdir(repoDir)
 	fs.mkdir(path.join(repoDir, "src"))
 	fs.write(path.join(repoDir, "src", "init.lua"), 'return "' .. name .. '"')
 	fs.write(path.join(repoDir, "lde.json"), json.encode({
-		name = name,
+		name = packageName or name,
 		version = "0.1.0",
 		dependencies = {}
 	}))
@@ -289,6 +290,99 @@ test.it("lde sync --production skips dev dependencies", function()
 	-- The dev dep must not be pinned into the lockfile either.
 	local lock = json.decode(fs.read(path.join(dir, "lde.lock")))
 	test.falsy(lock.dependencies["sync-prod-dev"])
+end)
+
+--
+-- Registry dependencies — resolved fully offline through a fake local registry
+--
+
+--- Writes a one-package registry into the --tree dir. The portfile's git URL
+--- points at a local repo, so the whole flow (registry lookup, clone, lockfile
+--- pinning) never touches the network.
+---@param treeDir string
+---@param repoDir string
+---@param commit string
+local function writeFakeRegistry(treeDir, repoDir, commit)
+	local registryDir = path.join(treeDir, "registry")
+	fs.mkdirAll(path.join(registryDir, "packages"))
+	fs.write(path.join(registryDir, "packages", "sync-reg-pkg.json"), json.encode({
+		name = "sync-reg-pkg",
+		description = "offline test package",
+		git = repoDir,
+		branch = "master",
+		versions = { ["1.0.0"] = commit }
+	}))
+end
+
+---@param repoDir string
+---@return string commit
+local function headCommit(repoDir)
+	local code, out = process.exec("git", { "rev-parse", "HEAD" }, { cwd = repoDir })
+	test.equal(code, 0, tostring(out))
+	return (out or ""):gsub("%s+$", "")
+end
+
+test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde sync pins the resolved git repo for a registry dep and reinstalls from it", function()
+	-- The repo's lde.json must carry the registry package name, or
+	-- findNamedPackage can't locate it after the clone.
+	local repoDir = makeLocalGitRepo("sync-reg-src", "sync-reg-pkg")
+	local commit = headCommit(repoDir)
+
+	local treeDir = path.join(tmpBase, "sync-reg-tree")
+	fs.rmdir(treeDir)
+	fs.mkdir(treeDir)
+	writeFakeRegistry(treeDir, repoDir, commit)
+
+	local dir = makeProject("sync-reg-app", { ["sync-reg-pkg"] = { version = "1.0.0" } })
+
+	local ok, out = cli({ "--tree", treeDir, "sync" }, dir)
+	test.truthy(ok, "sync failed: " .. tostring(out))
+	test.truthy(fs.exists(path.join(dir, "target", "sync-reg-pkg", "init.lua")))
+
+	-- Regression: the lock entry must pin the git repo, not just the commit.
+	-- A commit-only entry can't be classified on the next install and errors
+	-- with "Unsupported dependency type for: <alias>".
+	local lock = json.decode(fs.read(path.join(dir, "lde.lock")))
+	local entry = lock.dependencies["sync-reg-pkg"]
+	test.equal(entry.git, repoDir)
+	test.equal(entry.commit, commit)
+
+	-- Wipe target/: the pinned lock entry alone must be enough to reinstall
+	-- (no registry lookup, no network).
+	fs.rmdir(path.join(dir, "target"))
+	local ok2, out2 = cli({ "--tree", treeDir, "sync" }, dir)
+	test.truthy(ok2, "sync after target wipe failed: " .. tostring(out2))
+	test.truthy(fs.exists(path.join(dir, "target", "sync-reg-pkg", "init.lua")))
+end)
+
+test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde sync heals a stale commit-only lock entry for a registry dep", function()
+	local repoDir = makeLocalGitRepo("sync-reg-heal-src", "sync-reg-pkg")
+	local commit = headCommit(repoDir)
+
+	local treeDir = path.join(tmpBase, "sync-reg-heal-tree")
+	fs.rmdir(treeDir)
+	fs.mkdir(treeDir)
+	writeFakeRegistry(treeDir, repoDir, commit)
+
+	local dir = makeProject("sync-reg-heal-app", { ["sync-reg-pkg"] = { version = "1.0.0" } })
+
+	-- Simulate a lockfile written before registry deps recorded their git URL:
+	-- the entry carries a commit but no git field. Sync must re-resolve from
+	-- the manifest's version and rewrite the entry instead of erroring.
+	fs.write(path.join(dir, "lde.lock"), json.encode({
+		version = "1",
+		dependencies = {
+			["sync-reg-pkg"] = { commit = commit }
+		}
+	}))
+
+	local ok, out = cli({ "--tree", treeDir, "sync" }, dir)
+	test.truthy(ok, "sync with stale lock entry failed: " .. tostring(out))
+
+	local lock = json.decode(fs.read(path.join(dir, "lde.lock")))
+	local entry = lock.dependencies["sync-reg-pkg"]
+	test.equal(entry.git, repoDir, "stale lock entry should be healed with the git repo")
+	test.truthy(fs.exists(path.join(dir, "target", "sync-reg-pkg", "init.lua")))
 end)
 
 --

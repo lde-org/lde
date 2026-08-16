@@ -209,6 +209,78 @@ test.it("Package:getDevDependencies returns devDependencies from config", functi
 	test.equal(devDeps.testutil.path, "../testutil")
 end)
 
+test.it("getDependencies merges lockfile pins onto config entries without dropping the source", function()
+	local dir = makePackageDir("lock-merge-pkg", {
+		name = "lock-merge-pkg",
+		version = "0.1.0",
+		dependencies = {
+			regdep = { version = "1.0.0" },
+			gitdep = { git = "https://example.com/gitdep.git" }
+		}
+	})
+	-- A lockfile written by an old lde version: the registry dep carries only
+	-- the commit, so the config's version is all that identifies it. Replacing
+	-- the config entry wholesale here is what made makeNode fail with
+	-- "Unsupported dependency type" on the next install.
+	fs.write(path.join(dir, "lde.lock"), json.encode({
+		version = "1",
+		dependencies = {
+			regdep = { commit = "abc123" },
+			gitdep = { git = "https://example.com/gitdep.git", commit = "def456" }
+		}
+	}))
+
+	local pkg = lde.Package.open(dir)
+	local deps = pkg:getDependencies()
+	-- The config's source field must survive the merge.
+	test.equal(deps.regdep.version, "1.0.0")
+	-- Lock pins are still applied.
+	test.equal(deps.regdep.commit, "abc123")
+	test.equal(deps.gitdep.git, "https://example.com/gitdep.git")
+	test.equal(deps.gitdep.commit, "def456")
+end)
+
+test.it("getDependencies keeps config-only flags when merging lock entries", function()
+	local dir = makePackageDir("lock-flag-pkg", {
+		name = "lock-flag-pkg",
+		version = "0.1.0",
+		dependencies = {
+			optdep = { path = "../optdep", optional = true, features = { "linux" } }
+		}
+	})
+	fs.write(path.join(dir, "lde.lock"), json.encode({
+		version = "1",
+		dependencies = {
+			optdep = { path = "../optdep" }
+		}
+	}))
+
+	local deps = lde.Package.open(dir):getDependencies()
+	test.equal(deps.optdep.path, "../optdep")
+	test.equal(deps.optdep.optional, true)
+	test.deepEqual(deps.optdep.features, { "linux" })
+end)
+
+test.it("getDevDependencies merges lockfile pins onto config entries", function()
+	local dir = makePackageDir("devlock-merge-pkg", {
+		name = "devlock-merge-pkg",
+		version = "0.1.0",
+		devDependencies = {
+			regdep = { version = "2.0.0" }
+		}
+	})
+	fs.write(path.join(dir, "lde.lock"), json.encode({
+		version = "1",
+		dependencies = {
+			regdep = { commit = "beef123" }
+		}
+	}))
+
+	local devDeps = lde.Package.open(dir):getDevDependencies()
+	test.equal(devDeps.regdep.version, "2.0.0")
+	test.equal(devDeps.regdep.commit, "beef123")
+end)
+
 --
 -- Package:__tostring
 --
