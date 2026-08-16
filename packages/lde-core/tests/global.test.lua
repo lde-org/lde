@@ -24,9 +24,16 @@ test.it("getGitRepoDir combines sanitized repo name and commit", function()
 	test.equal(dir, path.join(global.getGitCacheDir(), "middleclass-abc123"))
 end)
 
-test.it("getGitRepoDir sanitizes unsafe characters", function()
+test.it("getGitRepoDir sanitizes unsafe characters but keeps namespace slashes", function()
 	local dir = global.getGitRepoDir("my/repo name", "x y")
-	test.truthy(dir:find("my_repo_name%-x_y$"))
+	-- Space -> _, "-" separator, but the "/" is preserved so namespaced
+	-- names nest their cache dirs instead of flattening.
+	test.truthy(dir:find("my/repo_name%-x_y$"))
+end)
+
+test.it("getGitRepoDir nests namespaced names instead of flattening them", function()
+	local dir = global.getGitRepoDir("ns/pkg", "abc123")
+	test.equal(dir, path.join(global.getGitCacheDir(), "ns", "pkg-abc123"))
 end)
 
 test.it("getArchiveDir keys the tar cache by sanitized URL", function()
