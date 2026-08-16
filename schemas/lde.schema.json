@@ -163,7 +163,9 @@
 	"properties": {
 		"name": {
 			"type": "string",
-			"description": "Package name"
+			"pattern": "^(?:[a-z][a-z0-9_-]{1,}[a-z0-9]/)?[a-z](?:[a-z0-9_-]*[a-z0-9])?$",
+			"maxLength": 128,
+			"description": "Package name (optionally namespaced as ns/name; matches the registry naming rules)"
 		},
 		"version": {
 			"type": "string",

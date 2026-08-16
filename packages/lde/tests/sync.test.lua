@@ -298,15 +298,21 @@ end)
 
 --- Writes a one-package registry into the --tree dir. The portfile's git URL
 --- points at a local repo, so the whole flow (registry lookup, clone, lockfile
---- pinning) never touches the network.
+--- pinning) never touches the network. When `ns` is given, the package is
+--- stored namespaced at packages/<ns>/sync-reg-pkg.json.
 ---@param treeDir string
 ---@param repoDir string
 ---@param commit string
-local function writeFakeRegistry(treeDir, repoDir, commit)
+---@param ns string?
+local function writeFakeRegistry(treeDir, repoDir, commit, ns)
 	local registryDir = path.join(treeDir, "registry")
-	fs.mkdirAll(path.join(registryDir, "packages"))
-	fs.write(path.join(registryDir, "packages", "sync-reg-pkg.json"), json.encode({
-		name = "sync-reg-pkg",
+	local pkgName = ns and (ns .. "/sync-reg-pkg") or "sync-reg-pkg"
+	local pkgPath = ns
+		and path.join(registryDir, "packages", ns, "sync-reg-pkg.json")
+		or path.join(registryDir, "packages", "sync-reg-pkg.json")
+	fs.mkdirAll(path.dirname(pkgPath))
+	fs.write(pkgPath, json.encode({
+		name = pkgName,
 		description = "offline test package",
 		git = repoDir,
 		branch = "master",
@@ -383,6 +389,39 @@ test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde sync heals a stale commit-only 
 	local entry = lock.dependencies["sync-reg-pkg"]
 	test.equal(entry.git, repoDir, "stale lock entry should be healed with the git repo")
 	test.truthy(fs.exists(path.join(dir, "target", "sync-reg-pkg", "init.lua")))
+end)
+
+test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde sync installs a namespaced registry dependency", function()
+	-- The repo's lde.json must carry the full namespaced name, or
+	-- findNamedPackage can't locate it after the clone.
+	local repoDir = makeLocalGitRepo("sync-reg-ns-src", "ns-owner/sync-reg-pkg")
+	local commit = headCommit(repoDir)
+
+	local treeDir = path.join(tmpBase, "sync-reg-ns-tree")
+	fs.rmdir(treeDir)
+	fs.mkdir(treeDir)
+	writeFakeRegistry(treeDir, repoDir, commit, "ns-owner")
+
+	local dir = makeProject("sync-reg-ns-app", { ["ns-owner/sync-reg-pkg"] = { version = "1.0.0" } })
+
+	local ok, out = cli({ "--tree", treeDir, "sync" }, dir)
+	test.truthy(ok, "sync failed: " .. tostring(out))
+
+	-- The namespaced alias materializes as a nested target dir and require
+	-- name (target/ns-owner/sync-reg-pkg, i.e. ns-owner.sync-reg-pkg).
+	test.truthy(fs.exists(path.join(dir, "target", "ns-owner", "sync-reg-pkg", "init.lua")))
+
+	local lock = json.decode(fs.read(path.join(dir, "lde.lock")))
+	local entry = lock.dependencies["ns-owner/sync-reg-pkg"]
+	test.equal(entry.git, repoDir)
+	test.equal(entry.commit, commit)
+
+	-- Wipe target/: the pinned lock entry alone must be enough to reinstall
+	-- (no registry lookup, no network).
+	fs.rmdir(path.join(dir, "target"))
+	local ok2, out2 = cli({ "--tree", treeDir, "sync" }, dir)
+	test.truthy(ok2, "sync after target wipe failed: " .. tostring(out2))
+	test.truthy(fs.exists(path.join(dir, "target", "ns-owner", "sync-reg-pkg", "init.lua")))
 end)
 
 --

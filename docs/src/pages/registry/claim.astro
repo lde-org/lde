@@ -1,0 +1,46 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import ClaimNamespace from "../../components/ClaimNamespace.tsx";
+---
+
+<Layout
+	title="Claim a namespace"
+	description="Claim a namespace in the lde registry."
+>
+	<div class="max-w-3xl mx-auto px-4 sm:px-6 py-16 w-full">
+		<a
+			href="/registry/"
+			class="inline-flex items-center gap-1.5 text-sm text-black/50 dark:text-white/50 hover:text-blue-500 transition-colors mb-8"
+		>
+			<svg
+				xmlns="http://www.w3.org/2000/svg"
+				class="size-3.5"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2.5"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+			>
+				<polyline points="15 18 9 12 15 6" />
+			</svg>
+			Registry
+		</a>
+
+		<h1 class="text-4xl font-bold tracking-tight">Claim a namespace</h1>
+		<p class="mt-4 text-black/60 dark:text-white/60 leading-relaxed max-w-2xl">
+			Namespaces are a way to organize packages under a single owner. They
+			allow you to easily create and manage your own packages, and ensure
+			that users of your projects know to trust those owned by yourself.
+		</p>
+		<p class="mt-3 text-black/60 dark:text-white/60 leading-relaxed max-w-2xl">
+			Creating a namespace will involve you creating an issue to the official
+			lde registry GitHub, which will then be approved or denied by a
+			moderator.
+		</p>
+
+		<div class="mt-10 max-w-xl">
+			<ClaimNamespace client:load />
+		</div>
+	</div>
+</Layout>

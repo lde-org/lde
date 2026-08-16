@@ -319,8 +319,8 @@ export default function Registry() {
 				)}
 			</div>
 
-			{/* Publish CTA */}
-			<div class="flex justify-center mb-24">
+			{/* Publish CTA + namespace request */}
+			<div class="flex flex-wrap items-center justify-center gap-4 mb-24">
 				<a
 					href="/registry/publish/"
 					class="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium bg-blue-600 text-white hover:bg-blue-500 transition"
@@ -339,6 +339,25 @@ export default function Registry() {
 						<path d="M12 5v14" />
 					</svg>
 					Publish a package
+				</a>
+				<a
+					href="/registry/claim/"
+					class="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium border border-blue-600/40 text-blue-600 dark:text-blue-400 hover:bg-blue-600/10 hover:border-blue-600/60 transition"
+				>
+					<svg
+						aria-hidden="true"
+						xmlns="http://www.w3.org/2000/svg"
+						class="size-4"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					>
+						<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />
+					</svg>
+					Claim a namespace
 				</a>
 			</div>
 

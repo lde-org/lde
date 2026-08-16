@@ -14,8 +14,10 @@ local function add(args)
 	local name, versionFromName = rawName:match("^([^@]+)@(.+)$")
 	if not name then name = rawName end
 
-	-- Strip registry prefix (e.g. rocks:foo -> foo)
-	name = name:match("^[^:]+:(.+)$") or name
+	-- Strip only the rocks: prefix (e.g. rocks:foo -> foo). Other prefixes are
+	-- not real; a namespaced package is ns/foo, so "ns:foo" must fail
+	-- validation below instead of silently becoming "foo".
+	name = name:match("^rocks:(.+)$") or name
 
 	---@type ("git" | "path")?, string?
 	local depType, depValue

@@ -89,6 +89,14 @@ local function publish(args)
 	local config = pkg:readConfig()
 	local pkgDir = pkg:getDir()
 
+	-- The registry enforces strict naming rules; fail here instead of letting
+	-- the browser submit an issue that the bot would reject.
+	local nameErr = lde.global.validatePackageName(config.name)
+	if nameErr then
+		ansi.printf("{red}Cannot publish: %s", nameErr)
+		return
+	end
+
 	local repo, repoErr = git2.open(pkgDir)
 	if not repo then
 		ansi.printf("{red}Could not open git repository: %s", repoErr or "unknown error")
@@ -135,8 +143,12 @@ local function publish(args)
 
 	local portfileJson = json.encode(portfile)
 	local filename = "packages/" .. config.name .. ".json"
+	-- Keep the "/" of namespaced names (packages/ns/pkg.json) unencoded so
+	-- GitHub's file-create page creates the nested directory instead of a
+	-- single file whose name contains a literal %2F.
+	local encodedFilename = urlEncode(filename):gsub("%%2F", "/")
 	local url = REGISTRY_REPO .. "/new/master"
-		.. "?filename=" .. urlEncode(filename)
+		.. "?filename=" .. encodedFilename
 		.. "&value=" .. urlEncode(portfileJson)
 
 	ansi.printf("{green}Opening browser to submit {cyan}%s@%s{reset} to the registry...", config.name, config.version)

@@ -83,7 +83,8 @@ end
 local function downloadTarball(url, commit, hostType, repoDir, label)
 	local tarballUrl = buildTarballUrl(url, commit, hostType)
 	local bar = lde.verbose and ansi.progress("Downloading " .. label) or nil
-	fs.mkdir(repoDir)
+	-- mkdirAll: namespaced names nest the cache dir (git/ns/pkg-<commit>).
+	fs.mkdirAll(repoDir)
 
 	local archiveFile = repoDir .. ".archive"
 
@@ -245,11 +246,73 @@ function global.syncRegistry()
 	end
 end
 
+--- Validates a package name against the lde registry naming rules (mirrors
+--- schemas/registry.schema.json in the lde-org/registry repo):
+---
+---   * flat ("foo") or exactly one namespace level ("ns/foo")
+---   * lowercase only; parts use a-z, 0-9, _ and - (no dots, no "..")
+---   * each part starts with a letter and ends with a letter or digit
+---   * the namespace part is at least 3 characters
+---   * the full name is at most 128 characters
+---
+---@param name string
+---@return string? err # nil when the name is valid
+function global.validatePackageName(name)
+	if type(name) ~= "string" or name == "" then
+		return "package name cannot be empty"
+	end
+	if #name > 128 then
+		return "package name '" .. name .. "' is too long (max 128 characters)"
+	end
+	if name:find("..", 1, true) then
+		return "package name '" .. name .. "' is invalid: must not contain '..'"
+	end
+	if name:sub(1, 1) == "/" or name:sub(-1) == "/" then
+		return "package name '" .. name .. "' is invalid: must not start or end with '/'"
+	end
+
+	local ns, pkg = name:match("^([^/]+)/([^/]+)$")
+	if not ns then
+		pkg = name
+		if name:find("/", 1, true) then
+			return "package name '" .. name .. "' is invalid: a namespace is exactly one level deep (e.g. ns/foo)"
+		end
+	end
+
+	---@param part string
+	---@return boolean
+	local function partValid(part)
+		return part:match("^[a-z][a-z0-9_-]*[a-z0-9]$") ~= nil
+			or part:match("^[a-z]$") ~= nil
+	end
+
+	if not partValid(pkg) then
+		return "package name '" .. name .. "' is invalid: it must be lowercase, start with a letter, end with a letter or digit, and contain only a-z, 0-9, _ and -"
+	end
+	if ns then
+		if #ns < 3 then
+			return "namespace '" .. ns .. "' must be at least 3 characters"
+		end
+		if not partValid(ns) then
+			return "namespace '" .. ns .. "' is invalid: it must be lowercase, start with a letter, end with a letter or digit, and contain only a-z, 0-9, _ and -"
+		end
+	end
+	return nil
+end
+
 ---@param name string
 ---@return lde.Portfile?
 ---@return string? err
 function global.lookupRegistryPackage(name)
-	local portfilePath = path.join(global.getRegistryDir(), "packages", name .. ".json")
+	local nameErr = global.validatePackageName(name)
+	if nameErr then
+		return nil, "Invalid package name '" .. tostring(name) .. "': " .. nameErr
+	end
+
+	-- Namespaced names (ns/foo) live at packages/ns/foo.json; split on "/" and
+	-- re-join with the OS separator so nested lookups work on Windows too.
+	local relPath = (name:gsub("/", path.separator))
+	local portfilePath = path.join(global.getRegistryDir(), "packages", relPath .. ".json")
 	local content = fs.read(portfilePath)
 	if not content then
 		return nil, "Package '" .. name .. "' not found in lde registry"
@@ -292,11 +355,14 @@ function global.resolveRegistryVersion(portfile, version)
 end
 
 --- Builds the cache directory name for a git repo: <name>-<commit>.
+--- Namespaced names (ns/pkg) nest the cache dir (git/ns/pkg-<commit>) instead
+--- of flattening, so they can't collide with a flat package named ns_pkg.
 ---@param repoName string
 ---@param commit string
 ---@return string
 function global.getGitRepoDir(repoName, commit)
-	return path.join(global.getGitCacheDir(), sanitize(repoName) .. "-" .. sanitize(commit))
+	local safeName = (repoName:gsub("[^%w_%-/]", "_"))
+	return path.join(global.getGitCacheDir(), safeName .. "-" .. sanitize(commit))
 end
 
 --- Shallow (depth=1) clone without submodules. `branch` may be nil (default
@@ -313,6 +379,10 @@ end
 ---@return any? repo
 ---@return string? err
 local function shallowClone(repoUrl, repoDir, branch, progress)
+	-- Namespaced repo names nest the cache dir (git/ns/pkg-<commit>); libgit2
+	-- does not create missing parents, so make sure they exist up front.
+	local parent = path.dirname(repoDir)
+	if not fs.isdir(parent) then fs.mkdirAll(parent) end
 	local repo, err = git2().clone(repoUrl, repoDir, branch, 1, progress)
 	if not repo and branch then
 		repo, err = git2().clone(repoUrl, repoDir, nil, 1, progress)
@@ -444,6 +514,10 @@ function global.planGitRepo(repoName, repoUrl, branch, commit)
 	end
 
 	local repoDir = global.getGitRepoDir(repoName, commit)
+	-- The parallel download writes the tarball to repoDir .. ".archive", so the
+	-- (possibly nested, for namespaced names) parent must already exist.
+	local parent = path.dirname(repoDir)
+	if not fs.isdir(parent) then fs.mkdirAll(parent) end
 	local plan = { dir = repoDir, commit = commit }
 
 	if not fs.exists(repoDir) then
