@@ -14,7 +14,7 @@ const tabs: { id: string; label: string; lines: Line[] }[] = [
 		label: "lde help",
 		lines: [
 			{ type: "cmd", text: "lde help" },
-			{ type: "out", text: `${E}34m${E}1mlde${E}0m is a package manager for Lua, written in Lua. ${E}90m(0.10.0-nightly+e63539d)` },
+			{ type: "out", text: `${E}34m${E}1mlde${E}0m is a package manager for Lua, written in Lua. ${E}90m(0.10.0)` },
 			{ type: "blank" },
 			{ type: "out", text: `${E}1mUsage:${E}0m lde <command> ${E}35m[options]${E}0m` },
 			{ type: "blank" },
@@ -335,7 +335,7 @@ export default function TerminalDemo() {
 	}
 
 	return (
-		<div class="w-[620px] border border-black/10 dark:border-white/10 bg-gray-100 dark:bg-[#0a0a0f] overflow-hidden font-mono text-xs">
+		<div class="w-[640px] border border-black/10 dark:border-white/10 bg-gray-100 dark:bg-[#0a0a0f] overflow-hidden font-mono text-sm">
 			{/* Tabs */}
 			<div class="flex border-b border-black/10 dark:border-white/10 bg-gray-200 dark:bg-[#111118]">
 				{tabs.map((tab) => (

@@ -5,6 +5,7 @@ import InstallTabs from "../components/InstallTabs";
 import TerminalDemo from "../components/TerminalDemo";
 import { GITHUB_RELEASES_URL, GITHUB_URL } from "../data/info";
 import BenchmarkChart from "../components/BenchmarkChart";
+import ComparisonTable from "../components/ComparisonTable";
 import { getCollection } from "astro:content";
 
 const posts = (await getCollection("blog")).sort(
@@ -137,16 +138,15 @@ const features = [
 					</a>
 				)}
 
-				<h1 class="text-5xl md:text-6xl xl:text-7xl font-semibold tracking-tight leading-[1.05]">
+				<h1 class="text-5xl md:text-6xl xl:text-7xl font-extrabold tracking-tight leading-[1.05]">
 					Lua Done{" "}
-					<span class="relative inline-block">
+					<span class="relative text-blue-600 inline-block">
 						Easy
-						<span class="absolute inset-x-0 bottom-1 -z-10 h-[3px] bg-blue-600"></span>
 					</span>
 				</h1>
 
-				<p class="mt-6 text-xl text-black/60 dark:text-white/80 leading-relaxed max-w-lg">
-					A cross platform package manager, runtime, test runner and compiler to turn your programs into &lt; <span class="text-black/80 dark:text-white/80 font-medium">1mB</span>  binaries.
+				<p class="mt-6 text-xl text-black/60 dark:text-white/80 leading-snug max-w-lg">
+					A cross platform <a href="/docs/package-manager/getting-started/quick-start" class="text-blue-500 dark:text-blue-400 underline underline-offset-2 decoration-blue-500/40 dark:decoration-blue-400/40 hover:text-blue-400 dark:hover:text-blue-300 transition-colors">package manager</a>, <a href="/docs/runtime/getting-started/runtime" class="text-blue-500 dark:text-blue-400 underline underline-offset-2 decoration-blue-500/40 dark:decoration-blue-400/40 hover:text-blue-400 dark:hover:text-blue-300 transition-colors">runtime</a>, test runner and <a href="/docs/bundler/getting-started/single-file-apps" class="text-blue-500 dark:text-blue-400 underline underline-offset-2 decoration-blue-500/40 dark:decoration-blue-400/40 hover:text-blue-400 dark:hover:text-blue-300 transition-colors">compiler</a> to turn your lua into &lt;<span class="text-black/80 dark:text-white/80 font-medium">1mB</span> programs.
 				</p>
 
 				<div class="mt-8 w-full">
@@ -221,141 +221,7 @@ const features = [
 				</p>
 			</div>
 
-			{/* Desktop table */}
-			<div class="hidden sm:block overflow-x-auto">
-				<div>
-				<table class="w-full text-sm">
-					<thead>
-						<tr>
-							<th scope="col" class="text-left px-6 py-4 font-medium text-black/35 dark:text-white/25 w-[40%]"></th>
-							<th scope="col" class="text-center px-6 py-4 font-semibold text-blue-400">
-								<span class="inline-flex items-center gap-2 text-[0.8125rem] font-brand">
-									<img src="/lde-nospace.svg" class="h-5 opacity-90" alt="" />
-									lde
-								</span>
-							</th>
-							<th scope="col" class="text-center px-6 py-4 font-medium text-black/60 dark:text-white/50">luarocks</th>
-							<th scope="col" class="text-center px-6 py-4 font-medium text-black/60 dark:text-white/50">lux</th>
-						</tr>
-					</thead>
-					<tbody>
-						{comparison.map(({ feature, href, subtitle, values: cols }) => {
-							const external = href.startsWith("http");
-							return (
-							<tr class="border-t border-black/[0.05] dark:border-white/[0.06] transition-colors">
-								<th scope="row" class="px-6 py-4 text-sm font-medium text-left">
-									<a
-										href={href}
-										target={external ? "_blank" : undefined}
-										rel={external ? "noopener noreferrer" : undefined}
-										class="inline-flex items-center gap-1.5 text-black/70 dark:text-white/65 hover:text-blue-500 dark:hover:text-blue-400 transition-colors"
-									>
-										{feature}
-										{external ? (
-											<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" class="opacity-45">
-												<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-												<polyline points="15 3 21 3 21 9"></polyline>
-												<line x1="10" y1="14" x2="21" y2="3"></line>
-											</svg>
-										) : (
-											<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" class="opacity-45">
-												<path d="M7 17 17 7"></path>
-												<path d="M7 7h10v10"></path>
-											</svg>
-										)}
-									</a>
-									{subtitle && <div class="mt-1 text-xs text-black/40 dark:text-white/30">{subtitle}</div>}
-								</th>
-								{cols.map((val, i) => {
-									const blue = i === 0;
-									const base = `px-6 py-4 align-middle text-center ${blue ? "text-blue-400 font-medium" : "text-black/70 dark:text-white/55"}`;
-									if (val === "y") return <td class={base}><span class="inline-flex size-7 items-center justify-center rounded-full bg-emerald-500/14 text-emerald-700 dark:text-emerald-300 ring-1 ring-emerald-600/20 dark:ring-emerald-400/20"><svg xmlns="http://www.w3.org/2000/svg" class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span></td>;
-									if (val === "n") return <td class={base}><span class="inline-flex size-7 items-center justify-center rounded-full bg-red-500/12 text-red-700 dark:text-red-300 ring-1 ring-red-600/20 dark:ring-red-400/20"><svg xmlns="http://www.w3.org/2000/svg" class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></span></td>;
-									if (val === "wip") return <td class={base}><span class="inline-flex size-7 items-center justify-center rounded-full bg-amber-500/18 text-amber-800 dark:text-amber-300 ring-1 ring-amber-600/20 dark:ring-amber-400/20"><svg xmlns="http://www.w3.org/2000/svg" class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg></span></td>;
-									if (val.startsWith("y:")) return (
-										<td class={base}>
-											<span title={val.slice(2)} class="inline-flex size-7 items-center justify-center rounded-full bg-emerald-500/14 text-emerald-700 dark:text-emerald-300 ring-1 ring-emerald-600/20 dark:ring-emerald-400/20">
-												<svg xmlns="http://www.w3.org/2000/svg" class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-											</span>
-										</td>
-									);
-									if (val.startsWith("a:")) return (
-										<td class={base}>
-											<a href={href} class="inline-flex items-center gap-1.5 text-blue-500 dark:text-blue-400 hover:underline transition-colors">
-												{val.slice(2)}
-												<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" class="opacity-45">
-													<path d="M7 17 17 7"></path>
-													<path d="M7 7h10v10"></path>
-												</svg>
-											</a>
-										</td>
-									);
-									return <td class={base}><span class={blue ? "text-blue-300" : ""}>{val}</span></td>;
-								})}
-							</tr>
-							);
-						})}
-					</tbody>
-				</table>
-				</div>
-			</div>
-
-			{/* Mobile rows */}
-			<div class="sm:hidden divide-y divide-black/[0.06] dark:divide-white/[0.06]">
-				{comparison.map(({ feature, href, subtitle, values: [lde, luarocks, lux] }) => {
-					const external = href.startsWith("http");
-					const renderVal = (val: string, blue = false) => {
-						const cls = blue ? "text-blue-500 dark:text-blue-400 font-semibold" : "text-black/65 dark:text-white/55";
-						if (val === "y") return <span class="text-emerald-700 dark:text-emerald-300 font-bold">Yes</span>;
-						if (val === "n") return <span class="text-red-700 dark:text-red-300 font-bold">No</span>;
-						if (val === "wip") return <svg xmlns="http://www.w3.org/2000/svg" class="size-4 text-amber-800 dark:text-amber-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>;
-						if (val.startsWith("y:")) return <span title={val.slice(2)} class="text-emerald-700 dark:text-emerald-300 font-bold">Yes</span>;
-						if (val.startsWith("a:")) return <a href={href} class="text-blue-500 dark:text-blue-400 font-semibold underline">{val.slice(2)}</a>;
-						return <span class={cls}>{val}</span>;
-					};
-					return (
-						<div class="py-4">
-							<p class="mb-3">
-								<a
-									href={href}
-									target={external ? "_blank" : undefined}
-									rel={external ? "noopener noreferrer" : undefined}
-									class="inline-flex items-center gap-1.5 text-sm font-medium text-black/75 dark:text-white/65 hover:text-blue-500 dark:hover:text-blue-400 transition-colors"
-								>
-									{feature}
-									{external ? (
-										<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" class="opacity-45">
-											<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-											<polyline points="15 3 21 3 21 9"></polyline>
-											<line x1="10" y1="14" x2="21" y2="3"></line>
-										</svg>
-									) : (
-										<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" class="opacity-45">
-											<path d="M7 17 17 7"></path>
-											<path d="M7 7h10v10"></path>
-										</svg>
-									)}
-								</a>
-							</p>
-							{subtitle && <p class="mb-3 text-xs text-black/40 dark:text-white/30">{subtitle}</p>}
-							<div class="grid grid-cols-3 gap-3 text-sm">
-								<div class="flex flex-col gap-1 items-center text-center">
-									<span class="text-[10px] text-blue-500 dark:text-blue-400 font-semibold font-brand">lde</span>
-									{renderVal(lde as string, true)}
-								</div>
-								<div class="flex flex-col gap-1 items-center text-center">
-									<span class="text-[10px] text-black/35 dark:text-white/25">luarocks</span>
-									{renderVal(luarocks as string)}
-								</div>
-								<div class="flex flex-col gap-1 items-center text-center">
-									<span class="text-[10px] text-black/35 dark:text-white/25">lux</span>
-									{renderVal(lux as string)}
-								</div>
-							</div>
-						</div>
-					);
-				})}
-			</div>
+			<ComparisonTable rows={comparison} client:idle />
 		</div>
 	</section>
 
