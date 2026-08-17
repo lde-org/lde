@@ -24,16 +24,19 @@ local function remove(args)
 	end
 
 	local config = json.decode(configRaw)
-	if not config.dependencies then
-		config.dependencies = {}
-	end
 
-	if not config.dependencies[name] then
+	-- A dependency may live in either runtime `dependencies` or `devDependencies`;
+	-- remove the name from whichever table(s) hold it.
+	local inDeps = config.dependencies and config.dependencies[name] ~= nil
+	local inDevDeps = config.devDependencies and config.devDependencies[name] ~= nil
+
+	if not inDeps and not inDevDeps then
 		ansi.printf("{yellow}Dependency does not exist: %s", name)
 		return
 	end
 
-	json.removeField(config.dependencies, name)
+	if inDeps then json.removeField(config.dependencies, name) end
+	if inDevDeps then json.removeField(config.devDependencies, name) end
 
 	fs.write(configPath, json.encode(config))
 
@@ -45,7 +48,11 @@ local function remove(args)
 
 	fs.delete(path.join(pkg:getModulesDir(), ".installed"))
 
-	ansi.printf("{green}Removed dependency: %s", name)
+	if inDeps then
+		ansi.printf("{green}Removed dependency: %s", name)
+	else
+		ansi.printf("{green}Removed dev dependency: %s", name)
+	end
 end
 
 return remove

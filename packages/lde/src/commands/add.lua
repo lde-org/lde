@@ -7,8 +7,14 @@ local lde = require("lde-core")
 
 ---@param args clap.Args
 local function add(args)
-	local rawName = assert(args:pop(), "Usage: lde add <name>[@<version>] --path <path> | --git <url>")
+	-- Consume flags/options before popping the positional name so
+	-- `lde add --dev foo` parses the same as `lde add foo --dev`.
 	local isDevelopment = args:flag("dev")
+
+	local gitUrl = args:option("git")
+	local pathValue = args:option("path")
+
+	local rawName = assert(args:pop(), "Usage: lde add <name>[@<version>] --path <path> | --git <url>")
 
 	-- Support lde add <name>@<version> syntax
 	local name, versionFromName = rawName:match("^([^@]+)@(.+)$")
@@ -21,9 +27,6 @@ local function add(args)
 
 	---@type ("git" | "path")?, string?
 	local depType, depValue
-
-	local gitUrl = args:option("git")
-	local pathValue = args:option("path")
 
 	if gitUrl then
 		depType = "git"

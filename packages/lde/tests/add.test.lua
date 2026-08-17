@@ -127,6 +127,45 @@ test.it("lde add --dev removes stale lockfile entry", function()
 	test.falsy(lock.dependencies["mydevpkg"], "stale lockfile entry should be removed after lde add --dev")
 end)
 
+test.it("lde add --dev <name> resolves a registry dep into devDependencies", function()
+	-- Fully offline: the fake registry's portfile points at a local repo, and
+	-- `lde add` only resolves the version — the clone happens later on sync.
+	local repoDir = path.join(tmpBase, "add-dev-reg-repo")
+	fs.rmdir(repoDir)
+	fs.mkdir(repoDir)
+	fs.mkdir(path.join(repoDir, "src"))
+	fs.write(path.join(repoDir, "src", "init.lua"), 'return "add-dev-reg"')
+	fs.write(path.join(repoDir, "lde.json"), json.encode({
+		name = "add-dev-reg",
+		version = "0.1.0",
+		dependencies = {}
+	}))
+
+	local treeDir = path.join(tmpBase, "add-dev-reg-tree")
+	fs.rmdir(treeDir)
+	fs.mkdir(treeDir)
+	fs.mkdirAll(path.join(treeDir, "registry", "packages"))
+	fs.write(path.join(treeDir, "registry", "packages", "add-dev-reg.json"), json.encode({
+		name = "add-dev-reg",
+		description = "offline test package",
+		git = repoDir,
+		branch = "master",
+		versions = { ["1.0.0"] = "1111111", ["2.0.0"] = "2222222" }
+	}))
+
+	local dir = makeProject("add-dev-reg-test")
+	local ok, out = ldecli({ "--tree", treeDir, "add", "--dev", "add-dev-reg" }, dir)
+	test.truthy(ok, "lde add --dev failed: " .. tostring(out))
+
+	local config = json.decode(fs.read(path.join(dir, "lde.json")))
+	test.truthy(config.devDependencies, "devDependencies should exist")
+	local dep = config.devDependencies["add-dev-reg"]
+	test.truthy(dep, "add-dev-reg should be in devDependencies")
+	test.equal(dep.version, "2.0.0", "latest registry version should be resolved")
+	test.falsy(config.dependencies and config.dependencies["add-dev-reg"], "add-dev-reg should not be in dependencies")
+	test.includes(out, "dev dependency")
+end)
+
 test.it("lde add removes the dep entry from lde.lock if present", function()
 	local dir = makeProject("add-lockfile-test")
 	fs.write(path.join(dir, "lde.lock"), json.encode({
