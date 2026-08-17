@@ -224,6 +224,7 @@ test.it("getDependencies merges lockfile pins onto config entries without droppi
 	-- "Unsupported dependency type" on the next install.
 	fs.write(path.join(dir, "lde.lock"), json.encode({
 		version = "1",
+		manifestHash = lde.Lockfile.manifestHash(json.decode(fs.read(path.join(dir, "lde.json")))),
 		dependencies = {
 			regdep = { commit = "abc123" },
 			gitdep = { git = "https://example.com/gitdep.git", commit = "def456" }
@@ -250,6 +251,7 @@ test.it("getDependencies keeps config-only flags when merging lock entries", fun
 	})
 	fs.write(path.join(dir, "lde.lock"), json.encode({
 		version = "1",
+		manifestHash = lde.Lockfile.manifestHash(json.decode(fs.read(path.join(dir, "lde.json")))),
 		dependencies = {
 			optdep = { path = "../optdep" }
 		}
@@ -271,6 +273,7 @@ test.it("getDevDependencies merges lockfile pins onto config entries", function(
 	})
 	fs.write(path.join(dir, "lde.lock"), json.encode({
 		version = "1",
+		manifestHash = lde.Lockfile.manifestHash(json.decode(fs.read(path.join(dir, "lde.json")))),
 		dependencies = {
 			regdep = { commit = "beef123" }
 		}
@@ -279,6 +282,30 @@ test.it("getDevDependencies merges lockfile pins onto config entries", function(
 	local devDeps = lde.Package.open(dir):getDevDependencies()
 	test.equal(devDeps.regdep.version, "2.0.0")
 	test.equal(devDeps.regdep.commit, "beef123")
+end)
+
+test.it("getDependencies skips stale lockfile pins when the manifest changed", function()
+	local dir = makePackageDir("lock-stale-pkg", {
+		name = "lock-stale-pkg",
+		version = "0.1.0",
+		dependencies = {
+			regdep = { version = "1.0.0" }
+		}
+	})
+	-- The lockfile pins the dep's old (git) form; the manifest now declares it
+	-- as a registry dep. The stale pin must not leak into the config entry —
+	-- the lockfile was resolved from different declarations.
+	fs.write(path.join(dir, "lde.lock"), json.encode({
+		version = "1",
+		dependencies = {
+			regdep = { git = "https://example.com/old.git", commit = "abc123" }
+		}
+	}))
+
+	local deps = lde.Package.open(dir):getDependencies()
+	test.equal(deps.regdep.version, "1.0.0")
+	test.falsy(deps.regdep.git, "stale git pin must not override the manifest's registry declaration")
+	test.falsy(deps.regdep.commit)
 end)
 
 --

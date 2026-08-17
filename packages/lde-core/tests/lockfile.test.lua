@@ -85,3 +85,52 @@ test.it("Lockfile:save produces valid JSON", function()
 	local decoded = json.decode(content)
 	test.match(decoded, { version = "1", dependencies = { mylib = { path = "../mylib" } } })
 end)
+
+test.it("Lockfile.manifestHash is stable and tracks the dependency declarations", function()
+	local config = {
+		dependencies = {
+			a = { git = "https://example.com/a.git" },
+			b = { version = "1.0.0" }
+		}
+	}
+
+	local h1 = lde.Lockfile.manifestHash(config)
+	test.equal(h1, lde.Lockfile.manifestHash(config))
+
+	-- Key order in a hand-built table must not matter (json.encode sorts).
+	local reordered = {
+		dependencies = {
+			b = { version = "1.0.0" },
+			a = { git = "https://example.com/a.git" }
+		}
+	}
+	test.equal(h1, lde.Lockfile.manifestHash(reordered))
+
+	-- Changing a declaration must change the hash.
+	config.dependencies.b.version = "2.0.0"
+	test.falsy(h1 == lde.Lockfile.manifestHash(config))
+
+	-- devDependencies and features are part of the hash too.
+	config.devDependencies = { dev = { path = "../dev" } }
+	test.falsy(h1 == lde.Lockfile.manifestHash(config))
+	config.devDependencies = nil
+	config.features = { linux = { "winapi" } }
+	test.falsy(h1 == lde.Lockfile.manifestHash(config))
+end)
+
+test.it("Lockfile:isStale flags missing and mismatched manifest hashes", function()
+	local lockPath = path.join(tmpBase, "stale-check.json")
+	local config = { dependencies = { foo = { version = "1.0.0" } } }
+
+	-- Lockfiles written before manifest hashing existed are stale.
+	local lf = lde.Lockfile.new(lockPath, {})
+	test.truthy(lf:isStale(config))
+
+	-- A matching hash means the pins are trustworthy.
+	lf:setManifestHash(lde.Lockfile.manifestHash(config))
+	test.falsy(lf:isStale(config))
+
+	-- Editing the manifest invalidates the lockfile again.
+	config.dependencies.foo.version = "2.0.0"
+	test.truthy(lf:isStale(config))
+end)

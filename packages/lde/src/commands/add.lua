@@ -117,6 +117,7 @@ local function add(args)
 	local lockfile = p:readLockfile()
 	if lockfile then
 		json.removeField(lockfile.raw.dependencies, name)
+		lockfile:setManifestHash(lde.Lockfile.manifestHash(config))
 		lockfile:save()
 	end
 

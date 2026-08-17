@@ -651,10 +651,13 @@ test.it("installDependencies uses lockfile to pin dependency on reinstall", func
 	local pkg = lde.Package.open(mainDir)
 	pkg:installDependencies()
 
-	-- Manually overwrite the lockfile to point at other-dep instead
-	lde.Lockfile.new(path.join(mainDir, "lde.lock"), {
+	-- Manually overwrite the lockfile to point at other-dep instead (keeping the
+	-- manifest hash, so the pins stay trustworthy and are applied on reinstall)
+	local lockfile = lde.Lockfile.new(path.join(mainDir, "lde.lock"), {
 		["pinned-dep"] = { path = "../other-dep" }
-	}):save()
+	})
+	lockfile:setManifestHash(lde.Lockfile.manifestHash(pkg:readConfig()))
+	lockfile:save()
 
 	-- Remove the installed symlink/junction so reinstall actually runs
 	fs.rmdir(path.join(mainDir, "target", "pinned-dep"))

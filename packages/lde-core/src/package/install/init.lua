@@ -76,6 +76,20 @@ local function applyLock(ctx, alias, depInfo)
 	return depInfo
 end
 
+--- Normalized git identity for conflict comparison: equivalent spellings of the
+--- same repo (trailing .git, git:// vs https://) must produce the same key, or a
+--- git dep spelled one way would false-conflict with the same repo spelled
+--- another (e.g. `.../sstream-lua` in a package manifest vs `.../sstream-lua.git`
+--- in the registry portfile). Local paths (no scheme) are left untouched.
+---@param url string
+---@return string
+local function gitSourceKey(url)
+	if url:match("://") then
+		return "git:" .. lde.util.normalizeGitUrl(url)
+	end
+	return "git:" .. url
+end
+
 --- Approximate source key for a not-yet-materialized dependency, used to detect
 --- conflicting sources when the same alias is requested from different places.
 ---@param alias string
@@ -91,7 +105,7 @@ local function depSourceKey(alias, depInfo, relativeTo)
 		-- pin), so the source identity is the URL alone — a re-request of the same
 		-- repo from a different parent must not false-conflict on an unresolved
 		-- vs resolved commit.
-		return "git:" .. depInfo.git
+		return gitSourceKey(depInfo.git)
 	elseif depInfo.archive then
 		return "archive:" .. depInfo.archive
 	elseif depInfo.luarocks then
@@ -102,7 +116,17 @@ local function depSourceKey(alias, depInfo, relativeTo)
 		local v = lde.util.resolveLuarocksBest(name, constraint)
 		return "luarocks:" .. name .. "@" .. (v or constraint)
 	elseif depInfo.version then
-		return "registry:" .. (depInfo.name or alias) .. "@" .. (depInfo.version or "")
+		-- Registry deps resolve to a git repo (same resolution as a git dep), so
+		-- their identity is the resolved repo URL — a second request for the same
+		-- package, whether via the registry or a direct git URL, must not
+		-- false-conflict. Fall back to the version form when the portfile can't
+		-- be read (e.g. the registry hasn't been synced yet this run).
+		local packageName = depInfo.name or alias
+		local portfile = lde.global.lookupRegistryPackage(packageName)
+		if portfile and portfile.git then
+			return gitSourceKey(portfile.git)
+		end
+		return "registry:" .. packageName .. "@" .. (depInfo.version or "")
 	end
 	return "unknown"
 end
@@ -207,7 +231,7 @@ local function makeNode(alias, depInfo, relativeTo, ctx)
 			alias = alias,
 			depInfo = depInfo,
 			kind = "git",
-			sourceKey = "git:" .. depInfo.git,
+			sourceKey = gitSourceKey(depInfo.git),
 			repoName = alias,
 			gitPlan = gitPlan,
 			expandAfter = true, -- monorepo: lde.json location unknown until extracted
@@ -240,7 +264,10 @@ local function makeNode(alias, depInfo, relativeTo, ctx)
 			alias = alias,
 			depInfo = depInfo,
 			kind = "git",
-			sourceKey = "git:" .. portfile.git,
+			-- Registry deps resolve to a git repo; their identity is the resolved
+			-- repo URL (matching depSourceKey), so a second registry request — or a
+			-- direct git request for the same repo — doesn't false-conflict.
+			sourceKey = gitSourceKey(portfile.git),
 			repoName = packageName,
 			gitPlan = gitPlan,
 			expandAfter = true,
@@ -817,6 +844,9 @@ local function commitLockfile(pkg, stack, modulesDir)
 	end
 
 	local lockfile = lde.Lockfile.new(pkg:getLockfilePath(), lockEntries)
+	-- Pin the manifest hash alongside the entries: installs only trust the pins
+	-- while lde.json's dependency declarations still match (Lockfile:isStale).
+	lockfile:setManifestHash(lde.Lockfile.manifestHash(pkg:readConfig()))
 	lockfile:save()
 
 	local content = assert(fs.read(pkg:getLockfilePath()), "Failed to read " .. pkg:getLockfilePath())
@@ -1112,12 +1142,25 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 		end
 	end
 
+	-- The lockfile's pins are only trustworthy while lde.json's dependency
+	-- declarations match what the lockfile was resolved from. A manifest edit
+	-- (switching a git dep to a registry dep, adding/removing deps, ...) makes
+	-- them stale: applying them would override the new declarations, or conflict
+	-- with transitive requests for the same alias. Re-resolve everything from
+	-- the manifest and rewrite the lockfile instead.
+	local rootLockfile = package:readLockfile()
+	local lockfileStale = rootLockfile ~= nil and rootLockfile:isStale(package:readConfig())
+	if opts.locked and lockfileStale then
+		error("Lockfile is out of date: lde.json dependencies changed since it was written. Run `lde sync` to update it.")
+	end
+	if lockfileStale then rootLockfile = nil end
+
 	local ctx = {
 		relativeTo = relativeTo,
 		stack = {},
 		-- The lockfile pins every previously-resolved alias (runtime and dev),
 		-- so dev-dependency installs resolve from it instead of lsRemote-ing.
-		rootLockfile = package:readLockfile(),
+		rootLockfile = rootLockfile,
 		locked = opts.locked,
 		downloads = 0,
 		builds = 0,

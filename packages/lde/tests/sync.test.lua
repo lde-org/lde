@@ -6,6 +6,8 @@
 -- shared ~/.lde cache other tests rely on.
 local test = require("lde-test")
 
+local lde = require("lde-core")
+
 local fs = require("fs")
 local env = require("env")
 local path = require("path")
@@ -299,20 +301,22 @@ end)
 --- Writes a one-package registry into the --tree dir. The portfile's git URL
 --- points at a local repo, so the whole flow (registry lookup, clone, lockfile
 --- pinning) never touches the network. When `ns` is given, the package is
---- stored namespaced at packages/<ns>/sync-reg-pkg.json.
+--- stored namespaced at packages/<ns>/<pkgName>.json.
 ---@param treeDir string
 ---@param repoDir string
 ---@param commit string
 ---@param ns string?
-local function writeFakeRegistry(treeDir, repoDir, commit, ns)
+---@param pkgName string? # portfile/package name (defaults to sync-reg-pkg)
+local function writeFakeRegistry(treeDir, repoDir, commit, ns, pkgName)
+	pkgName = pkgName or "sync-reg-pkg"
 	local registryDir = path.join(treeDir, "registry")
-	local pkgName = ns and (ns .. "/sync-reg-pkg") or "sync-reg-pkg"
+	local fullName = ns and (ns .. "/" .. pkgName) or pkgName
 	local pkgPath = ns
-		and path.join(registryDir, "packages", ns, "sync-reg-pkg.json")
-		or path.join(registryDir, "packages", "sync-reg-pkg.json")
+		and path.join(registryDir, "packages", ns, pkgName .. ".json")
+		or path.join(registryDir, "packages", pkgName .. ".json")
 	fs.mkdirAll(path.dirname(pkgPath))
 	fs.write(pkgPath, json.encode({
-		name = pkgName,
+		name = fullName,
 		description = "offline test package",
 		git = repoDir,
 		branch = "master",
@@ -374,9 +378,11 @@ test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde sync heals a stale commit-only 
 
 	-- Simulate a lockfile written before registry deps recorded their git URL:
 	-- the entry carries a commit but no git field. Sync must re-resolve from
-	-- the manifest's version and rewrite the entry instead of erroring.
+	-- the manifest's version and rewrite the entry instead of erroring. The
+	-- manifest hash matches lde.json so the pins are still considered valid.
 	fs.write(path.join(dir, "lde.lock"), json.encode({
 		version = "1",
+		manifestHash = lde.Lockfile.manifestHash(json.decode(fs.read(path.join(dir, "lde.json")))),
 		dependencies = {
 			["sync-reg-pkg"] = { commit = commit }
 		}
@@ -422,6 +428,72 @@ test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde sync installs a namespaced regi
 	local ok2, out2 = cli({ "--tree", treeDir, "sync" }, dir)
 	test.truthy(ok2, "sync after target wipe failed: " .. tostring(out2))
 	test.truthy(fs.exists(path.join(dir, "target", "ns-owner", "sync-reg-pkg", "init.lua")))
+end)
+
+test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde sync re-resolves a dep switched from git to registry in lde.json", function()
+	-- Phase 1: a git dependency, pinned in the lockfile.
+	local gitRepo = makeLocalGitRepo("sync-switch-git", "sync-switch-pkg")
+	local gitCommit = headCommit(gitRepo)
+
+	-- The registry serves the same package name from a *different* repo, so a
+	-- stale lockfile pin would be observably wrong (wrong git URL and commit).
+	local regRepo = makeLocalGitRepo("sync-switch-reg", "sync-switch-pkg")
+	local regCommit = headCommit(regRepo)
+
+	-- A parent package that requests the package as a *registry* dep: the same
+	-- alias then reaches the graph in registry form, which used to trip the
+	-- "Conflicting sources" error against the stale git pin.
+	local parentRepo = makeLocalGitRepo("sync-switch-parent", "sync-switch-parent")
+	fs.write(path.join(parentRepo, "lde.json"), json.encode({
+		name = "sync-switch-parent",
+		version = "0.1.0",
+		dependencies = { ["sync-switch-pkg"] = { version = "1.0.0" } }
+	}))
+	assert(process.exec("git", { "add", "-A" }, { cwd = parentRepo }), "git add failed")
+	local code = process.exec(
+		"git", { "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "registry dep" },
+		{ cwd = parentRepo })
+	assert(code == 0, "git commit failed: " .. tostring(code))
+	local parentCommit = headCommit(parentRepo)
+
+	local treeDir = path.join(tmpBase, "sync-switch-tree")
+	fs.rmdir(treeDir)
+	fs.mkdir(treeDir)
+	writeFakeRegistry(treeDir, regRepo, regCommit, nil, "sync-switch-pkg")
+	writeFakeRegistry(treeDir, parentRepo, parentCommit, nil, "sync-switch-parent")
+
+	-- Phase 1: git dep.
+	local dir = makeProject("sync-switch-app", {
+		["sync-switch-pkg"] = { git = gitRepo }
+	})
+	local ok, out = cli({ "--tree", treeDir, "sync" }, dir)
+	test.truthy(ok, "initial sync failed: " .. tostring(out))
+	local lock1 = json.decode(fs.read(path.join(dir, "lde.lock")))
+	test.equal(lock1.dependencies["sync-switch-pkg"].git, gitRepo)
+	test.equal(lock1.dependencies["sync-switch-pkg"].commit, gitCommit)
+
+	-- Phase 2: the manifest switches the dep to the registry and adds the
+	-- parent, which pulls the same alias from the registry too.
+	fs.write(path.join(dir, "lde.json"), json.encode({
+		name = "sync-switch-app",
+		version = "0.1.0",
+		dependencies = {
+			["sync-switch-pkg"] = { version = "1.0.0" },
+			["sync-switch-parent"] = { version = "1.0.0" }
+		}
+	}))
+
+	local ok2, out2 = cli({ "--tree", treeDir, "sync" }, dir)
+	test.truthy(ok2, "sync after git->registry switch failed: " .. tostring(out2))
+
+	-- The stale git pin must not survive (and must not conflict with the
+	-- parent's registry-form request): the alias re-resolves from the registry
+	-- and the lockfile records the registry's repo.
+	local lock2 = json.decode(fs.read(path.join(dir, "lde.lock")))
+	test.equal(lock2.dependencies["sync-switch-pkg"].git, regRepo,
+		"switched dep must re-resolve from the registry, not the stale git pin")
+	test.equal(lock2.dependencies["sync-switch-pkg"].commit, regCommit)
+	test.truthy(lock2.manifestHash, "lockfile must record the manifest hash")
 end)
 
 --

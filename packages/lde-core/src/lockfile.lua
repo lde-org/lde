@@ -1,5 +1,6 @@
 local fs = require("fs")
 local json = require("json")
+local util = require("util")
 
 ---@class lde.Lockfile.BaseDependency
 ---@field name string?
@@ -25,6 +26,7 @@ local json = require("json")
 
 ---@class lde.Lockfile.Raw
 ---@field version "1"
+---@field manifestHash string? # hash of lde.json's dependency declarations; a mismatch means the pins are stale
 ---@field dependencies table<string, lde.Lockfile.Dependency>
 
 ---@class lde.Lockfile
@@ -71,6 +73,43 @@ function Lockfile:getDependencies()
 	else
 		error("Unsupported lockfile version: " .. tostring(self.raw.version))
 	end
+end
+
+--- Deterministic hash of the manifest's dependency declarations. Any change to
+--- `dependencies`, `devDependencies`, or `features` changes the hash, which
+--- invalidates the lockfile's pins (see `Lockfile:isStale`). `json.encode`
+--- sorts the keys of tables it hasn't decoded itself, so the hash is stable
+--- regardless of key order in the manifest file.
+---@param config lde.Package.Config
+---@return string
+function Lockfile.manifestHash(config)
+	return util.fnv1a(json.encode({
+		dependencies = config.dependencies or {},
+		devDependencies = config.devDependencies or {},
+		features = config.features or {},
+	}))
+end
+
+---@return string?
+function Lockfile:getManifestHash()
+	return self.raw.manifestHash
+end
+
+---@param hash string
+function Lockfile:setManifestHash(hash)
+	self.raw.manifestHash = hash
+end
+
+--- True when the manifest's dependency declarations no longer match the
+--- declarations the lockfile was resolved from. A stale lockfile must not pin
+--- resolution — e.g. a dep switched from git to registry in lde.json would
+--- otherwise keep installing the old git source (or conflict with the new
+--- registry requests). Lockfiles written before the hash existed count as
+--- stale so they re-resolve exactly once and are rewritten with a hash.
+---@param config lde.Package.Config
+---@return boolean
+function Lockfile:isStale(config)
+	return self.raw.manifestHash ~= Lockfile.manifestHash(config)
 end
 
 ---@param name string

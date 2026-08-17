@@ -241,10 +241,14 @@ local function mergeLockedEntry(depInfo, locked)
 end
 
 function Package:getDependencies()
-	local deps = self:readConfig().dependencies or {}
+	local config = self:readConfig()
+	local deps = config.dependencies or {}
 
 	local lockfile = self:readLockfile()
-	if not lockfile then return deps end
+	-- A lockfile whose pins don't match the manifest's current declarations
+	-- must not override them: the dep re-resolves from lde.json and the next
+	-- install rewrites the lockfile (see Lockfile:isStale).
+	if not lockfile or lockfile:isStale(config) then return deps end
 
 	-- Prefer locked versions (which have pinned commits) over lde.json,
 	-- but preserve config-only flags (optional, features) that aren't stored in the lockfile
@@ -261,10 +265,11 @@ function Package:getDependencies()
 end
 
 function Package:getDevDependencies()
-	local deps = self:readConfig().devDependencies or {}
+	local config = self:readConfig()
+	local deps = config.devDependencies or {}
 
 	local lockfile = self:readLockfile()
-	if not lockfile then return deps end
+	if not lockfile or lockfile:isStale(config) then return deps end
 
 	-- Prefer locked versions (which have pinned commits) over lde.json, but
 	-- preserve config-only flags (optional, features) that aren't stored in the
