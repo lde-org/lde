@@ -45,7 +45,14 @@ function Lockfile.open(p)
 		return nil
 	end
 
-	return setmetatable({ path = p, raw = json.decode(content) }, Lockfile)
+	-- A corrupt lockfile is treated as absent: the next install regenerates
+	-- it, instead of crashing every command on the package.
+	local decoded = lde.util.decodeJson(content)
+	if not decoded then
+		return nil
+	end
+
+	return setmetatable({ path = p, raw = decoded }, Lockfile)
 end
 
 ---@param p string

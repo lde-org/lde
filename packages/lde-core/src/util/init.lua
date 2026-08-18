@@ -104,6 +104,23 @@ local function saveUrlCache()
 	end
 end
 
+--- Safe JSON decode: returns nil + message instead of raising on malformed
+--- input (the json parser crashes on some inputs, e.g. \uXXXX escapes in
+--- strings) and rejects non-object documents. Package contents must never
+--- be able to crash lde, so every manifest/lockfile decode goes through this.
+---@param content string
+---@return table?, string?
+function util.decodeJson(content)
+	local ok, decoded = pcall(json.decode, content)
+	if not ok then
+		return nil, "invalid JSON: " .. tostring(decoded)
+	end
+	if type(decoded) ~= "table" then
+		return nil, "expected a JSON object"
+	end
+	return decoded, nil
+end
+
 --- Normalises various git URL formats to a plain https:// URL.
 ---@param url string
 ---@return string

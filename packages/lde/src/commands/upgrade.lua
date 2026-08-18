@@ -58,9 +58,9 @@ local function upgrade(args)
 		return
 	end
 
-	local releaseInfo = json.decode(res.body)
+	local releaseInfo, derr = lde.util.decodeJson(res.body)
 	if not releaseInfo or not releaseInfo.tag_name or not releaseInfo.assets then
-		ansi.printf("{red}Invalid release information received")
+		ansi.printf("{red}Invalid release information received: %s", derr or "missing fields")
 		return
 	end
 

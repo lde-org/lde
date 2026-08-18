@@ -68,6 +68,7 @@ end
 ---@param dir string
 ---@return boolean
 local function hasMoon(dir)
+	if not fs.isdir(dir) then return false end
 	for _ in ipairs(fs.scan(dir, "**" .. path.separator .. "*.moon")) do
 		return true
 	end

@@ -73,6 +73,7 @@ end
 ---@param dir string
 ---@return boolean
 local function hasTeal(dir)
+	if not fs.isdir(dir) then return false end
 	for _, rel in ipairs(fs.scan(dir, "**" .. path.separator .. "*.tl")) do
 		if not rel:match("%.d%.tl$") then return true end
 	end

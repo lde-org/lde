@@ -160,7 +160,27 @@ function Package.openLDE(dir)
 		return nil, "No lde.json found in directory: " .. dir
 	end
 
-	return setmetatable({ dir = dir }, Package), nil
+	-- Parse and validate up front so a corrupt or nameless manifest fails
+	-- cleanly at open instead of crashing later (getName, readConfig, ...).
+	local stat = fs.stat(configPath)
+	local content = fs.read(configPath)
+	if not stat or not content then
+		return nil, "Could not read lde.json: " .. configPath
+	end
+
+	local decoded, derr = lde.util.decodeJson(content)
+	if not decoded then
+		return nil, "Failed to parse " .. configPath .. ": " .. derr
+	end
+	if type(decoded.name) ~= "string" or decoded.name == "" then
+		return nil, "Missing or invalid 'name' in " .. configPath
+	end
+
+	return setmetatable({
+		dir = dir,
+		cachedConfig = Package.Config.new(decoded),
+		cachedConfigMtime = stat.modifyTime,
+	}, Package), nil
 end
 
 local rockspecModule = require("lde-core.package.rockspec")
@@ -207,7 +227,12 @@ function Package:readConfig()
 		lde.error.raise("Could not read lde.json: " .. configPath)
 	end
 
-	local newConfig = Package.Config.new(json.decode(content))
+	local decoded, derr = lde.util.decodeJson(content)
+	if not decoded then
+		lde.error.raise("Failed to parse " .. configPath .. ": " .. derr)
+	end
+
+	local newConfig = Package.Config.new(decoded)
 	self.cachedConfig = newConfig
 	self.cachedConfigMtime = s.modifyTime
 

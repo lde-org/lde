@@ -317,7 +317,12 @@ function global.lookupRegistryPackage(name)
 	if not content then
 		return nil, "Package '" .. name .. "' not found in lde registry"
 	end
-	return json.decode(content), nil
+
+	local portfile, perr = lde.util.decodeJson(content)
+	if not portfile then
+		return nil, "Invalid portfile for '" .. name .. "': " .. perr
+	end
+	return portfile, nil
 end
 
 --- Resolves a version string (or nil for latest) to a commit hash.

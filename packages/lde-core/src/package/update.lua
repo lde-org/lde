@@ -78,7 +78,8 @@ local function updateRegistryDependency(package, name, depInfo)
 		return false, "failed to read config"
 	end
 
-	local config = json.decode(configRaw)
+	local config, derr = util.decodeJson(configRaw)
+	if not config then return false, "failed to parse lde.json: " .. derr end
 	if config.dependencies and config.dependencies[name] then
 		config.dependencies[name].version = best
 	elseif config.devDependencies and config.devDependencies[name] then
@@ -114,7 +115,8 @@ local function updateLuarocksDependency(package, name, depInfo)
 	local configRaw = fs.read(configPath)
 	if not configRaw then return false, "failed to read config" end
 
-	local config = json.decode(configRaw)
+	local config, derr = util.decodeJson(configRaw)
+	if not config then return false, "failed to parse lde.json: " .. derr end
 	if config.dependencies and config.dependencies[name] then
 		config.dependencies[name].version = latest
 	elseif config.devDependencies and config.devDependencies[name] then

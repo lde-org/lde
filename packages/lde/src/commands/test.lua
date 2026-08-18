@@ -530,6 +530,9 @@ local function test(args)
 		local packages = {}
 		local coverageReports = {} ---@type lde.CoverageReport[]
 		for _, relativePath in ipairs(fs.scan(cwd, "**" .. path.separator .. "lde.json")) do
+			-- Skip hidden directories (.git, .fuzz, ...): VCS internals and
+			-- generated scratch dirs are not packages.
+			if relativePath:match("^%.[^/\\\\]*[/\\\\]") then goto continue end
 			local configPath = path.join(cwd, relativePath)
 			local pkgDir = path.dirname(configPath)
 			if not fs.isdir(path.join(pkgDir, "tests")) then goto continue end
@@ -544,6 +547,7 @@ local function test(args)
 		-- specification lives in the rockspec; skip ones that also have an
 		-- lde.json (already handled above) and require a busted-style layout.
 		for _, relativePath in ipairs(fs.scan(cwd, "**" .. path.separator .. "*.rockspec")) do
+			if relativePath:match("^%.[^/\\\\]*[/\\\\]") then goto continue end
 			local configPath = path.join(cwd, relativePath)
 			local pkgDir = path.dirname(configPath)
 			if fs.exists(path.join(pkgDir, "lde.json")) then goto continue end

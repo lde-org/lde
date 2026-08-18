@@ -24,7 +24,10 @@ local function remove(args)
 		lde.error.raise("Failed to read config: " .. configPath)
 	end
 
-	local config = json.decode(configRaw)
+	local config, derr = lde.util.decodeJson(configRaw)
+	if not config then
+		lde.error.raise("Failed to parse " .. configPath .. ": " .. derr)
+	end
 
 	-- A dependency may live in either runtime `dependencies` or `devDependencies`;
 	-- remove the name from whichever table(s) hold it.
@@ -43,6 +46,7 @@ local function remove(args)
 
 	local lockfile = pkg:readLockfile()
 	if lockfile then
+		lockfile.raw.dependencies = lockfile.raw.dependencies or {}
 		json.removeField(lockfile.raw.dependencies, name)
 		lockfile:setManifestHash(lde.Lockfile.manifestHash(config))
 		lockfile:save()
