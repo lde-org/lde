@@ -1,4 +1,9 @@
 {
 	"name": "util",
-	"version": "0.1.0"
+	"version": "0.1.0",
+	"dependencies": {
+		"rapidhash": {
+			"version": "0.1.1"
+		}
+	}
 }

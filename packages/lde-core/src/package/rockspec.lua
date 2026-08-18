@@ -366,7 +366,7 @@ local function openRockspec(dir, rockspecPath)
 	-- Include the lde runtime version in the stamp so build outputs are
 	-- rebuilt when the binary is upgraded (build logic may have changed, e.g.
 	-- module layout rules).
-	local buildStamp = util.fnv1a(content .. "\n" .. tostring(lde.global.currentVersion))
+	local buildStamp = util.hash(content .. "\n" .. tostring(lde.global.currentVersion))
 
 	pkg.buildfn = function(_, outputDir)
 		if not fs.isdir(outputDir) then fs.mkdirAll(outputDir) end

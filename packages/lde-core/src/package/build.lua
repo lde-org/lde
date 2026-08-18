@@ -16,7 +16,7 @@ local currentlyBuilding = setmetatable({}, { __mode = "k" })
 local alreadyBuilt = {}
 
 -- Stamp file written inside the build output dir. It records the size, mtime,
--- and fnv1a hash of every build input (everything under src/, plus lde.json and
+-- and rapidhash hash of every build input (everything under src/, plus lde.json and
 -- build.lua) so the build script can be skipped on the next run when none of
 -- the inputs changed.
 local STAMP_FILE = ".lde-build-stamp"
@@ -82,7 +82,7 @@ local function checkInputs(package, stampPath)
 				changed = true
 				goto continue
 			end
-			local hash = util.fnv1a(content)
+			local hash = util.hash(content)
 			changed = changed or not prev or prev.hash ~= hash
 			current[relPath] = { size = size, mtime = mtime, hash = hash }
 		end

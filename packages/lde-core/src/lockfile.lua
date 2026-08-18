@@ -92,7 +92,7 @@ end
 ---@param config lde.Package.Config
 ---@return string
 function Lockfile.manifestHash(config)
-	return util.fnv1a(json.encode({
+	return util.hash(json.encode({
 		dependencies = config.dependencies or {},
 		devDependencies = config.devDependencies or {},
 		features = config.features or {},

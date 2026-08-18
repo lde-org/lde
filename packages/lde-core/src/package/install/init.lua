@@ -855,7 +855,7 @@ local function commitLockfile(pkg, stack, modulesDir)
 	-- so the fast path only skips installs that are genuinely up to date.
 	local manifest = fs.read(pkg:getConfigPath()) or ""
 	fs.write(path.join(modulesDir, ".installed"),
-		util.fnv1a(content .. "\n" .. tostring(lde.global.currentVersion) .. "\n" .. manifest))
+		util.hash(content .. "\n" .. tostring(lde.global.currentVersion) .. "\n" .. manifest))
 end
 
 --- Build scheduler for the install build pass.
@@ -1130,7 +1130,7 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 			-- commitLockfile hashes lockfile + runtime version + manifest; the
 			-- check must use the same input or it can never match.
 			local manifest = fs.read(package:getConfigPath()) or ""
-			if content and fs.read(installedPath) == util.fnv1a(content .. "\n" .. tostring(lde.global.currentVersion) .. "\n" .. manifest) then
+			if content and fs.read(installedPath) == util.hash(content .. "\n" .. tostring(lde.global.currentVersion) .. "\n" .. manifest) then
 				-- The hash only proves the lockfile didn't change; materialization
 				-- may still be gone (e.g. `rm -rf ~/.lde/git` dangling the git
 				-- symlinks in target/). Verify the install is intact before trusting

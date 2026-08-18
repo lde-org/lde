@@ -277,7 +277,7 @@ end
 ---@field hash string
 
 --- Stamp file written inside the target/tests copy. Records the size, mtime,
---- and fnv1a hash of every file under tests/ so the copy is only refreshed
+--- and rapidhash hash of every file under tests/ so the copy is only refreshed
 --- when the source actually changed — the same approach build.lua uses for
 --- build inputs.
 local TEST_STAMP_FILE = ".lde-tests-stamp"
@@ -320,7 +320,7 @@ local function checkTestsInputs(testDir, stored)
 			current[relKey] = prev
 		else
 			local content = fs.read(abs)
-			local hash = content and util.fnv1a(content) or ""
+			local hash = content and util.hash(content) or ""
 			changed = changed or not prev or prev.hash ~= hash
 			current[relKey] = { size = size, mtime = mtime, hash = hash }
 		end

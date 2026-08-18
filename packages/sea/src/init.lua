@@ -176,7 +176,7 @@ function sea.compile(main, source, sharedLibs, compiler)
 
 	for _, lib in ipairs(sharedLibs) do
 		local id                            = safeIdent(lib.name)
-		local hash                          = util.fnv1a(lib.content)
+		local hash                          = util.hash(lib.content)
 		local ext                           = jit.os == "Windows" and "dll"
 			or "so"
 		local libFileName                   = string.format("lde-lib-%s-%s.%s", lib.name, hash, ext)
@@ -315,7 +315,7 @@ char lde_tmpdir[4096];
 	-- The path is content-addressed so recompiles of unchanged code reuse the
 	-- file; returns the C declarations (asm + externs) for the blob.
 	local function writeBundleBlob(content)
-		local hash   = util.fnv1a(content)
+		local hash   = util.hash(content)
 		local bcPath = path.join(env.tmpdir(), "lde-bundle-" .. hash .. ".bc")
 		if not fs.exists(bcPath) then
 			fs.write(bcPath, content)

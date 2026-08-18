@@ -1,5 +1,7 @@
 local util = {}
 
+local rapidhash = require("rapidhash")
+
 ---@param str string
 function util.dedent(str)
 	local lines = {}
@@ -29,16 +31,11 @@ function util.dedent(str)
 	return result:match("^(.-)%s*$") or result
 end
 
----Compute a simple 32-bit FNV-1a hash of a string, returned as an 8-char hex string.
+---Compute a 64-bit rapidhash of a string, returned as a 16-char lowercase hex string.
 ---@param s string
 ---@return string
-function util.fnv1a(s)
-	local h = 2166136261
-	for i = 1, #s do
-		h = bit.bxor(h, string.byte(s, i))
-		h = bit.band(h * 16777619, 0xFFFFFFFF)
-	end
-	return string.format("%08x", bit.band(h, 0xFFFFFFFF))
+function util.hash(s)
+	return rapidhash.hex(s)
 end
 
 --- Returns a lazily evaluated value: `factory()` runs on the first call,
