@@ -10,20 +10,21 @@ local function plain(s)
 	return (s or ""):gsub("\27%[[0-9;]*m", "")
 end
 
---- Run fn with os.exit stubbed to a throw and stdout captured to a buffer.
---- ansi.printf goes through the `print` global (which writes to C stdout, not
---- io.output), so capture by patching print itself.
+--- Run fn with os.exit stubbed to a throw and stdout captured in memory.
+--- ansi.printf goes through the `print` global (which writes to C stdout),
+--- so capture by patching print itself — no temp files (io.tmpfile is nil on
+--- Android).
 --- Returns the captured text and the exit code passed to os.exit (nil if
 --- os.exit was never called and fn returned normally).
 ---@param fn fun()
 ---@return string text
 ---@return integer? exitCode
 local function capture(fn)
-	local buf = io.tmpfile()
+	local lines = {}
 	local prevPrint = print
 	local prevExit = os.exit
 	print = function(s)
-		buf:write(tostring(s) .. "\n")
+		lines[#lines + 1] = tostring(s)
 	end
 	os.exit = function(code)
 		error("CAPTURED-EXIT:" .. tostring(code), 0)
@@ -31,9 +32,7 @@ local function capture(fn)
 	local ok, err = pcall(fn)
 	os.exit = prevExit
 	print = prevPrint
-	buf:seek("set", 0)
-	local text = buf:read("a")
-	buf:close()
+	local text = table.concat(lines, "\n")
 	if ok then return text, nil end
 	local marker = tostring(err):match("CAPTURED%-EXIT:(%d+)")
 	test.truthy(marker, "unexpected error escaped capture: " .. tostring(err))
