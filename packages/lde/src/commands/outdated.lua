@@ -7,8 +7,7 @@ local lde = require("lde-core")
 local function outdated(_args)
 	local pkg, err = lde.Package.open()
 	if not pkg then
-		ansi.printf("{red}%s", err)
-		return
+		lde.error.raise(err)
 	end
 
 	local deps = pkg:getDependencies()

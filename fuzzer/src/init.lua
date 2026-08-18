@@ -148,6 +148,10 @@ local function record(case, cwd, res, outcome, ms)
 	local exit = res.timedOut and "TIMEOUT" or (res.exit ~= nil and tostring(res.exit) or "SPAWN-FAIL")
 	table.insert(rows, { seed, #rows + 1, case.kind, case.note, cwd, exit, outcome, ms, args })
 
+	if #rows % 100 == 0 then
+		ansi.printf("{gray}  case %d: %s{reset}", #rows, args)
+	end
+
 	-- eval/lua cases run user code, so a hang there is the user's loop, not an
 	-- lde bug — only command cases treat timeouts as findings.
 	local isFinding = outcome == "crash" or outcome == "raw_error"

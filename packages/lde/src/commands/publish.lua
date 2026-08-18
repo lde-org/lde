@@ -82,8 +82,7 @@ end
 local function publish(args)
 	local pkg, err = lde.Package.open()
 	if not pkg then
-		ansi.printf("{red}%s", err)
-		return
+		lde.error.raise(err)
 	end
 
 	local config = pkg:readConfig()
@@ -93,26 +92,22 @@ local function publish(args)
 	-- the browser submit an issue that the bot would reject.
 	local nameErr = lde.global.validatePackageName(config.name)
 	if nameErr then
-		ansi.printf("{red}Cannot publish: %s", nameErr)
-		return
+		lde.error.raise("Cannot publish: " .. nameErr)
 	end
 
 	local repo, repoErr = git2.open(pkgDir)
 	if not repo then
-		ansi.printf("{red}Could not open git repository: %s", repoErr or "unknown error")
-		return
+		lde.error.raise("Could not open git repository: " .. (repoErr or "unknown error"))
 	end
 
 	local gitUrl, urlErr = repo:remoteUrl("origin")
 	if not gitUrl then
-		ansi.printf("{red}Could not get git remote URL. Is this a git repo with an 'origin' remote?")
-		return
+		lde.error.raise("Could not get git remote URL. Is this a git repo with an 'origin' remote?")
 	end
 
 	local commit, commitErr = repo:revparse("HEAD")
 	if not commit then
-		ansi.printf("{red}Could not get current commit. Does this repo have any commits?")
-		return
+		lde.error.raise("Could not get current commit. Does this repo have any commits?")
 	end
 
 	local branch = repo:currentBranch() or "master"

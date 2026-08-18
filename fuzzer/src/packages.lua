@@ -189,7 +189,9 @@ local function generateSrc(rng, dir)
 			rel = path.join(rng.token(8), rng.token(8) .. ".lua")
 			fs.mkdirAll(path.join(srcDir, path.dirname(rel)))
 		else
-			rel = rng.token(8) .. rng.pick({ ".lua", ".txt", ".md", ".json", ".so", ".dll", ".tl", ".moon" })
+			-- No .tl/.moon: compiling those triggers a compiler download (network),
+			-- which would break the fuzzer's hermetic guarantees.
+			rel = rng.token(8) .. rng.pick({ ".lua", ".txt", ".md", ".json", ".so", ".dll" })
 		end
 		fs.write(path.join(srcDir, rel), rng.bytes(rng.int(40) + 1))
 	end

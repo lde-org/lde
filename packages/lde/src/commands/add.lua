@@ -89,8 +89,7 @@ local function add(args)
 	elseif rawName:match("^rocks:") then
 		local _, _, err = lde.util.openLuarocksPackage(name, registryVersion)
 		if err then
-			ansi.printf("{red}%s", err)
-			return
+			lde.error.raise(err)
 		end
 
 		dep = { luarocks = name, version = registryVersion or nil }
@@ -101,8 +100,7 @@ local function add(args)
 
 		local portfile, err = lde.global.lookupRegistryPackage(name)
 		if not portfile then
-			ansi.printf("{red}%s", err)
-			return
+			lde.error.raise(err)
 		end
 
 		local resolvedVersion = lde.global.resolveRegistryVersion(portfile, registryVersion or nil)

@@ -10,8 +10,7 @@ local function bundle(args)
 
 	local pkg, err = lde.Package.open()
 	if not pkg then
-		ansi.printf("{red}%s", err)
-		return
+		lde.error.raise(err)
 	end
 
 	if not outFile then
