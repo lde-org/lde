@@ -147,10 +147,13 @@ test.it("name", function()
   test.match(actual, expected)   -- subset match (like jest toMatchObject)
   test.truthy(x) / test.falsy(x)
   test.includes(str, substr)
+  test.errors(fn, expected?)     -- fn must throw; with expected, the error must match it
 end)
 test.skip("name", fn)
 test.skipIf(cond)("name", fn)
 ```
+
+Every assertion takes an optional trailing context message, appended to the failure output: `test.equal(a, b, "a must equal b")`. `test.errors` compares string errors without pcall's `path:line:` prefix; non-string errors by identity.
 
 Test files must match `**/*.test.lua`. During `lde test`, `tests/` is exposed as `target/tests` so test files can `require("tests.lib.something")`.
 

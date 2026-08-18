@@ -19,49 +19,61 @@ local SOURCE = [==[
 
 	local M = {}
 
-	local function equal(a, b)
-		if a ~= b then error("Expected " .. tostring(a) .. " to equal " .. tostring(b), 2) end
+	--- Append a caller-provided context message to a default failure message.
+	local function withMsg(msg, default)
+		if msg == nil or msg == "" then return default end
+		return default .. " (" .. msg .. ")"
 	end
 
-	local function notEqual(a, b)
-		if a == b then error("Expected " .. tostring(a) .. " not to equal " .. tostring(b), 2) end
+	--- pcall prefixes string errors with "path:line: "; strip it so expected
+	--- error messages can be written without position info.
+	local function stripPosition(err)
+		return (err:gsub("^.-:%d+: ", "", 1))
 	end
 
-	local function truthy(v)
-		if not v then error("Expected value to be truthy, got " .. tostring(v), 2) end
+	local function equal(a, b, msg)
+		if a ~= b then error(withMsg(msg, "Expected " .. tostring(a) .. " to equal " .. tostring(b)), 2) end
 	end
 
-	local function falsy(v)
-		if v then error("Expected value to be falsy, got " .. tostring(v), 2) end
+	local function notEqual(a, b, msg)
+		if a == b then error(withMsg(msg, "Expected " .. tostring(a) .. " not to equal " .. tostring(b)), 2) end
 	end
 
-	local function includes(haystack, needle)
+	local function truthy(v, msg)
+		if not v then error(withMsg(msg, "Expected value to be truthy, got " .. tostring(v)), 2) end
+	end
+
+	local function falsy(v, msg)
+		if v then error(withMsg(msg, "Expected value to be falsy, got " .. tostring(v)), 2) end
+	end
+
+	local function includes(haystack, needle, msg)
 		if not string.find(haystack, needle, 1, true) then
-			error("Expected string to include '" .. needle .. "'", 2)
+			error(withMsg(msg, "Expected string to include '" .. needle .. "'"), 2)
 		end
 	end
 
-	local function greater(a, b)
+	local function greater(a, b, msg)
 		if not (a > b) then
-			error("Expected " .. tostring(a) .. " to be greater than " .. tostring(b), 2)
+			error(withMsg(msg, "Expected " .. tostring(a) .. " to be greater than " .. tostring(b)), 2)
 		end
 	end
 
-	local function less(a, b)
+	local function less(a, b, msg)
 		if not (a < b) then
-			error("Expected " .. tostring(a) .. " to be less than " .. tostring(b), 2)
+			error(withMsg(msg, "Expected " .. tostring(a) .. " to be less than " .. tostring(b)), 2)
 		end
 	end
 
-	local function greaterEqual(a, b)
+	local function greaterEqual(a, b, msg)
 		if not (a >= b) then
-			error("Expected " .. tostring(a) .. " to be greater than or equal to " .. tostring(b), 2)
+			error(withMsg(msg, "Expected " .. tostring(a) .. " to be greater than or equal to " .. tostring(b)), 2)
 		end
 	end
 
-	local function lessEqual(a, b)
+	local function lessEqual(a, b, msg)
 		if not (a <= b) then
-			error("Expected " .. tostring(a) .. " to be less than or equal to " .. tostring(b), 2)
+			error(withMsg(msg, "Expected " .. tostring(a) .. " to be less than or equal to " .. tostring(b)), 2)
 		end
 	end
 
@@ -92,9 +104,9 @@ local SOURCE = [==[
 		end
 	end
 
-	local function deepEqual(a, b)
+	local function deepEqual(a, b, msg)
 		local ok, err = pcall(deepEqualInner, a, b, "<root>")
-		if not ok then error(err, 2) end
+		if not ok then error(withMsg(msg, tostring(err)), 2) end
 	end
 
 	local function matchInner(actual, expected, path)
@@ -110,12 +122,30 @@ local SOURCE = [==[
 		end
 	end
 
-	local function match(actual, expected)
+	local function match(actual, expected, msg)
 		if type(actual) ~= "table" then
-			error("Expected a table, got " .. type(actual), 2)
+			error(withMsg(msg, "Expected a table, got " .. type(actual)), 2)
 		end
 		local ok, err = pcall(matchInner, actual, expected, "<root>")
-		if not ok then error(err, 2) end
+		if not ok then error(withMsg(msg, tostring(err)), 2) end
+	end
+
+	--- Asserts that fn throws. With `expected`, the thrown error must equal it
+	--- (string messages are compared without pcall's "path:line: " prefix;
+	--- non-string errors by identity).
+	local function errors(fn, expected, msg)
+		local ok, err = pcall(fn)
+		if ok then
+			error(withMsg(msg, "Expected function to throw an error, but it did not"), 2)
+		end
+		if expected ~= nil then
+			if type(err) == "string" and type(expected) == "string" then
+				err = stripPosition(err)
+			end
+			if err ~= expected then
+				error(withMsg(msg, "Expected error to equal " .. tostring(expected) .. ", got " .. tostring(err)), 2)
+			end
+		end
 	end
 
 	function M.new()
@@ -193,6 +223,7 @@ local SOURCE = [==[
 		instance.count = count
 		instance.deepEqual = deepEqual
 		instance.match = match
+		instance.errors = errors
 
 		return instance
 	end
