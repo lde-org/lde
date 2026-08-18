@@ -13,6 +13,11 @@ local curl = util.lazy(|| -> require("curl-sys"))
 -- Enables concurrent native compiles during install builds (see build loop).
 local asyncBuild = require("lde-core.util.async-build")
 
+-- Teal source suffixes kept alongside a rock's compiled modules in target/ so
+-- `tl check -I target` can resolve the rock's module types (mirroring what
+-- lde Teal package builds do for their own src/ output).
+local TL_SOURCE_SUFFIXES = { "tl", "d.tl" }
+
 --- LuaRocks accepts a plain string or a list for a native module's
 --- sources/libraries/libdirs/incdirs/defines (lzlib uses `libraries = "z"`),
 --- and a build-level default (build.libraries etc.) applies to every module
@@ -530,6 +535,16 @@ local function openRockspec(dir, rockspecPath)
 				if not fs.copy(srcAbs, destAbs) or not fs.isfile(destAbs) then
 					return nil, "Failed to install module source '" .. src .. "' for module '" .. modname .. "'"
 				end
+				-- Keep the Teal source (if the rock ships one next to the compiled
+				-- module) so `tl check -I target` can resolve this module's types,
+				-- the same contract lde Teal builds give their own src/ output.
+				for i = 1, #TL_SOURCE_SUFFIXES do
+					local tlSuffix = TL_SOURCE_SUFFIXES[i]
+					local srcTl = srcAbs:gsub("%.lua$", "." .. tlSuffix)
+					if fs.isfile(srcTl) then
+						fs.copy(srcTl, destAbs:gsub("%.lua$", "." .. tlSuffix))
+					end
+				end
 			end
 
 			---@type { child: process.Child?, modname: string }[]
@@ -604,14 +619,28 @@ local function openRockspec(dir, rockspecPath)
 				end
 
 				for modname, src in pairs(installLuaFiles) do
-					if not src:match("%.lua$") then goto continue_install_lua end
+					-- LuaRocks installs the files build.install.lua lists into the Lua
+					-- module dir with the file's extension preserved (a numeric key
+					-- keeps the basename, e.g. "tl.tl" becomes module "tl"). Besides
+					-- .lua entries, keep .tl/.d.tl entries: Teal rocks ship their
+					-- sources this way (the tl compiler lists "tl.tl"), and they must
+					-- land next to the compiled modules so `tl check -I target` can
+					-- resolve the rock's types.
+					if not src:match("%.lua$") and not src:match("%.tl$") then
+						goto continue_install_lua
+					end
+					local srcBase = path.basename(src)
+					-- .d.tl declaration files keep both suffixes; others keep their
+					-- last extension.
+					local ext = srcBase:match("%.d%.tl$") and "d.tl" or srcBase:match("%.([^%.]+)$")
+					local modBase = ext and srcBase:sub(1, -#ext - 1) or srcBase
 					if type(modname) == "number" then
 						-- LuaRocks semantics: a numeric key installs the file under its
-						-- own basename (e.g. "src/ssl.lua" becomes module "ssl").
-						modname = path.basename(src):gsub("%.lua$", "")
+						-- own basename (e.g. "tl.tl" becomes module "tl").
+						modname = modBase
 					end
 					local modPath = modname:gsub("%.", path.separator)
-					local destAbs = path.join(modulesDir, modPath .. ".lua")
+					local destAbs = path.join(modulesDir, modPath .. "." .. ext)
 					local destDir = path.dirname(destAbs)
 					if not fs.isdir(destDir) then fs.mkdirAll(destDir) end
 					fs.copy(path.join(dir, src), destAbs)

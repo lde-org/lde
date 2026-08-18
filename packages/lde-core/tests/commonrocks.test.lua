@@ -55,6 +55,41 @@ test.it("luarocks: lua-cjson encodes and decodes",
 		test.truthy(ok)
 	end)
 
+test.it("luarocks: teal compiler keeps its .tl source in target for tl check", function()
+	local app = makeApp("rocks-tl", { tl = { luarocks = "tl" } })
+	app:installDependencies()
+
+	-- The tl rockspec lists "tl.tl" in build.install.lua (build.modules only
+	-- carries the compiled tl.lua); it must land next to it so `tl check
+	-- -I target` can resolve the module's types like lde package builds do.
+	test.truthy(fs.isfile(path.join(app:getModulesDir(), "tl.lua")), "tl.lua not installed")
+	test.truthy(fs.isfile(path.join(app:getModulesDir(), "tl.tl")), "tl.tl not kept in target")
+
+	-- End-to-end: type-check a Teal snippet that requires the compiler. The run
+	-- state's package.path is target/?, so tl resolves require("tl") to
+	-- target/tl.tl - the same resolution `tl check -I target` performs.
+	local ok, err = app:runString([=[
+		local function fmtErrors(result)
+			local out = {}
+			for _, e in ipairs(result.type_errors or {}) do
+				out[#out + 1] = (e.filename or "?") .. ":" .. tostring(e.y) .. ":" .. tostring(e.x) .. ": " .. (e.msg or "")
+			end
+			return table.concat(out, "\n")
+		end
+
+		local tl = require("tl")
+		local env = tl.init_env(false, false, "5.1")
+		local result = tl.process_string([[
+			local compiler = require("tl")
+			local v: string = compiler.version()
+			return compiler
+		]], false, env, "checkme.tl")
+		assert(result and result.type_errors and #result.type_errors == 0,
+			"tl check failed:\n" .. fmtErrors(result))
+	]=])
+	test.truthy(ok, err or "tl check of a require(\"tl\") snippet failed")
+end)
+
 local isAndroid = env.var("ANDROID_ROOT") ~= nil
 
 -- Android: Skip because termux doesn't expose crypt symbols.
