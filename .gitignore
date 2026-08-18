@@ -8,3 +8,4 @@ lde
 lde.lock
 /.direnv
 crater/.shotgun
+fuzzer/.fuzz

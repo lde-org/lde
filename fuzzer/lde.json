@@ -1,0 +1,12 @@
+{
+	"name": "fuzzer",
+	"version": "0.1.0",
+	"dependencies": {
+		"process": { "git": "https://github.com/lde-org/process" },
+		"fs": { "git": "https://github.com/lde-org/fs" },
+		"path": { "git": "https://github.com/lde-org/path" },
+		"env": { "git": "https://github.com/lde-org/env" },
+		"json": { "git": "https://github.com/lde-org/json" },
+		"ansi": { "path": "../packages/ansi" }
+	}
+}
