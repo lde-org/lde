@@ -432,8 +432,7 @@ local function runWatch(filters, coverage)
 			if not filter or filter(name) then dirty = true end
 		end, { recursive = recursive })
 		if not watcher then
-			ansi.printf("{red}Failed to watch: %s", dir)
-			os.exit(1)
+			lde.error.raise("Failed to watch: " .. dir)
 		end
 		watchers[#watchers + 1] = watcher
 	end
@@ -624,10 +623,7 @@ local function test(args)
 	local reporter = makeReporter(package:getDir())
 	local results = package:runTests(reporter, filters, { coverage = coverage })
 	if results.error then
-		ansi.printf("{red}%s", results.error)
-		print()
-		os.exit(1)
-		return
+		lde.error.raise(results.error)
 	elseif results.external then
 		-- External runners (busted) print their own results; lde just reports
 		-- the verdict so the exit code matches the suite's.

@@ -45,7 +45,7 @@ local function compilePackage(package)
 			local ext = matchNativeExt(entry.name)
 			if ext then
 				local content = fs.read(p)
-				if not content then error("Could not read file: " .. p) end
+				if not content then lde.error.raise("Could not read file: " .. p) end
 				local moduleName = entry.name:gsub("%." .. ext .. "$", "")
 				table.insert(sharedLibs, { name = moduleName, content = content })
 			end
@@ -57,7 +57,7 @@ local function compilePackage(package)
 			if ext then
 				local absPath = path.join(p, relativePath)
 				local content = fs.read(absPath)
-				if not content then error("Could not read file: " .. absPath) end
+				if not content then lde.error.raise("Could not read file: " .. absPath) end
 
 				local moduleName = string.gsub(relativePath, path.separator, "."):gsub("%." .. ext .. "$", "")
 				moduleName = moduleName ~= "" and (entry.name .. "." .. moduleName) or entry.name

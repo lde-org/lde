@@ -71,7 +71,7 @@ local function buildTarballUrl(url, ref, hostType)
 		return base .. "/get/" .. ref .. ".tar.gz"
 	end
 
-	error("Unknown host type: " .. hostType)
+	lde.error.raise("Unknown host type: " .. hostType)
 end
 
 --- Downloads and extracts a git tarball for a recognized host into repoDir.
@@ -106,7 +106,7 @@ local function downloadTarball(url, commit, hostType, repoDir, label)
 		fs.rmdir(repoDir)
 		fs.delete(archiveFile)
 		if bar then bar:fail("Downloading " .. label) end
-		error("Failed to download " .. tarballUrl .. ": " .. (dlErr or ""))
+		lde.error.raise("Failed to download " .. tarballUrl .. ": " .. (dlErr or ""))
 	end
 
 	local ok2, err2 = Archive().new(archiveFile):extract(repoDir, { stripComponents = true })
@@ -115,7 +115,7 @@ local function downloadTarball(url, commit, hostType, repoDir, label)
 	if not ok2 then
 		fs.rmdir(repoDir)
 		if bar then bar:fail("Downloading " .. label) end
-		error("Failed to extract " .. label .. ": " .. (err2 or ""))
+		lde.error.raise("Failed to extract " .. label .. ": " .. (err2 or ""))
 	end
 
 	if bar then bar:done("Downloaded " .. label) end
@@ -237,7 +237,7 @@ function global.syncRegistry()
 	if not fs.exists(registryDir) then
 		local repo, err = git2().clone(global.getConfig().registry, registryDir)
 		if not repo then
-			error("Failed to clone lde registry: " .. (err or "unknown error"))
+			lde.error.raise("Failed to clone lde registry: " .. (err or "unknown error"))
 		end
 		repo:updateSubmodules()
 	else
@@ -328,13 +328,13 @@ end
 function global.resolveRegistryVersion(portfile, version)
 	local versions = portfile.versions
 	if not versions then
-		error("Package '" .. portfile.name .. "' has no versions in registry")
+		lde.error.raise("Package '" .. portfile.name .. "' has no versions in registry")
 	end
 
 	if version then
 		local commit = versions[version]
 		if not commit then
-			error("Version '" .. version .. "' of '" .. portfile.name .. "' not found in lde registry")
+			lde.error.raise("Version '" .. version .. "' of '" .. portfile.name .. "' not found in lde registry")
 		end
 		return version, commit
 	end
@@ -348,7 +348,7 @@ function global.resolveRegistryVersion(portfile, version)
 	end
 
 	if not latest then
-		error("No versions available for package '" .. portfile.name .. "'")
+		lde.error.raise("No versions available for package '" .. portfile.name .. "'")
 	end
 
 	return latest, versions[latest]
@@ -451,18 +451,18 @@ end
 function global.getOrInitGitRepo(repoName, repoUrl, branch, commit, offline)
 	if not commit then
 		if offline then
-			error("offline: cannot resolve '" .. (branch or "HEAD") .. "' for " .. repoUrl)
+			lde.error.raise("offline: cannot resolve '" .. (branch or "HEAD") .. "' for " .. repoUrl)
 		end
 		local sha, err = resolveGitRef(repoUrl, branch)
 		if not sha then
-			error("Failed to resolve '" .. (branch or "HEAD") .. "' for " .. repoUrl .. ": " .. (err or ""))
+			lde.error.raise("Failed to resolve '" .. (branch or "HEAD") .. "' for " .. repoUrl .. ": " .. (err or ""))
 		end
 		commit = sha
 	end
 
 	local repoDir = global.getGitRepoDir(repoName, commit)
 	if offline and not fs.exists(repoDir) then
-		error("offline: '" .. repoName .. "' is not cached locally (run once online to cache it)")
+		lde.error.raise("offline: '" .. repoName .. "' is not cached locally (run once online to cache it)")
 	end
 	if not fs.exists(repoDir) then
 		local hostType = isRecognizedGitHost(repoUrl)
@@ -487,7 +487,7 @@ function global.getOrInitGitRepo(repoName, repoUrl, branch, commit, offline)
 			local ok, err = global.cloneDir(repoName, repoUrl, commit, branch, progress)
 			if not ok then
 				if bar then bar:fail("Cloning " .. repoName) end
-				error("Failed to clone git repository: " .. err)
+				lde.error.raise("Failed to clone git repository: " .. err)
 			end
 			if bar then bar:done("Cloned " .. repoName) end
 		end
@@ -509,7 +509,7 @@ function global.planGitRepo(repoName, repoUrl, branch, commit)
 	if not commit then
 		local sha, err = resolveGitRef(repoUrl, branch)
 		if not sha then
-			error("Failed to resolve '" .. (branch or "HEAD") .. "' for " .. repoUrl .. ": " .. (err or ""))
+			lde.error.raise("Failed to resolve '" .. (branch or "HEAD") .. "' for " .. repoUrl .. ": " .. (err or ""))
 		end
 		commit = sha
 	end
@@ -561,7 +561,7 @@ end
 function global.getOrInitArchive(url, offline)
 	local archiveDir = global.getArchiveDir(url)
 	if offline and not fs.exists(archiveDir) then
-		error("offline: archive is not cached locally (run once online to cache it): " .. url)
+		lde.error.raise("offline: archive is not cached locally (run once online to cache it): " .. url)
 	end
 	if not fs.exists(archiveDir) then
 		local filename = url:match("([^/]+)$") or url
@@ -612,7 +612,7 @@ function global.getOrInitArchive(url, offline)
 			if bar then bar:fail("Downloading " .. filename) end
 			-- Don't leave a partial cache dir behind: the next run re-downloads.
 			fs.rmdir(archiveDir)
-			error("Failed to download archive '" .. url .. "': " .. (dlErr or "unknown error"))
+			lde.error.raise("Failed to download archive '" .. url .. "': " .. (dlErr or "unknown error"))
 		end
 
 		local ok2, err2 = global.extractArchive(url, archiveFile, archiveDir)
@@ -621,7 +621,7 @@ function global.getOrInitArchive(url, offline)
 			-- Same cleanup on extract failure: an empty/partial dir must not make
 			-- every later run skip the download.
 			fs.rmdir(archiveDir)
-			error("Failed to extract archive '" .. url .. "': " .. (err2 or "unknown error"))
+			lde.error.raise("Failed to extract archive '" .. url .. "': " .. (err2 or "unknown error"))
 		end
 
 		if bar then bar:done("Downloaded " .. filename) end
@@ -688,7 +688,7 @@ end
 function global.getOrCloneRepo(repoName, cloneUrl, branch)
 	local commit, err = resolveGitRef(cloneUrl, branch)
 	if not commit then
-		error("Failed to resolve ref for " .. cloneUrl .. ": " .. (err or ""))
+		lde.error.raise("Failed to resolve ref for " .. cloneUrl .. ": " .. (err or ""))
 	end
 
 	local repoDir = global.getGitRepoDir(repoName, commit)
@@ -699,11 +699,11 @@ function global.getOrCloneRepo(repoName, cloneUrl, branch)
 		else
 			local repo, cerr = shallowClone(cloneUrl, repoDir, branch)
 			if not repo then
-				error("Failed to clone git repository: " .. (cerr or "unknown error"))
+				lde.error.raise("Failed to clone git repository: " .. (cerr or "unknown error"))
 			end
 			local ok, cerr2 = repo:checkout(commit)
 			if not ok then
-				error("Failed to checkout commit: " .. (cerr2 or "unknown error"))
+				lde.error.raise("Failed to checkout commit: " .. (cerr2 or "unknown error"))
 			end
 		end
 	end
@@ -766,7 +766,7 @@ function global.writeWrapper(toolName, packageDir, packageName)
 			or ('"' .. ldeBin .. '" x' .. winTreeFlag .. " " .. packageName .. " --offline --")
 
 		if not fs.write(wrapperPath, "@echo off\n" .. winInvocation .. " %*\n") then
-			error("Failed to write wrapper script: " .. wrapperPath)
+			lde.error.raise("Failed to write wrapper script: " .. wrapperPath)
 		end
 
 		ansi.printf("{green}Installed tool '%s' -> %s", toolName, wrapperPath)
@@ -774,12 +774,12 @@ function global.writeWrapper(toolName, packageDir, packageName)
 		local wrapperPath = path.join(toolsDir, toolName)
 
 		if not fs.write(wrapperPath, "#!/bin/sh\nexec " .. invocation .. ' "$@"\n') then
-			error("Failed to write wrapper script: " .. wrapperPath)
+			lde.error.raise("Failed to write wrapper script: " .. wrapperPath)
 		end
 
 		local child, err = process.spawn("chmod", { "+x", wrapperPath })
 		if not child then
-			error("Failed to make wrapper executable: " .. (err or "unknown error"))
+			lde.error.raise("Failed to make wrapper executable: " .. (err or "unknown error"))
 		end
 		child:wait()
 
@@ -806,7 +806,7 @@ function global.ensureMingw(opts)
 		urlArch = "aarch64"
 		sevenZArch = "aarch64"
 	else
-		error("Unsupported architecture for toolchain: " .. arch)
+		lde.error.raise("Unsupported architecture for toolchain: " .. arch)
 	end
 
 	local TOOLCHAIN_URL = TOOLCHAIN_BASE .. "/toolchain-windows-" .. urlArch .. ".7z"
@@ -843,7 +843,7 @@ function global.ensureMingw(opts)
 	if not ok then
 		fs.rmdir(tmpDir)
 		if p1 then p1:fail("Downloading 7z extractor") end
-		error("Failed to download 7z extractor: " .. (dlErr or ""))
+		lde.error.raise("Failed to download 7z extractor: " .. (dlErr or ""))
 	end
 	if p1 then p1:done("Downloaded 7z extractor") end
 
@@ -860,11 +860,11 @@ function global.ensureMingw(opts)
 			end
 		}
 	end
-	local ok2, dlErr2 = curl.download(TOOLCHAIN_URL, archivePath, dlOpts2)
+	local ok2, dlErr2 = curl().download(TOOLCHAIN_URL, archivePath, dlOpts2)
 	if not ok2 then
 		fs.rmdir(tmpDir)
 		if p2 then p2:fail("Downloading toolchain") end
-		error("Failed to download toolchain archive: " .. (dlErr2 or ""))
+		lde.error.raise("Failed to download toolchain archive: " .. (dlErr2 or ""))
 	end
 	if p2 then p2:done("Downloaded toolchain") end
 
@@ -875,7 +875,7 @@ function global.ensureMingw(opts)
 	if code ~= 0 then
 		fs.rmdir(mingwDir)
 		if p3 then p3:fail() end
-		error("Failed to extract toolchain archive: " .. (stderr or ""))
+		lde.error.raise("Failed to extract toolchain archive: " .. (stderr or ""))
 	end
 
 	-- The 7z contains a single top-level folder (toolchain); flatten it

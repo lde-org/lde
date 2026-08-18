@@ -1,6 +1,8 @@
 local fs = require("fs")
 local path = require("path")
 
+local lde = require("lde-core")
+
 local stringEscapes = {
 	["\\"] = "\\\\",
 	['"'] = '\\"',
@@ -43,7 +45,7 @@ end
 local function compileBytecode(content, chunkName)
 	local fn, err = loadstring(content, chunkName)
 	if not fn then
-		error("Failed to compile " .. chunkName .. ": " .. err)
+		lde.error.raise("Failed to compile " .. chunkName .. ": " .. err)
 	end
 	return string.dump(fn)
 end
@@ -60,7 +62,7 @@ local function bundleDir(projectName, dir, files)
 		local absPath = path.join(dir, relativePath)
 		local content = fs.read(absPath)
 		if not content then
-			error("Could not read file: " .. absPath)
+			lde.error.raise("Could not read file: " .. absPath)
 		end
 
 		local moduleName = relativePath:gsub(path.separator, "."):gsub("%.lua$", ""):gsub("%.?init$", "")

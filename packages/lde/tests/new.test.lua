@@ -13,9 +13,8 @@ local tmpBase = path.join(env.tmpdir(), "lde-new-tests")
 -- Clean up from any previous test run
 fs.rmdir(tmpBase)
 
----Run the lde binary, merging stdout and stderr. The plain ldecli helper only
----surfaces one stream, but scaffolding errors (error() tracebacks) go to
----stderr while stdout stays empty.
+---Run the lde binary, merging stdout and stderr so error assertions don't
+---depend on which stream the boundary rendered to.
 ---@param args string[]
 ---@param cwd string?
 ---@return boolean, string

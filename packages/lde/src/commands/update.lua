@@ -44,8 +44,7 @@ local function update(args)
 	local startTime = ansi.now()
 	local pkg, err = lde.Package.open()
 	if not pkg then
-		ansi.printf("{red}%s", err)
-		return
+		lde.error.raise(err)
 	end
 
 	local name = args:pop()
@@ -56,8 +55,7 @@ local function update(args)
 		local depInfo = deps[name] or devDeps[name]
 
 		if not depInfo then
-			ansi.printf("{red}Unknown dependency: %s", name)
-			os.exit(1)
+			lde.error.raise("Unknown dependency: " .. name)
 		end
 
 		local results = pkg:updateDependencies({ [name] = depInfo })

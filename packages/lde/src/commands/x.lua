@@ -1,5 +1,6 @@
 local ansi = require("ansi")
 local env = require("env")
+local lde = require("lde-core")
 
 local resolvePackage = require("lde.util.resolve")
 
@@ -12,8 +13,7 @@ local function executePackage(pkg, scriptArgs, cwd)
 
 	local ok, err = pkg:runFile(nil, scriptArgs, nil, cwd)
 	if not ok then
-		ansi.printf("{red}Error: %s", err or "Script exited with a non-zero exit code")
-		os.exit(1)
+		lde.error.raise(err or "Script exited with a non-zero exit code")
 	end
 end
 
@@ -30,8 +30,7 @@ local function x(args)
 
 	local pkg, err = resolvePackage(args)
 	if not pkg then
-		ansi.printf("{red}Error: %s", err)
-		os.exit(1)
+		lde.error.raise(err)
 	end
 
 	args:flag("") -- consume -- separator if present

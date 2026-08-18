@@ -160,7 +160,7 @@ local function buildPackage(package, destinationPath)
 					{ stdout = "inherit", stderr = "inherit" })
 				if not child then
 					if p then p:fail("Building " .. package:getName()) end
-					error("Failed to spawn build worker for '" .. package:getName() .. "': " .. (serr or "spawn failed"))
+					lde.error.raise("Failed to spawn build worker for '" .. package:getName() .. "': " .. (serr or "spawn failed"))
 				end
 				built = true
 				alreadyBuilt[destinationPath] = true
@@ -183,7 +183,7 @@ local function buildPackage(package, destinationPath)
 				local ok, err, asyncFinalizer = package:runBuildScript(destinationPath)
 				if not ok and not asyncFinalizer then
 					if p then p:fail("Building " .. package:getName()) end
-					error("Build script failed for package '" .. package:getName() .. "': " .. err)
+					lde.error.raise("Build script failed for package '" .. package:getName() .. "': " .. lde.error.message(err))
 				end
 				if p and not asyncFinalizer then p:done("Built " .. package:getName()) end
 				deferred = asyncFinalizer

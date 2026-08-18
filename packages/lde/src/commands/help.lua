@@ -1,9 +1,14 @@
 local ansi = require("ansi")
+local util = require("util")
 
 local usage = require("lde.commands.usage")
 
 local ok, currentVersion = pcall(require, "lde.version")
 currentVersion = ok and currentVersion or "0.10.0"
+
+-- lde-core is only needed to raise the unknown-command error; load it lazily
+-- so the fast help paths (bare `lde`, `lde --help`) never pay for it.
+local lde = util.lazy(function() return require("lde-core") end)
 
 --- Render a table of options as aligned rows: "  --flag <arg>  desc".
 ---@param opts table<string, { arg?: string, desc: string }>
@@ -31,9 +36,7 @@ local function forCommand(name)
 	local canonical = usage.aliases[name] or name
 	local spec = usage.commands[canonical]
 	if not spec then
-		ansi.printf("{red}Unknown command: %s", name)
-		ansi.printf("{gray}Run {bold}lde help{reset}{gray} to see all commands.")
-		os.exit(1)
+		lde().error.raise("Unknown command " .. ansi.colorize("yellow", '"' .. name .. '"'), { hint = "Run 'lde help' to see all commands." })
 	end
 
 	ansi.printf("{bold}{blue}Usage:{reset} %s", spec.usage)

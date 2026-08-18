@@ -38,7 +38,7 @@ local function ensureTL()
 	for attempt = 1, 2 do
 		local pkg, _, err = ldeUtil.openLuarocksPackage("tl")
 		if not pkg then
-			error("Failed to resolve the Teal compiler (luarocks:tl): " .. (err or "unknown error"))
+			lde.error.raise("Failed to resolve the Teal compiler (luarocks:tl): " .. (err or "unknown error"))
 		end
 		pkg:build()
 		pkg:installDependencies()
@@ -58,7 +58,7 @@ local function ensureTL()
 		st:close()
 
 		if attempt == 2 then
-			error("The Teal compiler installed but failed to load")
+			lde.error.raise("The Teal compiler installed but failed to load")
 		end
 		local url = ldeUtil.resolveLuarocksSource("tl")
 		if url then
@@ -67,7 +67,7 @@ local function ensureTL()
 			fs.delete(archiveDir .. ".archive")
 		end
 	end
-	error("The Teal compiler could not be loaded")
+	lde.error.raise("The Teal compiler could not be loaded")
 end
 
 ---@param dir string
@@ -128,11 +128,11 @@ local function compileDir(srcDir, outDir)
 			mkdirp(path.dirname(outPath))
 			local source = fs.read(absSrc)
 			if not source then
-				error("Failed to read " .. absSrc)
+				lde.error.raise("Failed to read " .. absSrc)
 			end
 			local code, err = compileSource(source, absSrc)
 			if not code then
-				error("Failed to compile " .. absSrc .. ":\n" .. (err or "unknown error"))
+				lde.error.raise("Failed to compile " .. absSrc .. ":\n" .. (err or "unknown error"))
 			end
 			fs.write(outPath, code)
 			-- Keep the .tl source alongside the compiled .lua so `tl check` can

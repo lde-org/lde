@@ -86,8 +86,7 @@ local function tree(_args)
 
 	local pkg, err = lde.Package.open()
 	if not pkg then
-		ansi.printf("{red}%s", err)
-		return
+		lde.error.raise(err)
 	end
 
 	printTree(pkg, nil, 0, "", true)

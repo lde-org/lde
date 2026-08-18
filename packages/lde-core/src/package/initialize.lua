@@ -3,6 +3,8 @@ local fs = require("fs")
 local util = require("util")
 local ansi = require("ansi")
 
+local lde = require("lde-core")
+
 local git2 = util.lazy(function() return require("git2-sys") end)
 
 local Package = require("lde-core.package")
@@ -309,28 +311,28 @@ local function initPackage(dir, opts)
 
 	local projectType = opts.type or "blank"
 	if projectType ~= "blank" and projectType ~= "library" then
-		error("Unknown project type: " .. projectType .. " (expected 'blank' or 'library')")
+		lde.error.raise("Unknown project type: " .. projectType .. " (expected 'blank' or 'library')")
 	end
 
 	local language = opts.language or "lua"
 	if language ~= "lua" and language ~= "teal" and language ~= "moonscript" then
-		error("Unknown language: " .. language .. " (expected 'lua', 'teal', or 'moonscript')")
+		lde.error.raise("Unknown language: " .. language .. " (expected 'lua', 'teal', or 'moonscript')")
 	end
 
 	local packageName = path.basename(dir)
 	if opts.name and opts.name ~= "" then
 		packageName = opts.name --[[@as string]]
 		if packageName:find("[%s/\\]") then
-			error("Invalid package name: '" .. packageName .. "' (no spaces or path separators)")
+			lde.error.raise("Invalid package name: '" .. packageName .. "' (no spaces or path separators)")
 		end
 	end
 	if packageName == "tests" then
-		error("The name 'tests' is reserved for the test fixtures directory (target/tests during lde test); choose another name")
+		lde.error.raise("The name 'tests' is reserved for the test fixtures directory (target/tests during lde test); choose another name")
 	end
 
 	local configPath = path.join(dir, "lde.json")
 	if fs.exists(configPath) then
-		error("Directory already contains lde.json: " .. dir)
+		lde.error.raise("Directory already contains lde.json: " .. dir)
 	end
 
 	if not fs.isdir(dir) then
@@ -362,7 +364,7 @@ local function initPackage(dir, opts)
 	else -- Try to append to it
 		local content = fs.read(gitignorePath)
 		if not content then
-			error("Failed to read existing .gitignore at: " .. gitignorePath)
+			lde.error.raise("Failed to read existing .gitignore at: " .. gitignorePath)
 		end
 
 		if not string.find(content, "/target/", 1, true) then
@@ -416,7 +418,7 @@ local function initPackage(dir, opts)
 
 	local package = Package.open(dir)
 	if not package then
-		error("Failed to initialize package at directory: " .. dir)
+		lde.error.raise("Failed to initialize package at directory: " .. dir)
 	end
 
 	local src = package:getSrcDir()

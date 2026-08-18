@@ -10,8 +10,7 @@ local function compile(args)
 
 	local pkg, err = lde.Package.open()
 	if not pkg then
-		ansi.printf("{red}%s", err)
-		return
+		lde.error.raise(err)
 	end
 
 	if not outFile then
@@ -25,7 +24,7 @@ local function compile(args)
 	local executable = pkg:compile()
 	local ok, moveErr = fs.move(executable, outFile)
 	if not ok then
-		error("Failed to move executable: " .. moveErr)
+		lde.error.raise("Failed to move executable: " .. moveErr)
 	end
 
 	if jit.os ~= "Windows" then ---@cast fs fs.raw.posix

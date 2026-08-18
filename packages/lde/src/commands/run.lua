@@ -18,8 +18,7 @@ local runtime = require("lde-core.runtime")
 local function runWithWatcher(pkg, pkgErr, name, scriptArgs, mode)
 	if not pkg then
 		if not name or not fs.exists(name) then
-			ansi.printf("{red}%s", pkgErr or "No script file given")
-			return
+			lde.error.raise(pkgErr or "No script file given")
 		end
 
 		local entry = path.resolve(env.cwd(), name)
@@ -162,14 +161,13 @@ local function run(args)
 			})
 
 			if not ok then
-				error("Failed to run script: " .. (err or "Script exited with a non-zero exit code"))
+				lde.error.raise("Failed to run script: " .. (err or "Script exited with a non-zero exit code"))
 			end
 
 			return
 		end
 
-		ansi.printf("{red}%s", pkgErr)
-		return
+		lde.error.raise(pkgErr or "No script file given")
 	end
 
 	pkg:build()
@@ -184,8 +182,7 @@ local function run(args)
 	end
 
 	if not ok then
-		ansi.printf("{red}Error: %s", err or "Script exited with a non-zero exit code")
-		os.exit(1)
+		lde.error.raise(err or "Script exited with a non-zero exit code")
 	end
 end
 

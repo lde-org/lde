@@ -30,7 +30,7 @@ local function ensureMoon()
 	for attempt = 1, 2 do
 		local pkg, _, err = ldeUtil.openLuarocksPackage("moonscript")
 		if not pkg then
-			error("Failed to resolve the Moonscript compiler (luarocks:moonscript): " .. (err or "unknown error"))
+			lde.error.raise("Failed to resolve the Moonscript compiler (luarocks:moonscript): " .. (err or "unknown error"))
 		end
 
 		pkg:build()
@@ -51,7 +51,7 @@ local function ensureMoon()
 		st:close()
 
 		if attempt == 2 then
-			error("The Moonscript compiler installed but failed to load")
+			lde.error.raise("The Moonscript compiler installed but failed to load")
 		end
 
 		local url = ldeUtil.resolveLuarocksSource("moonscript")
@@ -62,7 +62,7 @@ local function ensureMoon()
 		end
 	end
 
-	error("The Moonscript compiler could not be loaded")
+	lde.error.raise("The Moonscript compiler could not be loaded")
 end
 
 ---@param dir string
@@ -111,7 +111,7 @@ local function compileDir(srcDir, outDir)
 			mkdirp(path.dirname(path.join(outDir, outRel)))
 			local code, err = compileFile(absSrc)
 			if not code then
-				error("Failed to compile " .. absSrc .. ":\n" .. (err or "unknown error"))
+				lde.error.raise("Failed to compile " .. absSrc .. ":\n" .. (err or "unknown error"))
 			end
 			fs.write(path.join(outDir, outRel), code)
 		else

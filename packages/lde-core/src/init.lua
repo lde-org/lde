@@ -4,6 +4,8 @@ package.loaded[(...)] = lde
 
 lde.verbose = false
 
+lde.error = require("lde-core.error")
+
 lde.Package = require("lde-core.package")
 lde.Lockfile = require("lde-core.lockfile")
 

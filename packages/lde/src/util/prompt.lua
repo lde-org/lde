@@ -1,6 +1,8 @@
 local ansi = require("ansi")
 local ffi = require("ffi")
 
+local lde = require("lde-core")
+
 local raw = jit.os == "Windows"
 	and require("readline.raw.windows")
 	or require("readline.raw.posix")
@@ -168,7 +170,7 @@ function prompt.select(opts)
 	raw.exitRaw()
 
 	if not ok then
-		error(err, 0)
+		lde.error.raise(err)
 	end
 
 	-- Collapse the options into a single answer line.
@@ -240,7 +242,7 @@ function prompt.ask(opts)
 		end)
 		raw.exitRaw()
 		if not ok then
-			error(err, 0)
+			lde.error.raise(err)
 		end
 
 		io.write("\n")
@@ -309,7 +311,7 @@ function prompt.scaffoldOptions(args)
 	local typeFlag = args:option("type")
 	if typeFlag then
 		if typeFlag ~= "blank" and typeFlag ~= "library" then
-			error("Invalid --type '" .. typeFlag .. "' (expected 'blank' or 'library')")
+			lde.error.raise("Invalid --type '" .. typeFlag .. "' (expected 'blank' or 'library')")
 		end
 		opts.type = typeFlag
 	end
@@ -317,7 +319,7 @@ function prompt.scaffoldOptions(args)
 	local languageFlag = args:option("language")
 	if languageFlag then
 		if languageFlag ~= "lua" and languageFlag ~= "teal" and languageFlag ~= "moonscript" then
-			error("Invalid --language '" .. languageFlag .. "' (expected 'lua', 'teal', or 'moonscript')")
+			lde.error.raise("Invalid --language '" .. languageFlag .. "' (expected 'lua', 'teal', or 'moonscript')")
 		end
 		opts.language = languageFlag
 	end

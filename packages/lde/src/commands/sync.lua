@@ -5,24 +5,16 @@ local lde = require("lde-core")
 local function sync(args)
 	local pkg, err = lde.Package.open()
 	if not pkg then
-		ansi.printf("{red}%s", err)
-		return
+		lde.error.raise(err)
 	end
 
 	local start = ansi.now()
 	local opts = { summary = true, locked = args:flag("locked") }
 
-	local runtime, dev
-	local ok, installErr = pcall(function()
-		pkg:build()
-		runtime = pkg:installDependencies(nil, nil, nil, opts)
-		dev = not args:flag("production") and pkg:installDevDependencies(opts)
-	end)
-	if not ok then
-		-- Strip the bundled "file:line: " prefixes the error() calls add.
-		ansi.printf("{red}%s", tostring(installErr):gsub('%[string "[^"]+"%]:%d+: ', ""))
-		os.exit(1)
-	end
+	-- Errors propagate to the CLI boundary, which renders them cleanly.
+	pkg:build()
+	local runtime = pkg:installDependencies(nil, nil, nil, opts)
+	local dev = not args:flag("production") and pkg:installDevDependencies(opts)
 
 	if (runtime and runtime.changed) or (dev and dev.changed) then
 		ansi.printf("{green}All dependencies installed successfully.")

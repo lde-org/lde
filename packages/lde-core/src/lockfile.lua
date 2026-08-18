@@ -2,6 +2,8 @@ local fs = require("fs")
 local json = require("json")
 local util = require("util")
 
+local lde = require("lde-core")
+
 ---@class lde.Lockfile.BaseDependency
 ---@field name string?
 ---@field rockspec string? # URL or relative path to the rockspec file
@@ -71,7 +73,7 @@ function Lockfile:getDependencies()
 	if self:getVersion() == "1" then
 		return self.raw.dependencies
 	else
-		error("Unsupported lockfile version: " .. tostring(self.raw.version))
+		lde.error.raise("Unsupported lockfile version: " .. tostring(self.raw.version))
 	end
 end
 

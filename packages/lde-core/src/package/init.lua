@@ -1,5 +1,7 @@
 local Lockfile = require("lde-core.lockfile")
 
+local lde = require("lde-core")
+
 local global = require("lde-core.global")
 
 local fs = require("fs")
@@ -193,7 +195,7 @@ function Package:readConfig()
 
 	local s = fs.stat(configPath)
 	if not s then
-		error("Could not read lde.json: " .. configPath)
+		lde.error.raise("Could not read lde.json: " .. configPath)
 	end
 
 	if self.cachedConfig and self.cachedConfigMtime == s.modifyTime then
@@ -202,7 +204,7 @@ function Package:readConfig()
 
 	local content = fs.read(configPath)
 	if not content then
-		error("Could not read lde.json: " .. configPath)
+		lde.error.raise("Could not read lde.json: " .. configPath)
 	end
 
 	local newConfig = Package.Config.new(json.decode(content))
@@ -349,7 +351,7 @@ end
 function Package:runScript(name, capture, args)
 	local scripts = self:readConfig().scripts
 	if not scripts or not scripts[name] then
-		error("No script named '" .. name .. "' in lde.json")
+		lde.error.raise("No script named '" .. name .. "' in lde.json")
 	end
 	local opts = { cwd = self:getDir() }
 	if not capture then

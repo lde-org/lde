@@ -71,7 +71,7 @@ local function applyLock(ctx, alias, depInfo)
 	-- Failing loudly instead of resolving a fresh commit/version is what keeps
 	-- `lde sync --locked` reproducible and offline.
 	if ctx.locked and not depInfo.path then
-		error("Lockfile is out of date: '" .. alias .. "' is not pinned. Run `lde sync` to update it.")
+		lde.error.raise("Lockfile is out of date: '" .. alias .. "' is not pinned. Run `lde sync` to update it.")
 	end
 	return depInfo
 end
@@ -189,7 +189,7 @@ local function makeLuarocksNode(alias, depInfo)
 	local name = depInfo.name or depInfo.luarocks -- the luarocks package name (alias may differ)
 	local version, rockspecUrl, srcUrl, err = lde.util.resolveLuarocksBest(name, depInfo.version)
 	if not version then
-		error("Failed to resolve luarocks dep '" .. alias .. "': " .. (err or ""))
+		lde.error.raise("Failed to resolve luarocks dep '" .. alias .. "': " .. (err or ""))
 	end
 
 	return {
@@ -252,7 +252,7 @@ local function makeNode(alias, depInfo, relativeTo, ctx)
 		lde.global.syncRegistry()
 		local portfile, err = lde.global.lookupRegistryPackage(packageName)
 		if not portfile then
-			error("Registry lookup failed for '" .. alias .. "': " .. err)
+			lde.error.raise("Registry lookup failed for '" .. alias .. "': " .. err)
 		end
 		local _, commit = lde.global.resolveRegistryVersion(portfile, depInfo.version)
 		local gitPlan = lde.global.planGitRepo(packageName, portfile.git, portfile.branch, commit)
@@ -273,7 +273,7 @@ local function makeNode(alias, depInfo, relativeTo, ctx)
 			expandAfter = true,
 		}
 	else
-		error("Unsupported dependency type for: " .. alias)
+		lde.error.raise("Unsupported dependency type for: " .. alias)
 	end
 end
 
@@ -363,7 +363,7 @@ local function expand(node, ctx, graph, order)
 			local existingKey = graph[alias].sourceKey
 			local newKey = depSourceKey(alias, effective, node.expandDir or ctx.relativeTo)
 			if existingKey ~= newKey then
-				error("Conflicting sources for dependency '" .. alias .. "':\n  " .. existingKey .. "\n  " .. newKey)
+				lde.error.raise("Conflicting sources for dependency '" .. alias .. "':\n  " .. existingKey .. "\n  " .. newKey)
 			end
 		end
 	end
@@ -378,7 +378,7 @@ handlers.path = {
 	open = function(n)
 		local pkg, err = lde.Package.open(n.dir, n.depInfo.rockspec)
 		if not pkg then
-			error("Failed to load local dependency package for: " .. n.alias .. "\nError: " .. err)
+			lde.error.raise("Failed to load local dependency package for: " .. n.alias .. "\nError: " .. err)
 		end
 		n.pkg = pkg
 		n.expandDir = pkg:getDir()
@@ -413,19 +413,19 @@ handlers.git = {
 		if c.kind == "clone" then
 			local clone = n.gitPlan --[[@as lde.install.GitPlan]].clone --[[@as { repoName: string, repoUrl: string, commit: string, branch: string? }]]
 			local ok, err = lde.global.cloneDir(clone.repoName, clone.repoUrl, clone.commit, clone.branch)
-			if not ok then error("Failed to clone git repository: " .. (err or "unknown error")) end
+			if not ok then lde.error.raise("Failed to clone git repository: " .. (err or "unknown error")) end
 			return
 		end
 		local res = download.result(c.file --[[@as string]])
-		if res and not res.ok then error("Failed to download " .. c.url .. ": " .. (res.err or "")) end
+		if res and not res.ok then lde.error.raise("Failed to download " .. c.url .. ": " .. (res.err or "")) end
 		local ok, err = lde.global.extractGitTarball(c.file --[[@as string]], c.dir --[[@as string]])
-		if not ok then error("Failed to extract " .. n.repoName .. ": " .. (err or "")) end
+		if not ok then lde.error.raise("Failed to extract " .. n.repoName .. ": " .. (err or "")) end
 	end,
 	---@param n lde.install.Node
 	open = function(n)
 		local gitPlan = n.gitPlan --[[@as lde.install.GitPlan]]
 		local pkg, err = lde.util.findNamedPackage(gitPlan.dir, n.repoName, n.depInfo.rockspec)
-		if not pkg then error(err or "No package found in git repository") end
+		if not pkg then lde.error.raise(err or "No package found in git repository") end
 		n.pkg = pkg
 		n.expandDir = pkg:getDir()
 	end,
@@ -461,9 +461,9 @@ handlers.archive = {
 	---@param c lde.install.ContentPlan
 	materialize = function(n, c)
 		local res = download.result(c.file --[[@as string]])
-		if res and not res.ok then error("Failed to download archive '" .. c.url .. "': " .. (res.err or "")) end
+		if res and not res.ok then lde.error.raise("Failed to download archive '" .. c.url .. "': " .. (res.err or "")) end
 		local ok, err = lde.global.extractArchive(c.url --[[@as string]], c.file --[[@as string]], c.dir --[[@as string]])
-		if not ok then error("Failed to extract archive '" .. c.url .. "': " .. (err or "")) end
+		if not ok then lde.error.raise("Failed to extract archive '" .. c.url .. "': " .. (err or "")) end
 	end,
 	---@param n lde.install.Node
 	open = function(n)
@@ -475,12 +475,12 @@ handlers.archive = {
 		if n.depInfo.archive:match("%.src%.rock$") and not n.depInfo.rockspec then
 			local srcDir, srcRockspec, merr = lde.util.materializeSrcRock(c.dir --[[@as string]])
 			if not srcDir then
-				error("Failed to load archive dependency '" .. n.alias .. "': " .. (merr or "unknown error"))
+				lde.error.raise("Failed to load archive dependency '" .. n.alias .. "': " .. (merr or "unknown error"))
 			end
 			pkgDir, rockspecPath = srcDir, srcRockspec
 		end
 		local pkg, err = lde.Package.open(pkgDir, rockspecPath)
-		if not pkg then error("Failed to load archive dependency '" .. n.alias .. "': " .. (err or "")) end
+		if not pkg then lde.error.raise("Failed to load archive dependency '" .. n.alias .. "': " .. (err or "")) end
 		n.pkg = pkg
 		n.expandDir = pkg:getDir()
 	end,
@@ -513,7 +513,7 @@ handlers.luarocks = {
 		consume(n)
 		local source = n.spec and n.spec.source
 		if not source or not source.url then
-			error("No source artifact for '" .. n.alias .. "'")
+			lde.error.raise("No source artifact for '" .. n.alias .. "'")
 		end
 		local sourceUrl = source.url
 		-- LuaRocks treats any of these as a git source: git://, git+https://,
@@ -550,13 +550,13 @@ handlers.luarocks = {
 			local fallback = n._fallbackGit --[[@as lde.install.GitPlan]]
 			local clone = fallback.clone --[[@as { repoName: string, repoUrl: string, commit: string, branch: string? }]]
 			local ok, err = lde.global.cloneDir(clone.repoName, clone.repoUrl, clone.commit, clone.branch)
-			if not ok then error("Failed to clone git repository: " .. (err or "unknown error")) end
+			if not ok then lde.error.raise("Failed to clone git repository: " .. (err or "unknown error")) end
 			return
 		end
 		local res = download.result(c.file --[[@as string]])
-		if res and not res.ok then error("Failed to download " .. c.url .. ": " .. (res.err or "")) end
+		if res and not res.ok then lde.error.raise("Failed to download " .. c.url .. ": " .. (res.err or "")) end
 		local ok, err = lde.global.extractArchive(c.url --[[@as string]], c.file --[[@as string]], c.dir --[[@as string]])
-		if not ok then error("Failed to extract '" .. (c.url or c.dir) .. "': " .. (err or "")) end
+		if not ok then lde.error.raise("Failed to extract '" .. (c.url or c.dir) .. "': " .. (err or "")) end
 	end,
 	---@param n lde.install.Node
 	consume = function(n)
@@ -564,7 +564,7 @@ handlers.luarocks = {
 			local content = fs.read(n.rockspecFile)
 			local ok, spec = rocked.parse(content)
 			if not ok then
-				error("Failed to parse rockspec '" .. tostring(n.rockspecUrl) .. "': " .. tostring(spec))
+				lde.error.raise("Failed to parse rockspec '" .. tostring(n.rockspecUrl) .. "': " .. tostring(spec))
 			end
 			n.spec = spec
 			n.deps = {}
@@ -587,7 +587,7 @@ handlers.luarocks = {
 			local pkg = open(n)
 			n.deps = pkg:readConfig().dependencies or {}
 		else
-			error("Missing rockspec for '" .. n.alias .. "': " .. tostring(n.rockspecUrl))
+			lde.error.raise("Missing rockspec for '" .. n.alias .. "': " .. tostring(n.rockspecUrl))
 		end
 	end,
 	---@param n lde.install.Node
@@ -602,7 +602,7 @@ handlers.luarocks = {
 			local pkgDir = c and c.dir or (n._fallbackGit and n._fallbackGit.dir or n.dir)
 			pkg, err = lde.Package.openRockspec(pkgDir, n.rockspecUrl)
 		end
-		if not pkg then error("Failed to load '" .. n.name .. "': " .. (err or "")) end
+		if not pkg then lde.error.raise("Failed to load '" .. n.name .. "': " .. (err or "")) end
 		n.pkg = pkg
 		n.expandDir = pkg:getDir()
 	end,
@@ -662,7 +662,7 @@ local function collectDependencies(dependencies, ctx)
 				local existingKey = graph[alias].sourceKey
 				local newKey = depSourceKey(alias, effective, relativeTo)
 				if existingKey ~= newKey then
-					error("Conflicting sources for dependency '" .. alias .. "':\n  " .. existingKey .. "\n  " .. newKey)
+					lde.error.raise("Conflicting sources for dependency '" .. alias .. "':\n  " .. existingKey .. "\n  " .. newKey)
 				end
 			end
 		end
@@ -785,7 +785,7 @@ local function collectDependencies(dependencies, ctx)
 			local existingKey = sourceKey(ctx.stack[alias].lock, ctx.stack[alias].pkg)
 			local newKey = sourceKey(lockEntry, pkg)
 			if existingKey ~= newKey then
-				error("Conflicting sources for dependency '" .. alias .. "':\n  " .. existingKey .. "\n  " .. newKey)
+				lde.error.raise("Conflicting sources for dependency '" .. alias .. "':\n  " .. existingKey .. "\n  " .. newKey)
 			end
 		else
 			ctx.stack[alias] = { pkg = pkg, lock = withConfigFlags(lockEntry, node.depInfo) }
@@ -918,7 +918,7 @@ local function makeBuildScheduler(ctx)
 	local function finalizeJob(job)
 		local ok, err = job.build.finalize()
 		if not ok then
-			error("Build failed for '" .. job.alias .. "': " .. tostring(err))
+			lde.error.raise("Build failed for '" .. job.alias .. "': " .. tostring(err))
 		end
 		ctx.builds = ctx.builds + 1
 		done[job.alias] = true
@@ -1151,7 +1151,7 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 	local rootLockfile = package:readLockfile()
 	local lockfileStale = rootLockfile ~= nil and rootLockfile:isStale(package:readConfig())
 	if opts.locked and lockfileStale then
-		error("Lockfile is out of date: lde.json dependencies changed since it was written. Run `lde sync` to update it.")
+		lde.error.raise("Lockfile is out of date: lde.json dependencies changed since it was written. Run `lde sync` to update it.")
 	end
 	if lockfileStale then rootLockfile = nil end
 
@@ -1202,7 +1202,7 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 		-- Only fail the bar if it actually rendered (downloads were in flight);
 		-- a resolution error (e.g. --locked pin check) never drew anything.
 		if bar and ctx.downloads > 0 then bar:fail() end
-		error(err)
+		lde.error.raise(err)
 	end
 	if not sessionWasActive then download.finish() end
 

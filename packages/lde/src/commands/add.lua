@@ -14,7 +14,10 @@ local function add(args)
 	local gitUrl = args:option("git")
 	local pathValue = args:option("path")
 
-	local rawName = assert(args:pop(), "Usage: lde add <name>[@<version>] --path <path> | --git <url>")
+	local rawName = args:pop()
+	if not rawName then
+		lde.error.raise("Usage: lde add <name>[@<version>] --path <path> | --git <url>")
+	end
 
 	-- Support lde add <name>@<version> syntax
 	local name, versionFromName = rawName:match("^([^@]+)@(.+)$")
@@ -40,16 +43,14 @@ local function add(args)
 
 	local p, err = lde.Package.open()
 	if not p then
-		ansi.printf("{red}%s", err)
-		return
+		lde.error.raise(err)
 	end
 
 	local configPath = p:getConfigPath()
 
 	local configRaw = fs.read(configPath)
 	if not configRaw then
-		ansi.printf("{red}Config file not found: %s", configPath)
-		return
+		lde.error.raise("Config file not found: " .. configPath)
 	end
 
 	---@type lde.Package.Config

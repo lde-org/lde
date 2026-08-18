@@ -13,7 +13,7 @@ local function new(args)
 	local name = args:pop()
 	if not name then
 		if not prompt.interactive then
-			error("Usage: lde new <name>")
+			lde.error.raise("Usage: lde new <name>")
 		end
 
 		-- No name given: ask for it — it names both the directory and the package.
@@ -22,7 +22,7 @@ local function new(args)
 			os.exit(1)
 		end
 		if asked:find("[%s/\\]") then
-			error("Invalid project name: '" .. asked .. "' (no spaces or path separators)")
+			lde.error.raise("Invalid project name: '" .. asked .. "' (no spaces or path separators)")
 		end
 		name = asked
 		opts.name = asked
@@ -35,16 +35,16 @@ local function new(args)
 	-- anything.
 	local manifestName = opts.name or path.basename(name)
 	if manifestName == "tests" then
-		error("The name 'tests' is reserved for the test fixtures directory; choose another project name")
+		lde.error.raise("The name 'tests' is reserved for the test fixtures directory; choose another project name")
 	end
 
 	if fs.exists(name) then
-		error("Directory " .. name .. " already exists")
+		lde.error.raise("Directory " .. name .. " already exists")
 	end
 
 	local parent = path.dirname(name)
 	if parent ~= "" and parent ~= "." and not fs.isdir(parent) then
-		error("Cannot create '" .. name .. "': parent directory does not exist")
+		lde.error.raise("Cannot create '" .. name .. "': parent directory does not exist")
 	end
 
 	fs.mkdir(name)

@@ -20,6 +20,7 @@
 	},
 	"runtime": {
 		"version": "LuaJIT",
+		"enableLuaJITExtensions": true,
 		"path": ["./target/?.lua", "./target/?/init.lua"]
 	},
 	"workspace": {

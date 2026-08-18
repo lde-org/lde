@@ -41,7 +41,7 @@ local function applyOverrides()
 			-- (deleted while the shell was open). Only an absolute -C can
 			-- still get us somewhere useful in that state.
 			if not path.isAbsolute(cwdOverride) then
-				ansi.printf("{red}Error: Current working directory no longer exists (it may have been deleted); use an absolute path with -C or cd to an existing directory")
+				ansi.printf("{red}error{gray}:{reset} Current working directory no longer exists (it may have been deleted); use an absolute path with -C or cd to an existing directory")
 				os.exit(1)
 			end
 
@@ -50,12 +50,12 @@ local function applyOverrides()
 			requestedCwd = path.resolve(cwd, cwdOverride)
 		end
 		if not fs.isdir(requestedCwd) then
-			ansi.printf("{red}Error: Directory does not exist: %s", requestedCwd)
+			ansi.printf("{red}error{gray}:{reset} Directory does not exist: %s", requestedCwd)
 			os.exit(1)
 		end
 
 		if not env.chdir(requestedCwd) then
-			ansi.printf("{red}Error: Failed to change directory: %s", requestedCwd)
+			ansi.printf("{red}error{gray}:{reset} Failed to change directory: %s", requestedCwd)
 			os.exit(1)
 		end
 	end
@@ -89,18 +89,10 @@ end
 local evalCode = args:short("e")
 
 	-- `--help` before a command shows that command's help; alone it shows the
-	-- main help. Kept before the module loading below so plain `lde --help`
-	-- stays fast (no ansi/env/fs/path or lde-core).
+	-- main help. Handled inside the boundary (after applyOverrides) so unknown
+	-- targets render cleanly; help.lua lazy-loads lde-core, so plain `lde
+	-- --help` still pays nothing beyond ansi/env/fs/path.
 	local helpRequested = args:flag("help")
-	if helpRequested and not evalCode and not luaCliArgs then
-		local target = args:pop()
-		if target then
-			require("lde.commands.help").forCommand(target)
-		else
-			require("lde.commands.help").main()
-		end
-		return
-	end
 
 -- Hidden completion backend invoked by the generated shell scripts. Handled
 -- before the overrides and lde-core load so tab-completion stays fast.
@@ -118,139 +110,175 @@ if jit.os == "Windows" then
 	end
 end
 
-local ansi, env, fs, path = applyOverrides()
+-- Everything from here on runs through the error boundary: known errors
+-- (lde.error.raise) render as a single clean message, anything unexpected is
+-- treated as a bug and gets the "lde crashed" screen with a traceback. The
+-- fast paths above (--version/--help/__complete/--lua) stay outside so plain
+-- queries never pay for lde-core.
+	local ok, boundaryErr = xpcall(function()
+	local ansi, env, fs = applyOverrides()
 
-if args:flag("update-path") or args:flag("setup") then
-	require("lde.setup")()
-	return
-end
-
-if args:flag("ensure-mingw") then
-	local lde = require("lde-core")
-	lde.verbose = true
-	lde.global.ensureMingw()
-	return
-end
-
-local commandName
-if not evalCode and not luaCliArgs then
-	commandName = args:pop()
-	if not commandName or commandName == "help" then
-		require("lde.commands.help").main(args)
+	-- `--help` before a command shows that command's help; alone it shows the
+	-- main help. Runs through the boundary so `lde --help <unknown>` renders
+	-- a clean error; help.lua lazy-loads lde-core so the success path stays fast.
+	if helpRequested and not evalCode and not luaCliArgs then
+		local target = args:pop()
+		if target then
+			require("lde.commands.help").forCommand(target)
+		else
+			require("lde.commands.help").main()
+		end
 		return
 	end
-end
 
-local lde = require("lde-core")
-lde.verbose = true
-
--- Hidden build worker: run a package's build.lua in a subprocess so the
--- install scheduler can overlap independent native builds (see
--- lde-core/package/build.lua). Invoked as: lde __build-pkg <pkgDir> <outDir>.
-if commandName == "__build-pkg" then
-	local pkgDir = assert(args:pop(), "__build-pkg: missing package dir")
-	local outDir = assert(args:pop(), "__build-pkg: missing output dir")
-	local pkg, perr = lde.Package.open(pkgDir)
-	if not pkg then
-		io.stderr:write("__build-pkg: " .. (perr or "failed to open package") .. "\n")
-		os.exit(1)
-	end
-	local ok, berr = pkg:runBuildScript(outDir)
-	if not ok then
-		io.stderr:write("__build-pkg: " .. (berr or "build failed") .. "\n")
-		os.exit(1)
-	end
-	return
-end
-
-if evalCode then
-	local pkg = lde.Package.open()
-	local ok, result
-	if pkg then
-		pkg:installDependencies()
-		ok, result = pkg:runString(evalCode)
-	else
-		ok, result = lde.runtime.executeString(evalCode)
+	if args:flag("update-path") or args:flag("setup") then
+		require("lde.setup")()
+		return
 	end
 
-	if not ok then
-		ansi.printf("{red}%s", tostring(result))
-	elseif result ~= nil then
-		print(tostring(result))
+	local commandName
+	if not evalCode and not luaCliArgs then
+		commandName = args:pop()
+		if not commandName or commandName == "help" then
+			require("lde.commands.help").main(args)
+			return
+		end
 	end
 
-	return
-end
+	-- Everything below needs the full core library. Keep the fast commands
+	-- above (bare `lde`, `lde help`, `--setup`) free of lde-core so startup
+	-- stays ~1ms; the boundary's crash renderer requires it lazily instead.
+	local lde = require("lde-core")
+	lde.verbose = true
 
-if luaCliArgs then
-	local ok, err = lde.runtime.executeLuaCLI(luaCliArgs, { cwd = env.cwd() })
-	if not ok then
-		ansi.printf("{red}Error: %s", tostring(err)); os.exit(1)
+	-- env.cwd() returns nil when the shell's cwd was deleted out from under
+	-- it (relative FS ops then act on the orphaned directory, so commands
+	-- don't fail on their own). Every command below operates relative to
+	-- cwd — fail cleanly instead of crashing on path.resolve(nil, ...).
+	if not env.cwd() then
+		lde.error.raise("Current working directory no longer exists (it may have been deleted); use an absolute path with -C or cd to an existing directory")
 	end
-	return
-end
 
-local commandFiles = {
-	help      = "lde.commands.help",
-	init      = "lde.commands.initialize",
-	new       = "lde.commands.new",
-	upgrade   = "lde.commands.upgrade",
-	add       = "lde.commands.add",
-	remove    = "lde.commands.remove",
-	run       = "lde.commands.run",
-	x         = "lde.commands.x",
-	install   = "lde.commands.install",
-	i         = "lde.commands.install",
-	sync      = "lde.commands.sync",
-	bundle    = "lde.commands.bundle",
-	compile   = "lde.commands.compile",
-	test      = "lde.commands.test",
-	tree      = "lde.commands.tree",
-	update    = "lde.commands.update",
-	outdated  = "lde.commands.outdated",
-	uninstall = "lde.commands.uninstall",
-	publish   = "lde.commands.publish",
-	completion = "lde.commands.completion",
-	repl      = "lde.commands.repl"
-}
+	if args:flag("ensure-mingw") then
+		lde.global.ensureMingw()
+		return
+	end
 
--- Commands that don't need the global cache dirs initialized
-local noInitCommands = { help = true, completion = true }
+	-- Hidden build worker: run a package's build.lua in a subprocess so the
+	-- install scheduler can overlap independent native builds (see
+	-- lde-core/package/build.lua). Invoked as: lde __build-pkg <pkgDir> <outDir>.
+	if commandName == "__build-pkg" then
+		local pkgDir = args:pop()
+		local outDir = args:pop()
+		if not pkgDir or not outDir then
+			lde.error.raise("__build-pkg: missing package dir or output dir")
+		end
+		local pkg, perr = lde.Package.open(pkgDir)
+		if not pkg then
+			lde.error.raise("__build-pkg: " .. (perr or "failed to open package"))
+		end
+		local bok, berr = pkg:runBuildScript(outDir)
+		if not bok then
+			lde.error.raise("__build-pkg: " .. (berr or "build failed"))
+		end
+		return
+	end
 
-if not noInitCommands[commandName] and not treeOverride then
-	lde.global.init()
-end
-
-local commandFile = commandFiles[commandName]
-if commandFile then
-	require(commandFile)(args)
-elseif fs.exists(commandName) then
-	-- TODO: Replace this hacky behavior
-	table.insert(args.raw, 1, commandName)
-	require("lde.commands.run")(args)
-else
-	local pkg = lde.Package.open()
-	local scripts = pkg and pkg:readConfig().scripts
-
-	if scripts and scripts[commandName] then
-		---@cast pkg -nil
-
-		-- npm-style: everything after `--` is passed to the script as its args.
-		local scriptArgs = {}
-		local dash, dashPos = args:flag("")
-		if dash then
-			scriptArgs = args:drain(dashPos + 1)
+	if evalCode then
+		local pkg = lde.Package.open()
+		local eok, result
+		if pkg then
+			pkg:installDependencies()
+			eok, result = pkg:runString(evalCode)
+		else
+			eok, result = lde.runtime.executeString(evalCode)
 		end
 
-		pkg:build()
-		pkg:installDependencies()
-
-		local ok, err = pkg:runScript(commandName, nil, scriptArgs)
-		if not ok then
-			error("Script '" .. commandName .. "' failed: " .. (err or "exited with a non-zero exit code"))
+		if not eok then
+			ansi.printf("{red}%s", tostring(result))
+		elseif result ~= nil then
+			print(tostring(result))
 		end
-	else
-		ansi.printf("{red}Unknown command: %s", tostring(commandName))
-		os.exit(1)
+
+		return
 	end
+
+	if luaCliArgs then
+		local lok, lerr = lde.runtime.executeLuaCLI(luaCliArgs, { cwd = env.cwd() })
+		if not lok then
+			lde.error.raise(lerr)
+		end
+		return
+	end
+
+	local commandFiles = {
+		help      = "lde.commands.help",
+		init      = "lde.commands.initialize",
+		new       = "lde.commands.new",
+		upgrade   = "lde.commands.upgrade",
+		add       = "lde.commands.add",
+		remove    = "lde.commands.remove",
+		run       = "lde.commands.run",
+		x         = "lde.commands.x",
+		install   = "lde.commands.install",
+		i         = "lde.commands.install",
+		sync      = "lde.commands.sync",
+		bundle    = "lde.commands.bundle",
+		compile   = "lde.commands.compile",
+		test      = "lde.commands.test",
+		tree      = "lde.commands.tree",
+		update    = "lde.commands.update",
+		outdated  = "lde.commands.outdated",
+		uninstall = "lde.commands.uninstall",
+		publish   = "lde.commands.publish",
+		completion = "lde.commands.completion",
+		repl      = "lde.commands.repl"
+	}
+
+	-- Commands that don't need the global cache dirs initialized
+	local noInitCommands = { help = true, completion = true }
+
+	if not noInitCommands[commandName] and not treeOverride then
+		lde.global.init()
+	end
+
+	local commandFile = commandFiles[commandName]
+	if commandFile then
+		require(commandFile)(args)
+	elseif fs.exists(commandName) then
+		-- TODO: Replace this hacky behavior
+		table.insert(args.raw, 1, commandName)
+		require("lde.commands.run")(args)
+	else
+		local pkg = lde.Package.open()
+		local scripts = pkg and pkg:readConfig().scripts
+
+		if scripts and scripts[commandName] then
+			---@cast pkg -nil
+
+			-- npm-style: everything after `--` is passed to the script as its args.
+			local scriptArgs = {}
+			local dash, dashPos = args:flag("")
+			if dash then
+				scriptArgs = args:drain(dashPos + 1)
+			end
+
+			pkg:build()
+			pkg:installDependencies()
+
+			local sok, serr = pkg:runScript(commandName, nil, scriptArgs)
+			if not sok then
+				lde.error.raise("Script '" .. commandName .. "' failed: " .. (serr or "exited with a non-zero exit code"))
+			end
+		else
+			lde.error.raise("Unknown command " .. ansi.colorize("yellow", '"' .. tostring(commandName) .. '"'))
+		end
+	end
+end, function(e)
+	return { value = e, trace = debug.traceback(tostring(e), 2) }
+end)
+
+if not ok then
+	---@cast boundaryErr { value: any, trace: string? }
+	require("lde-core.error").show(boundaryErr.value, boundaryErr.trace)
 end

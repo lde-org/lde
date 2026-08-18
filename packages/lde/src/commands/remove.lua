@@ -7,20 +7,21 @@ local lde = require("lde-core")
 
 ---@param args clap.Args
 local function remove(args)
-	local name = assert(args:pop(), "Usage: lde remove <name>")
+	local name = args:pop()
+	if not name then
+		lde.error.raise("Usage: lde remove <name>")
+	end
 
 	local pkg, err = lde.Package.open()
 	if not pkg then
-		ansi.printf("{red}%s", err)
-		return
+		lde.error.raise(err)
 	end
 
 	local configPath = pkg:getConfigPath()
 
 	local configRaw = fs.read(configPath)
 	if not configRaw then
-		ansi.printf("{red}Failed to read config: %s", configPath)
-		return
+		lde.error.raise("Failed to read config: " .. configPath)
 	end
 
 	local config = json.decode(configRaw)

@@ -18,12 +18,12 @@ local function installRocks(name)
 
 	-- Metadata-only resolution (URL cache / cached manifest — no network).
 	local srcUrl, arch, uerr = lde.util.resolveLuarocksSource(rocksName, versionStr)
-	if not srcUrl then error("Failed to resolve '" .. name .. "': " .. (uerr or "")) end
+	if not srcUrl then lde.error.raise("Failed to resolve '" .. name .. "': " .. (uerr or "")) end
 
 	if arch ~= "src" then
 		-- No published .src.rock: classic synchronous path.
-		local pkg, perr = lde.util.openLuarocksPackage(rocksName, versionStr)
-		if not pkg then error(perr) end
+		local pkg, _, perr = lde.util.openLuarocksPackage(rocksName, versionStr)
+		if not pkg then lde.error.raise(perr or "Failed to open package") end
 		pkg:build()
 		pkg:installDependencies()
 		lde.global.writeWrapper(pkg:getName(), nil, name)
@@ -36,8 +36,8 @@ local function installRocks(name)
 	if fs.exists(archiveDir) then
 		-- Already materialized: classic path, which hits the install fast path
 		-- (few ms on a warm tree).
-		local pkg, perr = lde.util.openLuarocksPackage(rocksName, versionStr)
-		if not pkg then error(perr) end
+		local pkg, _, perr = lde.util.openLuarocksPackage(rocksName, versionStr)
+		if not pkg then lde.error.raise(perr or "Failed to open package") end
 		pkg:build()
 		pkg:installDependencies()
 		lde.global.writeWrapper(pkg:getName(), nil, name)
@@ -61,9 +61,9 @@ local function installRocks(name)
 		download.drain()
 		content = fs.read(rockspecFile)
 	end
-	if not content then error("Failed to fetch rockspec: " .. rockspecUrl) end
+	if not content then lde.error.raise("Failed to fetch rockspec: " .. rockspecUrl) end
 	local ok, spec = rocked.parse(content)
-	if not ok then error("Failed to parse rockspec '" .. rockspecUrl .. "': " .. tostring(spec)) end
+	if not ok then lde.error.raise("Failed to parse rockspec '" .. rockspecUrl .. "': " .. tostring(spec)) end
 
 	-- Wait for the .src.rock download, then extract it and open the package
 	-- from the real source tree inside (a source subdir, or the nested archive
@@ -74,11 +74,11 @@ local function installRocks(name)
 	download.waitBackground(archiveFile)
 	local exOk, exErr = lde.global.extractArchive(srcUrl, archiveFile, archiveDir)
 	if not exOk then
-		error("Failed to extract '" .. srcUrl .. "': " .. (exErr or "unknown error"))
+		lde.error.raise("Failed to extract '" .. srcUrl .. "': " .. (exErr or "unknown error"))
 	end
 
 	local pkg, perr = lde.util.openSrcRock(archiveDir, srcUrl)
-	if not pkg then error(perr) end
+	if not pkg then lde.error.raise(perr or "Failed to load package") end
 
 	pkg:installDependencies()
 	pkg:build()
@@ -98,23 +98,15 @@ local function install(args)
 	if not gitUrl and not pathDir and not args:peek() then
 		local pkg, err = lde.Package.open()
 		if not pkg then
-			ansi.printf("{red}%s", err)
-			return
+			lde.error.raise(err)
 		end
 
 		local start = ansi.now()
 		local opts = { summary = true }
 
-		local runtime, dev
-		local ok, installErr = pcall(function()
-			runtime = pkg:installDependencies(nil, nil, nil, opts)
-			dev = not args:flag("production") and pkg:installDevDependencies(opts)
-		end)
-		if not ok then
-			-- Strip the bundled "file:line: " prefixes the error() calls add.
-			ansi.printf("{red}%s", tostring(installErr):gsub('%[string "[^"]+"%]:%d+: ', ""))
-			os.exit(1)
-		end
+		-- Errors propagate to the CLI boundary, which renders them cleanly.
+		local runtime = pkg:installDependencies(nil, nil, nil, opts)
+		local dev = not args:flag("production") and pkg:installDevDependencies(opts)
 
 		if (runtime and runtime.changed) or (dev and dev.changed) then
 			ansi.printf("{green}All dependencies installed successfully.")
@@ -142,7 +134,7 @@ local function install(args)
 	end
 
 	local pkg, err = resolvePackage(args, { git = gitUrl, path = pathDir })
-	if not pkg then error(err) end
+	if not pkg then lde.error.raise(err) end
 
 	pkg:build()
 	pkg:installDependencies()

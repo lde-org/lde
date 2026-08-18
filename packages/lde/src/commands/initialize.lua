@@ -12,7 +12,7 @@ local function init(args)
 	-- Fail fast (and before any interactive prompts) when this is already a project.
 	local configPath = path.join(dir, "lde.json")
 	if fs.exists(configPath) or fs.exists(path.join(dir, "lpm.json")) then
-		error("Directory already contains lde.json: " .. dir)
+		lde.error.raise("Directory already contains lde.json: " .. dir)
 	end
 
 	local opts = prompt.scaffoldOptions(args)

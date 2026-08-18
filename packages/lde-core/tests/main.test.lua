@@ -332,7 +332,7 @@ test.it("runScript: errors when script name is not in lde.json", function()
 	local pkg = lde.Package.open(dir)
 	local ok, err = pcall(function() pkg:runScript("doesnotexist") end)
 	test.falsy(ok)
-	test.includes(err, "doesnotexist")
+	test.includes(tostring(err), "doesnotexist")
 end)
 
 --
@@ -480,7 +480,7 @@ test.it("installDependencies: errors when two deps share a name but have differe
 	local root = lde.Package.open(rootDir)
 	local ok, err = pcall(function() root:installDependencies() end)
 	test.falsy(ok)
-	test.includes(err, "shared-lib")
+	test.includes(tostring(err), "shared-lib")
 end)
 
 test.it("installDependencies: writes a single flat lockfile containing all transitive deps", function()

@@ -8,8 +8,7 @@ local lde = require("lde-core")
 local function toolUninstall(args)
 	local toolName = args:pop()
 	if not toolName then
-		ansi.printf("{red}Usage: lde uninstall <name>")
-		return
+		lde.error.raise("Usage: lde uninstall <name>")
 	end
 
 	local toolsDir = lde.global.getToolsDir()
@@ -31,7 +30,7 @@ local function toolUninstall(args)
 	for _, wrapperPath in ipairs(candidates) do
 		if fs.exists(wrapperPath) then
 			if not fs.delete(wrapperPath) then
-				error("Failed to remove wrapper: " .. wrapperPath)
+				lde.error.raise("Failed to remove wrapper: " .. wrapperPath)
 			end
 			ansi.printf("{green}Uninstalled tool '%s'", toolName)
 			removed = true

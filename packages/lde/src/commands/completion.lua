@@ -1,4 +1,4 @@
-local ansi = require("ansi")
+local lde = require("lde-core")
 
 local usage = require("lde.commands.usage")
 
@@ -137,14 +137,12 @@ local scripts = {
 local function completion(args)
 	local shell = args:pop()
 	if not shell then
-		ansi.printf("{red}Usage: lde completion <bash|zsh|fish>")
-		os.exit(1)
+		lde.error.raise("Usage: lde completion <bash|zsh|fish>")
 	end
 
 	local script = scripts[shell]
 	if not script then
-		ansi.printf("{red}Unknown shell: %s (supported: bash, zsh, fish)", shell)
-		os.exit(1)
+		lde.error.raise("Unknown shell: " .. shell .. " (supported: bash, zsh, fish)")
 	end
 
 	io.write(script)

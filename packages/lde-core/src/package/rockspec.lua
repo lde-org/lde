@@ -8,7 +8,7 @@ local path = require("path")
 local process = require("process")
 local util = require("util")
 
-local curl = util.lazy(function() return require("curl-sys") end)
+local curl = util.lazy(|| -> require("curl-sys"))
 
 -- Enables concurrent native compiles during install builds (see build loop).
 local asyncBuild = require("lde-core.util.async-build")
