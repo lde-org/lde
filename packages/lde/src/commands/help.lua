@@ -8,7 +8,7 @@ currentVersion = ok and currentVersion or "0.10.0"
 
 -- lde-core is only needed to raise the unknown-command error; load it lazily
 -- so the fast help paths (bare `lde`, `lde --help`) never pay for it.
-local lde = util.lazy(function() return require("lde-core") end)
+local lde = util.lazy(|| -> require("lde-core"))
 
 --- Render a table of options as aligned rows: "  --flag <arg>  desc".
 ---@param opts table<string, { arg?: string, desc: string }>

@@ -9,8 +9,8 @@ local ansi = require("ansi")
 
 local util = require("util")
 
-local curl = util.lazy(function() return require("curl-sys") end)
-local Archive = util.lazy(function() return require("archive") end)
+local curl = util.lazy(|| -> require("curl-sys"))
+local Archive = util.lazy(|| -> require("archive"))
 
 local ljDistRepo = "lde-org/luajit"
 local ljDistTag = "latest"

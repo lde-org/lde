@@ -13,9 +13,9 @@ package.loaded[(...)] = global
 
 -- Lazily wrap native modules to avoid loading them (which uses a ton of memory and adds some overhead to copy the file)
 -- This isn't done with require() inline because that would cause issues with LuaJIT compilation.
-local curl = util.lazy(function() return require("curl-sys") end)
-local Archive = util.lazy(function() return require("archive") end)
-local git2 = util.lazy(function() return require("git2-sys") end)
+local curl = util.lazy(|| -> require("curl-sys"))
+local Archive = util.lazy(|| -> require("archive"))
+local git2 = util.lazy(|| -> require("git2-sys"))
 
 global.getConfig = require("lde-core.global.config")
 global.currentVersion = (function()

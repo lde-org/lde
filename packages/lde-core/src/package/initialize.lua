@@ -5,7 +5,7 @@ local ansi = require("ansi")
 
 local lde = require("lde-core")
 
-local git2 = util.lazy(function() return require("git2-sys") end)
+local git2 = util.lazy(|| -> require("git2-sys"))
 
 local Package = require("lde-core.package")
 

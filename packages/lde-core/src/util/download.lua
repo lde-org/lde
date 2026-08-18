@@ -1,7 +1,7 @@
 local fs = require("fs")
 local util = require("util")
 
-local curl = util.lazy(function() return require("curl-sys") end)
+local curl = util.lazy(|| -> require("curl-sys"))
 
 --- Parallel download session used during dependency installation.
 ---
