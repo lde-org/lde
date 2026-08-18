@@ -176,6 +176,21 @@ function Package.openLDE(dir)
 		return nil, "Missing or invalid 'name' in " .. configPath
 	end
 
+	-- Dependency entries must be tables (or path shorthand strings); booleans
+	-- and numbers crash downstream consumers (update, install) when indexed.
+	for _, deps in ipairs({ decoded.dependencies, decoded.devDependencies }) do
+		if deps ~= nil then
+			if type(deps) ~= "table" then
+				return nil, "Invalid 'dependencies' in " .. configPath
+			end
+			for alias, info in pairs(deps) do
+				if type(info) ~= "table" and type(info) ~= "string" then
+					return nil, "Invalid dependency '" .. tostring(alias) .. "' in " .. configPath
+				end
+			end
+		end
+	end
+
 	return setmetatable({
 		dir = dir,
 		cachedConfig = Package.Config.new(decoded),

@@ -25,6 +25,20 @@ local pkgFuzz = require("fuzzer.packages")
 
 local rawArgs = { ... }
 
+-- Live status line: replaces itself as cases progress on a TTY; piped output
+-- falls back to a line every 100 cases.
+local ffi = require("ffi")
+local isTTY
+if jit.os == "Windows" then
+	pcall(ffi.cdef, "int _isatty(int fd);")
+	local ok, r = pcall(function() return ffi.C._isatty(1) ~= 0 end)
+	isTTY = ok and r or false
+else
+	pcall(ffi.cdef, "int isatty(int fd);")
+	local ok, r = pcall(function() return ffi.C.isatty(1) ~= 0 end)
+	isTTY = ok and r or false
+end
+
 local seed = os.time()
 local count = 500
 local only = nil ---@type "cli"|"packages"?
@@ -97,7 +111,10 @@ fs.mkdirAll(ctx.cliEmpty)
 fs.rmdir(ctx.cliProject)
 fs.mkdirAll(path.join(ctx.cliProject, "src"))
 fs.write(path.join(ctx.cliProject, "src", "init.lua"), 'return "cli-project"')
-fs.write(path.join(ctx.cliProject, "lde.json"), manifestJson({ ["dep-a"] = "../deps/dep-a", ["dep-b"] = "../deps/dep-b" }))
+fs.write(path.join(ctx.cliProject, "lde.json"), manifestJson({
+	["dep-a"] = { path = "../deps/dep-a" },
+	["dep-b"] = { path = "../deps/dep-b" },
+}))
 
 for _, depDir in ipairs(ctx.deps) do
 	fs.rmdir(depDir)
@@ -136,6 +153,9 @@ fs.write(path.join(scriptsDir, "loop.lua"), "while true do end")
 local rows = {}
 local findings = {} ---@type table[]
 local totalMs = 0
+local rng = rngLib.new(seed)
+
+local totalCases = count * (only and 1 or 2)
 
 ---@param case { kind: string, note: string, args: string[] }
 ---@param cwd string
@@ -148,7 +168,11 @@ local function record(case, cwd, res, outcome, ms)
 	local exit = res.timedOut and "TIMEOUT" or (res.exit ~= nil and tostring(res.exit) or "SPAWN-FAIL")
 	table.insert(rows, { seed, #rows + 1, case.kind, case.note, cwd, exit, outcome, ms, args })
 
-	if #rows % 100 == 0 then
+	if isTTY then
+		ansi.clearLine()
+		io.write(string.format("case %d/%d: %s (%.0fms)", #rows, totalCases, args, ms))
+		io.flush()
+	elseif #rows % 100 == 0 then
 		ansi.printf("{gray}  case %d: %s{reset}", #rows, args)
 	end
 
@@ -168,8 +192,6 @@ local function record(case, cwd, res, outcome, ms)
 		})
 	end
 end
-
-local rng = rngLib.new(seed)
 
 local function runSection(name, fn)
 	if only and only ~= name then return end
@@ -219,7 +241,8 @@ for _, f in ipairs(findings) do
 end
 fs.write(findingsPath, table.concat(flines, "\n") .. "\n")
 
--- Summary.
+-- Summary. Clear the live status line first.
+if isTTY then ansi.clearLine() end
 local counts = {} ---@type table<string, integer>
 for _, row in ipairs(rows) do
 	counts[row[7]] = (counts[row[7]] or 0) + 1

@@ -55,8 +55,11 @@ local function run(bin, args, opts)
 		end
 		if os.clock() > deadline then
 			child:kill(true)
-			local _, stdout, stderr = child:wait()
-			return { exit = nil, timedOut = true, out = (stdout or "") .. (stderr or "") }
+			-- Don't wait(): the killed process's grandchildren may still hold the
+			-- pipe write ends (e.g. a compiler or git spawned mid-build), which
+			-- would block the drain forever. Leak the fds instead — timeouts are
+			-- rare and the output is discarded anyway.
+			return { exit = nil, timedOut = true, out = "" }
 		end
 		sleep(2)
 	end

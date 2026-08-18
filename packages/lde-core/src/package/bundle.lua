@@ -91,9 +91,10 @@ local function bundlePackage(package, opts)
 
 	for entry in fs.readdir(modulesDir) do
 		local p = path.join(modulesDir, entry.name)
-		if entry.name == "tests" then
+		if entry.name == "tests" and package:getName() ~= "tests" then
 			-- lde test exposes the package's tests/ dir as target/tests; it's
-			-- test-only code and must never end up in a bundle.
+			-- test-only code and must never end up in a bundle. A package
+			-- *named* "tests" has its own module dir at target/tests — keep it.
 			goto continue
 		end
 

@@ -30,14 +30,29 @@ local function compilePackage(package)
 	-- the modules a command actually requires.
 	local source = bundlePackage(package, { raw = true })
 
+	-- sea.compile throws a raw string when the main module is missing; check
+	-- first so a broken project (no src/init.lua, src as a file, ...) fails
+	-- cleanly instead of crashing. Packages named "tests" are the one case
+	-- where the entry dir is skipped by the test-fixture filter, hence the
+	-- name comparison in bundlePackage.
+	local mainName = package:getName()
+	local hasMain = false
+	for _, m in ipairs(source.modules) do
+		if m.name == mainName then hasMain = true break end
+	end
+	if not hasMain then
+		lde.error.raise("Cannot compile: no entry module '" .. mainName .. "' in the bundle (is src/init.lua present?)")
+	end
+
 	local sharedLibs = {}
 	local modulesDir = package:getModulesDir()
 
 	for entry in fs.readdir(modulesDir) do
 		local p = path.join(modulesDir, entry.name)
-		if entry.name == "tests" then
+		if entry.name == "tests" and package:getName() ~= "tests" then
 			-- lde test exposes the package's tests/ dir as target/tests; test
-			-- code must never end up embedded in the executable.
+			-- code must never end up embedded in the executable. A package
+			-- *named* "tests" has its own module dir at target/tests — keep it.
 			goto continue
 		end
 
