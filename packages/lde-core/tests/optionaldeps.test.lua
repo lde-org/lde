@@ -40,7 +40,7 @@ fs.write(path.join(appDir, "lde.json"), json.encode({
 local osDep = { Linux = "linux-dep", Windows = "windows-dep", OSX = "macos-dep" }
 
 test.it("optional deps: only the current platform dep is installed", function()
-	local app = lde.Package.open(appDir)
+	local app = lde.Package.open(appDir) ---@cast app -nil
 	app:installDependencies()
 
 	local targetDir = app:getModulesDir()
@@ -55,18 +55,18 @@ test.it("optional deps: only the current platform dep is installed", function()
 end)
 
 test.it("optional deps: lockfile preserves optional flag", function()
-	local app = lde.Package.open(appDir)
+	local app = lde.Package.open(appDir) ---@cast app -nil
 	local lockfile = lde.Lockfile.open(app:getLockfilePath())
-	test.truthy(lockfile)
+	test.truthy(lockfile) ---@cast lockfile -nil
 	for _, name in ipairs(platforms) do
 		local entry = lockfile:getDependency(name)
-		test.truthy(entry)
+		test.truthy(entry) ---@cast entry -nil
 		test.truthy(entry.optional)
 	end
 end)
 
 test.it("optional deps: still respected on second install (lockfile path)", function()
-	local app = lde.Package.open(appDir)
+	local app = lde.Package.open(appDir) ---@cast app -nil
 	fs.rmdir(app:getModulesDir())
 	app:installDependencies()
 

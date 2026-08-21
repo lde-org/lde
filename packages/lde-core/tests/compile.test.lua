@@ -50,7 +50,7 @@ int luaopen_answer(lua_State *L) {
 			dependencies = { ["answer-rock"] = { path = "../answer-rock" } }
 		}))
 
-		local app = lde.Package.open(appDir)
+		local app = lde.Package.open(appDir) ---@cast app -nil
 		app:build()
 		app:installDependencies()
 

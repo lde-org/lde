@@ -45,7 +45,7 @@ local function update(args)
 	local pkg, err = lde.Package.open()
 	if not pkg then
 		lde.error.raise(err)
-	end
+	end ---@cast pkg -nil
 
 	local name = args:pop()
 

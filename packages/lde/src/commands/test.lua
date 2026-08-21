@@ -54,7 +54,7 @@ end
 ---@param line string
 ---@return string
 local function expandTabs(line)
-	return line:gsub("\t", "    ")
+	return (line:gsub("\t", "    "))
 end
 
 -- Assertion names, longest first so e.g. "greaterEqual" wins over "equal".
@@ -69,6 +69,8 @@ local ASSERT_NAMES = {
 ---@param msg string?
 ---@return number col, number len
 local function findCaretCol(line, msg)
+	---@param word string
+	---@return integer?
 	local function findWord(word)
 		local i = 1
 		while i <= #line do
@@ -195,7 +197,7 @@ local function printError(pkgDir, err, knownFile)
 		ansi.printf("     {red}%s", makeRelative(pkgDir, err))
 		return
 	end
-	local line = tonumber(mline)
+	local line = tonumber(mline) ---@cast line -nil
 	local actual, src = resolveSource(pkgDir, mfile, knownFile)
 	-- If the fallback file doesn't contain the failing line, the line belongs to
 	-- a different (unresolvable, truncated) file — show the path as reported
@@ -469,7 +471,8 @@ local function runWatch(filters, coverage)
 	for _, f in ipairs(filters) do spawnArgs[#spawnArgs + 1] = f end
 
 	local function spawnChild()
-		local child, err = process.spawn(env.execPath(), spawnArgs, { stdout = "inherit", stderr = "inherit" })
+		local execPath = env.execPath() ---@cast execPath -nil
+		local child, err = process.spawn(execPath, spawnArgs, { stdout = "inherit", stderr = "inherit" })
 		if not child then
 			ansi.printf("{red}Error: %s", tostring(err))
 		end

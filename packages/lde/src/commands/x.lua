@@ -31,7 +31,7 @@ local function x(args)
 	local pkg, err = resolvePackage(args)
 	if not pkg then
 		lde.error.raise(err)
-	end
+	end ---@cast pkg -nil
 
 	args:flag("") -- consume -- separator if present
 	executePackage(pkg, args:drain() or {}, userCwd)

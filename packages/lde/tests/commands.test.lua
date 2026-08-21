@@ -21,7 +21,7 @@ fs.mkdir(tmpBase)
 ---@param s string
 ---@return string
 local function plain(s)
-	return (s or ""):gsub("\27%[[0-9;]*m", "")
+	return ((s or ""):gsub("\27%[[0-9;]*m", ""))
 end
 
 ---@param name string
@@ -157,7 +157,8 @@ test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde update <name> pins a newer git 
 
 	local ok, out = cli({ "sync" }, dir)
 	test.truthy(ok, "initial sync failed: " .. tostring(out))
-	local lock1 = json.decode(fs.read(path.join(dir, "lde.lock")))
+	local lock1Raw = fs.read(path.join(dir, "lde.lock")) ---@cast lock1Raw -nil
+	local lock1 = json.decode(lock1Raw) ---@cast lock1 table<string, any>
 	local commit1 = lock1.dependencies["upd-dep"].commit
 	test.truthy(commit1)
 
@@ -168,7 +169,8 @@ test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde update <name> pins a newer git 
 	test.truthy(ok2, "lde update failed: " .. tostring(out2))
 	test.includes(plain(out2 or ""), "upd-dep")
 	test.includes(plain(out2 or ""), "->")
-	local lock2 = json.decode(fs.read(path.join(dir, "lde.lock")))
+	local lock2Raw = fs.read(path.join(dir, "lde.lock")) ---@cast lock2Raw -nil
+	local lock2 = json.decode(lock2Raw) ---@cast lock2 table<string, any>
 	local commit2 = lock2.dependencies["upd-dep"].commit
 	test.truthy(commit2 and commit2 ~= commit1, "lockfile commit must move to the new HEAD")
 
@@ -252,13 +254,13 @@ test.it("lde __complete offers files where a file can be passed", function()
 
 	-- A command prefix still completes commands, not files.
 	local ok3, out3 = cli({ "__complete", "ru" }, dir)
-	test.truthy(ok3)
+	test.truthy(ok3) ---@cast out3 -nil
 	test.includes(out3 or "", "run")
 	test.falsy(out3:find("main%.lua"))
 
 	-- An empty first word offers commands only, without file noise.
 	local ok4, out4 = cli({ "__complete", "" }, dir)
-	test.truthy(ok4)
+	test.truthy(ok4) ---@cast out4 -nil
 	test.includes(out4 or "", "run")
 	test.falsy(out4:find("main%.lua"))
 end)
@@ -293,7 +295,7 @@ test.it("lde __complete suggests lde.json script names", function()
 
 	-- Typing a script prefix completes the script.
 	local ok2, out2 = cli({ "__complete", "de" }, dir)
-	test.truthy(ok2)
+	test.truthy(ok2) ---@cast out2 -nil
 	test.includes(out2 or "", "dev")
 	test.falsy(out2:find("main%.lua"))
 
@@ -367,7 +369,8 @@ test.it("lde bundle writes a self-contained module file", function()
 
 	-- The bundle is executable Lua: run it and the entry point's side effects
 	-- (print) must appear.
-	local code, runOut = process.exec(env.execPath(), { "--lua", bundlePath })
+	local execPath = env.execPath() ---@cast execPath -nil
+	local code, runOut = process.exec(execPath, { "--lua", bundlePath })
 	test.truthy(code == 0, "bundle did not run: " .. tostring(runOut))
 end)
 
@@ -475,7 +478,8 @@ test.it("lde run --json writes programmatically checkable profile data", functio
 	test.includes(out or "", "json-done")
 	test.truthy(fs.exists(jsonPath), "profile JSON not written: " .. tostring(out))
 
-	local data = json.decode(fs.read(jsonPath))
+	local dataRaw = fs.read(jsonPath) ---@cast dataRaw -nil
+	local data = json.decode(dataRaw) ---@cast data table<string, any>
 	test.truthy(data, "profile JSON must decode")
 	test.truthy(data.total > 0, "expected sampled data, got total=" .. tostring(data.total))
 	test.equal(data.version, 1)

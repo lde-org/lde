@@ -4,6 +4,13 @@ local path = require("path")
 local archive = require("archive")
 local process = require("process")
 
+-- Minimal lua-sys surface used here (the full classes live in the lua-sys
+-- package, which is a dependency of the caller, not of lde-build).
+---@class lua.State
+---@field load fun(self: lua.State, code: string, name?: string): lua.Chunk
+---@class lua.Chunk
+---@field call fun(self: lua.Chunk, ...: any): any
+
 ---@class lde.build.Instance
 ---@field outDir string
 ---@field gccBin string
@@ -17,6 +24,7 @@ function Instance.new(outDir, gccBin)
 	return setmetatable({ outDir = outDir, gccBin = gccBin or "gcc" }, Instance)
 end
 
+---@param url string
 ---@return string
 function Instance:fetch(url)
 	local res, err = curl.get(url)

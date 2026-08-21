@@ -94,7 +94,7 @@ end)
 
 test.it("Package:getDir returns the directory it was opened from", function()
 	local dir = makePackageDir("dir-pkg")
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	test.equal(pkg:getDir(), dir)
 end)
 
@@ -105,25 +105,25 @@ test.it("Package:getName reads the name from lde.json", function()
 		dependencies = {}
 	})
 
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	test.equal(pkg:getName(), "my-cool-lib")
 end)
 
 test.it("Package:getSrcDir returns <dir>/src", function()
 	local dir = makePackageDir("src-pkg")
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	test.equal(pkg:getSrcDir(), path.join(dir, "src"))
 end)
 
 test.it("Package:getTestDir returns <dir>/tests", function()
 	local dir = makePackageDir("test-pkg")
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	test.equal(pkg:getTestDir(), path.join(dir, "tests"))
 end)
 
 test.it("Package:getModulesDir returns <dir>/target", function()
 	local dir = makePackageDir("mod-pkg")
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	test.equal(pkg:getModulesDir(), path.join(dir, "target"))
 end)
 
@@ -134,7 +134,7 @@ test.it("Package:getTargetDir returns <dir>/target/<name>", function()
 		dependencies = {}
 	})
 
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	test.equal(pkg:getTargetDir(), path.join(dir, "target", "target-pkg"))
 end)
 
@@ -151,7 +151,7 @@ test.it("Package:readConfig returns the parsed config", function()
 		}
 	})
 
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	local config = pkg:readConfig()
 	test.equal(config.name, "read-cfg")
 	test.equal(config.version, "3.5.0")
@@ -160,7 +160,7 @@ end)
 
 test.it("Package:readConfig caches and returns the same object", function()
 	local dir = makePackageDir("cache-cfg")
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 
 	local c1 = pkg:readConfig()
 	local c2 = pkg:readConfig()
@@ -181,7 +181,7 @@ test.it("Package:getDependencies returns dependencies from config", function()
 		}
 	})
 
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	local deps = pkg:getDependencies()
 	test.equal(deps.a.path, "../a")
 	test.equal(deps.b.path, "../b")
@@ -189,7 +189,7 @@ end)
 
 test.it("Package:getDependencies returns empty table when none defined", function()
 	local dir = makePackageDir("no-deps")
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	local deps = pkg:getDependencies()
 	test.equal(test.count(deps), 0)
 end)
@@ -204,7 +204,7 @@ test.it("Package:getDevDependencies returns devDependencies from config", functi
 		}
 	})
 
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	local devDeps = pkg:getDevDependencies()
 	test.equal(devDeps.testutil.path, "../testutil")
 end)
@@ -222,16 +222,18 @@ test.it("getDependencies merges lockfile pins onto config entries without droppi
 	-- the commit, so the config's version is all that identifies it. Replacing
 	-- the config entry wholesale here is what made makeNode fail with
 	-- "Unsupported dependency type" on the next install.
+	local manifestRaw = fs.read(path.join(dir, "lde.json")) ---@cast manifestRaw -nil
+	local manifest = json.decode(manifestRaw) ---@cast manifest lde.Package.Config
 	fs.write(path.join(dir, "lde.lock"), json.encode({
 		version = "1",
-		manifestHash = lde.Lockfile.manifestHash(json.decode(fs.read(path.join(dir, "lde.json")))),
+		manifestHash = lde.Lockfile.manifestHash(manifest),
 		dependencies = {
 			regdep = { commit = "abc123" },
 			gitdep = { git = "https://example.com/gitdep.git", commit = "def456" }
 		}
 	}))
 
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	local deps = pkg:getDependencies()
 	-- The config's source field must survive the merge.
 	test.equal(deps.regdep.version, "1.0.0")
@@ -249,9 +251,11 @@ test.it("getDependencies keeps config-only flags when merging lock entries", fun
 			optdep = { path = "../optdep", optional = true, features = { "linux" } }
 		}
 	})
+	local manifestRaw = fs.read(path.join(dir, "lde.json")) ---@cast manifestRaw -nil
+	local manifest = json.decode(manifestRaw) ---@cast manifest lde.Package.Config
 	fs.write(path.join(dir, "lde.lock"), json.encode({
 		version = "1",
-		manifestHash = lde.Lockfile.manifestHash(json.decode(fs.read(path.join(dir, "lde.json")))),
+		manifestHash = lde.Lockfile.manifestHash(manifest),
 		dependencies = {
 			optdep = { path = "../optdep" }
 		}
@@ -271,9 +275,11 @@ test.it("getDevDependencies merges lockfile pins onto config entries", function(
 			regdep = { version = "2.0.0" }
 		}
 	})
+	local manifestRaw = fs.read(path.join(dir, "lde.json")) ---@cast manifestRaw -nil
+	local manifest = json.decode(manifestRaw) ---@cast manifest lde.Package.Config
 	fs.write(path.join(dir, "lde.lock"), json.encode({
 		version = "1",
-		manifestHash = lde.Lockfile.manifestHash(json.decode(fs.read(path.join(dir, "lde.json")))),
+		manifestHash = lde.Lockfile.manifestHash(manifest),
 		dependencies = {
 			regdep = { commit = "beef123" }
 		}
@@ -314,7 +320,7 @@ end)
 
 test.it("Package tostring includes the directory", function()
 	local dir = makePackageDir("str-pkg")
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	local s = tostring(pkg)
 	test.equal(s, "Package(" .. dir .. ")")
 end)
@@ -362,7 +368,7 @@ test.it("rockspec dep: can require(packagename) from a consumer package", functi
 		}
 	}))
 
-	local app = lde.Package.open(appDir)
+	local app = lde.Package.open(appDir) ---@cast app -nil
 	app:installDependencies()
 	app:build()
 
@@ -435,7 +441,7 @@ int luaopen_answer(lua_State *L) {
 			}
 		}))
 
-		local app = lde.Package.open(appDir)
+		local app = lde.Package.open(appDir) ---@cast app -nil
 		app:installDependencies()
 		app:build()
 
@@ -457,8 +463,8 @@ test.it("bundle includes top-level lua files in target/ (not just subdir modules
 	fs.mkdir(path.join(targetDir, "mymod"))
 	fs.write(path.join(targetDir, "mymod", "sub.lua"), "return 99")
 
-	local pkg = lde.Package.open(dir)
-	local bundle = pkg:bundle()
+	local pkg = assert(lde.Package.open(dir))
+	local bundle = pkg:bundle() ---@cast bundle string
 
 	test.truthy(bundle:find('"mymod"'), "top-level mymod.lua should be bundled as 'mymod'")
 	test.truthy(bundle:find('"mymod.sub"'), "subdir mymod/sub.lua should be bundled as 'mymod.sub'")
@@ -482,9 +488,8 @@ test.it("bundle excludes test files (target/tests and *.test.lua)", function()
 	-- ... while its non-test sibling is real code and must still ship
 	fs.write(path.join(targetDir, "mymod", "sub.lua"), "return 99")
 
-	local pkg = lde.Package.open(dir)
-	local bundle = pkg:bundle()
-	---@cast bundle string
+	local pkg = assert(lde.Package.open(dir))
+	local bundle = pkg:bundle() ---@cast bundle string
 
 	test.falsy(bundle:find('"tests.main.test"'), "tests/main.test.lua must not be bundled")
 	test.falsy(bundle:find('"tests.lib.helpers"'), "tests/lib/helpers.lua must not be bundled")
@@ -498,19 +503,19 @@ end)
 
 test.it("getDependencyPath returns nil for git dep without a commit", function()
 	local dir = makePackageDir("nodep-commit", { name = "nodep-commit", version = "0.1.0", dependencies = {} })
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 
 	local depPath, err = pkg:getDependencyPath("foo", { git = "https://example.com/foo.git" })
-	test.falsy(depPath)
+	test.falsy(depPath) ---@cast err -nil
 	test.includes(err, "no commit pinned")
 end)
 
 test.it("getDependencyPath returns path for git dep with commit", function()
 	local dir = makePackageDir("with-commit", { name = "with-commit", version = "0.1.0", dependencies = {} })
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 
 	local depPath, err = pkg:getDependencyPath("foo", { git = "https://example.com/foo.git", commit = "abc123" })
-	test.truthy(depPath)
+	test.truthy(depPath) ---@cast depPath -nil
 	test.falsy(err)
 	test.truthy(depPath:find("foo"))
 	test.truthy(depPath:find("abc123"))
@@ -564,13 +569,14 @@ build = {
 	-- openSrcRock opens a real package from it, and the build materializes the
 	-- custom bin name (cerulean's rockspec installs bin "ceru").
 	local pkg, perr = lde.util.openSrcRock(base, "https://luarocks.org/ceru-1.0-1.src.rock")
-	test.truthy(pkg, perr or "openSrcRock failed")
+	test.truthy(pkg, perr or "openSrcRock failed") ---@cast pkg -nil
 	test.equal(pkg:getName(), "ceru")
 	local config = pkg:readConfig()
 	test.equal(config.bin, "ceru")
 
-	local built, derr = pkg:build()
-	test.truthy(built, derr or "build failed")
+	local hasBuilt, deferred = pkg:build()
+	local derr = deferred and tostring(deferred) or nil
+	test.truthy(hasBuilt, derr or "build failed")
 	test.truthy(fs.isfile(path.join(srcDir, "target", "ceru", "ceru")))
 	test.truthy(fs.isfile(path.join(srcDir, "target", "ceru", "init.lua")))
 end)
@@ -587,7 +593,7 @@ test.it("Package:runScript runs a shell script and captures its output", functio
 		scripts = { greet = "echo hello-script" }
 	})
 
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	local ok, out = pkg:runScript("greet", true)
 	test.truthy(ok, "runScript failed")
 	test.includes(out or "", "hello-script")
@@ -601,7 +607,7 @@ test.it("Package:runScript runs with the package directory as cwd", function()
 		scripts = { pwd = "pwd" }
 	})
 
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	local ok, out = pkg:runScript("pwd", true)
 	test.truthy(ok)
 	-- pwd may return a symlink-resolved path; check the basename matches.
@@ -617,7 +623,7 @@ test.it("Package:runScript reports a non-zero exit", function()
 		scripts = { boom = "exit 3" }
 	})
 
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	local ok, out = pkg:runScript("boom", true)
 	test.falsy(ok)
 	test.includes(out or "", "exit code 3")
@@ -631,7 +637,7 @@ test.it("Package:runScript appends args to the script command", function()
 		scripts = { args = "echo script-args" }
 	})
 
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	local ok, out = pkg:runScript("args", true, { "hello", "world" })
 	test.truthy(ok, "runScript with args failed: " .. tostring(out))
 	-- cmd.exe echo prints its quoted args verbatim; POSIX sh joins with spaces.
@@ -652,7 +658,7 @@ test.it("Package:runScript shell-quotes args with spaces and quotes", function()
 		scripts = { args = "echo script-quote" }
 	})
 
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	local ok, out = pkg:runScript("args", true, { "a b", "it's" })
 	test.truthy(ok, "runScript with quoted args failed: " .. tostring(out))
 	local _, _, isCmd = lde.global.getScriptShell()
@@ -672,7 +678,7 @@ test.it("Package:runScript with no args leaves the script unchanged", function()
 		scripts = { args = "echo no-args-ran" }
 	})
 
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	local ok, out = pkg:runScript("args", true, {})
 	test.truthy(ok, "runScript with empty args failed: " .. tostring(out))
 	test.includes(out or "", "no-args-ran")
@@ -686,7 +692,7 @@ test.it("Package:runScript errors for an unknown script name", function()
 		scripts = { known = "true" }
 	})
 
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	local ok, err = pcall(pkg.runScript, pkg, "missing")
 	test.falsy(ok)
 	test.includes(tostring(err), "No script named")
@@ -707,7 +713,7 @@ test.it("Package.open picks up the legacy lpm.json manifest", function()
 	}))
 
 	local pkg, err = lde.Package.open(dir)
-	test.truthy(pkg, err or "open failed")
+	test.truthy(pkg, err or "open failed") ---@cast pkg -nil
 	test.equal(pkg:getName(), "lpm-legacy")
 	test.equal(path.basename(pkg:getConfigPath()), "lpm.json")
 end)

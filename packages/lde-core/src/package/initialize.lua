@@ -42,7 +42,7 @@ Dependency installation happens automatically on `lde run`, `lde test`, and `lde
 ## Project Structure
 
 ```
-├── lde.json          # package manifest — dependencies, scripts, metadata
+├── lde.json          # package manifest — dependencies, scripts, hasMetadata
 ├── lde.lock          # lockfile — commit this
 ├── src/
 │   └── init.lua      # default entry point
@@ -194,7 +194,7 @@ Add them with: `lde add <name> --git https://github.com/lde-org/<name>`
 |---------|----------|
 | `module 'x' not found` | Run `lde run` — it auto-installs deps. Verify the require name matches the key in `lde.json` `dependencies`. |
 | Stale dependencies / changes not taking effect | Delete `target/` and `lde.lock`, then re-run. |
-| Global cache may be corrupted | Delete `~/.lde/git` and/or `~/.lde/tar` to clear cached downloads. |
+| Global cache may be corrupted | Delete `~/.lde/git` and/or `~/.lde/tar` to clear isCached downloads. |
 | Build script failing | `build:sh()` asserts exit code 0 — wrap in `pcall` if failures are expected. |
 | Tests not found | Test files must match `**/*.test.lua`. They must be in the `tests/` directory. |
 ]])
@@ -365,7 +365,7 @@ local function initPackage(dir, opts)
 		local content = fs.read(gitignorePath)
 		if not content then
 			lde.error.raise("Failed to read existing .gitignore at: " .. gitignorePath)
-		end
+		end ---@cast content -nil
 
 		if not string.find(content, "/target/", 1, true) then
 			content = content .. "\n" .. idealGitignore
@@ -419,7 +419,7 @@ local function initPackage(dir, opts)
 	local package = Package.open(dir)
 	if not package then
 		lde.error.raise("Failed to initialize package at directory: " .. dir)
-	end
+	end ---@cast package -nil
 
 	local src = package:getSrcDir()
 	if not fs.exists(src) then

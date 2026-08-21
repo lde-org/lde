@@ -64,6 +64,7 @@ local function fetchExistingPortfile(name)
 	return portfile, nil
 end
 
+---@param url string
 local function openBrowser(url)
 	if jit.os == "Windows" then
 		-- Empty string before URL is the window title, required when URL contains special chars
@@ -83,7 +84,7 @@ local function publish(args)
 	local pkg, err = lde.Package.open()
 	if not pkg then
 		lde.error.raise(err)
-	end
+	end ---@cast pkg -nil
 
 	local config = pkg:readConfig()
 	local pkgDir = pkg:getDir()
@@ -98,12 +99,12 @@ local function publish(args)
 	local repo, repoErr = git2.open(pkgDir)
 	if not repo then
 		lde.error.raise("Could not open git repository: " .. (repoErr or "unknown error"))
-	end
+	end ---@cast repo -nil
 
 	local gitUrl, urlErr = repo:remoteUrl("origin")
 	if not gitUrl then
 		lde.error.raise("Could not get git remote URL. Is this a git repo with an 'origin' remote?")
-	end
+	end ---@cast gitUrl -nil
 
 	local commit, commitErr = repo:revparse("HEAD")
 	if not commit then

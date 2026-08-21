@@ -95,7 +95,8 @@ function Manifest.new(raw)
 end
 
 ---@param name string
----@return table<string, luarocks.Manifest.Entry[]>?
+---@return table<string, luarocks.Manifest.Entry[]>? entries
+---@return string? err
 function Manifest:package(name)
 	if not self._cache then self._cache = {} end
 	if self._cache[name] ~= nil then return self._cache[name] or nil end

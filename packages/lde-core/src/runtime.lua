@@ -12,10 +12,10 @@ local PROFILER_MS_PER_SAMPLE = 1
 --- Prints a fancy profile report: VM state bars + hotspot table.
 ---@param counts   table<string, number>  stack → sample count
 ---@param vmstates table<string, number>  vmstate char → sample count
----@param stacks   table<string, number>  folded stack → sample count (for flamegraph)
 ---@param total    number
 ---@param cwd      string?
 local function printProfileReport(counts, vmstates, total, cwd)
+	---@param s string
 	local function wln(s) io.write(s .. "\n") end
 
 	if total == 0 then
@@ -24,6 +24,8 @@ local function printProfileReport(counts, vmstates, total, cwd)
 	end
 
 	local totalMs = total * PROFILER_MS_PER_SAMPLE
+	---@param ms number
+	---@return string
 	local function fmtTime(ms)
 		if ms < 1000 then return string.format("~%dms", ms) end
 		return string.format("~%.1fs", ms / 1000)
@@ -34,6 +36,9 @@ local function printProfileReport(counts, vmstates, total, cwd)
 	local vmLabels = { N = "JIT compiled", I = "Interpreted", C = "C code", G = "GC", J = "JIT compiler" }
 	local vmOrder  = { "N", "I", "C", "G", "J" }
 
+	---@param n number
+	---@param color string
+	---@return string
 	local function bar(n, color)
 		local filled = math.max(0, math.min(BAR_WIDTH, math.floor(n / total * BAR_WIDTH + 0.5)))
 		local s = filled > 0 and ansi.colorize(color, string.rep("█", filled)) or ""
@@ -41,6 +46,8 @@ local function printProfileReport(counts, vmstates, total, cwd)
 		return empty > 0 and s .. ansi.colorize("gray", string.rep("░", empty)) or s
 	end
 
+	---@param loc string
+	---@return string
 	local function relativize(loc)
 		if cwd and loc:sub(1, #cwd + 1) == cwd .. "/" then
 			loc = loc:sub(#cwd + 2)
@@ -110,6 +117,8 @@ local function startProfiler(state)
 	}
 
 	-- Strip the name:line suffix that luajit appends in "f;" mode (e.g. "foo:42" → "foo").
+	---@param f string
+	---@return string
 	local function frameName(f)
 		return (f:gsub(":%d+$", ""))
 	end
@@ -233,7 +242,7 @@ local function createState(opts)
 
 	-- Fresh isolated state
 	local state = lua.new()
-	local g     = state:globals()
+	local g     = state:globals() --[[@as { package: { path: string?, cpath: string?, loaded: table<string, any> }, arg: any }]]
 
 	-- Set package.path / package.cpath
 	local pkg = g.package
@@ -304,14 +313,14 @@ local function executeSource(source, chunkName, opts)
 	-- Collect profiling results
 	if stopProfiler then
 		local counts, vmstates, stacks, total = stopProfiler()
-		if opts.profile and lde.verbose then
+		if opts.profile and lde.isVerbose then
 			printProfileReport(counts, vmstates, total, opts.cwd or env.cwd())
 		end
 		if opts.flamegraph then
 			local title = chunkName and chunkName:match("[^/\\\\]+$")
 			local fgOk, fgErr = lde.flamegraph.write(
 				stacks, total, PROFILER_MS_PER_SAMPLE, opts.flamegraph, title)
-			if lde.verbose then
+			if lde.isVerbose then
 				if fgOk then
 					ansi.printf("{cyan}Flamegraph written to %s", opts.flamegraph)
 				else
@@ -321,7 +330,7 @@ local function executeSource(source, chunkName, opts)
 		end
 		if opts.profileJson then
 			local jOk, jErr = writeProfileJson(opts.profileJson, counts, vmstates, stacks, total)
-			if lde.verbose then
+			if lde.isVerbose then
 				if jOk then
 					ansi.printf("{cyan}Profile JSON written to %s", opts.profileJson)
 				else
@@ -350,14 +359,14 @@ local function readCompiledFile(filePath)
 	end
 	if filePath:match("%.tl$") and not filePath:match("%.d%.tl$") then
 		-- Teal entry point: compile to Lua before handing it to the guest state.
-		local code, cerr = teal.compileFile(filePath)
+		local code, cerr = teal:compileFile(filePath)
 		if not code then
 			return nil, "Failed to compile " .. filePath .. ":\n" .. (cerr or "unknown error")
 		end
 		return code, nil
 	elseif filePath:match("%.moon$") then
 		-- Moonscript entry point: compile to Lua before handing it to the guest state.
-		local code, cerr = moonscript.compileFile(filePath)
+		local code, cerr = moonscript:compileFile(filePath)
 		if not code then
 			return nil, "Failed to compile " .. filePath .. ":\n" .. (cerr or "unknown error")
 		end

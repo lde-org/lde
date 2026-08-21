@@ -62,7 +62,7 @@ local function applyOverrides()
 
 	if treeOverride then
 		local lde = require("lde-core")
-		lde.verbose = true
+		lde.isVerbose = true
 		lde.global.setDir(treeOverride)
 		lde.global.init()
 	end
@@ -149,7 +149,7 @@ end
 	-- above (bare `lde`, `lde help`, `--setup`) free of lde-core so startup
 	-- stays ~1ms; the boundary's crash renderer requires it lazily instead.
 	local lde = require("lde-core")
-	lde.verbose = true
+	lde.isVerbose = true
 
 	-- env.cwd() returns nil when the shell's cwd was deleted out from under
 	-- it (relative FS ops then act on the orphaned directory, so commands
@@ -172,11 +172,11 @@ end
 		local outDir = args:pop()
 		if not pkgDir or not outDir then
 			lde.error.raise("__build-pkg: missing package dir or output dir")
-		end
+		end ---@cast outDir -nil
 		local pkg, perr = lde.Package.open(pkgDir)
 		if not pkg then
 			lde.error.raise("__build-pkg: " .. (perr or "failed to open package"))
-		end
+		end ---@cast pkg -nil
 		local bok, berr = pkg:runBuildScript(outDir)
 		if not bok then
 			lde.error.raise("__build-pkg: " .. (berr or "build failed"))
@@ -247,19 +247,19 @@ end
 		require(commandFile)(args)
 	elseif fs.exists(commandName) then
 		-- TODO: Replace this hacky behavior
-		table.insert(args.raw, 1, commandName)
+		---@cast args { raw: string[] }
+		table.insert(args.raw, 1, commandName) ---@cast args clap.Args
 		require("lde.commands.run")(args)
 	else
 		local pkg = lde.Package.open()
 		local scripts = pkg and pkg:readConfig().scripts
 
-		if scripts and scripts[commandName] then
-			---@cast pkg -nil
+		if scripts and scripts[commandName] then ---@cast pkg -nil
 
 			-- npm-style: everything after `--` is passed to the script as its args.
 			local scriptArgs = {}
-			local dash, dashPos = args:flag("")
-			if dash then
+			local isDash, dashPos = args:flag("")
+			if isDash then
 				scriptArgs = args:drain(dashPos + 1)
 			end
 
@@ -278,7 +278,6 @@ end, function(e)
 	return { value = e, trace = debug.traceback(tostring(e), 2) }
 end)
 
-if not ok then
-	---@cast boundaryErr { value: any, trace: string? }
+if not ok then ---@cast boundaryErr { value: any, trace: string? }
 	require("lde-core.error").show(boundaryErr.value, boundaryErr.trace)
 end

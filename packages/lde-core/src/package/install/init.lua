@@ -2,802 +2,15 @@ local fs = require("fs")
 local path = require("path")
 local util = require("util")
 local ansi = require("ansi")
-local rocked = require("rocked")
-local download = require("lde-core.util.download")
 
 local lde = require("lde-core")
 
+-- Dependency resolution (the graph walk, node kinds, conflict detection) and
+-- the install build pass. Resolution drives the scheduler via ctx.build.
+local resolve = require("lde-core.package.install.resolve")
+
 -- buildPackage plus the isStale stamp check the install fast path consults.
 local build = require("lde-core.package.build")
-
---- Copies config-only flags (optional, features) from a config entry onto a lock entry.
----@param lockEntry lde.Lockfile.Dependency
----@param depInfo lde.Package.Config.Dependency
----@return lde.Lockfile.Dependency
-local function withConfigFlags(lockEntry, depInfo)
-	lockEntry.optional = depInfo.optional
-	lockEntry.features = depInfo.features
-	return lockEntry
-end
-
----@class lde.install.Context
----@field relativeTo string
----@field stack table<string, { pkg: lde.Package, lock: lde.Lockfile.Dependency }>
----@field rootLockfile lde.Lockfile?
----@field locked boolean? # --locked: fail when a dep isn't pinned in the lockfile
----@field downloads integer # content artifacts actually downloaded (0 = nothing to fetch)
----@field builds integer # build scripts actually run (0 = nothing to compile)
-
----@class lde.install.DeferredBuild
----@field poll fun(): boolean? # true once the spawned build finished, nil while still running
----@field finalize fun(): boolean?, string? # waits for the build, verifies it, and stamps; true on success
-
---- Returns a string key that uniquely identifies a dependency's source.
----@param entry lde.Lockfile.Dependency
----@param pkg lde.Package
----@return string
-local function sourceKey(entry, pkg)
-	if entry.git then return "git:" .. entry.git .. "@" .. (entry.commit or "") end
-	if entry.path then return "path:" .. pkg.dir end
-	if entry.archive then return "archive:" .. entry.archive end
-	return "unknown"
-end
-
---- Applies the root lockfile pin to a dependency entry, if present.
----@param ctx lde.install.Context
----@param alias string
----@param depInfo lde.Package.Config.Dependency
----@return lde.Package.Config.Dependency
-local function applyLock(ctx, alias, depInfo)
-	if ctx.rootLockfile then
-		local locked = ctx.rootLockfile:getDependency(alias)
-		if locked then
-			locked = withConfigFlags(locked, depInfo)
-			-- Lock entries written before registry deps recorded their git URL only
-			-- carry a commit, so makeNode can't classify them. Fall back to the
-			-- manifest's source fields (keeping any commit pin); the dep re-resolves
-			-- and the next commit rewrites the entry correctly.
-			local entry = locked ---@type any
-			if not (entry.path or entry.git or entry.archive or entry.luarocks or entry.version) then
-				local merged = {}
-				for k, v in pairs(depInfo) do merged[k] = v end
-				if locked.commit then merged.commit = locked.commit end
-				return withConfigFlags(merged, depInfo)
-			end
-			return locked
-		end
-	end
-	-- --locked installs: the lockfile must already pin every non-path dependency.
-	-- Failing loudly instead of resolving a fresh commit/version is what keeps
-	-- `lde sync --locked` reproducible and offline.
-	if ctx.locked and not depInfo.path then
-		lde.error.raise("Lockfile is out of date: '" .. alias .. "' is not pinned. Run `lde sync` to update it.")
-	end
-	return depInfo
-end
-
---- Normalized git identity for conflict comparison: equivalent spellings of the
---- same repo (trailing .git, git:// vs https://) must produce the same key, or a
---- git dep spelled one way would false-conflict with the same repo spelled
---- another (e.g. `.../sstream-lua` in a package manifest vs `.../sstream-lua.git`
---- in the registry portfile). Local paths (no scheme) are left untouched.
----@param url string
----@return string
-local function gitSourceKey(url)
-	if url:match("://") then
-		return "git:" .. lde.util.normalizeGitUrl(url)
-	end
-	return "git:" .. url
-end
-
---- Approximate source key for a not-yet-materialized dependency, used to detect
---- conflicting sources when the same alias is requested from different places.
----@param alias string
----@param depInfo lde.Package.Config.Dependency
----@param relativeTo string
----@return string
-local function depSourceKey(alias, depInfo, relativeTo)
-	depInfo = depInfo or {}
-	if depInfo.path then
-		return "path:" .. path.resolve(relativeTo, path.normalize(depInfo.path))
-	elseif depInfo.git then
-		-- The commit is a deterministic resolution detail (lsRemote HEAD or lockfile
-		-- pin), so the source identity is the URL alone — a re-request of the same
-		-- repo from a different parent must not false-conflict on an unresolved
-		-- vs resolved commit.
-		return gitSourceKey(depInfo.git)
-	elseif depInfo.archive then
-		return "archive:" .. depInfo.archive
-	elseif depInfo.luarocks then
-		-- Resolve to the concrete version so two parents with different
-		-- constraints that land on the same version don't conflict.
-		local name = depInfo.name or depInfo.luarocks
-		local constraint = depInfo.version or ""
-		local v = lde.util.resolveLuarocksBest(name, constraint)
-		return "luarocks:" .. name .. "@" .. (v or constraint)
-	elseif depInfo.version then
-		-- Registry deps resolve to a git repo (same resolution as a git dep), so
-		-- their identity is the resolved repo URL — a second request for the same
-		-- package, whether via the registry or a direct git URL, must not
-		-- false-conflict. Fall back to the version form when the portfile can't
-		-- be read (e.g. the registry hasn't been synced yet this run).
-		local packageName = depInfo.name or alias
-		local portfile = lde.global.lookupRegistryPackage(packageName)
-		if portfile and portfile.git then
-			return gitSourceKey(portfile.git)
-		end
-		return "registry:" .. packageName .. "@" .. (depInfo.version or "")
-	end
-	return "unknown"
-end
-
--- ── Dependency nodes ──────────────────────────────────────────────────────
---
--- During the two-phase install every dependency becomes a "node": a plain
--- table recording what the dependency is and how far it has progressed.
--- The graph walk (collectDependencies) drives nodes through:
---
---   1. metadata   — fetch the tiny published rockspec to learn its deps
---   2. content    — download the artifact (.src.rock / tarball / archive)
---   3. consume    — make its dependency list available (expand the graph)
---   4. materialize + open — extract, open the package, emit its lock entry
---
--- Per-kind behavior lives in `handlers` below; the node itself only carries
--- data.
-
----@class lde.install.ContentPlan
----@field kind "src"|"git"|"archive"|"clone"
----@field url string?  -- download source (nil for the git-clone fallback)
----@field file string? -- local cache file to download into (nil for clone)
----@field dir string?  -- extraction target (nil for clone / cached git)
-
----@class lde.install.GitPlan
----@field dir string
----@field commit string
----@field tarballUrl string?
----@field archiveFile string?
----@field url string? -- resolved source URL (set when the config entry doesn't carry it: luarocks fallbacks, registry deps)
----@field clone { repoName: string, repoUrl: string, commit: string, branch: string? }?
-
----@class lde.install.Node
----@field alias string -- key in the parent's dependencies table
----@field depInfo lde.Package.Config.Dependency
----@field kind "path"|"git"|"archive"|"luarocks"
----@field sourceKey string -- identity used for conflict detection
----@field dir string? -- path deps: resolved directory
----@field repoName string? -- git/registry: package name to find inside the repo
----@field metadata boolean? -- luarocks: fetch the published rockspec for deps
----@field rockspecUrl string?
----@field rockspecFile string?
----@field version string?
----@field srcUrl string? -- preferred content artifact (.src.rock)
----@field spec rocked.raw.Output?
----@field expandAfter boolean? -- deps only knowable after content downloads
----@field gitPlan lde.install.GitPlan?
----@field deps table<string, lde.Package.Config.Dependency>?
----@field pkg lde.Package?
----@field expandDir string? -- relativeTo base for the node's children
----@field materialized boolean? -- content already extracted/cloned this run
----@field _content lde.install.ContentPlan?
----@field _fallbackGit lde.install.GitPlan?
-
---- Resolve a luarocks dependency to its version + metadata/content URLs.
----@param alias string
----@param depInfo lde.Package.Config.LuarocksDependency
----@return lde.install.Node
-local function makeLuarocksNode(alias, depInfo)
-	local name = depInfo.name or depInfo.luarocks -- the luarocks package name (alias may differ)
-	local version, rockspecUrl, srcUrl, err = lde.util.resolveLuarocksBest(name, depInfo.version)
-	if not version then
-		lde.error.raise("Failed to resolve luarocks dep '" .. alias .. "': " .. (err or ""))
-	end
-
-	return {
-		alias = alias,
-		depInfo = depInfo,
-		kind = "luarocks",
-		name = name,
-		version = version,
-		sourceKey = "luarocks:" .. name .. "@" .. version,
-		metadata = rockspecUrl ~= nil,
-		rockspecUrl = rockspecUrl,
-		rockspecFile = rockspecUrl and lde.util.rockspecCacheFile(rockspecUrl) or nil,
-		srcUrl = srcUrl, -- preferred content artifact; nil when no src rock exists
-		expandAfter = not rockspecUrl, -- without a rockspec the deps come from the content
-	}
-end
-
---- Creates a node for a dependency, honoring lockfile pins.
----@param alias string
----@param depInfo lde.Package.Config.Dependency
----@param relativeTo string
----@param ctx lde.install.Context
----@return lde.install.Node
-local function makeNode(alias, depInfo, relativeTo, ctx)
-	depInfo = applyLock(ctx, alias, depInfo)
-
-	if depInfo.path then
-		local dir = path.resolve(relativeTo, path.normalize(depInfo.path))
-		return {
-			alias = alias,
-			depInfo = depInfo,
-			kind = "path",
-			dir = dir,
-			sourceKey = "path:" .. dir,
-		}
-	elseif depInfo.git then
-		local gitPlan = lde.global.planGitRepo(alias, depInfo.git, depInfo.branch, depInfo.commit)
-		return {
-			alias = alias,
-			depInfo = depInfo,
-			kind = "git",
-			sourceKey = gitSourceKey(depInfo.git),
-			repoName = alias,
-			gitPlan = gitPlan,
-			expandAfter = true, -- monorepo: lde.json location unknown until extracted
-		}
-	elseif depInfo.archive then
-		return {
-			alias = alias,
-			depInfo = depInfo,
-			kind = "archive",
-			sourceKey = "archive:" .. depInfo.archive,
-			expandAfter = true, -- deps only known from the extracted content
-		}
-	elseif depInfo.luarocks then
-		return makeLuarocksNode(alias, depInfo)
-	elseif depInfo.version then
-		-- Registry packages are git repos (same resolution as a git dep).
-		local packageName = depInfo.name or alias
-		lde.global.syncRegistry()
-		local portfile, err = lde.global.lookupRegistryPackage(packageName)
-		if not portfile then
-			lde.error.raise("Registry lookup failed for '" .. alias .. "': " .. err)
-		end
-		local _, commit = lde.global.resolveRegistryVersion(portfile, depInfo.version)
-		local gitPlan = lde.global.planGitRepo(packageName, portfile.git, portfile.branch, commit)
-		-- The config entry only carries the version; the repo URL lives in the
-		-- portfile. Record it on the plan so the lockfile entry can pin the git
-		-- source (without it, a later install can't classify the dep).
-		gitPlan.url = portfile.git
-		return {
-			alias = alias,
-			depInfo = depInfo,
-			kind = "git",
-			-- Registry deps resolve to a git repo; their identity is the resolved
-			-- repo URL (matching depSourceKey), so a second registry request — or a
-			-- direct git request for the same repo — doesn't false-conflict.
-			sourceKey = gitSourceKey(portfile.git),
-			repoName = packageName,
-			gitPlan = gitPlan,
-			expandAfter = true,
-		}
-	else
-		lde.error.raise("Unsupported dependency type for: " .. alias)
-	end
-end
-
--- ── Per-kind behavior ─────────────────────────────────────────────────────
----@class lde.install.Handler
----@field content fun(node: lde.install.Node): lde.install.ContentPlan?
----@field materialize fun(node: lde.install.Node, content: lde.install.ContentPlan)
----@field consume fun(node: lde.install.Node)
----@field open fun(node: lde.install.Node)
----@field lock fun(node: lde.install.Node): lde.Lockfile.Dependency
-
----@type table<string, lde.install.Handler>
-local handlers = {}
-
---- Shared helpers dispatching on node.kind.
----@param node lde.install.Node
----@return lde.install.Handler
-local function h(node)
-	return handlers[node.kind]
-end
-
----@param node lde.install.Node
----@return lde.install.ContentPlan?
-local function content(node)
-	return h(node).content(node)
-end
-
---- Make the node's dependency list available (idempotent).
----@param node lde.install.Node
-local function consume(node)
-	if node.deps then return end
-	h(node).consume(node)
-end
-
---- Extract the node's downloaded content (after the batch drained).
----@param node lde.install.Node
-local function materialize(node)
-	local c = content(node)
-	assert(c, "no content plan for '" .. node.alias .. "'")
-	h(node).materialize(node, c)
-	node.materialized = true
-end
-
---- Open the node's package (requires content materialized).
----@param node lde.install.Node
----@return lde.Package
-local function open(node)
-	if node.pkg then return node.pkg end
-	h(node).open(node)
-	---@cast node.pkg lde.Package
-	return node.pkg
-end
-
---- Emit the lockfile entry for this node.
----@param node lde.install.Node
----@return lde.Lockfile.Dependency
-local function lock(node)
-	return h(node).lock(node)
-end
-
---- Standard consume for content-based kinds: open the package, read its deps.
----@param node lde.install.Node
-local function consumeFromPkg(node)
-	local pkg = open(node)
-	node.deps = pkg:readConfig().dependencies or {}
-end
-
---- Expand a node's deps into the graph; returns newly created nodes.
----@param node lde.install.Node
----@param ctx lde.install.Context
----@param graph table<string, lde.install.Node>
----@param order lde.install.Node[]
----@return lde.install.Node[]
-local function expand(node, ctx, graph, order)
-	---@type lde.install.Node[]
-	local newNodes = {}
-	for alias, depInfo in pairs(node.deps or {}) do
-		if not graph[alias] then
-			local newNode = makeNode(alias, depInfo, node.expandDir or ctx.relativeTo, ctx)
-			graph[alias] = newNode
-			order[#order + 1] = newNode
-			newNodes[#newNodes + 1] = newNode
-		else
-			-- Same alias requested again from a different place: verify the
-			-- sources match (e.g. two different path deps under one name).
-			local effective = applyLock(ctx, alias, depInfo)
-			local existingKey = graph[alias].sourceKey
-			local newKey = depSourceKey(alias, effective, node.expandDir or ctx.relativeTo)
-			if existingKey ~= newKey then
-				lde.error.raise("Conflicting sources for dependency '" .. alias .. "':\n  " .. existingKey .. "\n  " .. newKey)
-			end
-		end
-	end
-	return newNodes
-end
-
---- path: local directory, already on disk.
-handlers.path = {
-	content = function() return nil end,
-	materialize = function() end,
-	---@param n lde.install.Node
-	open = function(n)
-		local pkg, err = lde.Package.open(n.dir, n.depInfo.rockspec)
-		if not pkg then
-			lde.error.raise("Failed to load local dependency package for: " .. n.alias .. "\nError: " .. err)
-		end
-		n.pkg = pkg
-		n.expandDir = pkg:getDir()
-	end,
-	---@param n lde.install.Node
-	consume = function(n)
-		consumeFromPkg(n)
-	end,
-	---@param n lde.install.Node
-	---@return lde.Lockfile.Dependency
-	lock = function(n)
-		return { path = n.depInfo.path, name = n.depInfo.name, rockspec = n.depInfo.rockspec }
-	end,
-}
-
---- git (and registry): tarball content, package/deps found after extraction.
-handlers.git = {
-	---@param n lde.install.Node
-	---@return lde.install.ContentPlan?
-	content = function(n)
-		local g = n.gitPlan --[[@as lde.install.GitPlan]]
-		if g.tarballUrl then
-			return { url = g.tarballUrl, file = g.archiveFile, dir = g.dir, kind = "git" }
-		elseif g.clone then
-			return { kind = "clone" } -- unrecognized host: git clone directly
-		end
-		return nil -- already cached
-	end,
-	---@param n lde.install.Node
-	---@param c lde.install.ContentPlan
-	materialize = function(n, c)
-		if c.kind == "clone" then
-			local clone = n.gitPlan --[[@as lde.install.GitPlan]].clone --[[@as { repoName: string, repoUrl: string, commit: string, branch: string? }]]
-			local ok, err = lde.global.cloneDir(clone.repoName, clone.repoUrl, clone.commit, clone.branch)
-			if not ok then lde.error.raise("Failed to clone git repository: " .. (err or "unknown error")) end
-			return
-		end
-		local res = download.result(c.file --[[@as string]])
-		if res and not res.ok then lde.error.raise("Failed to download " .. c.url .. ": " .. (res.err or "")) end
-		local ok, err = lde.global.extractGitTarball(c.file --[[@as string]], c.dir --[[@as string]])
-		if not ok then lde.error.raise("Failed to extract " .. n.repoName .. ": " .. (err or "")) end
-	end,
-	---@param n lde.install.Node
-	open = function(n)
-		local gitPlan = n.gitPlan --[[@as lde.install.GitPlan]]
-		local pkg, err = lde.util.findNamedPackage(gitPlan.dir, n.repoName, n.depInfo.rockspec)
-		if not pkg then lde.error.raise(err or "No package found in git repository") end
-		n.pkg = pkg
-		n.expandDir = pkg:getDir()
-	end,
-	---@param n lde.install.Node
-	consume = function(n)
-		consumeFromPkg(n)
-	end,
-	---@param n lde.install.Node
-	---@return lde.Lockfile.Dependency
-	lock = function(n)
-		local gitPlan = n.gitPlan --[[@as lde.install.GitPlan]]
-		-- Registry deps have no git field in their config entry; makeNode records
-		-- the resolved repo URL on the plan (gitPlan.url) so it still gets pinned.
-		return {
-			git = gitPlan.url or n.depInfo.git,
-			commit = gitPlan.commit,
-			branch = n.depInfo.branch,
-			name = n.depInfo.name,
-			rockspec = n.depInfo.rockspec,
-		}
-	end,
-}
-
---- archive: URL downloads into the tar cache, then the rockspec is found inside.
-handlers.archive = {
-	---@param n lde.install.Node
-	---@return lde.install.ContentPlan
-	content = function(n)
-		local dir = lde.global.getArchiveDir(n.depInfo.archive)
-		return { url = n.depInfo.archive, file = dir .. ".archive", dir = dir, kind = "archive" }
-	end,
-	---@param n lde.install.Node
-	---@param c lde.install.ContentPlan
-	materialize = function(n, c)
-		local res = download.result(c.file --[[@as string]])
-		if res and not res.ok then lde.error.raise("Failed to download archive '" .. c.url .. "': " .. (res.err or "")) end
-		local ok, err = lde.global.extractArchive(c.url --[[@as string]], c.file --[[@as string]], c.dir --[[@as string]])
-		if not ok then lde.error.raise("Failed to extract archive '" .. c.url .. "': " .. (err or "")) end
-	end,
-	---@param n lde.install.Node
-	open = function(n)
-		local c = content(n) --[[@as lde.install.ContentPlan]]
-		-- .src.rock archives contain a rockspec + the source tree; the source is
-		-- either a subdir next to the rockspec or the nested archive (extracted by
-		-- materializeSrcRock).
-		local pkgDir, rockspecPath = c.dir, n.depInfo.rockspec
-		if n.depInfo.archive:match("%.src%.rock$") and not n.depInfo.rockspec then
-			local srcDir, srcRockspec, merr = lde.util.materializeSrcRock(c.dir --[[@as string]])
-			if not srcDir then
-				lde.error.raise("Failed to load archive dependency '" .. n.alias .. "': " .. (merr or "unknown error"))
-			end
-			pkgDir, rockspecPath = srcDir, srcRockspec
-		end
-		local pkg, err = lde.Package.open(pkgDir, rockspecPath)
-		if not pkg then lde.error.raise("Failed to load archive dependency '" .. n.alias .. "': " .. (err or "")) end
-		n.pkg = pkg
-		n.expandDir = pkg:getDir()
-	end,
-	---@param n lde.install.Node
-	consume = function(n)
-		consumeFromPkg(n)
-	end,
-	---@param n lde.install.Node
-	---@return lde.Lockfile.Dependency
-	lock = function(n)
-		return { archive = n.depInfo.archive, name = n.depInfo.name, rockspec = n.depInfo.rockspec }
-	end,
-}
-
---- luarocks: metadata is the published rockspec; content prefers the .src.rock
---- and falls back to the rockspec's own source artifact.
-handlers.luarocks = {
-	---@param n lde.install.Node
-	---@return lde.install.ContentPlan?
-	content = function(n)
-		if n._content then return n._content end
-
-		if n.srcUrl then
-			local dir = lde.global.getArchiveDir(n.srcUrl)
-			n._content = { url = n.srcUrl, file = dir .. ".archive", dir = dir, kind = "src" }
-			return n._content
-		end
-
-		-- No src rock for this version: fall back to the rockspec's source.
-		consume(n)
-		local source = n.spec and n.spec.source
-		if not source or not source.url then
-			lde.error.raise("No source artifact for '" .. n.alias .. "'")
-		end
-		local sourceUrl = source.url
-		-- LuaRocks treats any of these as a git source: git://, git+https://,
-		-- or a plain URL ending in .git (e.g. "https://github.com/x/y.git");
-		-- anything else is a plain archive to download.
-		if sourceUrl:match("^git") or sourceUrl:match("%.git$") then
-			sourceUrl = lde.util.normalizeGitUrl(sourceUrl)
-			local fallback = lde.global.planGitRepo(n.name, sourceUrl, source.branch or source.tag, nil)
-			fallback.url = sourceUrl
-			n._fallbackGit = fallback
-			if fallback.tarballUrl then
-				n._content = {
-					url = fallback.tarballUrl,
-					file = fallback.archiveFile,
-					dir = fallback.dir,
-					kind = "git",
-				}
-			elseif fallback.clone then
-				n._content = { kind = "clone" }
-			else
-				-- Repo dir already cached: nothing to download or extract.
-				n._content = nil
-			end
-		else
-			local dir = lde.global.getArchiveDir(sourceUrl)
-			n._content = { url = sourceUrl, file = dir .. ".archive", dir = dir, kind = "archive" }
-		end
-		return n._content
-	end,
-	---@param n lde.install.Node
-	---@param c lde.install.ContentPlan
-	materialize = function(n, c)
-		if c.kind == "clone" then
-			local fallback = n._fallbackGit --[[@as lde.install.GitPlan]]
-			local clone = fallback.clone --[[@as { repoName: string, repoUrl: string, commit: string, branch: string? }]]
-			local ok, err = lde.global.cloneDir(clone.repoName, clone.repoUrl, clone.commit, clone.branch)
-			if not ok then lde.error.raise("Failed to clone git repository: " .. (err or "unknown error")) end
-			return
-		end
-		local res = download.result(c.file --[[@as string]])
-		if res and not res.ok then lde.error.raise("Failed to download " .. c.url .. ": " .. (res.err or "")) end
-		local ok, err = lde.global.extractArchive(c.url --[[@as string]], c.file --[[@as string]], c.dir --[[@as string]])
-		if not ok then lde.error.raise("Failed to extract '" .. (c.url or c.dir) .. "': " .. (err or "")) end
-	end,
-	---@param n lde.install.Node
-	consume = function(n)
-		if n.rockspecFile and fs.exists(n.rockspecFile) then
-			local content = fs.read(n.rockspecFile)
-			local ok, spec = rocked.parse(content)
-			if not ok then
-				lde.error.raise("Failed to parse rockspec '" .. tostring(n.rockspecUrl) .. "': " .. tostring(spec))
-			end
-			n.spec = spec
-			n.deps = {}
-			for _, depStr in ipairs(spec.dependencies or {}) do
-				local name, version = rocked.parseDependency(depStr)
-				if name and name ~= "lua" and name ~= "luajit" then
-					n.deps[name] = { luarocks = name, version = version }
-				end
-			end
-			-- Build backends (e.g. luarocks-build-rust-mlua) install alongside
-			-- runtime deps so their modules resolve at build time.
-			for _, depStr in ipairs(spec.build_dependencies or {}) do
-				local name, version = rocked.parseDependency(depStr)
-				if name and name ~= "lua" and name ~= "luajit" then
-					n.deps[name] = { luarocks = name, version = version }
-				end
-			end
-		elseif n.srcUrl then
-			-- No published rockspec: read deps from the extracted content.
-			local pkg = open(n)
-			n.deps = pkg:readConfig().dependencies or {}
-		else
-			lde.error.raise("Missing rockspec for '" .. n.alias .. "': " .. tostring(n.rockspecUrl))
-		end
-	end,
-	---@param n lde.install.Node
-	open = function(n)
-		local c = content(n)
-		local pkg, err
-		if c and c.kind == "src" then
-			pkg, err = lde.util.openSrcRock(c.dir --[[@as string]], c.url --[[@as string]])
-		else
-			-- Rockspec-backed, or a git fallback whose repo dir was already cached
-			-- (content() returns nil in that case).
-			local pkgDir = c and c.dir or (n._fallbackGit and n._fallbackGit.dir or n.dir)
-			pkg, err = lde.Package.openRockspec(pkgDir, n.rockspecUrl)
-		end
-		if not pkg then lde.error.raise("Failed to load '" .. n.name .. "': " .. (err or "")) end
-		n.pkg = pkg
-		n.expandDir = pkg:getDir()
-	end,
-	---@param n lde.install.Node
-	---@return lde.Lockfile.Dependency
-	lock = function(n)
-		local c = content(n)
-		if c and c.kind == "src" then
-			return { archive = n.srcUrl }
-		end
-		if c and (c.kind == "git" or c.kind == "clone") then
-			local fallback = n._fallbackGit --[[@as lde.install.GitPlan]]
-			return { git = fallback.url, commit = fallback.commit, rockspec = n.rockspecUrl }
-		end
-		if c then
-			return { archive = c.url, rockspec = n.rockspecUrl }
-		end
-		-- Cached git dir (content() returns nil): lock to the resolved git ref.
-		local fallback = n._fallbackGit --[[@as lde.install.GitPlan]]
-		return { git = fallback.url, commit = fallback.commit, rockspec = n.rockspecUrl }
-	end,
-}
-
---- Resolves the whole dependency graph onto `ctx.stack`.
----
---- Two-phase design: the graph is walked by fetching only small metadata
---- (published rockspecs) in parallel batches, then all content artifacts
---- (.src.rock files, source tarballs) are downloaded in one parallel batch,
---- and finally everything is extracted and opened. Git deps (and lockfile-
---- pinned archives) are the exception: their metadata lives inside the repo,
---- so their content is downloaded during the walk and they expand after it.
----
----@param dependencies table<string, lde.Package.Config.Dependency>
----@param ctx lde.install.Context
-local function collectDependencies(dependencies, ctx)
-	---@type table<string, lde.install.Node>
-	local graph = {} -- alias -> node
-	---@type lde.install.Node[]
-	local order = {} -- nodes in discovery order
-
-	---@param deps table<string, lde.Package.Config.Dependency>
-	---@param relativeTo string
-	---@return lde.install.Node[]
-	local function addDeps(deps, relativeTo)
-		---@type lde.install.Node[]
-		local newNodes = {}
-		for alias, depInfo in pairs(deps) do
-			if not graph[alias] then
-				local node = makeNode(alias, depInfo, relativeTo, ctx)
-				graph[alias] = node
-				order[#order + 1] = node
-				newNodes[#newNodes + 1] = node
-			else
-				-- Same alias requested again from a different place: verify the
-				-- sources match (e.g. two different path deps under one name).
-				local effective = applyLock(ctx, alias, depInfo)
-				local existingKey = graph[alias].sourceKey
-				local newKey = depSourceKey(alias, effective, relativeTo)
-				if existingKey ~= newKey then
-					lde.error.raise("Conflicting sources for dependency '" .. alias .. "':\n  " .. existingKey .. "\n  " .. newKey)
-				end
-			end
-		end
-		return newNodes
-	end
-
-	-- ── Phase 1: graph walk (metadata-only) ────────────────────────────────
-	---@type lde.install.Node[]
-	local frontier = addDeps(dependencies, ctx.relativeTo)
-
-	while #frontier > 0 do
-		---@type lde.install.Node[]
-		local nextFrontier = {}
-		---@type lde.install.Node[]
-		local metaBatch = {}
-		---@type lde.install.Node[]
-		local contentBatch = {}
-
-		for _, node in ipairs(frontier) do
-			if node.metadata then
-				-- Fetch the published rockspec (tiny) to discover deps.
-				if not fs.exists(node.rockspecFile --[[@as string]]) then
-					download.prefetch(node.rockspecUrl --[[@as string]], node.rockspecFile --[[@as string]])
-				end
-				metaBatch[#metaBatch + 1] = node
-			elseif not node.expandAfter and not content(node) then
-				-- path deps: nothing to download, consume and expand immediately.
-				consume(node)
-				for _, child in ipairs(expand(node, ctx, graph, order)) do
-					nextFrontier[#nextFrontier + 1] = child
-				end
-			end
-
-			if node.expandAfter then
-				-- Git deps / pinned archives: content is needed to expand.
-				local c = content(node)
-				if (c and c.dir and not fs.exists(c.dir)) or (c and c.kind == "clone") then
-					if c.kind ~= "clone" then
-						download.prefetch(c.url --[[@as string]], c.file --[[@as string]])
-					end
-					ctx.downloads = ctx.downloads + 1
-					contentBatch[#contentBatch + 1] = node
-				else
-					-- Content already cached: consume + expand without downloading.
-					consume(node)
-					for _, child in ipairs(expand(node, ctx, graph, order)) do
-						nextFrontier[#nextFrontier + 1] = child
-					end
-				end
-			end
-		end
-
-		download.drain()
-
-		for _, node in ipairs(metaBatch) do
-			consume(node)
-			for _, child in ipairs(expand(node, ctx, graph, order)) do
-				nextFrontier[#nextFrontier + 1] = child
-			end
-		end
-
-		for _, node in ipairs(contentBatch) do
-			materialize(node)
-			consume(node)
-			for _, child in ipairs(expand(node, ctx, graph, order)) do
-				nextFrontier[#nextFrontier + 1] = child
-			end
-		end
-
-		frontier = nextFrontier
-	end
-
-	-- ── Phase 2: download all remaining content in one parallel batch ──────
-	---@type lde.install.Node[]
-	local contentNodes = {}
-	---@type table<string, lde.install.Node>
-	local contentByFile = {}
-	for _, node in ipairs(order) do
-		local c = content(node)
-		-- Skip nodes whose content the walk already materialized (git clones
-		-- have no cache dir to guard on, so without this they'd clone twice).
-		if not node.materialized and ((c and c.dir and not fs.exists(c.dir)) or (c and c.kind == "clone")) then
-			if c.kind ~= "clone" then
-				download.prefetch(c.url --[[@as string]], c.file --[[@as string]])
-				contentByFile[c.file --[[@as string]]] = node
-			end
-			ctx.downloads = ctx.downloads + 1
-			contentNodes[#contentNodes + 1] = node
-		end
-	end
-
-	-- Pipeline: as each download lands, materialize + open the node and queue
-	-- its build, so independent compiles overlap the remaining downloads.
-	download.onTransfer(function(destPath)
-		local node = contentByFile[destPath]
-		if not node then return end
-		materialize(node)
-		ctx.build.addNode(node)
-	end)
-	download.drain()
-
-	-- Materialize anything the pipeline didn't (git clones have no transfer).
-	for _, node in ipairs(contentNodes) do
-		if not node.materialized then materialize(node) end
-	end
-
-	-- Queue the remaining nodes (cached/path deps never downloaded) for build.
-	for _, node in ipairs(order) do
-		ctx.build.addNode(node)
-	end
-
-	-- ── Phase 3: open packages + build the stack ───────────────────────────
-	for _, node in ipairs(order) do
-		local alias = node.alias
-		local pkg = open(node)
-		local lockEntry = lock(node)
-		lockEntry.name = node.depInfo.name
-
-		if ctx.stack[alias] then
-			local existingKey = sourceKey(ctx.stack[alias].lock, ctx.stack[alias].pkg)
-			local newKey = sourceKey(lockEntry, pkg)
-			if existingKey ~= newKey then
-				lde.error.raise("Conflicting sources for dependency '" .. alias .. "':\n  " .. existingKey .. "\n  " .. newKey)
-			end
-		else
-			ctx.stack[alias] = { pkg = pkg, lock = withConfigFlags(lockEntry, node.depInfo) }
-		end
-	end
-
-	-- Discovery order is a topological order (parents expand before their
-	-- children), so the build pass can depend on it: build backends like
-	-- luarocks-build-rust-mlua must land in target/ before the rock that
-	-- requires them builds.
-	ctx.order = order
-end
 
 ---@type table<string, lde.Package.Config.FeatureFlag>
 local platformLookup = { Windows = "windows", Linux = "linux", OSX = "macos" }
@@ -864,7 +77,7 @@ end
 --- dependency whose build they can read has finished, so independent rocks
 --- (and their gcc compiles) start building while the download batch is still
 --- draining — overlapping the build with the download tail. Ordering
---- constraints are preserved via `buildNeedsDeps` (the same rule the old
+--- constraints are preserved via `hasBuildDeps` (the same rule the old
 --- sequential loop used).
 ---@param ctx lde.install.Context
 ---@return { addNode: fun(node: lde.install.Node), finish: fun() }
@@ -905,7 +118,7 @@ local function makeBuildScheduler(ctx)
 	local function ready(node)
 		if not ctx.stack[node.alias] then return false end
 		local entry = ctx.stack[node.alias]
-		if entry.pkg.buildNeedsDeps ~= false then
+		if entry.pkg.hasBuildDeps ~= false then
 			for depAlias in pairs(node.deps or {}) do
 				if not done[depAlias] then return false end
 			end
@@ -960,11 +173,11 @@ local function makeBuildScheduler(ctx)
 			return
 		end
 
-		local built, deferred = entry.pkg:build(dest)
+		local hasBuilt, deferred = entry.pkg:build(dest)
 		if deferred then
 			pending[#pending + 1] = { alias = alias, build = deferred }
 		else
-			if built then ctx.builds = ctx.builds + 1 end
+			if hasBuilt then ctx.builds = ctx.builds + 1 end
 			done[alias] = true
 			pumpQueue()
 		end
@@ -972,21 +185,21 @@ local function makeBuildScheduler(ctx)
 
 	--- Try to build every queued node that is now ready.
 	pumpQueue = function()
-		local progressed = true
-		while progressed do
-			progressed = false
+		local hasProgressed = true
+		while hasProgressed do
+			hasProgressed = false
 			for _, node in ipairs(queue) do
 				if not attempted[node.alias] and ready(node) then
 					attemptBuild(node)
-					progressed = true
+					hasProgressed = true
 				end
 			end
 		end
 	end
 	local scheduler = {}
 
-	--- Open a node's package (once), record its stack entry, and queue it for
-	--- building. Idempotent per alias.
+	--- Queue a node for building; opens its package and records its stack
+	--- entry first (once per alias). Idempotent per alias.
 	---@param node lde.install.Node
 	function scheduler.addNode(node)
 		local alias = node.alias
@@ -994,10 +207,7 @@ local function makeBuildScheduler(ctx)
 		queued[alias] = true
 		queue[#queue + 1] = node
 		if not ctx.stack[alias] then
-			local pkg = open(node)
-			local lockEntry = lock(node)
-			lockEntry.name = node.depInfo.name
-			ctx.stack[alias] = { pkg = pkg, lock = withConfigFlags(lockEntry, node.depInfo) }
+			resolve.registerNode(node, ctx)
 		end
 		pumpQueue()
 	end
@@ -1008,21 +218,21 @@ local function makeBuildScheduler(ctx)
 	--- promptly.
 	function scheduler.finish()
 		while #pending > 0 do
-			local progressed = false
+			local hasProgressed = false
 			local i = 1
 			while i <= #pending do
 				local job = pending[i]
 				if job.build.poll() ~= nil then
 					table.remove(pending, i)
 					finalizeJob(job)
-					progressed = true
+					hasProgressed = true
 					-- finalizeJob may pump the queue and append new jobs; keep
 					-- this index to re-check the element that shifted into it.
 				else
 					i = i + 1
 				end
 			end
-			if not progressed then
+			if not hasProgressed then
 				sleep(20)
 			end
 		end
@@ -1052,7 +262,7 @@ end
 ---@param enabledOptional table<string, true>
 ---@param modulesDir string
 ---@return boolean
-local function installIsIntact(package, dependencies, enabledOptional, modulesDir)
+local function isInstallIntact(package, dependencies, enabledOptional, modulesDir)
 	if not fs.isdir(modulesDir) then return false end
 
 	for alias, depInfo in pairs(dependencies) do
@@ -1088,8 +298,8 @@ end
 ---@param dependencies table<string, lde.Package.Config.Dependency>?
 ---@param relativeTo string?
 ---@param features lde.Package.Config.FeatureFlag[]?
----@param opts { summary: boolean?, locked: boolean? }?
----@return { checked: integer, installs: integer, changed: boolean, cached: boolean }
+---@param opts { summary: boolean?, isLocked: boolean?, rootExtract: fun()? }?
+---@return { checked: integer, installs: integer, hasChanged: boolean, isCached: boolean }
 local function installDependencies(package, dependencies, relativeTo, features, opts)
 	local isRoot = dependencies == nil
 	dependencies = dependencies or package:getDependencies()
@@ -1111,7 +321,7 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 	local function noopResult()
 		local installs = 0
 		for _ in pairs(dependencies) do installs = installs + 1 end
-		return { checked = installs, installs = installs, changed = false, cached = true }
+		return { checked = installs, installs = installs, hasChanged = false, isCached = true }
 	end
 
 	-- Temporary: a .skip marker in target/ (written by minilde during the
@@ -1122,7 +332,7 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 	-- Fast path: if target/.installed hash matches the current lockfile, skip all work.
 	-- Bypassed under --locked so it always re-verifies the manifest against the
 	-- lockfile instead of trusting the marker.
-	if isRoot and not opts.locked then
+	if isRoot and not opts.isLocked then
 		local installedPath = path.join(modulesDir, ".installed")
 		local lockfilePath = package:getLockfilePath()
 		if fs.exists(lockfilePath) and fs.exists(installedPath) then
@@ -1135,7 +345,7 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 				-- may still be gone (e.g. `rm -rf ~/.lde/git` dangling the git
 				-- symlinks in target/). Verify the install is intact before trusting
 				-- the marker so `lde run` re-installs instead of failing at require.
-				if installIsIntact(package, dependencies, enabledOptional, modulesDir) then
+				if isInstallIntact(package, dependencies, enabledOptional, modulesDir) then
 					return noopResult()
 				end
 			end
@@ -1149,11 +359,11 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 	-- with transitive requests for the same alias. Re-resolve everything from
 	-- the manifest and rewrite the lockfile instead.
 	local rootLockfile = package:readLockfile()
-	local lockfileStale = rootLockfile ~= nil and rootLockfile:isStale(package:readConfig())
-	if opts.locked and lockfileStale then
+	local isLockfileStale = rootLockfile ~= nil and rootLockfile:isStale(package:readConfig())
+	if opts.isLocked and isLockfileStale then
 		lde.error.raise("Lockfile is out of date: lde.json dependencies changed since it was written. Run `lde sync` to update it.")
 	end
-	if lockfileStale then rootLockfile = nil end
+	if isLockfileStale then rootLockfile = nil end
 
 	local ctx = {
 		relativeTo = relativeTo,
@@ -1161,7 +371,7 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 		-- The lockfile pins every previously-resolved alias (runtime and dev),
 		-- so dev-dependency installs resolve from it instead of lsRemote-ing.
 		rootLockfile = rootLockfile,
-		locked = opts.locked,
+		isLocked = opts.isLocked,
 		downloads = 0,
 		builds = 0,
 		-- Build-scheduler inputs.
@@ -1183,10 +393,11 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 	-- overlapped `install rocks:` flow (the root package's own download started
 	-- before resolution). In that case the session is shared and the caller
 	-- ends it.
-	local sessionWasActive = download.active()
+	local download = require("lde-core.util.download")
+	local isSessionActive = download.active()
 	local bar = nil
-	if not sessionWasActive then
-		bar = lde.verbose and installs > 0
+	if not isSessionActive then
+		bar = lde.isVerbose and installs > 0
 			and ansi.progress("Downloading dependencies") or nil
 		download.begin(bar and {
 			progress = function(done, total)
@@ -1196,7 +407,7 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 		} or nil)
 	end
 
-	local ok, err = pcall(collectDependencies, dependencies, ctx)
+	local ok, err = pcall(resolve.resolveDependencies, dependencies, ctx)
 	if not ok then
 		download.abort()
 		-- Only fail the bar if it actually rendered (downloads were in flight);
@@ -1204,7 +415,7 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 		if bar and ctx.downloads > 0 then bar:fail() end
 		lde.error.raise(err)
 	end
-	if not sessionWasActive then download.finish() end
+	if not isSessionActive then download.finish() end
 
 	-- Overlapped `install rocks:` installs start the root package's .src.rock
 	-- download before resolution; materialize it now that the content batch has
@@ -1245,8 +456,8 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 	return {
 		checked = checked,
 		installs = installs,
-		changed = ctx.downloads > 0 or ctx.builds > 0,
-		cached = false,
+		hasChanged = ctx.downloads > 0 or ctx.builds > 0,
+		isCached = false,
 	}
 end
 

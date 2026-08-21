@@ -18,6 +18,7 @@
 		"git2-sys": { "git": "https://github.com/lde-org/git2-sys" },
 		"rocked": { "path": "../rocked" },
 		"luarocks": { "path": "../luarocks" },
+		"lde-registry": { "path": "../lde-registry" },
 		"archive": { "git": "https://github.com/lde-org/archive" },
 		"socket": { "git": "https://github.com/lde-org/socket" },
 		"lua-sys": { "git": "https://github.com/lde-org/lua-sys" }

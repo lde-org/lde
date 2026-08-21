@@ -18,12 +18,12 @@ local function installRocks(name)
 
 	-- Metadata-only resolution (URL cache / cached manifest — no network).
 	local srcUrl, arch, uerr = lde.util.resolveLuarocksSource(rocksName, versionStr)
-	if not srcUrl then lde.error.raise("Failed to resolve '" .. name .. "': " .. (uerr or "")) end
+	if not srcUrl then lde.error.raise("Failed to resolve '" .. name .. "': " .. (uerr or "")) end ---@cast srcUrl -nil
 
 	if arch ~= "src" then
 		-- No published .src.rock: classic synchronous path.
 		local pkg, _, perr = lde.util.openLuarocksPackage(rocksName, versionStr)
-		if not pkg then lde.error.raise(perr or "Failed to open package") end
+		if not pkg then lde.error.raise(perr or "Failed to open package") end ---@cast pkg -nil
 		pkg:build()
 		pkg:installDependencies()
 		lde.global.writeWrapper(pkg:getName(), nil, name)
@@ -37,7 +37,7 @@ local function installRocks(name)
 		-- Already materialized: classic path, which hits the install fast path
 		-- (few ms on a warm tree).
 		local pkg, _, perr = lde.util.openLuarocksPackage(rocksName, versionStr)
-		if not pkg then lde.error.raise(perr or "Failed to open package") end
+		if not pkg then lde.error.raise(perr or "Failed to open package") end ---@cast pkg -nil
 		pkg:build()
 		pkg:installDependencies()
 		lde.global.writeWrapper(pkg:getName(), nil, name)
@@ -61,7 +61,7 @@ local function installRocks(name)
 		download.drain()
 		content = fs.read(rockspecFile)
 	end
-	if not content then lde.error.raise("Failed to fetch rockspec: " .. rockspecUrl) end
+	if not content then lde.error.raise("Failed to fetch rockspec: " .. rockspecUrl) end ---@cast content -nil
 	local ok, spec = rocked.parse(content)
 	if not ok then lde.error.raise("Failed to parse rockspec '" .. rockspecUrl .. "': " .. tostring(spec)) end
 
@@ -78,7 +78,7 @@ local function installRocks(name)
 	end
 
 	local pkg, perr = lde.util.openSrcRock(archiveDir, srcUrl)
-	if not pkg then lde.error.raise(perr or "Failed to load package") end
+	if not pkg then lde.error.raise(perr or "Failed to load package") end ---@cast pkg -nil
 
 	pkg:installDependencies()
 	pkg:build()
@@ -99,7 +99,7 @@ local function install(args)
 		local pkg, err = lde.Package.open()
 		if not pkg then
 			lde.error.raise(err)
-		end
+		end ---@cast pkg -nil
 
 		local start = ansi.now()
 		local opts = { summary = true }
@@ -108,14 +108,14 @@ local function install(args)
 		local runtime = pkg:installDependencies(nil, nil, nil, opts)
 		local dev = not args:flag("production") and pkg:installDevDependencies(opts)
 
-		if (runtime and runtime.changed) or (dev and dev.changed) then
+		if (runtime and runtime.hasChanged) or (dev and dev.hasChanged) then
 			ansi.printf("{green}All dependencies installed successfully.")
 		else
 			local installs = (runtime and runtime.installs or 0) + (dev and dev.installs or 0)
 			local checked = (runtime and runtime.checked or 0) + (dev and dev.checked or 0)
 			if checked > 0 then
-				local cached = runtime and runtime.cached
-				local format = cached
+				local isCached = runtime and runtime.isCached
+				local format = isCached
 					and "{gray}No changes in %d %s across %d %s (cached) (%s)"
 					or "{gray}No changes in %d %s across %d %s (%s)"
 				ansi.printf(format,
@@ -134,7 +134,7 @@ local function install(args)
 	end
 
 	local pkg, err = resolvePackage(args, { git = gitUrl, path = pathDir })
-	if not pkg then lde.error.raise(err) end
+	if not pkg then lde.error.raise(err) end ---@cast pkg -nil
 
 	pkg:build()
 	pkg:installDependencies()

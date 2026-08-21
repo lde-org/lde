@@ -151,8 +151,10 @@ local CEscapes = {
 
 
 ---Sanitise a library name so it is safe to use as a C identifier.
+---@param name string
+---@return string
 local function safeIdent(name)
-	return string.gsub(name, "[^%w]", "_")
+	return (string.gsub(name, "[^%w]", "_"))
 end
 
 ---@param main string # name used as the chunk label
@@ -309,11 +311,13 @@ char lde_tmpdir[4096];
 	end
 
 	local isRawBundle = type(source) == "table"
-	local isBytecode  = not isRawBundle and source:sub(1, 3) == "\27LJ"
+	local isBytecode  = not isRawBundle and (source --[[@as string]]):sub(1, 3) == "\27LJ"
 
 	-- Link a raw byte blob into the binary (1:1 size, zero runtime decode).
 	-- The path is content-addressed so recompiles of unchanged code reuse the
 	-- file; returns the C declarations (asm + externs) for the blob.
+	---@param content string
+	---@return string
 	local function writeBundleBlob(content)
 		local hash   = util.hash(content)
 		local bcPath = path.join(env.tmpdir(), "lde-bundle-" .. hash .. ".bc")
@@ -424,7 +428,7 @@ static int lde_module_loader(lua_State* L) {
 			mainMod.chunkname:gsub(".", CEscapes),
 			mainMod.name:gsub(".", CEscapes)
 		)
-	elseif isBytecode then
+	elseif isBytecode then ---@cast source string
 		-- LuaJIT bytecode wrapper (contains the escaped module bytecode as
 		-- string constants), linked as a raw blob.
 		bundleDecls = writeBundleBlob(source)
@@ -433,7 +437,7 @@ static int lde_module_loader(lua_State* L) {
 			('luaL_loadbuffer(L, (const char*)lde_bundle_start, (size_t)(lde_bundle_end - lde_bundle_start), "@%s"); lua_setfield(L, -2, "%s");')
 				:format(main:gsub(".", CEscapes), main:gsub(".", CEscapes))
 		}
-	else
+	else ---@cast source string
 		filePreloads = {
 			('luaL_loadbuffer(L, "%s", %d, "@%s"); lua_setfield(L, -2, "%s");')
 				:format(

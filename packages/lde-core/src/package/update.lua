@@ -20,7 +20,7 @@ local function updateGitDependency(package, name, depInfo)
 	local latestCommit, err = git2().lsRemote(depInfo.git, ref)
 	if not latestCommit then
 		return false, "failed: " .. (err or "unknown error")
-	end
+	end ---@cast latestCommit string
 
 	if depInfo.commit and latestCommit == depInfo.commit then
 		return false, "already up to date (" .. latestCommit:sub(1, 7) .. ")"
@@ -30,10 +30,12 @@ local function updateGitDependency(package, name, depInfo)
 	-- (Registry/luarocks updates write to lde.json instead; git commits only
 	-- live in the lockfile, which is what getDependencies() reports from.)
 	local lockfile = package:readLockfile()
-	local locked = lockfile and lockfile:getDependency(name)
-	if locked and locked.commit then
-		locked.commit = latestCommit
-		lockfile:save()
+	if lockfile then
+		local isLocked = lockfile:getDependency(name)
+		if isLocked and isLocked.commit then
+			isLocked.commit = latestCommit
+			lockfile:save()
+		end
 	end
 
 	local msg = depInfo.commit

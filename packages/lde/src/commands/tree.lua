@@ -87,7 +87,7 @@ local function tree(_args)
 	local pkg, err = lde.Package.open()
 	if not pkg then
 		lde.error.raise(err)
-	end
+	end ---@cast pkg -nil
 
 	printTree(pkg, nil, 0, "", true)
 end

@@ -6,23 +6,23 @@ local lde = require("lde-core")
 
 --- Resolves a rocks: name to a Package
 ---@param name string e.g. "rocks:busted@2.0"
----@param offline boolean?
+---@param isOffline boolean?
 ---@return lde.Package?, string?
-local function resolveRocks(name, offline)
+local function resolveRocks(name, isOffline)
 	local rocksName, versionStr = name:match("^rocks:([^@]+)@?(.*)$")
 	versionStr = versionStr ~= "" and versionStr or nil
 
-	local pkg, _, err = lde.util.openLuarocksPackage(rocksName, versionStr, offline)
+	local pkg, _, err = lde.util.openLuarocksPackage(rocksName, versionStr, isOffline)
 	return pkg, err
 end
 
 --- Resolves --git, --path, or a registry/rocks: name to a Package.
 --- Returns pkg, err, extraName (the popped sub-package name for git/path)
 ---@param args clap.Args
----@param parsed { git: string?, path: string?, offline: boolean? }? # Pre-consumed --git/--path/--offline values (the install command peeks them to decide its project-install branch)
+---@param parsed { git: string?, path: string?, isOffline: boolean? }? # Pre-consumed --git/--path/--isOffline values (the install command peeks them to decide its project-install branch)
 ---@return lde.Package?, string?, string?
 local function resolvePackage(args, parsed)
-	local offline = (parsed and parsed.offline) or args:flag("offline")
+	local isOffline = (parsed and parsed.isOffline) or args:flag("offline")
 	local gitUrl = parsed and parsed.git or args:option("git")
 	local localPath = parsed and parsed.path or args:option("path")
 	local userCwd = env.cwd()
@@ -52,13 +52,13 @@ local function resolvePackage(args, parsed)
 		if not name then return nil, "no name" end
 
 		if name:match("^rocks:") then
-			return resolveRocks(name, offline)
+			return resolveRocks(name, isOffline)
 		end
 
 		local packageName, versionStr = name:match("^([^@]+)@(.+)$")
 		if not packageName then packageName = name end
 
-		if not offline then
+		if not isOffline then
 			lde.global.syncRegistry()
 		elseif not fs.exists(lde.global.getRegistryDir()) then
 			return nil, "offline: lde registry is not cached (run `lde x " .. packageName .. "` online once to cache it)"
@@ -69,7 +69,7 @@ local function resolvePackage(args, parsed)
 
 		local _, commit = lde.global.resolveRegistryVersion(portfile, versionStr or nil)
 		local repoDir
-		if offline then
+		if isOffline then
 			repoDir = lde.global.getGitRepoDir(packageName, commit)
 			if not fs.exists(repoDir) then
 				return nil, "offline: '" .. packageName .. "' is not cached locally (run `lde x " .. packageName .. "` online once to cache it)"

@@ -24,7 +24,7 @@ fs.mkdir(tmpBase)
 ---@param s string
 ---@return string
 local function plain(s)
-	return (s or ""):gsub("\27%[[0-9;]*m", "")
+	return ((s or ""):gsub("\27%[[0-9;]*m", ""))
 end
 
 ---@param name string
@@ -94,7 +94,8 @@ test.it("lde sync installs path dependencies and writes the lockfile", function(
 	test.truthy(fs.exists(path.join(dir, "target", "sync-basic-dep", "init.lua")))
 	test.truthy(fs.exists(path.join(dir, "lde.lock")))
 	test.truthy(fs.exists(path.join(dir, "target", ".installed")))
-	local lock = json.decode(fs.read(path.join(dir, "lde.lock")))
+	local lockRaw = fs.read(path.join(dir, "lde.lock")) ---@cast lockRaw -nil
+	local lock = json.decode(lockRaw) ---@cast lock table<string, any>
 	test.equal(lock.dependencies["sync-basic-dep"].path, "../sync-basic-dep")
 end)
 
@@ -290,7 +291,8 @@ test.it("lde sync --production skips dev dependencies", function()
 	test.falsy(fs.exists(path.join(dir, "target", "sync-prod-dev")),
 		"dev dep must not be installed with --production")
 	-- The dev dep must not be pinned into the lockfile either.
-	local lock = json.decode(fs.read(path.join(dir, "lde.lock")))
+	local lockRaw = fs.read(path.join(dir, "lde.lock")) ---@cast lockRaw -nil
+	local lock = json.decode(lockRaw) ---@cast lock table<string, any>
 	test.falsy(lock.dependencies["sync-prod-dev"])
 end)
 
@@ -329,7 +331,7 @@ end
 local function headCommit(repoDir)
 	local code, out = process.exec("git", { "rev-parse", "HEAD" }, { cwd = repoDir })
 	test.equal(code, 0, tostring(out))
-	return (out or ""):gsub("%s+$", "")
+	return ((out or ""):gsub("%s+$", ""))
 end
 
 test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde sync pins the resolved git repo for a registry dep and reinstalls from it", function()
@@ -352,7 +354,8 @@ test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde sync pins the resolved git repo
 	-- Regression: the lock entry must pin the git repo, not just the commit.
 	-- A commit-only entry can't be classified on the next install and errors
 	-- with "Unsupported dependency type for: <alias>".
-	local lock = json.decode(fs.read(path.join(dir, "lde.lock")))
+	local lockRaw = fs.read(path.join(dir, "lde.lock")) ---@cast lockRaw -nil
+	local lock = json.decode(lockRaw) ---@cast lock table<string, any>
 	local entry = lock.dependencies["sync-reg-pkg"]
 	test.equal(entry.git, repoDir)
 	test.equal(entry.commit, commit)
@@ -380,9 +383,11 @@ test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde sync heals a stale commit-only 
 	-- the entry carries a commit but no git field. Sync must re-resolve from
 	-- the manifest's version and rewrite the entry instead of erroring. The
 	-- manifest hash matches lde.json so the pins are still considered valid.
+	local manifestRaw = fs.read(path.join(dir, "lde.json")) ---@cast manifestRaw -nil
+	local manifest = json.decode(manifestRaw) --[[@as lde.Package.Config]]
 	fs.write(path.join(dir, "lde.lock"), json.encode({
 		version = "1",
-		manifestHash = lde.Lockfile.manifestHash(json.decode(fs.read(path.join(dir, "lde.json")))),
+		manifestHash = lde.Lockfile.manifestHash(manifest),
 		dependencies = {
 			["sync-reg-pkg"] = { commit = commit }
 		}
@@ -391,7 +396,8 @@ test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde sync heals a stale commit-only 
 	local ok, out = cli({ "--tree", treeDir, "sync" }, dir)
 	test.truthy(ok, "sync with stale lock entry failed: " .. tostring(out))
 
-	local lock = json.decode(fs.read(path.join(dir, "lde.lock")))
+	local lockRaw = fs.read(path.join(dir, "lde.lock")) ---@cast lockRaw -nil
+	local lock = json.decode(lockRaw) ---@cast lock table<string, any>
 	local entry = lock.dependencies["sync-reg-pkg"]
 	test.equal(entry.git, repoDir, "stale lock entry should be healed with the git repo")
 	test.truthy(fs.exists(path.join(dir, "target", "sync-reg-pkg", "init.lua")))
@@ -417,7 +423,8 @@ test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde sync installs a namespaced regi
 	-- name (target/ns-owner/sync-reg-pkg, i.e. ns-owner.sync-reg-pkg).
 	test.truthy(fs.exists(path.join(dir, "target", "ns-owner", "sync-reg-pkg", "init.lua")))
 
-	local lock = json.decode(fs.read(path.join(dir, "lde.lock")))
+	local lockRaw = fs.read(path.join(dir, "lde.lock")) ---@cast lockRaw -nil
+	local lock = json.decode(lockRaw) ---@cast lock table<string, any>
 	local entry = lock.dependencies["ns-owner/sync-reg-pkg"]
 	test.equal(entry.git, repoDir)
 	test.equal(entry.commit, commit)
@@ -468,7 +475,8 @@ test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde sync re-resolves a dep switched
 	})
 	local ok, out = cli({ "--tree", treeDir, "sync" }, dir)
 	test.truthy(ok, "initial sync failed: " .. tostring(out))
-	local lock1 = json.decode(fs.read(path.join(dir, "lde.lock")))
+	local lock1Raw = fs.read(path.join(dir, "lde.lock")) ---@cast lock1Raw -nil
+	local lock1 = json.decode(lock1Raw) ---@cast lock1 table<string, any>
 	test.equal(lock1.dependencies["sync-switch-pkg"].git, gitRepo)
 	test.equal(lock1.dependencies["sync-switch-pkg"].commit, gitCommit)
 
@@ -489,7 +497,8 @@ test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde sync re-resolves a dep switched
 	-- The stale git pin must not survive (and must not conflict with the
 	-- parent's registry-form request): the alias re-resolves from the registry
 	-- and the lockfile records the registry's repo.
-	local lock2 = json.decode(fs.read(path.join(dir, "lde.lock")))
+	local lock2Raw = fs.read(path.join(dir, "lde.lock")) ---@cast lock2Raw -nil
+	local lock2 = json.decode(lock2Raw) ---@cast lock2 table<string, any>
 	test.equal(lock2.dependencies["sync-switch-pkg"].git, regRepo,
 		"switched dep must re-resolve from the registry, not the stale git pin")
 	test.equal(lock2.dependencies["sync-switch-pkg"].commit, regCommit)

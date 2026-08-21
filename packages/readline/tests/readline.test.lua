@@ -17,7 +17,7 @@ if jit.os ~= "Windows" then
 
 		-- capture termios after enterRaw
 		local Termios = ffi.typeof("struct termios")
-		local t       = Termios()
+		local t       = Termios() --[[@as readline.ffi.termios]]
 		raw.enterRaw()
 		ffi.C.tcgetattr(0, t)
 		local vmin  = tonumber(t.c_cc[VMIN])

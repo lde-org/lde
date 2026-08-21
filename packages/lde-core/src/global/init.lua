@@ -23,17 +23,7 @@ global.currentVersion = (function()
 	return ok and v or "0.10.0"
 end)()
 
----@class lde.Portfile
----@field name string
----@field git string
----@field versions table<string, string> # version -> commit hash
----@field branch string?
----@field description string?
----@field license string?
----@field authors string[]?
----@field dependencies table<string, string>?
-
----@param s string
+---@param s string?
 local function sanitize(s)
 	if not s then return "" end
 	return (string.gsub(s, "[^%w_%-]", "_"))
@@ -72,6 +62,7 @@ local function buildTarballUrl(url, ref, hostType)
 	end
 
 	lde.error.raise("Unknown host type: " .. hostType)
+	error("unreachable", 0)
 end
 
 --- Downloads and extracts a git tarball for a recognized host into repoDir.
@@ -82,7 +73,7 @@ end
 ---@param label string
 local function downloadTarball(url, commit, hostType, repoDir, label)
 	local tarballUrl = buildTarballUrl(url, commit, hostType)
-	local bar = lde.verbose and ansi.progress("Downloading " .. label) or nil
+	local bar = lde.isVerbose and ansi.progress("Downloading " .. label) or nil
 	-- mkdirAll: namespaced names nest the cache dir (git/ns/pkg-<commit>).
 	fs.mkdirAll(repoDir)
 
@@ -221,142 +212,47 @@ function global.getScriptShell()
 end
 
 function global.getRegistryDir()
-	return path.join(global.getDir(), "registry")
+	return global.registry:getDir()
 end
 
--- Only sync once per process invocation
-local registrySynced = false
+-- The registry client, wired with the production dependencies. Tests can
+-- construct their own lde.Registry instances with injected fakes instead.
+global.registry = require("lde-registry").new({
+	dirFn = function() return path.join(global.getDir(), "registry") end,
+	url = require("lde-core.global.config")().registry,
+	fs = fs --[[@as lde.RegistryFs]],
+	path = path --[[@as lde.RegistryPath]],
+	semver = semver --[[@as lde.RegistrySemver]],
+	git = git2,
+	-- lde-core.util loads after this module; require it here so the singleton
+	-- construction doesn't depend on lde-core's init order.
+	decodeJson = require("lde-core.util").decodeJson,
+	raise = lde.error.raise,
+})
 
---- Clones the registry if not present, otherwise pulls to update.
---- A failed pull (e.g. offline) is non-fatal; cached data is used.
 function global.syncRegistry()
-	if registrySynced then return end
-	registrySynced = true
-
-	local registryDir = global.getRegistryDir()
-	if not fs.exists(registryDir) then
-		local repo, err = git2().clone(global.getConfig().registry, registryDir)
-		if not repo then
-			lde.error.raise("Failed to clone lde registry: " .. (err or "unknown error"))
-		end
-		repo:updateSubmodules()
-	else
-		local repo = git2().open(registryDir)
-		if repo then repo:pull() end
-	end
-end
-
---- Validates a package name against the lde registry naming rules (mirrors
---- schemas/registry.schema.json in the lde-org/registry repo):
----
----   * flat ("foo") or exactly one namespace level ("ns/foo")
----   * lowercase only; parts use a-z, 0-9, _ and - (no dots, no "..")
----   * each part starts with a letter and ends with a letter or digit
----   * the namespace part is at least 3 characters
----   * the full name is at most 128 characters
----
----@param name string
----@return string? err # nil when the name is valid
-function global.validatePackageName(name)
-	if type(name) ~= "string" or name == "" then
-		return "package name cannot be empty"
-	end
-	if #name > 128 then
-		return "package name '" .. name .. "' is too long (max 128 characters)"
-	end
-	if name:find("..", 1, true) then
-		return "package name '" .. name .. "' is invalid: must not contain '..'"
-	end
-	if name:sub(1, 1) == "/" or name:sub(-1) == "/" then
-		return "package name '" .. name .. "' is invalid: must not start or end with '/'"
-	end
-
-	local ns, pkg = name:match("^([^/]+)/([^/]+)$")
-	if not ns then
-		pkg = name
-		if name:find("/", 1, true) then
-			return "package name '" .. name .. "' is invalid: a namespace is exactly one level deep (e.g. ns/foo)"
-		end
-	end
-
-	---@param part string
-	---@return boolean
-	local function partValid(part)
-		return part:match("^[a-z][a-z0-9_-]*[a-z0-9]$") ~= nil
-			or part:match("^[a-z]$") ~= nil
-	end
-
-	if not partValid(pkg) then
-		return "package name '" .. name .. "' is invalid: it must be lowercase, start with a letter, end with a letter or digit, and contain only a-z, 0-9, _ and -"
-	end
-	if ns then
-		if #ns < 3 then
-			return "namespace '" .. ns .. "' must be at least 3 characters"
-		end
-		if not partValid(ns) then
-			return "namespace '" .. ns .. "' is invalid: it must be lowercase, start with a letter, end with a letter or digit, and contain only a-z, 0-9, _ and -"
-		end
-	end
-	return nil
+	global.registry:sync()
 end
 
 ---@param name string
 ---@return lde.Portfile?
 ---@return string? err
 function global.lookupRegistryPackage(name)
-	local nameErr = global.validatePackageName(name)
-	if nameErr then
-		return nil, "Invalid package name '" .. tostring(name) .. "': " .. nameErr
-	end
-
-	-- Namespaced names (ns/foo) live at packages/ns/foo.json; split on "/" and
-	-- re-join with the OS separator so nested lookups work on Windows too.
-	local relPath = (name:gsub("/", path.separator))
-	local portfilePath = path.join(global.getRegistryDir(), "packages", relPath .. ".json")
-	local content = fs.read(portfilePath)
-	if not content then
-		return nil, "Package '" .. name .. "' not found in lde registry"
-	end
-
-	local portfile, perr = lde.util.decodeJson(content)
-	if not portfile then
-		return nil, "Invalid portfile for '" .. name .. "': " .. perr
-	end
-	return portfile, nil
+	return global.registry:lookup(name)
 end
 
---- Resolves a version string (or nil for latest) to a commit hash.
 ---@param portfile lde.Portfile
----@param version string? # nil means latest
+---@param version string?
 ---@return string version
 ---@return string commit
 function global.resolveRegistryVersion(portfile, version)
-	local versions = portfile.versions
-	if not versions then
-		lde.error.raise("Package '" .. portfile.name .. "' has no versions in registry")
-	end
+	return global.registry:resolveVersion(portfile, version)
+end
 
-	if version then
-		local commit = versions[version]
-		if not commit then
-			lde.error.raise("Version '" .. version .. "' of '" .. portfile.name .. "' not found in lde registry")
-		end
-		return version, commit
-	end
-
-	-- Find highest semver
-	local latest = nil
-	for v in pairs(versions) do
-		if latest == nil or semver.compare(v, latest) > 0 then
-			latest = v
-		end
-	end
-
-	if not latest then
-		lde.error.raise("No versions available for package '" .. portfile.name .. "'")
-	end
-
-	return latest, versions[latest]
+---@param name string
+---@return string? err
+function global.validatePackageName(name)
+	return global.registry:validateName(name)
 end
 
 --- Builds the cache directory name for a git repo: <name>-<commit>.
@@ -427,17 +323,17 @@ end
 ---@return string? err
 local function resolveGitRef(repoUrl, ref)
 	if not ref or ref == "" or ref == "HEAD" then
-		return git2().lsRemote(repoUrl, "HEAD")
+		return git2().lsRemote(repoUrl, "HEAD") --[[@as string?]]
 	end
 
 	local sha, err = git2().lsRemote(repoUrl, "refs/heads/" .. ref)
-	if sha then return sha end
+	if sha then return sha --[[@as string]] end
 	-- Tags: prefer the peeled "^{}" entry (annotated tags), then the raw tag ref
 	-- (lightweight tags point straight at the commit).
 	sha, err = git2().lsRemote(repoUrl, "refs/tags/" .. ref .. "^{}")
-	if sha then return sha end
+	if sha then return sha --[[@as string]] end
 	sha, err = git2().lsRemote(repoUrl, "refs/tags/" .. ref)
-	if sha then return sha end
+	if sha then return sha --[[@as string]] end
 	return nil, err
 end
 
@@ -450,12 +346,12 @@ end
 ---@param repoUrl string
 ---@param branch string?
 ---@param commit string?
----@param offline boolean?
+---@param isOffline boolean?
 ---@return string repoDir
 ---@return string commit
-function global.getOrInitGitRepo(repoName, repoUrl, branch, commit, offline)
+function global.getOrInitGitRepo(repoName, repoUrl, branch, commit, isOffline)
 	if not commit then
-		if offline then
+		if isOffline then
 			lde.error.raise("offline: cannot resolve '" .. (branch or "HEAD") .. "' for " .. repoUrl)
 		end
 		local sha, err = resolveGitRef(repoUrl, branch)
@@ -463,10 +359,10 @@ function global.getOrInitGitRepo(repoName, repoUrl, branch, commit, offline)
 			lde.error.raise("Failed to resolve '" .. (branch or "HEAD") .. "' for " .. repoUrl .. ": " .. (err or ""))
 		end
 		commit = sha
-	end
+	end ---@cast commit string
 
 	local repoDir = global.getGitRepoDir(repoName, commit)
-	if offline and not fs.exists(repoDir) then
+	if isOffline and not fs.exists(repoDir) then
 		lde.error.raise("offline: '" .. repoName .. "' is not cached locally (run once online to cache it)")
 	end
 	if not fs.exists(repoDir) then
@@ -475,7 +371,7 @@ function global.getOrInitGitRepo(repoName, repoUrl, branch, commit, offline)
 			downloadTarball(repoUrl, commit, hostType, repoDir, repoName)
 		else
 			local progress
-			local bar = lde.verbose and ansi.progress("Cloning " .. repoName) or nil
+			local bar = lde.isVerbose and ansi.progress("Cloning " .. repoName) or nil
 			if bar then
 				local totalObjs = 0
 				progress = function(stats)
@@ -517,7 +413,7 @@ function global.planGitRepo(repoName, repoUrl, branch, commit)
 			lde.error.raise("Failed to resolve '" .. (branch or "HEAD") .. "' for " .. repoUrl .. ": " .. (err or ""))
 		end
 		commit = sha
-	end
+	end ---@cast commit string
 
 	local repoDir = global.getGitRepoDir(repoName, commit)
 	-- The parallel download writes the tarball to repoDir .. ".archive", so the
@@ -561,16 +457,16 @@ end
 --- concurrent install may finish (and delete the .archive file) while this
 --- download is in flight; the extracted dir is reused in that case.
 ---@param url string
----@param offline boolean?
+---@param isOffline boolean?
 ---@return string dir
-function global.getOrInitArchive(url, offline)
+function global.getOrInitArchive(url, isOffline)
 	local archiveDir = global.getArchiveDir(url)
-	if offline and not fs.exists(archiveDir) then
+	if isOffline and not fs.exists(archiveDir) then
 		lde.error.raise("offline: archive is not cached locally (run once online to cache it): " .. url)
 	end
 	if not fs.exists(archiveDir) then
 		local filename = url:match("([^/]+)$") or url
-		local bar = lde.verbose and ansi.progress("Downloading " .. filename) or nil
+		local bar = lde.isVerbose and ansi.progress("Downloading " .. filename) or nil
 		-- Created up front: curl.download opens archiveDir .. ".archive" directly,
 		-- so the parent must exist. Removed again on failure (see below).
 		fs.mkdir(archiveDir)
@@ -694,7 +590,7 @@ function global.getOrCloneRepo(repoName, cloneUrl, branch)
 	local commit, err = resolveGitRef(cloneUrl, branch)
 	if not commit then
 		lde.error.raise("Failed to resolve ref for " .. cloneUrl .. ": " .. (err or ""))
-	end
+	end ---@cast commit string
 
 	local repoDir = global.getGitRepoDir(repoName, commit)
 	if not fs.exists(repoDir) then
@@ -785,7 +681,7 @@ function global.writeWrapper(toolName, packageDir, packageName)
 		local child, err = process.spawn("chmod", { "+x", wrapperPath })
 		if not child then
 			lde.error.raise("Failed to make wrapper executable: " .. (err or "unknown error"))
-		end
+		end ---@cast child -nil
 		child:wait()
 
 		ansi.printf("{green}Installed tool '%s' -> %s", toolName, wrapperPath)
@@ -824,7 +720,7 @@ function global.ensureMingw(opts)
 	local code = process.exec("gcc", { "--version" })
 	if code == 0 then return end
 
-	local p1 = lde.verbose and ansi.progress("Downloading 7z extractor") or nil
+	local p1 = lde.isVerbose and ansi.progress("Downloading 7z extractor") or nil
 
 	local tmpDir = path.join(global.getDir(), "mingw-tmp")
 	fs.mkdir(tmpDir)
@@ -852,7 +748,7 @@ function global.ensureMingw(opts)
 	end
 	if p1 then p1:done("Downloaded 7z extractor") end
 
-	local p2 = lde.verbose and ansi.progress("Downloading toolchain") or nil
+	local p2 = lde.isVerbose and ansi.progress("Downloading toolchain") or nil
 	local dlOpts2
 	if p2 then
 		dlOpts2 = {
@@ -873,7 +769,7 @@ function global.ensureMingw(opts)
 	end
 	if p2 then p2:done("Downloaded toolchain") end
 
-	local p3 = lde.verbose and ansi.progress("Extracting toolchain") or nil
+	local p3 = lde.isVerbose and ansi.progress("Extracting toolchain") or nil
 	fs.mkdir(mingwDir)
 	code, _, stderr = process.exec(sevenzPath, { "x", archivePath, "-o" .. mingwDir, "-y" })
 	fs.rmdir(tmpDir)

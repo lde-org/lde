@@ -42,16 +42,23 @@ local TL_SOURCE_SUFFIXES = { "tl", "d.tl" }
 ---@field incdirs string[]?
 ---@field defines string[]?
 
----@param src lde.rockspec.NativeModuleSpec
----@param buildTable lde.rockspec.NativeModuleDefaults?
----@return lde.rockspec.NormalizedNativeModule
+---@param src table # lde.rockspec.NativeModuleSpec or rocked.raw.NativeSource (same shape)
+---@param buildTable table?
+---@return table
 local function normalizeNativeModule(src, buildTable)
-	if type(src.sources) == "string" then src.sources = { src.sources } end
+	local sources = src.sources
+	if type(sources) == "string" then
+		src.sources = { sources }
+	end
 	for _, f in ipairs({ "libraries", "libdirs", "incdirs", "defines" }) do
-		if type(src[f]) == "string" then
-			src[f] = { src[f] }
-		elseif src[f] == nil and buildTable and buildTable[f] then
-			src[f] = type(buildTable[f]) == "string" and { buildTable[f] } or buildTable[f]
+		local value = src[f]
+		if type(value) == "string" then
+			src[f] = { value }
+		elseif value == nil and buildTable then
+			local fallback = buildTable[f]
+			if fallback ~= nil then
+				src[f] = type(fallback) == "string" and { fallback } or fallback
+			end
 		end
 	end
 	return src
@@ -129,7 +136,7 @@ end
 ---@field jitOS string
 ---@field makePath? fun(path: string): string
 
----@param src lde.rockspec.NormalizedNativeModule
+---@param src lde.rockspec.NativeModuleSpec | lde.rockspec.NormalizedNativeModule
 ---@param ctx lde.rockspec.NativeGccContext
 ---@return string[]
 local function nativeGccArgs(src, ctx)
@@ -140,13 +147,15 @@ local function nativeGccArgs(src, ctx)
 	local makePath = ctx.makePath or function(p) return p end
 
 	local srcFiles = {}
-	for _, s in ipairs(src.sources) do
+	local sourceList = src.sources ---@cast sourceList string[]
+	for _, s in ipairs(sourceList) do
 		srcFiles[#srcFiles + 1] = path.join(dir, s)
 	end
 
 	local args = { "-shared", "-fPIC", "-DLUAJIT_VERSION=LuaJIT 2.1.0-beta3", "-DLUA_VERSION_NUM=501",
 		"-I" .. path.join(ljPath, "include") }
-	for _, d in ipairs(src.defines or {}) do args[#args + 1] = "-D" .. d end
+	local defines = src.defines or {} ---@cast defines string[]
+	for _, d in ipairs(defines) do args[#args + 1] = "-D" .. d end
 	if jitOS == "Windows" then
 		-- compat-5.3 (bundled by rocks like bit32) selects strerror_r when
 		-- _XOPEN_SOURCE >= 600 (which lprefix.h defines), but UCRT only
@@ -164,7 +173,8 @@ local function nativeGccArgs(src, ctx)
 		LUADIR = modulesDir,
 		LIBDIR = modulesDir,
 	}
-	for _, inc in ipairs(src.incdirs or {}) do
+	local incdirs = src.incdirs or {} ---@cast incdirs string[]
+	for _, inc in ipairs(incdirs) do
 		local resolved = (inc:gsub("%$%(([%w_]+)%)", function(k) return incVars[k] or "" end))
 		if resolved ~= "" and not resolved:find("$", 1, true) then
 			local incPath = path.isAbsolute(resolved) and resolved or path.join(dir, resolved)
@@ -175,7 +185,8 @@ local function nativeGccArgs(src, ctx)
 	args[#args + 1] = "-o"
 	args[#args + 1] = ctx.destAbs
 	args[#args + 1] = "-L" .. path.join(ljPath, "lib")
-	for _, d in ipairs(src.libdirs or {}) do
+	local libdirs = src.libdirs or {} ---@cast libdirs string[]
+	for _, d in ipairs(libdirs) do
 		local resolved = (d:gsub("%$%(([%w_]+)%)", function(k) return incVars[k] or "" end))
 		if resolved ~= "" and not resolved:find("$", 1, true) then
 			args[#args + 1] = "-L" .. makePath(resolved)
@@ -185,7 +196,8 @@ local function nativeGccArgs(src, ctx)
 	if jitOS == "OSX" then
 		args[#args + 1] = "-undefined"; args[#args + 1] = "dynamic_lookup"
 	end
-	for _, l in ipairs(src.libraries or {}) do args[#args + 1] = "-l" .. l end
+	local libraries = src.libraries or {} ---@cast libraries string[]
+	for _, l in ipairs(libraries) do args[#args + 1] = "-l" .. l end
 	return args
 end
 
@@ -285,16 +297,16 @@ local function openRockspec(dir, rockspecPath)
 					modules[modname] = src
 				elseif path.extension(src) == "c" then
 					nativeModules[modname] = { sources = { src } }
-				elseif lde.verbose and interpretsModules then
+				elseif lde.isVerbose and interpretsModules then
 					io.stderr:write("warning: " ..
 						(spec.package or "?") ..
 						": unrecognised source type for module '" .. modname .. "': " .. src .. "\n")
 				end
-			elseif type(src) == "table" and src.sources then
+			elseif type(src) == "table" and src.sources then ---@cast src rocked.raw.NativeSource
 				nativeModules[modname] = normalizeNativeModule(src, spec.build)
 			elseif type(src) == "table" and src[1] then
 				nativeModules[modname] = normalizeNativeModule({ sources = src }, spec.build)
-			elseif type(src) == "table" and lde.verbose and interpretsModules then
+			elseif type(src) == "table" and lde.isVerbose and interpretsModules then
 				io.stderr:write("warning: " ..
 					(spec.package or "?") .. ": module '" .. modname .. "' has no sources field, skipping\n")
 			end
@@ -314,12 +326,13 @@ local function openRockspec(dir, rockspecPath)
 			if platBuild then break end
 		end
 
-		if spec.build.platforms and not platBuild and lde.verbose then
+		if spec.build.platforms and not platBuild and lde.isVerbose then
 			io.stderr:write("warning: " ..
 				(spec.package or "?") .. ": no platform config for '" .. jitPlatform .. "'\n")
 		end
 
-		for modname, src in pairs(platBuild and platBuild.modules or {}) do
+		local platformModules = platBuild and platBuild.modules or {} ---@cast platformModules table<string, rocked.raw.BuildSource>
+		for modname, src in pairs(platformModules) do
 			if type(src) == "string" then
 				if path.extension(src) == "lua" then
 					modules[modname] = src
@@ -345,7 +358,7 @@ local function openRockspec(dir, rockspecPath)
 
 	local binEntry
 	local bk, bv = next(binScripts)
-	if bk then binEntry = type(bk) == "number" and path.basename(bv) or bk end
+	if bk then binEntry = type(bk) == "number" and path.basename(bv --[[@as string]]) or bk end
 
 	-- LuaRocks' builtin backend autodetects modules when a rockspec (format
 	-- 3.0+) declares none; used by rocks like luarocks-build-rust-mlua that
@@ -360,7 +373,7 @@ local function openRockspec(dir, rockspecPath)
 	-- install build loop uses this to decide if a pending native compile of a
 	-- dependency must finish first). Pure-Lua builtin/module/none installs only
 	-- copy from the rock's own source, so they never need a dependency's .so.
-	pkg.buildNeedsDeps = buildType ~= "builtin" and buildType ~= "module" and buildType ~= "none"
+	pkg.hasBuildDeps = buildType ~= "builtin" and buildType ~= "module" and buildType ~= "none"
 		or next(nativeModules) ~= nil
 
 	-- Include the lde runtime version in the stamp so build outputs are
@@ -381,6 +394,8 @@ local function openRockspec(dir, rockspecPath)
 		-- On Windows, pass forward-slash paths to make: sh (busybox) eats
 		-- backslashes in unquoted make recipes, and Windows tools accept '/'
 		-- in paths.
+		---@param p string
+		---@return string
 		local function makePath(p)
 			if jit.os ~= "Windows" then return p end
 			return (p:gsub("\\", "/"))
@@ -405,9 +420,11 @@ local function openRockspec(dir, rockspecPath)
 			LUADIR      = makePath(modulesDir),
 			LIBDIR      = makePath(modulesDir),
 			PREFIX      = makePath(modulesDir),
-			LUA         = makePath(env.execPath())
+			LUA         = makePath(env.execPath() or "")
 		}
 
+		---@param s string
+		---@return string
 		local function subst(s)
 			return (s:gsub("%$%(([%w_]+)%)", function(k) return stdVars[k] or "" end))
 		end
@@ -423,6 +440,8 @@ local function openRockspec(dir, rockspecPath)
 
 			local makeEnv = toolchainEnv()
 
+			---@param extraVars table<string, string>?
+			---@return string[]
 			local function buildVarList(extraVars)
 				local args = {}
 				for k, v in pairs(stdVars) do args[#args + 1] = k .. "=" .. v end
@@ -559,7 +578,8 @@ local function openRockspec(dir, rockspecPath)
 				if not fs.isdir(destDir) then fs.mkdirAll(destDir) end
 
 				local srcFiles = {}
-				for _, s in ipairs(src.sources) do
+				local sources = src.sources ---@cast sources string[]
+				for _, s in ipairs(sources) do
 					srcFiles[#srcFiles + 1] = path.join(dir, s)
 				end
 
@@ -698,10 +718,14 @@ local function openRockspec(dir, rockspecPath)
 				OBJ_EXTENSION = "o"
 			}
 
+			---@param cmd string
+			---@return string
 			local function subst(cmd)
 				return (cmd:gsub("%$%(([%w_]+)%)", function(k) return vars[k] or "" end))
 			end
 
+			---@param cmd string
+			---@return string[]
 			local function shellSplit(cmd)
 				local args = {}
 				local i = 1
@@ -728,6 +752,9 @@ local function openRockspec(dir, rockspecPath)
 				return args
 			end
 
+			---@param cmdStr string?
+			---@return boolean? ok
+			---@return string? err
 			local function execCmd(cmdStr)
 				if not cmdStr or cmdStr == "" then return true end
 				local argv = shellSplit(subst(cmdStr))

@@ -19,7 +19,7 @@ local function runWithWatcher(pkg, pkgErr, name, scriptArgs, mode)
 	if not pkg then
 		if not name or not fs.exists(name) then
 			lde.error.raise(pkgErr or "No script file given")
-		end
+		end ---@cast name -nil
 
 		local entry = path.resolve(env.cwd(), name)
 		local args = { [0] = entry, unpack(scriptArgs) }
@@ -131,8 +131,8 @@ local function run(args)
 		return
 	end
 
-	local dash, dashPos = args:flag("")
-	if dash then
+	local isDash, dashPos = args:flag("")
+	if isDash then
 		if dashPos ~= 0 then
 			name = args:pop()
 			scriptArgs = args:drain(dashPos)
@@ -168,7 +168,7 @@ local function run(args)
 		end
 
 		lde.error.raise(pkgErr or "No script file given")
-	end
+	end ---@cast pkg -nil
 
 	pkg:build()
 	pkg:installDependencies()

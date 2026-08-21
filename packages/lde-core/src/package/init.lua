@@ -15,7 +15,7 @@ local process = require("process")
 ---@field cachedConfig lde.Package.Config?
 ---@field cachedConfigMtime number?
 ---@field buildfn (fun(pkg: lde.Package, outputDir: string): boolean?, string?, lde.install.DeferredBuild?)?
----@field buildNeedsDeps boolean? # false = pure-Lua builtin install that never reads dependency build outputs
+---@field hasBuildDeps boolean? # false = pure-Lua builtin install that never reads dependency build outputs
 ---@field isRockspec boolean? # true when opened from a *.rockspec (no lde.json)
 ---@field rockspecData rocked.raw.Output? # parsed rockspec, when isRockspec
 local Package = {}
@@ -91,7 +91,7 @@ local function defaultBuildFn(pkg, outputDir)
 
 	local luaPath, luaCPath = require("lde-core.package.run").getLuaPaths(pkg)
 	local state = lua.new()
-	local g     = state:globals()
+	local g     = state:globals() --[[@as { package: { path: string?, cpath: string? } }]]
 	g.package.path  = luaPath
 	g.package.cpath = luaCPath
 
@@ -231,7 +231,7 @@ function Package:readConfig()
 	local s = fs.stat(configPath)
 	if not s then
 		lde.error.raise("Could not read lde.json: " .. configPath)
-	end
+	end ---@cast s -nil
 
 	if self.cachedConfig and self.cachedConfigMtime == s.modifyTime then
 		return self.cachedConfig
@@ -240,12 +240,12 @@ function Package:readConfig()
 	local content = fs.read(configPath)
 	if not content then
 		lde.error.raise("Could not read lde.json: " .. configPath)
-	end
+	end ---@cast content -nil
 
 	local decoded, derr = lde.util.decodeJson(content)
 	if not decoded then
 		lde.error.raise("Failed to parse " .. configPath .. ": " .. derr)
-	end
+	end ---@cast decoded -nil
 
 	local newConfig = Package.Config.new(decoded)
 	self.cachedConfig = newConfig
@@ -271,12 +271,12 @@ end
 --- registry dep's version is only in lde.json, so makeNode would lose the
 --- source type and fail to classify it.
 ---@param depInfo lde.Package.Config.Dependency
----@param locked lde.Lockfile.Dependency
+---@param lockedEntry lde.Lockfile.Dependency
 ---@return lde.Package.Config.Dependency
-local function mergeLockedEntry(depInfo, locked)
+local function mergeLockedEntry(depInfo, lockedEntry)
 	local merged = {}
 	for k, v in pairs(depInfo) do merged[k] = v end
-	for k, v in pairs(locked) do
+	for k, v in pairs(lockedEntry) do
 		if v ~= nil then merged[k] = v end
 	end
 	return merged
@@ -296,9 +296,9 @@ function Package:getDependencies()
 	-- but preserve config-only flags (optional, features) that aren't stored in the lockfile
 	local merged = {}
 	for name, depInfo in pairs(deps) do
-		local locked = lockfile:getDependency(name)
-		if locked then
-			merged[name] = mergeLockedEntry(depInfo, locked)
+		local lockedEntry = lockfile:getDependency(name)
+		if lockedEntry then
+			merged[name] = mergeLockedEntry(depInfo, lockedEntry)
 		else
 			merged[name] = depInfo
 		end
@@ -318,9 +318,9 @@ function Package:getDevDependencies()
 	-- lockfile — mirroring getDependencies().
 	local merged = {}
 	for name, depInfo in pairs(deps) do
-		local locked = lockfile:getDependency(name)
-		if locked then
-			merged[name] = mergeLockedEntry(depInfo, locked)
+		local lockedEntry = lockfile:getDependency(name)
+		if lockedEntry then
+			merged[name] = mergeLockedEntry(depInfo, lockedEntry)
 		else
 			merged[name] = depInfo
 		end
@@ -352,7 +352,7 @@ end
 
 Package.installDependencies = require("lde-core.package.install")
 
----@param opts { summary: boolean?, locked: boolean? }?
+---@param opts { summary: boolean?, isLocked: boolean?, rootExtract: fun()? }?
 function Package:installDevDependencies(opts)
 	return self:installDependencies(self:getDevDependencies(), nil, nil, opts)
 end
@@ -384,17 +384,17 @@ local function shellQuote(arg, isCmd)
 end
 
 ---@param name string # Name of a script defined in lde.json scripts table
----@param capture boolean? # If true, capture stdout/stderr instead of inheriting them
+---@param isCapture boolean? # If true, isCapture stdout/stderr instead of inheriting them
 ---@param args string[]? # Extra args appended to the script command (e.g. from `-- <args>`)
 ---@return boolean?
 ---@return string?
-function Package:runScript(name, capture, args)
+function Package:runScript(name, isCapture, args)
 	local scripts = self:readConfig().scripts
 	if not scripts or not scripts[name] then
 		lde.error.raise("No script named '" .. name .. "' in lde.json")
-	end
+	end ---@cast scripts -nil
 	local opts = { cwd = self:getDir() }
-	if not capture then
+	if not isCapture then
 		opts.stdout = "inherit"
 		opts.stderr = "inherit"
 	end

@@ -7,6 +7,13 @@
 --- reporter is adapted here into primitive-only host callbacks, which are
 --- passed into the guest as varargs when the framework is injected.
 
+-- Minimal lua-sys surface used here (the full classes live in the lua-sys
+-- package, which is a dependency of the caller, not of lde-test).
+---@class lua.State
+---@field load fun(self: lua.State, code: string, name?: string): lua.Chunk
+---@class lua.Chunk
+---@field eval fun(self: lua.Chunk, ...: any): any
+
 --- The guest-side framework. Receives the host reporter callbacks as varargs
 --- (primitives only), exposes itself via package.preload so require("lde-test")
 --- and require("lpm-test") resolve to a fresh instance, and returns the suite
@@ -280,8 +287,7 @@ local function setup(state, reporter, host)
 		reporter.onSkip(name)
 	end or nil
 
-	local runSuite = state:load(SOURCE, "@lde-test.test"):eval(host.onResult, onStart, onPass, onFail, onSkip)
-	---@cast runSuite fun()
+	local runSuite = state:load(SOURCE, "@lde-test.test"):eval(host.onResult, onStart, onPass, onFail, onSkip) ---@cast runSuite fun()
 	return runSuite
 end
 

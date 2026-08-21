@@ -39,7 +39,7 @@ local function getManifest()
 		end
 	end
 
-	local p = lde.verbose and ansi.progress("Fetching luarocks manifest") or nil
+	local p = lde.isVerbose and ansi.progress("Fetching luarocks manifest") or nil
 
 	-- luarocks.org serves the ~4.2MB raw manifest as a ~130KB zip; download the
 	-- zip and decode the single "manifest-5.1" file it contains, all in memory.
@@ -71,15 +71,15 @@ local function getUrlCachePath()
 	return path.join(lde.global.getUserDir(), "luarocks-url-cache-5.1.json")
 end
 
----@param offline boolean? # offline: trust the persisted cache even if it's
+---@param isOffline boolean? # isOffline: trust the persisted cache even if it's
 --- older than the manifest (the manifest can't be refreshed without network)
-local function loadUrlCache(offline)
+local function loadUrlCache(isOffline)
 	if urlCache then return urlCache end
 	local cachePath = getUrlCachePath()
 	local manifestPath = path.join(lde.global.getUserDir(), "luarocks-manifest.raw")
 	local cstat = fs.stat(cachePath)
 	local mstat = fs.stat(manifestPath)
-	if cstat and (offline or (mstat and cstat.modifyTime >= mstat.modifyTime)) then
+	if cstat and (isOffline or (mstat and cstat.modifyTime >= mstat.modifyTime)) then
 		local raw = fs.read(cachePath)
 		if raw then
 			local ok, decoded = pcall(json.decode, raw)
@@ -137,9 +137,9 @@ end
 ---@param url string # Rockspec URL
 ---@param branch string?
 ---@param commit string?
----@param offline boolean?
+---@param isOffline boolean?
 ---@return lde.Package?, lde.Lockfile.Dependency?, string?
-function util.openRockspecUrl(name, url, branch, commit, offline)
+function util.openRockspecUrl(name, url, branch, commit, isOffline)
 	-- Cache rockspec content by URL to avoid re-fetching on every warm run
 	local rockspecCacheFile = path.join(lde.global.getRockspecCacheDir(), (url:gsub("[^%w]", "_")))
 	local content
@@ -147,7 +147,7 @@ function util.openRockspecUrl(name, url, branch, commit, offline)
 		content = fs.read(rockspecCacheFile)
 	end
 	if not content then
-		if offline then
+		if isOffline then
 			return nil, nil, "offline: rockspec for '" .. name .. "' is not cached (run once online to cache it)"
 		end
 		local res, fetchErr = curl().get(url)
@@ -171,10 +171,10 @@ function util.openRockspecUrl(name, url, branch, commit, offline)
 	local dir, lockEntry
 	if sourceUrl:match("^git") then
 		sourceUrl = util.normalizeGitUrl(sourceUrl)
-		dir, commit = lde.global.getOrInitGitRepo(name, sourceUrl, branch or sourceTag, commit, offline)
+		dir, commit = lde.global.getOrInitGitRepo(name, sourceUrl, branch or sourceTag, commit, isOffline)
 		lockEntry = { git = sourceUrl, commit = commit, rockspec = url }
 	elseif sourceUrl:match("^https?://") then
-		dir = lde.global.getOrInitArchive(sourceUrl, offline)
+		dir = lde.global.getOrInitArchive(sourceUrl, isOffline)
 		lockEntry = { archive = sourceUrl, rockspec = url }
 	else
 		return nil, nil, "Unsupported source for '" .. name .. "': " .. sourceUrl
@@ -190,13 +190,13 @@ end
 --- fetching the manifest.
 ---@param name string
 ---@param version string?
----@param offline boolean?
+---@param isOffline boolean?
 ---@return string? url
 ---@return "src"|"rockspec"|nil arch
 ---@return string? err
-function util.resolveLuarocksSource(name, version, offline)
+function util.resolveLuarocksSource(name, version, isOffline)
 	-- For unversioned lookups, check the URL cache first to skip manifest scan
-	local cache = loadUrlCache(offline)
+	local cache = loadUrlCache(isOffline)
 	local cacheKey = name .. (version and ("@" .. version) or "")
 	local cachedEntry = (not version) and cache[cacheKey] or nil
 
@@ -204,7 +204,7 @@ function util.resolveLuarocksSource(name, version, offline)
 	if cachedEntry then
 		url = type(cachedEntry) == "table" and cachedEntry.url or cachedEntry
 		arch = type(cachedEntry) == "table" and cachedEntry.arch or "rockspec"
-	elseif offline then
+	elseif isOffline then
 		return nil, nil, "offline: '" .. name .. "' is not cached (run once online to cache it)"
 	else
 		local manifest, err = getManifest()
@@ -212,7 +212,7 @@ function util.resolveLuarocksSource(name, version, offline)
 
 		local uerr
 		url, arch, uerr = luarocks.getUrl(manifest, name, version)
-		if not url then return nil, nil, uerr end
+		if not url then return nil, nil, uerr end ---@cast url string
 
 		-- Cache the resolved URL for future invocations
 		if not version then
@@ -221,6 +221,8 @@ function util.resolveLuarocksSource(name, version, offline)
 		end
 	end
 
+	---@cast url string?
+	---@cast arch "src"|"rockspec"|nil
 	return url, arch
 end
 
@@ -243,7 +245,7 @@ function util.resolveLuarocksBest(name, constraint)
 	local cache = loadUrlCache()
 	local cachedEntry = (not constraint) and cache[name] or nil
 	if cachedEntry then
-		local url = type(cachedEntry) == "table" and cachedEntry.url or cachedEntry
+		local url = type(cachedEntry) == "table" and cachedEntry.url or cachedEntry ---@cast url string
 		local arch = type(cachedEntry) == "table" and cachedEntry.arch or "rockspec"
 		local suffix = arch == "src" and "%.src%.rock$" or "%.rockspec$"
 		local version = url:match("^.*/" .. name:gsub("([%-%.%+%*%?%[%]%^%$%(%)%%])", "%%%1") .. "%-([^/]+)" .. suffix)
@@ -253,7 +255,7 @@ function util.resolveLuarocksBest(name, constraint)
 				return version, rockspecUrl, url
 			end
 			return version, url, nil
-		end
+		end ---@cast version string
 	end
 
 	local manifest, err = getManifest()
@@ -292,14 +294,14 @@ end
 --- Resolves a luarocks package name/version to a Package via the luarocks registry.
 ---@param name string
 ---@param version string?
----@param offline boolean?
+---@param isOffline boolean?
 ---@return lde.Package?, lde.Lockfile.Dependency?, string?
-function util.openLuarocksPackage(name, version, offline)
-	local url, arch, uerr = util.resolveLuarocksSource(name, version, offline)
+function util.openLuarocksPackage(name, version, isOffline)
+	local url, arch, uerr = util.resolveLuarocksSource(name, version, isOffline)
 	if not url then
 		-- Offline URL-cache miss: the archive may still be materialized in the
 		-- tar cache even though the URL cache entry was lost.
-		if offline then
+		if isOffline then
 			local dir = findCachedSrcRock(name)
 			if dir then
 				local pkg, err = util.openSrcRock(dir, name)
@@ -315,7 +317,7 @@ function util.openLuarocksPackage(name, version, offline)
 	end
 
 	if arch == "src" then
-		local archiveDir = lde.global.getOrInitArchive(url, offline)
+		local archiveDir = lde.global.getOrInitArchive(url, isOffline)
 		-- .src.rock extracts with the rockspec at root; the source is either a
 		-- subdir next to the rockspec or the nested archive (materialized by
 		-- openSrcRock).
@@ -329,7 +331,7 @@ function util.openLuarocksPackage(name, version, offline)
 		return pkg, lockEntry
 	end
 
-	return util.openRockspecUrl(name, url, nil, nil, offline)
+	return util.openRockspecUrl(name, url, nil, nil, isOffline)
 end
 
 ---@return luarocks.Manifest?, string?

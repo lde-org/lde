@@ -74,7 +74,7 @@ end)
 test.it("write: returns error for empty stacks", function()
 	local ok, err = fg.write({}, 0, 10, path.join(tmpBase, "empty.html"))
 	test.falsy(ok)
-	test.truthy(err)
+	test.truthy(err) ---@cast err -nil
 	test.includes(err, "no stack data")
 end)
 
@@ -89,7 +89,7 @@ end)
 test.it("write: output contains no unsubstituted template placeholders", function()
 	local outPath = path.join(tmpBase, "placeholders.html")
 	fg.write({ ["fn_a"] = 3 }, 3, 10, outPath, "my profile")
-	local html = fs.read(outPath)
+	local html = fs.read(outPath) ---@cast html -nil
 	test.falsy(html:find("__DATA__",   1, true))
 	test.falsy(html:find("__TITLE__",  1, true))
 	test.falsy(html:find("__MS__",     1, true))
@@ -98,7 +98,7 @@ end)
 test.it("write: output is valid HTML with embedded JSON data", function()
 	local outPath = path.join(tmpBase, "valid.html")
 	fg.write({ ["outer;inner"] = 7 }, 7, 10, outPath)
-	local html = fs.read(outPath)
+	local html = fs.read(outPath) ---@cast html -nil
 	test.truthy(html:find("<!DOCTYPE html>", 1, true))
 	test.truthy(html:find("var D={",         1, true))
 	test.truthy(html:find("var D=.*MS=10",   1, false)) -- MS substituted
@@ -107,14 +107,14 @@ end)
 test.it("write: title appears in the HTML output", function()
 	local outPath = path.join(tmpBase, "titled.html")
 	fg.write({ ["x"] = 1 }, 1, 10, outPath, "My Cool Script")
-	local html = fs.read(outPath)
+	local html = fs.read(outPath) ---@cast html -nil
 	test.truthy(html:find("My Cool Script", 1, true))
 end)
 
 test.it("write: JSON data contains the expected root node name", function()
 	local outPath = path.join(tmpBase, "rootname.html")
 	fg.write({ ["bench;inner"] = 4 }, 4, 10, outPath, "myscript")
-	local html = fs.read(outPath)
+	local html = fs.read(outPath) ---@cast html -nil
 	-- root is named after the title; "bench" and "inner" should be child nodes
 	test.truthy(html:find('"n":"myscript"', 1, true))
 	test.truthy(html:find('"n":"bench"',    1, true))
@@ -126,7 +126,7 @@ test.it("write: handles percent signs in node names without corrupting output", 
 	local outPath = path.join(tmpBase, "percent.html")
 	local ok = fg.write({ ["fn_50%_done"] = 2 }, 2, 10, outPath)
 	test.truthy(ok)
-	local html = fs.read(outPath)
+	local html = fs.read(outPath) ---@cast html -nil
 	test.truthy(html:find("fn_50", 1, true))
 	test.falsy(html:find("__DATA__", 1, true))
 end)
@@ -167,7 +167,7 @@ test.it("executeFile with flamegraph path writes an HTML file", function()
 	-- File may or may not exist if no samples were collected (fast machine / CI);
 	-- if it does exist it must be valid HTML with no placeholders.
 	if fs.exists(outPath) then
-		local html = fs.read(outPath)
+		local html = fs.read(outPath) ---@cast html -nil
 		test.truthy(html:find("<!DOCTYPE html>", 1, true))
 		test.falsy(html:find("__DATA__",  1, true))
 		test.falsy(html:find("__MS__",    1, true))
@@ -207,7 +207,8 @@ test.it("executeFile with profileJson writes decodable profile data", function()
 	test.truthy(fs.exists(outPath), "profile JSON not written")
 
 	local json = require("json")
-	local data = json.decode(fs.read(outPath))
+	local raw = fs.read(outPath) ---@cast raw -nil
+	local data = json.decode(raw) ---@cast data table
 	test.truthy(data, "profile JSON must decode")
 	test.equal(data.version, 1)
 	test.equal(data.intervalMs, 1)

@@ -29,7 +29,8 @@ test.it("lde add rocks:<name> stores dependency without registry prefix", functi
 	local dir = makeProject("rocks-prefix-test")
 	ldecli({ "add", "rocks:lpeg" }, dir)
 
-	local config = json.decode(fs.read(path.join(dir, "lde.json")))
+	local raw = fs.read(path.join(dir, "lde.json")) ---@cast raw -nil
+	local config = json.decode(raw) ---@cast config table<string, any>
 	test.falsy(config.dependencies["rocks:lpeg"], "dependency key should not contain 'rocks:' prefix")
 	test.truthy(config.dependencies["lpeg"], "dependency should be stored as 'lpeg'")
 end)
@@ -46,7 +47,8 @@ test.it("lde add creates dependencies field when config has none", function()
 
 	ldecli({ "add", "mylib", "--path", "../mylib" }, dir)
 
-	local config = json.decode(fs.read(path.join(dir, "lde.json")))
+	local raw = fs.read(path.join(dir, "lde.json")) ---@cast raw -nil
+	local config = json.decode(raw) ---@cast config table<string, any>
 	test.truthy(config.dependencies, "dependencies field should be created")
 	test.truthy(config.dependencies["mylib"], "mylib should be in dependencies")
 	test.equal(config.dependencies["mylib"].path, "../mylib")
@@ -56,7 +58,8 @@ test.it("lde add --dev --path adds to devDependencies not dependencies", functio
 	local dir = makeProject("dev-path-test")
 	ldecli({ "add", "mylib", "--dev", "--path", "../mylib" }, dir)
 
-	local config = json.decode(fs.read(path.join(dir, "lde.json")))
+	local raw = fs.read(path.join(dir, "lde.json")) ---@cast raw -nil
+	local config = json.decode(raw) ---@cast config table<string, any>
 	test.truthy(config.devDependencies, "devDependencies should exist")
 	test.truthy(config.devDependencies["mylib"], "mylib should be in devDependencies")
 	test.equal(config.devDependencies["mylib"].path, "../mylib")
@@ -66,12 +69,14 @@ end)
 test.it("lde add --dev creates devDependencies if not present in config", function()
 	local dir = makeProject("dev-create-test")
 	-- makeProject writes a config with no devDependencies key
-	local config = json.decode(fs.read(path.join(dir, "lde.json")))
+	local raw = fs.read(path.join(dir, "lde.json")) ---@cast raw -nil
+	local config = json.decode(raw) ---@cast config table<string, any>
 	test.falsy(config.devDependencies, "devDependencies should not exist initially")
 
 	ldecli({ "add", "mylib", "--dev", "--path", "../mylib" }, dir)
 
-	local updated = json.decode(fs.read(path.join(dir, "lde.json")))
+	local raw = fs.read(path.join(dir, "lde.json")) ---@cast raw -nil
+	local updated = json.decode(raw) ---@cast updated table<string, any>
 	test.truthy(updated.devDependencies, "devDependencies should be created")
 	test.truthy(updated.devDependencies["mylib"], "mylib should be in devDependencies")
 end)
@@ -80,7 +85,8 @@ test.it("lde add --dev --git adds git dep to devDependencies", function()
 	local dir = makeProject("dev-git-test")
 	ldecli({ "add", "mypkg", "--dev", "--git", "https://example.com/mypkg.git" }, dir)
 
-	local config = json.decode(fs.read(path.join(dir, "lde.json")))
+	local raw = fs.read(path.join(dir, "lde.json")) ---@cast raw -nil
+	local config = json.decode(raw) ---@cast config table<string, any>
 	test.truthy(config.devDependencies, "devDependencies should exist")
 	test.truthy(config.devDependencies["mypkg"], "mypkg should be in devDependencies")
 	test.equal(config.devDependencies["mypkg"].git, "https://example.com/mypkg.git")
@@ -91,7 +97,8 @@ test.it("lde add --dev --git --branch stores branch in devDependencies", functio
 	local dir = makeProject("dev-git-branch-test")
 	ldecli({ "add", "mypkg", "--dev", "--git", "https://example.com/mypkg.git", "--branch", "main" }, dir)
 
-	local config = json.decode(fs.read(path.join(dir, "lde.json")))
+	local raw = fs.read(path.join(dir, "lde.json")) ---@cast raw -nil
+	local config = json.decode(raw) ---@cast config table<string, any>
 	test.truthy(config.devDependencies, "devDependencies should exist")
 	local dep = config.devDependencies["mypkg"]
 	test.truthy(dep, "mypkg should be in devDependencies")
@@ -106,7 +113,8 @@ test.it("lde add --dev does not affect existing dependencies", function()
 
 	ldecli({ "add", "devonly", "--dev", "--path", "../devonly" }, dir)
 
-	local config = json.decode(fs.read(path.join(dir, "lde.json")))
+	local raw = fs.read(path.join(dir, "lde.json")) ---@cast raw -nil
+	local config = json.decode(raw) ---@cast config table<string, any>
 	test.truthy(config.dependencies["existing"], "existing dep should still be in dependencies")
 	test.falsy(config.dependencies["devonly"], "devonly should not be in dependencies")
 	test.truthy(config.devDependencies["devonly"], "devonly should be in devDependencies")
@@ -123,7 +131,8 @@ test.it("lde add --dev removes stale lockfile entry", function()
 
 	ldecli({ "add", "mydevpkg", "--dev", "--path", "../mydevpkg" }, dir)
 
-	local lock = json.decode(fs.read(path.join(dir, "lde.lock")))
+	local raw = fs.read(path.join(dir, "lde.lock")) ---@cast raw -nil
+	local lock = json.decode(raw) ---@cast lock table<string, any>
 	test.falsy(lock.dependencies["mydevpkg"], "stale lockfile entry should be removed after lde add --dev")
 end)
 
@@ -155,9 +164,10 @@ test.it("lde add --dev <name> resolves a registry dep into devDependencies", fun
 
 	local dir = makeProject("add-dev-reg-test")
 	local ok, out = ldecli({ "--tree", treeDir, "add", "--dev", "add-dev-reg" }, dir)
-	test.truthy(ok, "lde add --dev failed: " .. tostring(out))
+	test.truthy(ok, "lde add --dev failed: " .. tostring(out)) ---@cast out -nil
 
-	local config = json.decode(fs.read(path.join(dir, "lde.json")))
+	local raw = fs.read(path.join(dir, "lde.json")) ---@cast raw -nil
+	local config = json.decode(raw) ---@cast config table<string, any>
 	test.truthy(config.devDependencies, "devDependencies should exist")
 	local dep = config.devDependencies["add-dev-reg"]
 	test.truthy(dep, "add-dev-reg should be in devDependencies")
@@ -180,8 +190,8 @@ test.it("lde add removes the dep entry from lde.lock if present", function()
 	ldecli({ "add", "mypkg", "--path", "../mypkg" }, dir)
 
 	local lockRaw = fs.read(path.join(dir, "lde.lock"))
-	test.truthy(lockRaw, "lde.lock should still exist")
-	local lock = json.decode(lockRaw)
+	test.truthy(lockRaw, "lde.lock should still exist") ---@cast lockRaw -nil
+	local lock = json.decode(lockRaw) ---@cast lock table<string, any>
 	test.falsy(lock.dependencies["mypkg"], "stale lockfile entry should be removed after lde add")
 	test.falsy(fs.exists(path.join(dir, "target", ".installed")), ".installed should be deleted")
 end)
@@ -209,20 +219,23 @@ test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde add --git records the dep and s
 	local ok, out = ldecli({ "add", "addgit", "--git", repoDir }, dir)
 	test.truthy(ok, "lde add --git failed: " .. tostring(out))
 
-	local config = json.decode(fs.read(path.join(dir, "lde.json")))
+	local raw = fs.read(path.join(dir, "lde.json")) ---@cast raw -nil
+	local config = json.decode(raw) ---@cast config table<string, any>
 	test.truthy(config.dependencies["addgit"], "addgit should be in dependencies")
 	test.equal(config.dependencies["addgit"].git, repoDir)
 
 	-- The commit is auto-pinned at install time, not by add itself.
 	local lockPath = path.join(dir, "lde.lock")
 	if fs.exists(lockPath) then
-		local lockBefore = json.decode(fs.read(lockPath))
+		local lockBeforeRaw = fs.read(lockPath) ---@cast lockBeforeRaw -nil
+		local lockBefore = json.decode(lockBeforeRaw) ---@cast lockBefore table<string, any>
 		test.falsy(lockBefore.dependencies["addgit"], "add must not pin the commit yet")
 	end
 
 	local ok2, out2 = ldecli({ "sync" }, dir)
 	test.truthy(ok2, "sync failed: " .. tostring(out2))
-	local lockAfter = json.decode(fs.read(path.join(dir, "lde.lock")))
+	local lockAfterRaw = fs.read(path.join(dir, "lde.lock")) ---@cast lockAfterRaw -nil
+	local lockAfter = json.decode(lockAfterRaw) ---@cast lockAfter table<string, any>
 	local entry = lockAfter.dependencies["addgit"]
 	test.truthy(entry and entry.commit, "commit must be auto-pinned after sync")
 	test.truthy(entry.commit:match("^%x+$"), "expected a hex commit sha")

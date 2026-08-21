@@ -33,7 +33,7 @@ test.it("Package.init uses the directory basename as the package name", function
 
 	lde.Package.init(dir)
 
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	test.equal(pkg:getName(), "my-lib")
 end)
 
@@ -44,7 +44,7 @@ test.it("Package.init sets version to 0.1.0", function()
 
 	lde.Package.init(dir)
 
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	local config = pkg:readConfig()
 	test.equal(config.version, "0.1.0")
 end)
@@ -70,7 +70,7 @@ test.it("Package.init creates a .gitignore", function()
 	test.truthy(fs.exists(path.join(dir, ".gitignore")))
 
 	local content = fs.read(path.join(dir, ".gitignore"))
-	test.truthy(content)
+	test.truthy(content) ---@cast content -nil
 	test.includes(content, "/target/")
 end)
 
@@ -132,7 +132,7 @@ test.it("Package.init library type exposes a module from init.lua", function()
 	lde.Package.init(dir, { type = "library" })
 
 	local content = fs.read(path.join(dir, "src", "init.lua"))
-	test.truthy(content)
+	test.truthy(content) ---@cast content -nil
 	test.includes(content, "local M = {}")
 	test.includes(content, "return M")
 end)
@@ -145,7 +145,7 @@ test.it("Package.init blank type keeps the hello-world entry point", function()
 	lde.Package.init(dir, { type = "blank" })
 
 	local content = fs.read(path.join(dir, "src", "init.lua"))
-	test.truthy(content)
+	test.truthy(content) ---@cast content -nil
 	test.includes(content, "print('Hello, world!')")
 end)
 
@@ -159,7 +159,7 @@ test.it("Package.init teal projects write a .tl entry point, check script, and t
 	test.truthy(fs.isfile(path.join(dir, "src", "init.tl")))
 	test.falsy(fs.exists(path.join(dir, "src", "init.lua")))
 
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	local config = pkg:readConfig()
 	local check = config.scripts and config.scripts.check
 	test.truthy(check)
@@ -168,7 +168,7 @@ test.it("Package.init teal projects write a .tl entry point, check script, and t
 	end
 
 	test.truthy(fs.isfile(path.join(dir, "tlconfig.lua")))
-	local tlconfig = fs.read(path.join(dir, "tlconfig.lua"))
+	local tlconfig = fs.read(path.join(dir, "tlconfig.lua")) ---@cast tlconfig -nil
 	test.includes(tlconfig, "include_dir")
 end)
 
@@ -184,7 +184,7 @@ test.it("Package.init appends to an existing .gitignore that lacks /target/", fu
 
 	lde.Package.init(dir)
 
-	local content = fs.read(path.join(dir, ".gitignore"))
+	local content = fs.read(path.join(dir, ".gitignore")) ---@cast content -nil
 	test.includes(content, "node_modules/")
 	test.includes(content, "/target/")
 end)
@@ -300,7 +300,7 @@ test.it("Package.init moonscript projects write a .moon entry point and no extra
 	test.truthy(fs.isfile(path.join(dir, "src", "init.moon")))
 	test.falsy(fs.exists(path.join(dir, "src", "init.lua")))
 
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	local config = pkg:readConfig()
 	test.falsy(config.scripts)
 	test.falsy(fs.exists(path.join(dir, "tlconfig.lua")))
@@ -314,7 +314,7 @@ test.it("Package.init combines type and language for library modules", function(
 	lde.Package.init(dir, { type = "library", language = "teal" })
 
 	local content = fs.read(path.join(dir, "src", "init.tl"))
-	test.truthy(content)
+	test.truthy(content) ---@cast content -nil
 	test.includes(content, "return M")
 
 	local moonDir = path.join(tmpBase, "moon-lib")
@@ -322,7 +322,7 @@ test.it("Package.init combines type and language for library modules", function(
 	lde.Package.init(moonDir, { type = "library", language = "moonscript" })
 
 	local moonContent = fs.read(path.join(moonDir, "src", "init.moon"))
-	test.truthy(moonContent)
+	test.truthy(moonContent) ---@cast moonContent -nil
 	test.includes(moonContent, "return M")
 end)
 
@@ -330,13 +330,15 @@ test.it("Package.init rejects unknown types and languages", function()
 	fs.mkdir(tmpBase)
 	local badType = path.join(tmpBase, "bad-type")
 	fs.mkdir(badType)
-	local ok, err = pcall(lde.Package.init, badType, { type = "bogus" })
+	local badOpts = { type = "bogus" } ---@type any
+	local ok, err = pcall(lde.Package.init, badType, badOpts)
 	test.falsy(ok)
 	test.truthy(err)
 
 	local badLang = path.join(tmpBase, "bad-lang")
 	fs.mkdir(badLang)
-	local ok2, err2 = pcall(lde.Package.init, badLang, { language = "rust" })
+	local badLangOpts = { language = "rust" } ---@type any
+	local ok2, err2 = pcall(lde.Package.init, badLang, badLangOpts)
 	test.falsy(ok2)
 	test.truthy(err2)
 end)
@@ -348,7 +350,7 @@ test.it("Package.init honors a name override in the manifest", function()
 
 	lde.Package.init(dir, { name = "custom-name" })
 
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	test.equal(pkg:getName(), "custom-name")
 end)
 

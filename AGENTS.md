@@ -120,6 +120,17 @@ Tests in `packages/lde/tests/` invoke the compiled binary via `env.execPath()`. 
 
 To run from repo root: `lde test` runs all packages. Use `-C <dir>` to target a specific one.
 
+Prefer the `just` recipes for the two standing checks:
+
+```sh
+just test    # lde test — run the full suite across all packages
+just check   # lua-language-server over every package; must report zero diagnostics
+```
+
+Always run `just check` after changing any Lua file, and never leave the tree
+with diagnostics (the recipe exits non-zero if any package reports problems).
+
+
 ## minilde.lua
 
 `minilde.lua` is a minimal bootstrap script for platforms that don't yet have an `lde` binary — used only when creating a new platform build from scratch. It requires only `luajit`, `curl`, and `tar`, and implements just enough of lde to resolve deps and run the package entry point.
@@ -159,7 +170,27 @@ Test files must match `**/*.test.lua`. During `lde test`, `tests/` is exposed as
 
 ## Code Style
 
-Use LuaCATS annotations everywhere — all functions, parameters, return values, and class definitions. This codebase uses the Lua Language Server; annotations are the primary way types are communicated across modules.
+Follow `STYLE.md` — the full style guide (naming, LuaCATs, comments, structure).
+The rules below are the short form.
+
+Use LuaCATs annotations everywhere — all functions, parameters, and class
+definitions. This codebase uses the Lua Language Server; annotations are the
+primary way types are communicated across modules.
+
+- `---@param` is mandatory for every parameter, without exception. A
+  function with unannotated parameters is a bug — the language server has no
+  diagnostic for it, so it is a review requirement, not an enforced one.
+- Omit `---@return` when the language server can infer the return (99% of
+  cases — it is cleaner). Write it only when inference is impossible, e.g.
+  `nil, err` failure returns.
+- Booleans are named with an `is`/`has` prefix: `isRoot`, `hasBuildScript`,
+  `isStale`. Never bare `locked`/`cached`/`stale`.
+- Casts go on the same line as the check that guarantees them:
+  `test.truthy(value) ---@cast value -nil`. Prefer `local pkg = assert(lde.Package.open(dir))`
+  over a guard-plus-cast, and never put two casts on one line.
+- camelCase for everything; PascalCase only for class names.
+- Comments are for LuaCATs types, safety concerns, and non-obvious behavior.
+  No narration, no LLM filler.
 
 ```lua
 ---@class MyClass
@@ -168,11 +199,7 @@ local MyClass = {}
 MyClass.__index = MyClass
 
 ---@param path string
----@return string?, string? # value, error
 function MyClass:read(path) end
-
----@type table<string, MyClass>
-local cache = {}
 ```
 
 ## Performance
@@ -213,6 +240,7 @@ Local (in `packages/`):
 | `lde-core` | `Package`, `Lockfile`, install/build/run/test/compile logic |
 | `lde-test` | Test framework |
 | `lde-build` | Build script context (injected into `build.lua` scripts) |
+| `lde-registry` | `Registry` class: portfile lookup, version resolution, sync |
 | `clap` | CLI arg parsing: `args:option()`, `args:flag()`, `args:pop()` |
 | `ansi` | Terminal output: `ansi.printf("{red}msg")`, `ansi.progress(label)` |
 | `sea` | Compiles bundled Lua + native libs into a self-contained binary |

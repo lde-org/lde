@@ -50,8 +50,20 @@ local TIOCGWINSZ = jit.os == "OSX" and 0x40087468 or 0x5413
 local VTIME      = jit.os == "OSX" and 17 or 5
 local VMIN       = jit.os == "OSX" and 16 or 6
 
+-- The LS can't see ffi.cdef structs; declare the fields used here.
+---@class readline.ffi.termios: ffi.cdata*
+---@field c_iflag integer
+---@field c_oflag integer
+---@field c_lflag integer
+---@field c_cc integer[]
+
+---@class readline.ffi.winsize: ffi.cdata*
+---@field ws_col integer
+---@field ws_row integer
+
 local Termios    = ffi.typeof("struct termios")
 local Winsize    = ffi.typeof("struct winsize")
+local TERMIOS_SIZE = ffi.sizeof("struct termios") --[[@as integer]]
 
 ---@class readline.raw.posix
 local readline   = {}
@@ -59,14 +71,14 @@ local readline   = {}
 local saved      = nil
 
 function readline.enterRaw()
-	local t = Termios()
+	local t = Termios() --[[@as readline.ffi.termios]]
 	ffi.C.tcgetattr(0, t)
-	saved = Termios()
-	ffi.copy(saved, t, ffi.sizeof(t))
+	saved = Termios() --[[@as readline.ffi.termios]]
+	ffi.copy(saved, t, TERMIOS_SIZE)
 
-	t.c_iflag     = bit.band(t.c_iflag, bit.bnot(bit.bor(IXON, ICRNL)))
-	t.c_oflag     = bit.band(t.c_oflag, bit.bnot(OPOST))
-	t.c_lflag     = bit.band(t.c_lflag, bit.bnot(bit.bor(ECHO, ICANON, ISIG, IEXTEN)))
+	t.c_iflag     = bit.band(t.c_iflag --[[@as integer]], bit.bnot(bit.bor(IXON, ICRNL)))
+	t.c_oflag     = bit.band(t.c_oflag --[[@as integer]], bit.bnot(OPOST))
+	t.c_lflag     = bit.band(t.c_lflag --[[@as integer]], bit.bnot(bit.bor(ECHO, ICANON, ISIG, IEXTEN)))
 	t.c_cc[VMIN]  = 1
 	t.c_cc[VTIME] = 0
 	ffi.C.tcsetattr(0, TCSANOW, t)
@@ -82,9 +94,9 @@ end
 
 ---@return number cols
 function readline.getCols()
-	local ws = Winsize()
+	local ws = Winsize() --[[@as readline.ffi.winsize]]
 	if ffi.C.ioctl(1, TIOCGWINSZ, ws) == 0 then
-		return tonumber(ws.ws_col)
+		return tonumber(ws.ws_col) --[[@as number]]
 	end
 	return 80
 end

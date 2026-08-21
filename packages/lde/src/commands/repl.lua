@@ -38,6 +38,11 @@ local function repl(_args)
 
 	local buffer = ""
 
+	---@param val any
+	---@param indent number?
+	---@param seen table?
+	---@param depth number?
+	---@return string
 	local function pretty(val, indent, seen, depth)
 		indent = indent or 0
 		seen   = seen or {}
@@ -82,6 +87,8 @@ local function repl(_args)
 	--   `local x, y = ...`         → `x, y = ...`
 	--   `const x, y = ...`         → `x, y = ...` (const is a soft keyword, so a
 	--                            global keeps the value across lines)
+	---@param s string
+	---@return string
 	local function delocal(s)
 		s = s:gsub("^%s*local%s+function%s+([%a_][%w_]*)%s*%(", "function %1(")
 		s = s:gsub("^%s*local%s+([%a_][%w_%s,]-)%s*=", "%1 =")
@@ -115,7 +122,9 @@ local function repl(_args)
 		end
 
 		local candidates, seen = {}, {}
+		---@param t table<string, boolean>
 		local function scan(t)
+			---@param k string
 			local function visit(k)
 				if type(k) == "string" and not seen[k]
 					and k:sub(1, #prefix) == prefix and k ~= prefix then

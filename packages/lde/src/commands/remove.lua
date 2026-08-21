@@ -10,24 +10,24 @@ local function remove(args)
 	local name = args:pop()
 	if not name then
 		lde.error.raise("Usage: lde remove <name>")
-	end
+	end ---@cast name -nil
 
 	local pkg, err = lde.Package.open()
 	if not pkg then
 		lde.error.raise(err)
-	end
+	end ---@cast pkg -nil
 
 	local configPath = pkg:getConfigPath()
 
 	local configRaw = fs.read(configPath)
 	if not configRaw then
 		lde.error.raise("Failed to read config: " .. configPath)
-	end
+	end ---@cast configRaw -nil
 
 	local config, derr = lde.util.decodeJson(configRaw)
 	if not config then
 		lde.error.raise("Failed to parse " .. configPath .. ": " .. derr)
-	end
+	end ---@cast config -nil
 
 	-- A dependency may live in either runtime `dependencies` or `devDependencies`;
 	-- remove the name from whichever table(s) hold it.

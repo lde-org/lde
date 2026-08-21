@@ -53,6 +53,8 @@ local M = {
 -- under target/<name>/ (a copy of src/, or a symlink to it), so they are
 -- keyed by their src/ identity: "src:foo.lua". Everything else (deps,
 -- stdlib, loose files) keeps its absolute path.
+---@param p string
+---@return string
 local function normKey(p)
 	local t = hot.targetPrefix
 	if t and p:sub(1, #t) == t then
@@ -115,6 +117,8 @@ os.exit = function(code)
 	error(hot.exitMarker .. tostring(code or 0), 0)
 end
 
+---@param names table<string, boolean>
+---@param out table<string, boolean>
 local function collect(names, out)
 	for name in pairs(names) do
 		if not out[name] then
@@ -125,6 +129,7 @@ local function collect(names, out)
 	end
 end
 
+---@param name string
 local function drop(name)
 	package.loaded[name] = nil
 	local key = M.moduleFile[name]
@@ -141,6 +146,8 @@ end
 
 -- Invalidate the modules backed by a changed source file, plus everything
 -- that transitively depends on them. Returns the number of modules dropped.
+---@param changedKey string
+---@return integer
 function M.reload(changedKey)
 	local names = M.fileModules[changedKey]
 	if not names or next(names) == nil then return 0 end
@@ -168,6 +175,8 @@ function M.reloadAll()
 end
 
 -- True when a changed file maps to a tracked module or the entry point.
+---@param absPath string
+---@return boolean
 function M.checkKey(absPath)
 	local key = normKey(absPath)
 	return key == hot.entryKey or M.fileModules[key] ~= nil
@@ -199,7 +208,7 @@ end
 ---@field watchDirs { dir: string, recursive: boolean }[]
 ---@field srcPrefix string?           # package src dir + path.separator
 ---@field targetPrefix string?        # package target/<name> dir + path.separator
----@field preReload fun(): boolean?   # runs before each reload (e.g. rebuild); false = skip the re-run
+---@field preReload fun()?              # runs before each reload (e.g. rebuild); false = skip the re-run
 
 --- Run the entry point in a guest state, watching for file changes. In "hot"
 --- mode the state survives reloads and only the changed modules' package.loaded
@@ -294,16 +303,13 @@ local function run(opts)
 		---@cast hotState lua.Table
 		hotStateTbl = hotState
 
-		local rf = hotState:get("reload")
-		---@cast rf function
+		local rf = hotState:get("reload") ---@cast rf function
 		reloadFn = rf
 
-		local raf = hotState:get("reloadAll")
-		---@cast raf function
+		local raf = hotState:get("reloadAll") ---@cast raf function
 		reloadAllFn = raf
 
-		local ckf = hotState:get("checkKey")
-		---@cast ckf function
+		local ckf = hotState:get("checkKey") ---@cast ckf function
 		checkKeyFn = ckf
 
 		-- Disables the guest JIT for the whole session (hooks only fire on
@@ -323,8 +329,7 @@ local function run(opts)
 		end
 	end
 
-	local function runEntry()
-		---@cast state lua.State
+	local function runEntry() ---@cast state lua.State
 		local source, chunkName, readErr = runtime.readCompiledFile(opts.entry)
 		if not source then
 			return "error", readErr
@@ -389,8 +394,7 @@ local function run(opts)
 			end
 			if reloaded > 0 then
 				local names = {}
-				local lst = hotStateTbl and hotStateTbl:get("lastReloaded")
-				---@cast lst lua.Table
+				local lst = hotStateTbl and hotStateTbl:get("lastReloaded") ---@cast lst lua.Table
 				if lst then
 					for _i, v in lst:ipairs() do names[#names + 1] = v end
 					ansi.printf("{cyan}Reloaded: {yellow}%s", table.concat(names, ", "))

@@ -41,7 +41,7 @@ test.it("rockspec git dep: middleclass can be required after install", function(
 		}
 	}))
 
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	pkg:installDependencies()
 	pkg:build()
 
@@ -73,14 +73,14 @@ test.it("rockspec git dep: luafilesystem native C module works", function()
 		}
 	}))
 
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	pkg:installDependencies()
 	pkg:build()
 
 	local lockfile = pkg:readLockfile()
-	test.truthy(lockfile)
+	test.truthy(lockfile) ---@cast lockfile -nil
 	local entry = lockfile:getDependency("luafilesystem")
-	test.truthy(entry)
+	test.truthy(entry) ---@cast entry -nil
 	test.match(entry, { git = "https://github.com/lunarmodules/luafilesystem" })
 	test.truthy(entry.commit)
 	test.truthy(entry.commit:match("^%x+$"))

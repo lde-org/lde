@@ -3,6 +3,11 @@ local path = require("path")
 local process = require("process")
 local env = require("env")
 
+-- The fs module exposes rawfs fields (chmod) through its copy loop; declare
+-- the ones used here so the language server sees them.
+---@class fs
+---@field chmod fun(p: string, mode: number): boolean
+
 --- Polyfills for the subset of the LuaRocks runtime API that custom build
 --- backends expect (luarocks.fs, luarocks.dir, luarocks.path,
 --- luarocks.core.cfg, luarocks.util), implemented on lde's own fs/path/process
@@ -84,7 +89,6 @@ end
 --- string values — host callbacks can only return primitives, so the guest
 --- assembles them into a table.
 ---@param dir string
----@return string...
 local function listDirNames(dir)
 	local names = {}
 	local iter = fs.readdir(dir)
@@ -97,7 +101,6 @@ end
 --- Recursively list the files under a directory (relative paths), as multiple
 --- string values for the guest to assemble.
 ---@param dir string
----@return string...
 local function findFiles(dir)
 	local files = {}
 	if fs.isdir(dir) then
@@ -111,9 +114,9 @@ end
 --- proxy coerces them into the guest by value, so require() returns them
 --- directly. package.preload can't hold them — preload entries are loader
 --- functions, and require() calls them.
+local luarocks = {}
 ---@param state lua.State
 ---@param opts rocked.SandboxOpts?
-local luarocks = {}
 function luarocks.setup(state, opts)
 	opts = opts or {}
 
@@ -127,7 +130,8 @@ function luarocks.setup(state, opts)
 		or (platform == "osx" and "dylib")
 		or "so"
 
-	local loaded = state:globals().package.loaded
+	local g = state:globals() --[[@as { package: { loaded: table<string, any> } }]]
+	local loaded = g.package.loaded
 	loaded["luarocks.fs"] = {
 		exists            = fs.exists,
 		is_dir            = fs.isdir,

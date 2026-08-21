@@ -20,7 +20,7 @@ fs.mkdir(tmpBase)
 ---@param s string
 ---@return string
 local function plain(s)
-	return (s or ""):gsub("\27%[[0-9;]*m", "")
+	return ((s or ""):gsub("\27%[[0-9;]*m", ""))
 end
 
 ---Run the binary, merging stdout and stderr.
@@ -29,7 +29,7 @@ end
 ---@return integer code
 ---@return string out
 local function run(args, cwd)
-	local code, stdout, stderr = process.exec(ldePath, args, { cwd = cwd })
+	local code, stdout, stderr = process.exec(ldePath, args, { cwd = cwd }) ---@cast code integer
 	return code, (stdout or "") .. (stderr or "")
 end
 

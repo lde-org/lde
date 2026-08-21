@@ -1,0 +1,10 @@
+{
+	"name": "lde-registry",
+	"version": "0.1.0",
+	"dependencies": {
+		"json": { "git": "https://github.com/lde-org/json" },
+		"path": { "git": "https://github.com/lde-org/path" },
+		"fs": { "git": "https://github.com/lde-org/fs" },
+		"semver": { "path": "../semver" }
+	}
+}

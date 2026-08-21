@@ -72,7 +72,7 @@ function readline.enterRaw()
 	local mode = DwordBox()
 	kernel32.GetConsoleMode(hIn, mode)
 	savedMode = tonumber(mode[0])
-	local newMode = bit.band(savedMode, bit.bnot(bit.bor(
+	local newMode = bit.band(savedMode --[[@as integer]], bit.bnot(bit.bor(
 		ENABLE_ECHO_INPUT, ENABLE_LINE_INPUT, ENABLE_PROCESSED_INPUT
 	)))
 	kernel32.SetConsoleMode(hIn, newMode)

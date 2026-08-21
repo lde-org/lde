@@ -39,6 +39,7 @@ local rocked = {}
 ---@field makefile string?
 ---@field build_target string?
 ---@field install_target string?
+---@field variables table<string, string>?
 ---@field build_variables table<string, string>?
 ---@field install_variables table<string, string>?
 ---@field build_command string?
@@ -110,9 +111,9 @@ end
 --- results become the return values, and any error it raises becomes
 --- `(false, err)`.
 ---@param opts rocked.SandboxOpts?
----@param fn fun(state: lua.State, g: lua.Table): boolean|nil, string?
----@return boolean|nil ok
----@return string? err
+---@param fn fun(state: lua.State, g: lua.Table): any, any # (ok, result-or-err); shapes differ per caller
+---@return any ok
+---@return any resultOrErr
 local function sandbox(opts, fn)
 	opts = opts or {}
 	local state = lua.new()
@@ -131,8 +132,9 @@ local function sandbox(opts, fn)
 	for _, name in ipairs(toRemove) do g:set(name, nil) end
 
 	-- require() only resolves preloads and the caller-provided paths.
-	g:get("package"):set("path", opts.packagePath or "")
-	g:get("package"):set("cpath", opts.cpath or "")
+	local packageTable = g:get("package") --[[@as lua.Table]]
+	packageTable:set("path", opts.packagePath or "")
+	packageTable:set("cpath", opts.cpath or "")
 
 	-- Instruction budget; setHook also disables the guest JIT while installed.
 	state:setHook(function()
@@ -143,7 +145,7 @@ local function sandbox(opts, fn)
 
 	local ok, a, b = pcall(fn, state, g)
 	state:close()
-	if not ok then return false, a end
+	if not ok then return false, a --[[@as string?]] end
 	return a, b
 end
 
@@ -234,7 +236,7 @@ function rocked.runBackend(buildType, rockspec, opts)
 			end
 		]]):pcall(buildType, state:table(rockspec))
 		if ok then return true end
-		return false, err
+		return false, err --[[@as string?]]
 	end)
 end
 

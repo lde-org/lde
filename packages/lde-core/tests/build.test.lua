@@ -14,6 +14,10 @@ local tmpBase = path.join(env.tmpdir(), "lde-build-tests")
 fs.rmdir(tmpBase)
 
 --- Creates a package with src directory and source files.
+---@param name string # package name, used as the directory name under tmpBase
+---@param srcFiles table<string, string> # relative path -> file content
+---@param config table? # lde.json contents; defaults to a minimal manifest
+---@return string # package directory
 local function makePackageWithSrc(name, srcFiles, config)
 	fs.mkdir(tmpBase)
 	local dir = path.join(tmpBase, name)
@@ -47,7 +51,7 @@ test.it("Package:build creates a symlink in target/<name>", function()
 		["init.lua"] = 'return "hello"'
 	})
 
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	pkg:build()
 
 	local targetDir = pkg:getTargetDir()
@@ -60,7 +64,7 @@ test.it("Package:build target contains the source files", function()
 		["helper.lua"] = 'return {}'
 	})
 
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	pkg:build()
 
 	local targetDir = pkg:getTargetDir()
@@ -73,7 +77,7 @@ test.it("Package:build is idempotent (can be called twice)", function()
 		["init.lua"] = 'return true'
 	})
 
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	pkg:build()
 	pkg:build()
 
@@ -96,7 +100,7 @@ f:write("x")
 f:close()
 ]])
 
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	pkg:build()
 	pkg:build()
 	pkg:build()
@@ -117,7 +121,7 @@ f:write("x")
 f:close()
 ]])
 
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	pkg:build()
 	-- Different size so the mtime/size fast path can't mask the change.
 	fs.write(path.join(dir, "src", "init.lua"), 'return 123456')
@@ -137,7 +141,7 @@ f:write("x")
 f:close()
 ]])
 
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	pkg:build()
 
 	-- Rewrite with a clearly larger config so the mtime/size fast path can't mask it.
@@ -163,7 +167,7 @@ f:write("x")
 f:close()
 ]])
 
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	pkg:build()
 
 	-- Longer script: changes the size so the mtime/size fast path can't mask it.
@@ -200,7 +204,7 @@ test.it("installDependencies installs a local path dependency", function()
 		}
 	}))
 
-	local pkg = lde.Package.open(mainDir)
+	local pkg = assert(lde.Package.open(mainDir))
 	pkg:installDependencies()
 
 	local depInTarget = path.join(mainDir, "target", "install-dep")
@@ -231,7 +235,7 @@ test.it("installDependencies installs multiple dependencies", function()
 		}
 	}))
 
-	local pkg = lde.Package.open(mainDir)
+	local pkg = assert(lde.Package.open(mainDir))
 	pkg:installDependencies()
 
 	test.truthy(fs.exists(path.join(mainDir, "target", "multi-dep-a", "init.lua")))
@@ -256,7 +260,7 @@ end)
 		}
 	}))
 
-	local pkg = lde.Package.open(mainDir)
+	local pkg = assert(lde.Package.open(mainDir))
 	pkg:installDependencies()
 	pkg:installDependencies()
 
@@ -281,7 +285,7 @@ test.it("installDependencies re-installs when the dep is missing from target/", 
 		}
 	}))
 
-	local pkg = lde.Package.open(mainDir)
+	local pkg = assert(lde.Package.open(mainDir))
 	pkg:installDependencies()
 
 	-- Simulate wiped materialization (e.g. the git cache was deleted, taking
@@ -291,7 +295,7 @@ test.it("installDependencies re-installs when the dep is missing from target/", 
 	-- The .installed marker still matches the lockfile, but the install must
 	-- not be treated as a no-op — the dep has to come back.
 	local result = pkg:installDependencies()
-	test.falsy(result.cached)
+	test.falsy(result.isCached)
 	test.equal(fs.read(path.join(mainDir, "target", "wipe-dep", "init.lua")), 'return "wipe"')
 end)
 
@@ -313,7 +317,7 @@ test.it("installDependencies re-installs when a dep symlink is dangling", functi
 		}
 	}))
 
-	local pkg = lde.Package.open(mainDir)
+	local pkg = assert(lde.Package.open(mainDir))
 	pkg:installDependencies()
 	test.truthy(fs.islink(path.join(mainDir, "target", "dangling-dep")))
 
@@ -363,7 +367,7 @@ end
 --- An app that depends on a path dep by name.
 ---@param name string
 ---@param depName string
----@return lde.Package?
+---@return lde.Package
 local function makeAppWithDep(name, depName)
 	local mainDir = path.join(tmpBase, name)
 	fs.mkdir(mainDir)
@@ -376,7 +380,9 @@ local function makeAppWithDep(name, depName)
 			[depName] = { path = "../" .. depName }
 		}
 	}))
-	return lde.Package.open(mainDir)
+	local pkg, err = lde.Package.open(mainDir)
+	assert(pkg, "open failed: " .. tostring(err))
+	return pkg
 end
 
 test.it("installDependencies skips a path dep's build.lua while its inputs are unchanged", function()
@@ -388,7 +394,7 @@ test.it("installDependencies skips a path dep's build.lua while its inputs are u
 
 	-- locked = true forces the full walk (bypassing the .installed fast path) so
 	-- the stamp check itself is exercised, not just the root marker.
-	pkg:installDependencies(nil, nil, nil, { locked = true })
+	pkg:installDependencies(nil, nil, nil, { isLocked = true })
 	test.equal(fs.read(path.join(tmpBase, "install-skip-dep", "install-skip-count.txt")), "x",
 		"dep build.lua must not re-run while its inputs are unchanged")
 end)
@@ -402,7 +408,7 @@ test.it("installDependencies re-runs a path dep's build.lua when its src changes
 
 	-- Different size so the mtime/size fast path can't mask the change.
 	fs.write(path.join(depDir, "src", "init.lua"), 'return 123456')
-	pkg:installDependencies(nil, nil, nil, { locked = true })
+	pkg:installDependencies(nil, nil, nil, { isLocked = true })
 	test.equal(fs.read(path.join(depDir, "install-src-count.txt")), "xx",
 		"dep build.lua must re-run when the dep's source changed")
 end)
@@ -420,7 +426,7 @@ f:write("y")
 f:close()
 -- extra line to change the file size
 ]], "install-script-count.txt"))
-	pkg:installDependencies(nil, nil, nil, { locked = true })
+	pkg:installDependencies(nil, nil, nil, { isLocked = true })
 	test.equal(fs.read(path.join(depDir, "install-script-count.txt")), "xy",
 		"dep build.lua must re-run when the dep's build.lua changed")
 end)
@@ -433,8 +439,8 @@ test.it("installDependencies fast path detects a stale path dep build (src chang
 	test.equal(fs.read(path.join(depDir, "install-stale-count.txt")), "x")
 
 	-- Unchanged: the fast path reports cached.
-	local cached = pkg:installDependencies()
-	test.truthy(cached.cached)
+	local isCached = pkg:installDependencies()
+	test.truthy(isCached.isCached)
 	test.equal(fs.read(path.join(depDir, "install-stale-count.txt")), "x")
 
 	-- The root lockfile/manifest didn't change, but the dep's source did: the
@@ -442,7 +448,7 @@ test.it("installDependencies fast path detects a stale path dep build (src chang
 	-- a full install that re-runs the dep's build.
 	fs.write(path.join(depDir, "src", "init.lua"), 'return 123456789')
 	local stale = pkg:installDependencies()
-	test.falsy(stale.cached, "install must not report cached when a dep build is stale")
+	test.falsy(stale.isCached, "install must not report cached when a dep build is stale")
 	test.equal(fs.read(path.join(depDir, "install-stale-count.txt")), "xx",
 		"dep build.lua must re-run when its source changed")
 end)
@@ -470,8 +476,8 @@ build = { type = "builtin", modules = { ["rockspec-stamp"] = "src/init.lua" } }
 	-- Rewrite the rock's source: the stamp keys on the rockspec content, not the
 	-- sources (a published rock is immutable), so the copy must NOT be refreshed.
 	fs.write(path.join(rockDir, "src", "init.lua"), 'return "v2"')
-	pkg:installDependencies(nil, nil, nil, { locked = true })
-	local copied = fs.read(path.join(pkg:getModulesDir(), "rockspec-stamp", "init.lua"))
+	pkg:installDependencies(nil, nil, nil, { isLocked = true })
+	local copied = fs.read(path.join(pkg:getModulesDir(), "rockspec-stamp", "init.lua")) ---@cast copied -nil
 	test.includes(copied, "v1")
 	test.falsy(copied:find("v2", 1, true))
 end)
@@ -505,7 +511,7 @@ build = { type = "builtin", modules = {
   ["rockspec-change.extra"] = "src/extra.lua",
 } }
 ]])
-	pkg:installDependencies(nil, nil, nil, { locked = true })
+	pkg:installDependencies(nil, nil, nil, { isLocked = true })
 	test.truthy(fs.exists(path.join(pkg:getModulesDir(), "rockspec-change", "extra.lua")),
 		"rockspec change must invalidate the .lde-built stamp and rebuild")
 end)
@@ -528,9 +534,9 @@ test.it("locked install fails when a git dep is not pinned in the lockfile", fun
 		}
 	}))
 
-	local pkg = lde.Package.open(mainDir)
+	local pkg = assert(lde.Package.open(mainDir))
 	local ok, err = pcall(function()
-		pkg:installDependencies(nil, nil, nil, { locked = true })
+		pkg:installDependencies(nil, nil, nil, { isLocked = true })
 	end)
 	test.falsy(ok)
 	test.includes(tostring(err), "not pinned")
@@ -553,10 +559,10 @@ test.it("locked install allows path deps without lockfile pins", function()
 		}
 	}))
 
-	local pkg = lde.Package.open(mainDir)
-	local result = pkg:installDependencies(nil, nil, nil, { locked = true })
+	local pkg = assert(lde.Package.open(mainDir))
+	local result = pkg:installDependencies(nil, nil, nil, { isLocked = true })
 	test.truthy(fs.exists(path.join(mainDir, "target", "locked-path-dep")))
-	test.falsy(result.changed)
+	test.falsy(result.hasChanged)
 	test.equal(result.installs, 1)
 	test.equal(result.checked, 1)
 end)
@@ -584,12 +590,12 @@ test.it("installDevDependencies pins dev deps into the lockfile", function()
 		}
 	}))
 
-	local pkg = lde.Package.open(mainDir)
+	local pkg = assert(lde.Package.open(mainDir))
 	pkg:installDependencies()
 	pkg:installDevDependencies()
 
 	local lockfile = pkg:readLockfile()
-	test.truthy(lockfile)
+	test.truthy(lockfile) ---@cast lockfile -nil
 	test.truthy(lockfile:getDependency("dev-pinned-dep"), "dev dep should be pinned")
 	test.truthy(lockfile:getDependency("dev-pinned-runtime"), "runtime pin should survive the dev commit")
 	test.truthy(fs.exists(path.join(mainDir, "target", "dev-pinned-dep")))
@@ -617,13 +623,14 @@ test.it("installDependencies writes a lockfile with resolved path dependency", f
 		}
 	}))
 
-	local pkg = lde.Package.open(mainDir)
+	local pkg = assert(lde.Package.open(mainDir))
 	pkg:installDependencies()
 
 	local lockPath = path.join(mainDir, "lde.lock")
 	test.truthy(fs.exists(lockPath))
 
-	local content = json.decode(fs.read(lockPath))
+	local raw = fs.read(lockPath) ---@cast raw -nil
+	local content = json.decode(raw) ---@cast content table
 	test.equal(content.version, "1")
 	test.equal(content.dependencies["lockfile-dep"].path, "../lockfile-dep")
 end)
@@ -648,7 +655,7 @@ test.it("installDependencies uses lockfile to pin dependency on reinstall", func
 		}
 	}))
 
-	local pkg = lde.Package.open(mainDir)
+	local pkg = assert(lde.Package.open(mainDir))
 	pkg:installDependencies()
 
 	-- Manually overwrite the lockfile to point at other-dep instead (keeping the
@@ -704,7 +711,7 @@ test.it("installDependencies installs transitive dependencies", function()
 		}
 	}))
 
-	local pkg = lde.Package.open(rootDir)
+	local pkg = assert(lde.Package.open(rootDir))
 	pkg:installDependencies()
 
 	test.truthy(fs.exists(path.join(rootDir, "target", "mid-dep")))
@@ -743,14 +750,14 @@ test.it("installDependencies materializes a cached archive dependency", function
 		}
 	}))
 
-	local pkg = lde.Package.open(mainDir)
+	local pkg = assert(lde.Package.open(mainDir))
 	pkg:installDependencies()
 
 	test.truthy(fs.exists(path.join(mainDir, "target", "archive-dep", "init.lua")))
 	local lockfile = pkg:readLockfile()
-	test.truthy(lockfile)
+	test.truthy(lockfile) ---@cast lockfile -nil
 	local entry = lockfile:getDependency("archive-dep")
-	test.truthy(entry)
+	test.truthy(entry) ---@cast entry -nil
 	test.equal(entry.archive, url)
 
 	local ok, err = pkg:runString('assert(require("archive-dep") == "from-archive")')
@@ -784,7 +791,7 @@ test.it("installDependencies treats a wiped archive cache as a fresh install", f
 		}
 	}))
 
-	local pkg = lde.Package.open(mainDir)
+	local pkg = assert(lde.Package.open(mainDir))
 	pkg:installDependencies()
 	test.truthy(fs.exists(path.join(mainDir, "target", "archive-dep-2", "init.lua")))
 
@@ -806,7 +813,7 @@ test.it("installDependencies treats a wiped archive cache as a fresh install", f
 	}))
 
 	local result = pkg:installDependencies()
-	test.falsy(result.cached, "archive dep must be re-materialized after a cache wipe")
+	test.falsy(result.isCached, "archive dep must be re-materialized after a cache wipe")
 	test.equal(fs.read(path.join(mainDir, "target", "archive-dep-2", "init.lua")), 'return "v1"')
 end)
 
@@ -842,7 +849,7 @@ test.it("installDependencies does not conflict when two deps reference the same 
 		}
 	}))
 
-	local pkg = lde.Package.open(rootDir)
+	local pkg = assert(lde.Package.open(rootDir))
 	-- Should not error
 	pkg:installDependencies()
 
@@ -879,7 +886,7 @@ build = {
 	fs.write(path.join(dir, "src", "sub", "leaf.lua"), 'return "leaf"')
 
 	local pkg = lde.Package.openRockspec(dir)
-	test.truthy(pkg)
+	test.truthy(pkg) ---@cast pkg -nil
 
 	local outputDir = path.join(dir, "target", "mypkg")
 	local ok2, err = pkg:runBuildScript(outputDir)
@@ -915,7 +922,7 @@ build = {
 	fs.write(path.join(dir, "system", "init.lua"), 'return "system"')
 
 	local pkg = lde.Package.openRockspec(dir)
-	test.truthy(pkg)
+	test.truthy(pkg) ---@cast pkg -nil
 
 	local outputDir = path.join(dir, "target", "mysystem")
 	local ok, err = pkg:runBuildScript(outputDir)
@@ -960,7 +967,7 @@ build = {
 	fs.write(path.join(dir, "src", "extra.lua"), 'return "extra"')
 
 	local pkg = lde.Package.openRockspec(dir)
-	test.truthy(pkg)
+	test.truthy(pkg) ---@cast pkg -nil
 
 	local outputDir = path.join(dir, "target", "mypkg")
 	pkg:runBuildScript(outputDir) -- may fail on C compile, that's ok
@@ -995,7 +1002,7 @@ test.it("runTests can require tests.fixture without build script", function()
 	fs.write(path.join(testsDir, "fixture.lua"), testFixture)
 	fs.write(path.join(testsDir, "main.test.lua"), testFile)
 
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	local results = pkg:runTests()
 
 	test.equal(results.failures, 0)
@@ -1005,7 +1012,7 @@ end)
 test.it("runTests can require tests.fixture with build script", function()
 	local dir = makePackageWithSrc("runtests-copy", { ["init.lua"] = 'return true' })
 
-	local f = io.open(path.join(dir, "build.lua"), "w")
+	local f = io.open(path.join(dir, "build.lua"), "w") ---@cast f -nil
 	f:write('local f = io.open(os.getenv("LDE_OUTPUT_DIR") .. "/init.lua", "w"); f:write("return true"); f:close()')
 	f:close()
 
@@ -1014,7 +1021,7 @@ test.it("runTests can require tests.fixture with build script", function()
 	fs.write(path.join(testsDir, "fixture.lua"), testFixture)
 	fs.write(path.join(testsDir, "main.test.lua"), testFile)
 
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	local results = pkg:runTests()
 
 	test.equal(results.failures, 0)
@@ -1056,7 +1063,7 @@ t.it("fixture works", function()
 end)
 ]])
 
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	test.equal(pkg:runTests().failures, 0)
 
 	-- The stamp is written alongside the copy so unchanged runs can skip it.
@@ -1068,7 +1075,7 @@ end)
 	fs.write(path.join(testsDir, "fixture.lua"), 'return { magic = 777 }')
 	test.equal(pkg:runTests().failures, 0)
 
-	local copied = fs.read(targetTestsFile(dir, "fixture.lua"))
+	local copied = fs.read(targetTestsFile(dir, "fixture.lua")) ---@cast copied -nil
 	test.includes(copied, "777")
 	test.falsy(copied:find("magic = 42", 1, true))
 end)
@@ -1083,7 +1090,7 @@ local t = require("lde-test")
 t.it("passes", function() end)
 ]])
 
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	test.equal(pkg:runTests().failures, 0)
 
 	-- A file dropped into the copy that isn't in tests/ survives the second
@@ -1105,7 +1112,7 @@ local t = require("lde-test")
 t.it("passes", function() end)
 ]])
 
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	test.equal(pkg:runTests().failures, 0)
 	test.truthy(fs.exists(targetTestsFile(dir, "unused.lua")))
 
@@ -1121,7 +1128,7 @@ test.it("runTests fails when a test file registers no tests", function()
 	fs.mkdir(testsDir)
 	fs.write(path.join(testsDir, "empty.test.lua"), 'local t = require("lde-test")')
 
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	local results = pkg:runTests()
 
 	test.equal(results.failures, 1)
@@ -1148,7 +1155,7 @@ test.it("runTests with single filter runs only matching files", function()
 	fs.write(path.join(testsDir, "bar.test.lua"), filterTestFile)
 	fs.write(path.join(testsDir, "baz.test.lua"), filterTestFile)
 
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	local results = pkg:runTests(nil, { "foo*" })
 
 	test.equal(results.failures, 0)
@@ -1165,7 +1172,7 @@ test.it("runTests with multiple filters runs matching files (OR logic)", functio
 	fs.write(path.join(testsDir, "beta.test.lua"), filterTestFile)
 	fs.write(path.join(testsDir, "gamma.test.lua"), filterTestFile)
 
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	local results = pkg:runTests(nil, { "alpha*", "*gamma*" })
 
 	test.equal(results.failures, 0)
@@ -1180,7 +1187,7 @@ test.it("runTests with filter that matches nothing returns empty results", funct
 	fs.mkdir(testsDir)
 	fs.write(path.join(testsDir, "main.test.lua"), filterTestFile)
 
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	local results = pkg:runTests(nil, { "doesnot*exist*" })
 
 	test.equal(results.failures, 0)
@@ -1196,7 +1203,7 @@ test.it("runTests without filters runs all test files", function()
 	fs.write(path.join(testsDir, "a.test.lua"), filterTestFile)
 	fs.write(path.join(testsDir, "b.test.lua"), filterTestFile)
 
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	local results = pkg:runTests()
 
 	test.equal(results.failures, 0)
@@ -1213,7 +1220,7 @@ test.it("runTests with absolute path filter runs only that file", function()
 	fs.write(path.join(testsDir, "ohno.test.lua"), filterTestFile)
 
 	local absPath = path.join(testsDir, "ohyes.test.lua")
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	local results = pkg:runTests(nil, { absPath })
 
 	test.equal(results.failures, 0)
@@ -1232,7 +1239,7 @@ test.it("runTests with path-like filter containing glob resolves and matches", f
 	fs.write(path.join(subDir, "two.test.lua"), filterTestFile)
 
 	local globPath = path.join(testsDir, "sub", "*.test.lua")
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	local results = pkg:runTests(nil, { globPath })
 
 	test.equal(results.failures, 0)
@@ -1257,7 +1264,7 @@ t.it("teal test passes", function()
 end)
 ]])
 
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	local results = pkg:runTests()
 
 	test.equal(results.failures, 0)
@@ -1280,7 +1287,7 @@ test.it("runTests compiles Moonscript (.moon) test files before running", functi
 			t.equal 40 + 2, 42
 	]]))
 
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	local results = pkg:runTests()
 
 	test.equal(results.failures, 0)
@@ -1302,7 +1309,7 @@ t.it("foo runs", function() end)
 ]])
 	fs.write(path.join(testsDir, "bar.test.lua"), filterTestFile)
 
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	local results = pkg:runTests(nil, { "foo.test.tl" })
 
 	test.equal(results.failures, 0)
@@ -1320,7 +1327,7 @@ local t = require("lde-test")
 t.it("teal runs", function() end)
 ]])
 
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	test.equal(pkg:runTests().failures, 0)
 	test.truthy(fs.exists(targetTestsFile(dir, "a.test.lua")))
 
@@ -1377,7 +1384,7 @@ int luaopen_greet(lua_State *L) {
 			dependencies = { greet = { path = "../array-sources-rock" } }
 		}))
 
-		local app = lde.Package.open(appDir)
+		local app = lde.Package.open(appDir) ---@cast app -nil
 		app:installDependencies()
 		local ok, err = app:runFile()
 		if not ok then print(err) end
@@ -1404,7 +1411,7 @@ build = {
 ]])
 	-- openRockspec must not error even though sources is a string
 	local pkg, err = lde.Package.openRockspec(dir)
-	test.truthy(pkg, err)
+	test.truthy(pkg, err) ---@cast pkg -nil
 end)
 
 --
@@ -1433,7 +1440,7 @@ build = {
 ]])
 
 	local pkg, err = lde.Package.openRockspec(dir)
-	test.truthy(pkg, err)
+	test.truthy(pkg, err) ---@cast pkg -nil
 
 	local outputDir = path.join(dir, "target", "install-lua")
 	local ok, berr = pkg:runBuildScript(outputDir)
@@ -1466,7 +1473,7 @@ build = {
 ]])
 
 	local pkg, err = lde.Package.openRockspec(dir)
-	test.truthy(pkg, err)
+	test.truthy(pkg, err) ---@cast pkg -nil
 
 	local outputDir = path.join(dir, "target", "array-bin")
 	local ok, berr = pkg:runBuildScript(outputDir)
@@ -1515,7 +1522,7 @@ build = {
 ]], platKey))
 
 	local pkg, err = lde.Package.openRockspec(dir)
-	test.truthy(pkg, err)
+	test.truthy(pkg, err) ---@cast pkg -nil
 
 	local outputDir = path.join(dir, "target", "plat-install")
 	local ok, berr = pkg:runBuildScript(outputDir)
@@ -1566,7 +1573,7 @@ build = {
 ]])
 
 	local pkg, err = lde.Package.openRockspec(dir)
-	test.truthy(pkg, err)
+	test.truthy(pkg, err) ---@cast pkg -nil
 
 	local outputDir = path.join(dir, "target", "incdirs")
 	local ok, berr = pkg:runBuildScript(outputDir)
@@ -1671,7 +1678,7 @@ local build = require("lde-build")
 build:write("output.txt", "hello from lde-build")
 ]])
 
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	local outputDir = path.join(dir, "target", pkg:getName())
 	local ok, err = pkg:runBuildScript(outputDir)
 	test.truthy(ok, err)
@@ -1700,7 +1707,7 @@ assert(build.outDir == outputDir,
 "outDir mismatch: got " .. tostring(build.outDir) .. " expected " .. tostring(outputDir))
 ]])
 
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	local outputDir = path.join(dir, "target", pkg:getName())
 	local ok, err = pkg:runBuildScript(outputDir)
 	test.truthy(ok, err)
@@ -1732,7 +1739,7 @@ local shellContent = build:read("shell.txt")
 assert(shellContent:match("hello"), "sh/read mismatch: " .. shellContent)
 ]])
 
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	local outputDir = path.join(dir, "target", pkg:getName())
 	local ok, err = pkg:runBuildScript(outputDir)
 	test.truthy(ok, err)
@@ -1750,11 +1757,11 @@ test.it("rockspec: make build.variables are substituted and passed to make", fun
 	-- overwriting built.txt with an empty MY_INCDIR since it only appears in build.variables).
 	fs.write(path.join(dir, "Makefile"), [[
 build:
-	echo "$(MY_INCDIR)" > built.txt
+	echo "$(MY_INCDIR)" > hasBuilt.txt
 
 install:
 	mkdir -p $(MY_LIBDIR)
-	cp built.txt $(MY_LIBDIR)/vars.txt
+	cp hasBuilt.txt $(MY_LIBDIR)/vars.txt
 	mkdir -p $(PREFIX)/bin
 	echo "#!/bin/sh" > $(PREFIX)/bin/myprog
 	chmod 755 $(PREFIX)/bin/myprog
@@ -1771,7 +1778,7 @@ build = {
 ]])
 
 	local pkg, err = lde.Package.openRockspec(dir)
-	test.truthy(pkg, err)
+	test.truthy(pkg, err) ---@cast pkg -nil
 
 	local outputDir = path.join(dir, "target", "make-vars")
 	local ok, berr = pkg:runBuildScript(outputDir)

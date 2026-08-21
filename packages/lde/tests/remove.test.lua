@@ -31,7 +31,8 @@ test.it("lde remove removes the dep from lde.json", function()
 
 	ldecli({ "remove", "mypkg" }, dir)
 
-	local config = json.decode(fs.read(path.join(dir, "lde.json")))
+	local raw = fs.read(path.join(dir, "lde.json")) ---@cast raw -nil
+	local config = json.decode(raw) ---@cast config table<string, any>
 	test.falsy(config.dependencies["mypkg"], "dependency should be removed from lde.json")
 end)
 
@@ -50,8 +51,8 @@ test.it("lde remove removes the dep entry from lde.lock if present", function()
 	ldecli({ "remove", "mypkg" }, dir)
 
 	local lockRaw = fs.read(path.join(dir, "lde.lock"))
-	test.truthy(lockRaw, "lde.lock should still exist")
-	local lock = json.decode(lockRaw)
+	test.truthy(lockRaw, "lde.lock should still exist") ---@cast lockRaw -nil
+	local lock = json.decode(lockRaw) ---@cast lock table<string, any>
 	test.falsy(lock.dependencies["mypkg"], "removed dep should be gone from lde.lock")
 	test.truthy(lock.dependencies["other"], "unrelated lockfile entries should be preserved")
 	test.falsy(fs.exists(path.join(dir, "target", ".installed")), ".installed should be deleted")
@@ -62,7 +63,8 @@ test.it("lde remove removes a dev dependency from lde.json", function()
 
 	ldecli({ "remove", "mydevpkg" }, dir)
 
-	local config = json.decode(fs.read(path.join(dir, "lde.json")))
+	local raw = fs.read(path.join(dir, "lde.json")) ---@cast raw -nil
+	local config = json.decode(raw) ---@cast config table<string, any>
 	test.falsy(config.devDependencies["mydevpkg"], "dev dependency should be removed from lde.json")
 	test.falsy(config.dependencies["mydevpkg"], "runtime dependencies should remain unaffected")
 end)
@@ -82,8 +84,8 @@ test.it("lde remove removes the dev dep entry from lde.lock if present", functio
 	ldecli({ "remove", "mydevpkg" }, dir)
 
 	local lockRaw = fs.read(path.join(dir, "lde.lock"))
-	test.truthy(lockRaw, "lde.lock should still exist")
-	local lock = json.decode(lockRaw)
+	test.truthy(lockRaw, "lde.lock should still exist") ---@cast lockRaw -nil
+	local lock = json.decode(lockRaw) ---@cast lock table<string, any>
 	test.falsy(lock.dependencies["mydevpkg"], "removed dev dep should be gone from lde.lock")
 	test.truthy(lock.dependencies["other"], "unrelated lockfile entries should be preserved")
 	test.falsy(fs.exists(path.join(dir, "target", ".installed")), ".installed should be deleted")
@@ -94,7 +96,8 @@ test.it("lde remove removes a dep present in both dependencies and devDependenci
 
 	ldecli({ "remove", "mypkg" }, dir)
 
-	local config = json.decode(fs.read(path.join(dir, "lde.json")))
+	local raw = fs.read(path.join(dir, "lde.json")) ---@cast raw -nil
+	local config = json.decode(raw) ---@cast config table<string, any>
 	test.falsy(config.dependencies["mypkg"], "runtime dependency should be removed")
 	test.falsy(config.devDependencies["mypkg"], "dev dependency should be removed too")
 end)

@@ -59,7 +59,7 @@ return M
 	fs.write(path.join(tmpDir, "tests", "main.test.lua"), table.concat(body, "\n"))
 
 	local ok, out = ldecli({ "test", "--coverage" }, tmpDir)
-	test.truthy(ok, "lde test --coverage failed: " .. tostring(out))
+	test.truthy(ok, "lde test --coverage failed: " .. tostring(out)) ---@cast out -nil
 	-- GitHub Actions forces ANSI colors on even when stdout is a pipe, so strip
 	-- escape sequences before matching on content and column layout.
 	out = out:gsub("\27%[[0-9;]*m", "")
@@ -126,7 +126,8 @@ end)
 	test.truthy(ok, "lde test --coverage --json failed: " .. tostring(out))
 	test.truthy(fs.exists(jsonPath), "coverage JSON not written")
 
-	local data = json.decode(fs.read(jsonPath))
+	local dataRaw = fs.read(jsonPath) ---@cast dataRaw -nil
+	local data = json.decode(dataRaw) ---@cast data table<string, any>
 	test.truthy(data, "coverage JSON must decode")
 	test.equal(data.version, 1)
 	test.equal(#data.packages, 1)

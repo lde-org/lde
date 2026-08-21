@@ -19,7 +19,9 @@ local function makeApp(name, deps)
 		version = "0.1.0",
 		dependencies = deps
 	}))
-	return lde.Package.open(dir)
+	local pkg, err = lde.Package.open(dir)
+	assert(pkg, "open failed: " .. tostring(err))
+	return pkg
 end
 
 test.it("luarocks: lpeg matches a pattern", function()

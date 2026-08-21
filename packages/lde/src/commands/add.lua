@@ -17,11 +17,11 @@ local function add(args)
 	local rawName = args:pop()
 	if not rawName then
 		lde.error.raise("Usage: lde add <name>[@<version>] --path <path> | --git <url>")
-	end
+	end ---@cast rawName -nil
 
 	-- Support lde add <name>@<version> syntax
 	local name, versionFromName = rawName:match("^([^@]+)@(.+)$")
-	if not name then name = rawName end
+	if not name then name = rawName end ---@cast name string
 
 	-- Strip only the rocks: prefix (e.g. rocks:foo -> foo). Other prefixes are
 	-- not real; a namespaced package is ns/foo, so "ns:foo" must fail
@@ -44,20 +44,19 @@ local function add(args)
 	local p, err = lde.Package.open()
 	if not p then
 		lde.error.raise(err)
-	end
+	end ---@cast p -nil
 
 	local configPath = p:getConfigPath()
 
 	local configRaw = fs.read(configPath)
 	if not configRaw then
 		lde.error.raise("Config file not found: " .. configPath)
-	end
+	end ---@cast configRaw -nil
 
-	---@type lde.Package.Config
 	local config, derr = lde.util.decodeJson(configRaw)
 	if not config then
 		lde.error.raise("Failed to parse " .. configPath .. ": " .. derr)
-	end
+	end ---@cast config lde.Package.Config
 
 	local dependencyTable ---@type lde.Package.Config.Dependencies
 	if isDevelopment then
@@ -101,7 +100,7 @@ local function add(args)
 		local portfile, err = lde.global.lookupRegistryPackage(name)
 		if not portfile then
 			lde.error.raise(err)
-		end
+		end ---@cast portfile -nil
 
 		local resolvedVersion = lde.global.resolveRegistryVersion(portfile, registryVersion or nil)
 		dep = { version = resolvedVersion }

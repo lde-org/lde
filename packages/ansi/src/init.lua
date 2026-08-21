@@ -1,5 +1,12 @@
 local ffi = require("ffi")
 
+-- Typed views over the ffi.cdef structs below (the LS can't see cdef fields).
+---@class ansi.ffi.LARGE_INTEGER: ffi.cdata*
+---@field val number
+---@class ansi.ffi.timespec: ffi.cdata*
+---@field tv_sec number
+---@field tv_nsec number
+
 local isTTY = true
 local now
 do
@@ -43,13 +50,13 @@ do
 		local freqOk, freq = pcall(function()
 			local f = ffi.new("LARGE_INTEGER")
 			ffi.C.QueryPerformanceFrequency(f)
-			return tonumber(f.val)
+			return tonumber(f --[[@as ansi.ffi.LARGE_INTEGER]].val)
 		end)
 		if freqOk then
 			now = function()
 				local t = ffi.new("LARGE_INTEGER")
 				ffi.C.QueryPerformanceCounter(t)
-				return tonumber(t.val) / freq
+				return tonumber(t --[[@as ansi.ffi.LARGE_INTEGER]].val) / freq
 			end
 		end
 	else
@@ -67,7 +74,8 @@ do
 			now = function()
 				local t = ffi.new("timespec")
 				ffi.C.clock_gettime(1, t)
-				return tonumber(t.tv_sec) + tonumber(t.tv_nsec) * 1e-9
+				local ts = t --[[@as ansi.ffi.timespec]]
+				return tonumber(ts.tv_sec) + tonumber(ts.tv_nsec) * 1e-9
 			end
 		end
 	end
@@ -180,6 +188,7 @@ end
 
 local BAR_WIDTH = 20
 
+---@param seconds number
 local function formatElapsed(seconds)
 	if seconds < 0.1 then
 		return string.format("%.0fms", seconds * 1000)
@@ -194,6 +203,7 @@ local function formatElapsed(seconds)
 	end
 end
 
+---@param ratio number?
 local function renderBar(ratio)
 	if not ratio then return nil end
 	local filled = math.floor(ratio * BAR_WIDTH)
@@ -241,6 +251,8 @@ function ansi.progress(label)
 	local lastRendered = nil
 	local lastRatio, lastInfo
 
+	---@param ratio number?
+	---@param info string?
 	local function render(ratio, info)
 		lastRatio, lastInfo = ratio, info
 		local barStr = renderBar(ratio)

@@ -12,7 +12,7 @@ fs.mkdir(tmpDir)
 
 local json5Config = [[
 {
-	// Project metadata
+	// Project hasMetadata
 	"name": "json5-sample",
 	"version": "1.0.0", // trailing comma below
 	/* multi-line comment:
@@ -33,14 +33,14 @@ test.it("Package.open succeeds for a project with a JSON5 lde.json", function()
 end)
 
 test.it("Package:readConfig parses name from JSON5 lde.json", function()
-	local pkg = lde.Package.open(tmpDir)
+	local pkg = assert(lde.Package.open(tmpDir))
 	local config = pkg:readConfig()
 	test.equal(config.name, "json5-sample")
 	test.equal(config.version, "1.0.0")
 end)
 
 test.it("Package:readConfig parses dependencies from JSON5 lde.json", function()
-	local pkg = lde.Package.open(tmpDir)
+	local pkg = assert(lde.Package.open(tmpDir))
 	local config = pkg:readConfig()
 	test.equal(config.dependencies.foo.path, "../foo")
 	test.equal(config.dependencies.bar.path, "../bar")

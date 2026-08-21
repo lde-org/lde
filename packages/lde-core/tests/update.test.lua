@@ -59,7 +59,7 @@ test.it("updateDependencies skips path dependencies", function()
 	local dir = makeApp("update-skip", {
 		mylib = { path = "../mylib" }
 	})
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	local results = pkg:updateDependencies()
 
 	test.equal(results.mylib.updated, false)
@@ -71,7 +71,7 @@ test.skipIf(env.var("ANDROID_ROOT") ~= nil)("updateDependencies reports already 
 	local dir = makeApp("update-head-app", {
 		["update-head"] = { git = repoDir }
 	})
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	pkg:installDependencies()
 
 	local results = pkg:updateDependencies()
@@ -84,7 +84,7 @@ test.skipIf(env.var("ANDROID_ROOT") ~= nil)("updateDependencies re-pins a git de
 	local dir = makeApp("update-move-app", {
 		["update-move"] = { git = repoDir }
 	})
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	pkg:installDependencies()
 	local before = pkg:readLockfile():getDependency("update-move").commit
 

@@ -47,7 +47,7 @@ local function setup()
 		entryKey = "entry-main",
 		exitMarker = "__lde_exit__",
 	})
-	test.truthy(ok, tostring(hotState))
+	test.truthy(ok, tostring(hotState)) ---@cast hotState -nil
 	return state,
 		hotState:get("reload"), --[[@as function]]
 		hotState:get("reloadAll"), --[[@as function]]

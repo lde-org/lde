@@ -7,7 +7,15 @@ local readline = {}
 
 local history = {}
 
----@param opts { prompt: string, readByte: fun(): string?, write: fun(s: string), history: string[], highlight: (fun(s:string):string)?, complete: (fun(s:string, pos:integer):string?)? }
+---@class readline.EditOpts
+---@field prompt string
+---@field readByte fun(): string?
+---@field write fun(s: string)
+---@field history string[]
+---@field highlight (fun(s: string): string)?
+---@field complete (fun(s: string, pos: integer): string?)?
+
+---@param opts readline.EditOpts
 ---@return string?
 function readline.edit(opts)
 	local prompt    = opts.prompt
@@ -19,6 +27,8 @@ function readline.edit(opts)
 
 	local ghost     = nil
 
+	---@param line string
+	---@param pos integer
 	local function redraw(line, pos)
 		ghost         = complete and pos == #line and complete(line, pos) or nil
 		local display = highlight and highlight(line) or line

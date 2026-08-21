@@ -56,17 +56,17 @@ end
 ---state to persist afterwards.
 ---@param package lde.Package
 ---@param stampPath string
----@return boolean changed
+---@return boolean hasChanged
 ---@return table<string, { size: number, mtime: number, hash: string }> current
 local function checkInputs(package, stampPath)
 	local stored = readStamp(stampPath)
 	local current = {}
-	local changed = false
+	local hasChanged = false
 
 	for relPath, absPath in pairs(collectInputFiles(package)) do
 		local stat = fs.stat(absPath)
 		if not stat then
-			changed = true
+			hasChanged = true
 			goto continue
 		end
 
@@ -79,11 +79,11 @@ local function checkInputs(package, stampPath)
 		else
 			local content = fs.read(absPath)
 			if not content then
-				changed = true
+				hasChanged = true
 				goto continue
 			end
 			local hash = util.hash(content)
-			changed = changed or not prev or prev.hash ~= hash
+			hasChanged = hasChanged or not prev or prev.hash ~= hash
 			current[relPath] = { size = size, mtime = mtime, hash = hash }
 		end
 
@@ -93,16 +93,16 @@ local function checkInputs(package, stampPath)
 	-- Files that were inputs to the last build but no longer exist.
 	for relPath in pairs(stored) do
 		if not current[relPath] then
-			changed = true
+			hasChanged = true
 		end
 	end
 
-	return changed, current
+	return hasChanged, current
 end
 
 ---@param package lde.Package
 ---@param destinationPath string?
----@return boolean built # true when a build script actually ran (and finished)
+---@return boolean hasBuilt # true when a build script actually ran (and finished)
 ---@return lde.install.DeferredBuild? deferred # finalizer for async native builds (rockspec builtin or a build.lua subprocess)
 local function buildPackage(package, destinationPath)
 	if currentlyBuilding[package] then return false end
@@ -119,7 +119,7 @@ local function buildPackage(package, destinationPath)
 	-- build.lua, so checkInputs never runs and their buildfn gates on its own
 	-- .lde-built stamp instead.
 	local inputsChanged = true
-	local built = false
+	local hasBuilt = false
 
 	if package:hasBuildScript() then
 		-- If a symlink exists from a previous no-build-script run, remove it
@@ -136,7 +136,7 @@ local function buildPackage(package, destinationPath)
 
 		if inputsChanged then
 			local alreadyDone = alreadyBuilt[destinationPath] or fs.exists(path.join(destinationPath, ".lde-built"))
-			local p = (lde.verbose and not alreadyDone) and ansi.progress("Building " .. package:getName()) or nil
+			local p = (lde.isVerbose and not alreadyDone) and ansi.progress("Building " .. package:getName()) or nil
 
 			-- Record the input state after a successful build (or a confirmed
 			-- no-change run) so the next build can skip. For the subprocess path
@@ -158,11 +158,13 @@ local function buildPackage(package, destinationPath)
 				local child, serr = process.spawn(ldeBin,
 					{ "__build-pkg", package:getDir(), destinationPath },
 					{ stdout = "inherit", stderr = "inherit" })
+				if not child then ---@cast child -nil
+				end
 				if not child then
 					if p then p:fail("Building " .. package:getName()) end
 					lde.error.raise("Failed to spawn build worker for '" .. package:getName() .. "': " .. (serr or "spawn failed"))
 				end
-				built = true
+				hasBuilt = true
 				alreadyBuilt[destinationPath] = true
 				deferred = {
 					poll = function()
@@ -187,7 +189,7 @@ local function buildPackage(package, destinationPath)
 				end
 				if p and not asyncFinalizer then p:done("Built " .. package:getName()) end
 				deferred = asyncFinalizer
-				built = true
+				hasBuilt = true
 				alreadyBuilt[destinationPath] = true
 				if not asyncFinalizer then writeStamp() end
 			end
@@ -200,19 +202,19 @@ local function buildPackage(package, destinationPath)
 		elseif fs.isdir(destinationPath) then
 			fs.rmdir(destinationPath)
 		end
-		if teal.hasTeal(package:getSrcDir()) then
+		if teal:hasSource(package:getSrcDir()) then
 			-- Teal package: compile .tl sources to .lua instead of symlinking,
 			-- so the rest of the pipeline (run/test/compile/bundle) only sees Lua.
-			teal.compileDir(package:getSrcDir(), destinationPath)
-		elseif moonscript.hasMoon(package:getSrcDir()) then
-			moonscript.compileDir(package:getSrcDir(), destinationPath)
+			teal:compileDir(package:getSrcDir(), destinationPath)
+		elseif moonscript:hasSource(package:getSrcDir()) then
+			moonscript:compileDir(package:getSrcDir(), destinationPath)
 		else
 			fs.mklink(package:getSrcDir(), destinationPath)
 		end
 	end
 
 	currentlyBuilding[package] = nil
-	return built, deferred
+	return hasBuilt, deferred
 end
 
 --- Whether a build-script package's stamped output is stale against its
@@ -225,8 +227,8 @@ end
 ---@return boolean stale
 local function isStale(package, destinationPath)
 	local stampPath = path.join(destinationPath, STAMP_FILE)
-	local changed, _ = checkInputs(package, stampPath)
-	return changed
+	local hasChanged, _ = checkInputs(package, stampPath)
+	return hasChanged
 end
 
 ---@class lde.packageBuild

@@ -47,7 +47,7 @@ local function upgrade(args)
 		releaseUrl = releasesUrl .. "/tags/v" .. desiredVersion
 	end
 
-	local res, err = curl.get(releaseUrl, { headers = { ["User-Agent"] = "lde-upgrade" } })
+	local res, err = curl.get(releaseUrl, { url = releaseUrl, headers = { ["User-Agent"] = "lde-upgrade" } })
 	if not res then
 		ansi.printf("{red}Failed to fetch latest release: %s", err)
 		return
@@ -117,6 +117,7 @@ local function upgrade(args)
 
 	-- Download the archive directly to file
 	local dlOk, dlErr = curl.download(downloadUrl, tempZipLocation, {
+		url = downloadUrl,
 		progress = function(dltotal, dlnow)
 			local ratio = dltotal > 0 and (dlnow / dltotal) or nil
 			local info = dltotal > 0

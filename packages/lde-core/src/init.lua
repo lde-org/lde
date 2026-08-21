@@ -2,9 +2,11 @@ local lde = {}
 
 package.loaded[(...)] = lde
 
-lde.verbose = false
+lde.isVerbose = false
 
 lde.error = require("lde-core.error")
+
+lde.Registry = require("lde-registry")
 
 lde.Package = require("lde-core.package")
 lde.Lockfile = require("lde-core.lockfile")

@@ -11,7 +11,7 @@ local function compile(args)
 	local pkg, err = lde.Package.open()
 	if not pkg then
 		lde.error.raise(err)
-	end
+	end ---@cast pkg -nil
 
 	if not outFile then
 		outFile = path.join(pkg:getDir(), pkg:getName())

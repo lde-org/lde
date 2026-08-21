@@ -28,6 +28,9 @@ local moonscript     = require("lde-core.moonscript")
 ---@field exitCode number? # exit code of the external runner
 ---@field coverage lde.Coverage? # line coverage collected during the run (--coverage)
 
+---@param pkg lde.Package
+---@return string luaPath
+---@return string luaCPath
 local function getLuaPathsForPackage(pkg)
 	local modulesDir = pkg:getModulesDir()
 	local luaPath =
@@ -64,7 +67,7 @@ local function runTestFile(testFile, luaPath, luaCPath, reporter, coverage)
 	local results = {}
 
 	local state = lua.new()
-	local g     = state:globals()
+	local g     = state:globals() --[[@as { package: { path: string?, cpath: string? } }]]
 	local pkg   = g.package
 	pkg.path    = luaPath
 	pkg.cpath   = luaCPath
@@ -296,21 +299,21 @@ local function readTestsStamp(stampPath)
 end
 
 --- Compare tests/ against the stored stamp. Files whose size+mtime are
---- unchanged reuse the stored hash; anything else is re-hashed. Returns
+--- Unchanged inputs reuse the stored hash; anything else is re-hashed. Returns
 --- whether the copy is stale and the current per-file state to persist.
 ---@param testDir string
 ---@param stored table<string, lde.TestsStampFile>
----@return boolean changed
+---@return boolean hasChanged
 ---@return table<string, lde.TestsStampFile> current
 local function checkTestsInputs(testDir, stored)
 	local current = {}
-	local changed = false
+	local hasChanged = false
 	for _, rel in ipairs(fs.scan(testDir, "**")) do
 		local relKey = rel:gsub("\\", "/")
 		local abs = path.join(testDir, rel)
 		local stat = fs.stat(abs)
 		if not stat then
-			changed = true
+			hasChanged = true
 			goto continue
 		end
 		local size, mtime = tonumber(stat.size) or 0, tonumber(stat.modifyTime) or 0
@@ -321,16 +324,16 @@ local function checkTestsInputs(testDir, stored)
 		else
 			local content = fs.read(abs)
 			local hash = content and util.hash(content) or ""
-			changed = changed or not prev or prev.hash ~= hash
+			hasChanged = hasChanged or not prev or prev.hash ~= hash
 			current[relKey] = { size = size, mtime = mtime, hash = hash }
 		end
 		::continue::
 	end
 	-- Files that were inputs to the last copy but no longer exist.
 	for relKey in pairs(stored) do
-		if not current[relKey] then changed = true end
+		if not current[relKey] then hasChanged = true end
 	end
-	return changed, current
+	return hasChanged, current
 end
 
 ---@param package  lde.Package
@@ -383,27 +386,22 @@ local function runTests(package, reporter, filters, opts)
 	-- but unchanged runs don't re-copy.
 	local targetTestsDir = path.join(package:getModulesDir(), "tests")
 	local testsDir = testDir -- where the runner scans and executes from
-	if teal.hasTeal(testDir) then
-		-- Teal takes precedence over Moonscript, matching build's src/ handling.
+	-- Teal takes precedence over Moonscript, matching build's src/ handling.
+	local compiler = teal:hasSource(testDir) and teal
+		or moonscript:hasSource(testDir) and moonscript
+		or nil
+	if compiler then
 		if fs.islink(targetTestsDir) then
 			fs.delete(targetTestsDir)
 		elseif fs.exists(targetTestsDir) then
 			fs.rmdir(targetTestsDir)
 		end
-		teal.compileDir(testDir, targetTestsDir)
-		testsDir = targetTestsDir
-	elseif moonscript.hasMoon(testDir) then
-		if fs.islink(targetTestsDir) then
-			fs.delete(targetTestsDir)
-		elseif fs.exists(targetTestsDir) then
-			fs.rmdir(targetTestsDir)
-		end
-		moonscript.compileDir(testDir, targetTestsDir)
+		compiler:compileDir(testDir, targetTestsDir)
 		testsDir = targetTestsDir
 	elseif package:hasBuildScript() then
 		local stampPath = path.join(targetTestsDir, TEST_STAMP_FILE)
-		local changed, current = checkTestsInputs(testDir, readTestsStamp(stampPath))
-		if changed or not fs.exists(targetTestsDir) then
+		local hasChanged, current = checkTestsInputs(testDir, readTestsStamp(stampPath))
+		if hasChanged or not fs.exists(targetTestsDir) then
 			if fs.islink(targetTestsDir) then
 				fs.delete(targetTestsDir)
 			elseif fs.exists(targetTestsDir) then

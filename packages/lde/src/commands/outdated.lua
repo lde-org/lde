@@ -8,7 +8,7 @@ local function outdated(_args)
 	local pkg, err = lde.Package.open()
 	if not pkg then
 		lde.error.raise(err)
-	end
+	end ---@cast pkg -nil
 
 	local deps = pkg:getDependencies()
 	local found = false

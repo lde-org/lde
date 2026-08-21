@@ -82,9 +82,13 @@ local function countExecutableLines(src, out)
 	-- when not inside one. A level-0 opener can contain higher-level brackets.
 	local level ---@type number?
 
+	---@param i number
+	---@return integer
 	local function charAt(i) return i <= len and string.byte(src, i) or -1 end
 
 	-- Level of a long-bracket opener at i ("[" + n*"=" + "["), or nil.
+	---@param i number
+	---@return integer?
 	local function openerLevelAt(i)
 		if charAt(i) ~= 91 then return nil end -- '['
 		local j = i + 1

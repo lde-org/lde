@@ -7,7 +7,7 @@ local errorlib = require("lde-core.error")
 ---@param s string
 ---@return string
 local function plain(s)
-	return (s or ""):gsub("\27%[[0-9;]*m", "")
+	return ((s or ""):gsub("\27%[[0-9;]*m", ""))
 end
 
 --- Run fn with os.exit stubbed to a throw and stdout captured in memory.
@@ -19,7 +19,7 @@ end
 ---@param fn fun()
 ---@return string text
 ---@return integer? exitCode
-local function capture(fn)
+local function isCapture(fn)
 	local lines = {}
 	local prevPrint = print
 	local prevExit = os.exit
@@ -61,7 +61,7 @@ test.it("non-error values are not known errors", function()
 end)
 
 test.it("known errors render a clean message and exit 1", function()
-	local text, code = capture(function()
+	local text, code = isCapture(function()
 		errorlib.show(errorlib.new("clean message"), "ignored trace")
 	end)
 	test.equal(code, 1)
@@ -71,14 +71,14 @@ test.it("known errors render a clean message and exit 1", function()
 end)
 
 test.it("hints render under the message", function()
-	local text = capture(function()
+	local text = isCapture(function()
 		errorlib.show(errorlib.new("some message", { hint = "do the thing" }))
 	end)
 	test.includes(plain(text), "do the thing")
 end)
 
 test.it("unexpected errors render the crash screen and exit 2", function()
-	local text, code = capture(function()
+	local text, code = isCapture(function()
 		errorlib.show({ some = "bug" }, "fake traceback line")
 	end)
 	test.equal(code, 2)

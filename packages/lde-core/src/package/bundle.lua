@@ -46,7 +46,7 @@ local function compileBytecode(content, chunkName)
 	local fn, err = loadstring(content, chunkName)
 	if not fn then
 		lde.error.raise("Failed to compile " .. chunkName .. ": " .. err)
-	end
+	end ---@cast fn -nil
 	return string.dump(fn)
 end
 

@@ -16,14 +16,27 @@
 			"duplicate-set-field",
 			"duplicate-doc-alias"
 		],
-		"unusedLocalExclude": ["_*"]
+		"unusedLocalExclude": [
+			"_*"
+		]
 	},
 	"runtime": {
 		"version": "LuaJIT",
 		"enableLuaJITExtensions": true,
-		"path": ["./target/?.lua", "./target/?/init.lua"]
+		"path": [
+			"./target/?.lua",
+			"./target/?/init.lua"
+		]
 	},
 	"workspace": {
-		"library": ["target"]
+		"library": [
+			"target"
+		],
+		"ignoreDir": [
+			".git",
+			"target",
+			".scratch",
+			".lls"
+		]
 	}
 }

@@ -14,7 +14,7 @@ test.it("should not ignore --git in ldx", function()
 	local cloneUrl = "https://github.com/codebycruz/hood"
 
 	-- Resolve the real commit so the cache key matches what getOrCloneRepo expects.
-	local commit = assert(git2.lsRemote(cloneUrl, "HEAD"))
+	local commit = assert(git2.lsRemote(cloneUrl, "HEAD")) ---@cast commit string
 
 	-- Pre-populate the cache with a fake repo that lacks a "triangle" package.
 	local repoDir = lde.global.getGitRepoDir("hood", commit)
@@ -28,7 +28,7 @@ test.it("should not ignore --git in ldx", function()
 	fs.mkdir(path.join(repoDir, "src"))
 	fs.write(path.join(repoDir, "src", "init.lua"), "")
 
-	local _, out = ldecli { "x", "triangle", "--git", cloneUrl }
+	local _, out = ldecli { "x", "triangle", "--git", cloneUrl } ---@cast out -nil
 	test.falsy(out:find("not found in lde registry"))
 	test.includes(out, "No package named 'triangle'")
 
@@ -63,7 +63,7 @@ test.it("lde test skips packages with no tests/ directory", function()
 	}))
 
 	local ok, out = ldecli({ "test" }, tmpDir)
-	test.truthy(ok)
+	test.truthy(ok) ---@cast out -nil
 	test.includes(out, "dummy passes")
 	-- The package without tests/ should not appear in output at all
 	test.falsy(out:find("no%-tests", 1, false))
@@ -113,7 +113,7 @@ test.it("-C changes the working directory before loose-file resolution", functio
 	fs.write(path.join(pkgDir, "hello.lua"), 'io.write("cwd-short")')
 
 	local ok, out = ldecli({ "-C", "pkg", "hello.lua" }, tmpDir)
-	test.truthy(ok)
+	test.truthy(ok) ---@cast out -nil
 	test.includes(out, "cwd-short")
 
 	fs.rmdir(tmpDir)
@@ -133,7 +133,7 @@ test.it("--cwd changes the working directory before package resolution", functio
 	}))
 
 	local ok, out = ldecli({ "--cwd", "pkg", "run" }, tmpDir)
-	test.truthy(ok)
+	test.truthy(ok) ---@cast out -nil
 	test.includes(out, "cwd-long")
 
 	fs.rmdir(tmpDir)
@@ -145,7 +145,7 @@ test.it("--cwd errors when the target directory does not exist", function()
 	fs.mkdir(tmpDir)
 
 	local ok, out = ldecli({ "--cwd", "missing", "--version" }, tmpDir)
-	test.falsy(ok)
+	test.falsy(ok) ---@cast out -nil
 	test.includes(out, "Directory does not exist")
 
 	fs.rmdir(tmpDir)
@@ -156,7 +156,7 @@ test.it("lde <script> <args> passes positional args to the script", function()
 	fs.write(script, 'io.write(arg[1] .. " " .. arg[2])')
 
 	local ok, out = ldecli { script, "hello", "world" }
-	test.truthy(ok)
+	test.truthy(ok) ---@cast out -nil
 	test.includes(out, "hello world")
 end)
 
@@ -165,7 +165,7 @@ test.it("lde <script> receives arg[0] as the script path", function()
 	fs.write(script, "io.write(arg[0])")
 
 	local ok, out = ldecli { script }
-	test.truthy(ok)
+	test.truthy(ok) ---@cast out -nil
 	test.includes(out, script)
 end)
 
@@ -177,7 +177,7 @@ test.it("lde --lua <script> passes all positional args to the script", function(
 	fs.write(script, 'io.write(table.concat(arg, "|"))')
 
 	local ok, out = ldecli { "--lua", script, "install", "--quiet", "FOO=bar" }
-	test.truthy(ok)
+	test.truthy(ok) ---@cast out -nil
 	test.includes(out, "install|--quiet|FOO=bar")
 end)
 
@@ -189,13 +189,13 @@ test.it("lde --lua runs -e chunks before the script in the same state", function
 	fs.write(script, "io.write(marker)")
 
 	local ok, out = ldecli { "--lua", "-e", "marker = 'chained'", script }
-	test.truthy(ok)
+	test.truthy(ok) ---@cast out -nil
 	test.includes(out, "chained")
 end)
 
 test.it("lde --lua supports multiple -e chunks", function()
 	local ok, out = ldecli { "--lua", "-e", "io.write('a')", "-e", "io.write('b')" }
-	test.truthy(ok)
+	test.truthy(ok) ---@cast out -nil
 	test.includes(out, "ab")
 end)
 
@@ -204,7 +204,7 @@ test.it("lde --lua rebuilds arg for the script after -e chunks", function()
 	fs.write(script, "io.write(arg[0] .. '|' .. table.concat(arg, '|'))")
 
 	local ok, out = ldecli { "--lua", "-e", "x = 1", script, "a", "b" }
-	test.truthy(ok)
+	test.truthy(ok) ---@cast out -nil
 	test.includes(out, script .. "|a|b")
 end)
 
@@ -214,7 +214,7 @@ test.it("lde --lua -i enters an interactive REPL", function()
 	-- close it immediately (empty write + EOF) to prove the prompt prints and
 	-- the REPL loop terminates.
 	local ok, out = ldecli({ "--lua", "-e", "io.write('pre')", "-i" }, nil, { stdin = "" })
-	test.truthy(ok)
+	test.truthy(ok) ---@cast out -nil
 	test.includes(out, "pre")
 	test.includes(out, ">")
 end)

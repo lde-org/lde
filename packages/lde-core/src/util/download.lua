@@ -22,13 +22,22 @@ local curl = util.lazy(|| -> require("curl-sys"))
 
 local download = {}
 
+---@class download.Batch
+---@field add fun(self: download.Batch, url: string, opts?: table): integer
+---@field results fun(self: download.Batch): table[]
+---@field pump fun(self: download.Batch): integer
+---@field wait fun(self: download.Batch, ms?: integer)
+---@field runAll fun(self: download.Batch)
+---@field close fun(self: download.Batch)
+
 ---@class download.Session
----@field batch CurlBatch
+---@field batch download.Batch
 ---@field pending table<string, integer|table>  destPath -> batch transfer index (a result table once resolved)
 ---@field background table<string, boolean>  destPath -> true for transfers drain() must not block on
 ---@field onTransfer fun(destPath: string)? # fired once per completed transfer, after its result is resolved
 ---@field progress fun(done: integer, total: integer)?
 
+---@type download.Session?
 local session = nil
 
 --- Start a parallel download session. Blocks until everything finishes.
@@ -36,7 +45,7 @@ local session = nil
 function download.begin(opts)
 	assert(not session, "download session already active")
 	session = {
-		batch = curl().batch({ progress = opts and opts.progress or nil }),
+		batch = curl().batch({ progress = opts and opts.progress or nil }) --[[@as download.Batch]],
 		pending = {},
 		background = {},
 	}
@@ -65,7 +74,7 @@ end
 --- Whether a pending transfer has finished (result table available).
 ---@param destPath string
 ---@return boolean
-local function transferDone(destPath)
+local function transferDone(destPath) ---@cast session -nil
 	local index = session.pending[destPath]
 	if type(index) ~= "number" then return true end
 	local res = session.batch:results()[index]
@@ -73,7 +82,7 @@ local function transferDone(destPath)
 end
 
 ---@return boolean true when any non-background transfer is still running
-local function pendingNonBackground()
+local function pendingNonBackground() ---@cast session -nil
 	for destPath, index in pairs(session.pending) do
 		if type(index) == "number" and not session.background[destPath] then
 			if not transferDone(destPath) then return true end
@@ -84,7 +93,7 @@ end
 
 --- Resolve a finished transfer's pending entry into its result table.
 ---@param destPath string
-local function resolveTransfer(destPath)
+local function resolveTransfer(destPath) ---@cast session -nil
 	local index = session.pending[destPath]
 	if type(index) ~= "number" then return end
 	local res = session.batch:results()[index] or { ok = false, err = "missing result" }

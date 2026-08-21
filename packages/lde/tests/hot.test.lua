@@ -63,8 +63,7 @@ end
 ---@param fn fun(child: process.Child)
 local function withChild(args, cwd, fn)
 	local child, err = process.spawn(ldePath, args, { cwd = cwd, stdout = "null", stderr = "null" })
-	if not child then error("spawn failed: " .. tostring(err), 2) end
-	---@cast child process.Child
+	if not child then error("spawn failed: " .. tostring(err), 2) end ---@cast child process.Child
 	local ok, perr = pcall(fn, child)
 	child:kill()
 	sleep(150)

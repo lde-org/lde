@@ -45,10 +45,12 @@ test.it("Lockfile:save writes to disk and Lockfile.open reads it back", function
 
 	test.truthy(fs.exists(lockPath))
 
-	local loaded = lde.Lockfile.open(lockPath)
+	local loaded = lde.Lockfile.open(lockPath) ---@cast loaded -nil
 	test.equal(loaded:getVersion(), "1")
-	test.match(loaded:getDependency("alpha"), { path = "../alpha" })
-	test.match(loaded:getDependency("beta"), {
+	local alpha = loaded:getDependency("alpha") ---@cast alpha table
+	test.match(alpha, { path = "../alpha" })
+	local beta = loaded:getDependency("beta") ---@cast beta table
+	test.match(beta, {
 		git = "https://example.com/beta.git",
 		commit = "abc123",
 		branch = "main"
@@ -81,8 +83,8 @@ test.it("Lockfile:save produces valid JSON", function()
 
 	lf:save()
 
-	local content = fs.read(lockPath)
-	local decoded = json.decode(content)
+	local content = fs.read(lockPath) ---@cast content -nil
+	local decoded = json.decode(content) ---@cast decoded table
 	test.match(decoded, { version = "1", dependencies = { mylib = { path = "../mylib" } } })
 end)
 

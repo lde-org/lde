@@ -9,8 +9,8 @@ test.it("option does not consume -- as a value", function()
 	test.equal(args:option("flamegraph"), nil)
 	test.equal(args:peek(), "--flamegraph")
 
-	local dash, dashPos = args:flag("")
-	test.truthy(dash)
+	local isDash, dashPos = args:flag("")
+	test.truthy(isDash)
 	test.equal(dashPos, 1)
 
 	local rest = args:drain(dashPos)

@@ -185,7 +185,7 @@ test.it("runFile: cwd is the package directory", function()
 		f:close()
 	]])
 
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	local ok, err = pkg:runFile(nil, {})
 	test.truthy(ok)
 	-- sentinel file should be relative to the package dir, not cwd of the test runner
@@ -212,7 +212,7 @@ test.it("build.lua: cwd is the package directory, not the destination", function
 		f:close()
 	]])
 
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	pkg:build()
 
 	-- sentinel should be in the package dir, not the destination (target/cwd-build-test/)
@@ -241,7 +241,7 @@ test.it("runFile: runs an explicit relative file path", function()
 		dependencies = {}
 	}))
 
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	local ok, err = pkg:runFile("./scripts/hello.lua")
 	test.truthy(ok)
 	test.truthy(fs.exists(path.join(dir, "hello-sentinel.txt")))
@@ -268,7 +268,7 @@ test.it("runFile: uses bin as default entry point when set", function()
 	fs.write(path.join(srcDir, "init.lua"), 'error("should not run init.lua")')
 	fs.write(path.join(srcDir, "cli.lua"), 'return true')
 
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	local ok, err = pkg:runFile(nil, {})
 	test.truthy(ok)
 end)
@@ -288,7 +288,7 @@ test.it("runFile: falls back to init.lua when bin is not set", function()
 	fs.mkdir(srcDir)
 	fs.write(path.join(srcDir, "init.lua"), 'return true')
 
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	local ok, err = pkg:runFile(nil, {})
 	test.truthy(ok)
 end)
@@ -310,8 +310,8 @@ test.it("runScript: runs a named shell command from lde.json scripts", function(
 		dependencies = {}
 	}))
 
-	local pkg = lde.Package.open(dir)
-	local ok, output = pkg:runScript("greet", true)
+	local pkg = assert(lde.Package.open(dir))
+	local ok, output = pkg:runScript("greet", true) ---@cast output -nil
 	test.truthy(ok)
 	test.truthy(output:find("hello"))
 end)
@@ -329,7 +329,7 @@ test.it("runScript: errors when script name is not in lde.json", function()
 		dependencies = {}
 	}))
 
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	local ok, err = pcall(function() pkg:runScript("doesnotexist") end)
 	test.falsy(ok)
 	test.includes(tostring(err), "doesnotexist")
@@ -388,7 +388,7 @@ test.it("git dep: installs root package, not a sub-package, when repo has lde.js
 		}
 	}))
 
-	local app = lde.Package.open(appDir)
+	local app = lde.Package.open(appDir) ---@cast app -nil
 	app:installDependencies()
 
 	-- Should install "my-root-pkg", NOT "ansi"
@@ -424,7 +424,7 @@ test.it("end-to-end: package with dependency can install and build", function()
 	}))
 
 	local app = lde.Package.open(appDir)
-	test.truthy(app)
+	test.truthy(app) ---@cast app -nil
 
 	app:installDependencies()
 	app:build()
@@ -477,7 +477,7 @@ test.it("installDependencies: errors when two deps share a name but have differe
 		}
 	}))
 
-	local root = lde.Package.open(rootDir)
+	local root = lde.Package.open(rootDir) ---@cast root -nil
 	local ok, err = pcall(function() root:installDependencies() end)
 	test.falsy(ok)
 	test.includes(tostring(err), "shared-lib")
@@ -523,12 +523,12 @@ test.it("installDependencies: writes a single flat lockfile containing all trans
 		}
 	}))
 
-	local root = lde.Package.open(rootDir)
+	local root = lde.Package.open(rootDir) ---@cast root -nil
 	root:installDependencies()
 
 	-- Root lockfile must contain both middle AND deep
 	local lockfile = root:readLockfile()
-	test.truthy(lockfile)
+	test.truthy(lockfile) ---@cast lockfile -nil
 	test.truthy(lockfile:getDependency("flat-lock-middle"))
 	test.truthy(lockfile:getDependency("flat-lock-deep"))
 
@@ -584,12 +584,12 @@ test.it("installDependencies: ignores sub-package lockfiles during transitive re
 		}
 	}))
 
-	local root = lde.Package.open(rootDir)
+	local root = lde.Package.open(rootDir) ---@cast root -nil
 	root:installDependencies()
 
 	-- Root lockfile must contain deep-a (from lde.json), NOT deep-b (from stale lockfile)
 	local lockfile = root:readLockfile()
-	test.truthy(lockfile)
+	test.truthy(lockfile) ---@cast lockfile -nil
 	test.truthy(lockfile:getDependency("ignore-lockfile-deep-a"))
 	test.falsy(lockfile:getDependency("ignore-lockfile-deep-b"))
 end)
@@ -618,7 +618,7 @@ test.it("runFile: errors with a clear message when package has no bin and no ini
 	fs.mkdir(srcDir)
 	fs.write(path.join(srcDir, "lib.lua"), 'return {}')
 
-	local pkg = lde.Package.open(dir)
+	local pkg = assert(lde.Package.open(dir))
 	local ok, err = pkg:runFile(nil, {})
 	test.falsy(ok)
 	test.includes(err, "no runnable entry point")
@@ -642,7 +642,7 @@ test.it("archive dep: installs a .tar.gz dependency from a URL", function()
 		}
 	}))
 
-	local app = lde.Package.open(appDir)
+	local app = lde.Package.open(appDir) ---@cast app -nil
 	app:installDependencies()
 
 	test.truthy(fs.isdir(path.join(appDir, "target", "term")))

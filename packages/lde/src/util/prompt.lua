@@ -83,6 +83,9 @@ function prompt.select(opts)
 		end
 	end
 
+	---@param i integer
+	---@param selected boolean
+	---@return string
 	local function row(i, selected)
 		local opt = opts.options[i]
 		local marker = selected and ansi.colorize("green", "> ") or "  "
@@ -288,12 +291,12 @@ end
 ---@param language "lua"|"teal"|"moonscript"
 function prompt.ensureCompiler(language)
 	if language == "teal" then
-		local ok, err = pcall(require("lde-core.teal").ensureTL)
+		local ok, err = pcall(function() require("lde-core.teal"):ensure() end)
 		if not ok then
 			ansi.printf("{yellow}Warning: could not install the Teal compiler: %s", tostring(err))
 		end
 	elseif language == "moonscript" then
-		local ok, err = pcall(require("lde-core.moonscript").ensureMoon)
+		local ok, err = pcall(function() require("lde-core.moonscript"):ensure() end)
 		if not ok then
 			ansi.printf("{yellow}Warning: could not install the MoonScript compiler: %s", tostring(err))
 		end

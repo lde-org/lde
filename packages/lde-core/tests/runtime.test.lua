@@ -94,16 +94,16 @@ test.it("profile report prints VM state and hotspot sections", function()
 		for i = 1, 20 do work(1000000) end
 	]])
 
-	local oldVerbose, oldWrite = lde.verbose, io.write
+	local oldIsVerbose, oldWrite = lde.isVerbose, io.write
 	local buf = {}
 	io.write = function(...)
 		local parts = { ... }
 		for i, p in ipairs(parts) do buf[#buf + 1] = tostring(p) end
 	end
-	lde.verbose = true
+	lde.isVerbose = true
 	local ok = lde.runtime.executeFile(script, { profile = true })
 	io.write = oldWrite
-	lde.verbose = oldVerbose
+	lde.isVerbose = oldIsVerbose
 
 	test.truthy(ok)
 	local out = table.concat(buf)
@@ -122,7 +122,7 @@ test.it("readCompiledFile compiles a Teal entry point", function()
 	local tl = path.join(tmpBase, "entry.tl")
 	fs.write(tl, "local n: integer = 40\nreturn tostring(n + 2)\n")
 	local source, err = lde.runtime.readCompiledFile(tl)
-	test.truthy(source, err or "teal compile failed")
+	test.truthy(source, err or "teal compile failed") ---@cast source -nil
 	test.truthy(source:find("return", 1, true))
 	test.truthy(source:find("tostring", 1, true))
 end)
@@ -131,6 +131,6 @@ test.it("readCompiledFile compiles a Moonscript entry point", function()
 	local moon = path.join(tmpBase, "entry.moon")
 	fs.write(moon, "print \"moon\"\n")
 	local source, err = lde.runtime.readCompiledFile(moon)
-	test.truthy(source, err or "moonscript compile failed")
+	test.truthy(source, err or "moonscript compile failed") ---@cast source -nil
 	test.truthy(source:find("print", 1, true))
 end)

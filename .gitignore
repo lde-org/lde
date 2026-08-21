@@ -9,3 +9,6 @@ lde.lock
 /.direnv
 crater/.shotgun
 fuzzer/.fuzz
+.lls
+.scratch
+.check*

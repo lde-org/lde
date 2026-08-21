@@ -3,6 +3,9 @@ local fs = require("fs")
 local M = {}
 
 --- Build a tree from { "outerFrame;...;innerFrame" = count } folded stacks.
+---@param stacks table<string, number>
+---@param rootName string?
+--- Build a tree from { "outerFrame;...;innerFrame" = count } folded stacks.
 function M.buildTree(stacks, rootName)
 	local root = { n = rootName or "root", v = 0, c = {} }
 
@@ -27,10 +30,15 @@ function M.buildTree(stacks, rootName)
 end
 
 --- Minimal JSON encoder for the tree (only needs string keys n, integer v, array c).
+---@param s string
+---@return string
+--- Minimal JSON encoder for the tree (only needs string keys n, integer v, array c).
 local function jsonStr(s)
 	return '"' .. s:gsub('\\', '\\\\'):gsub('"', '\\"'):gsub('\n', '\\n') .. '"'
 end
 
+---@param node table
+---@return string
 local function jsonNode(node)
 	local s = '{"n":' .. jsonStr(node.n) .. ',"v":' .. node.v
 	if #node.c > 0 then

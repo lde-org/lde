@@ -122,7 +122,7 @@ test.it("should be able to parse busted's rockspec", function()
 	local ok, parsed = rocked.parse(BUSTED_ROCKSPEC)
 	if not ok then
 		error("Failed to parse rockspec: " .. parsed)
-	end
+	end ---@cast parsed rocked.raw.Output
 	test.equal(parsed.package, "busted")
 	test.equal(parsed.build.type, "builtin")
 	test.equal(parsed.dependencies[2], "lua_cliargs >= 3.0")
@@ -164,8 +164,8 @@ test.it("sandbox exposes only whitelisted globals", function()
 	]])
 	if not ok then
 		error("probe parse failed: " .. tostring(parsed))
-	end
-	local m = parsed.build.modules
+	end ---@cast parsed rocked.raw.Output
+	local m = parsed.build.modules --[[@as table<string, string>]]
 	test.equal(m["probe.os"], "false")
 	test.equal(m["probe.io"], "false")
 	test.equal(m["probe.debug"], "false")
@@ -234,7 +234,7 @@ source = { url = "git+https://github.com/luarocks/luarocks" }
 ]])
 	if not ok then
 		error("Expected format 3.0 rockspec without build to parse: " .. tostring(parsed))
-	end
+	end ---@cast parsed rocked.raw.Output
 	test.equal(parsed.build.type, "builtin")
 end)
 
