@@ -101,6 +101,16 @@ During `lde test`, the project's `tests/` directory is exposed as `target/tests`
 local helper = require("tests.lib.helper")  -- resolves to tests/lib/helper.lua
 ```
 
+Your own source is built into `target/<name>/` before `lde test` runs, so tests
+reach your modules by **package name** — the same alias rule as dependencies.
+The require name is the `name` field in `lde.json`, never `src`:
+
+```lua
+-- src/mathlib.lua defines M; the package name is "my-package"
+-- tests/mathlib.test.lua
+local mathlib = require("my-package.mathlib")  -- resolves to src/mathlib.lua
+```
+
 ## Testing
 
 ```sh
@@ -193,6 +203,7 @@ Add them with: `lde add <name> --git https://github.com/lde-org/<name>`
 | Problem | Solution |
 |---------|----------|
 | `module 'x' not found` | Run `lde run` — it auto-installs deps. Verify the require name matches the key in `lde.json` `dependencies`. |
+| `module 'src.foo' not found` in a test | Your own source is reachable by package name: `require("<name>.foo")` (the `name` field in `lde.json`), not `require("src.foo")`. |
 | Stale dependencies / changes not taking effect | Delete `target/` and `lde.lock`, then re-run. |
 | Global cache may be corrupted | Delete `~/.lde/git` and/or `~/.lde/tar` to clear isCached downloads. |
 | Build script failing | `build:sh()` asserts exit code 0 — wrap in `pcall` if failures are expected. |

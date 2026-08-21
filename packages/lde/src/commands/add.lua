@@ -98,12 +98,35 @@ local function add(args)
 	end
 
 	local dep
+	---@type lde.Lockfile.GitDependency?
+	local gitLockEntry
 	local verb = isUpdate and "Updated" or "Added"
 	if depType == "path" then
 		dep = { path = depValue }
 	elseif depType == "git" then
+		---@cast depValue -nil
 		local branch = args:option("branch")
 		local commit = args:option("commit")
+
+		-- Resolve the ref now (lsRemote) instead of on the next install, so a
+		-- typo'd or dead URL fails at add time and the lockfile gets the
+		-- auto-pin immediately. An explicit --commit skips resolution — it is
+		-- a deliberate pin (and keeps fully-offline adds working); the install
+		-- still verifies the commit exists when it fetches the repo.
+		local pin = commit
+		if not pin then
+			local sha, rerr = lde.global.resolveGitRef(depValue, branch)
+			if not sha then
+				lde.error.raise(
+					"Failed to resolve '" .. (branch or "HEAD") .. "' for " .. depValue .. ": " .. (rerr or "unknown error"),
+					{ hint = "Double-check the repository URL. It may not exist or may require authentication." })
+			end
+			pin = sha
+		end ---@cast pin -nil
+
+		local lockEntry = { git = depValue, commit = pin }
+		if branch then lockEntry.branch = branch end
+		gitLockEntry = lockEntry
 
 		dep = { git = depValue, branch = branch, commit = commit }
 	elseif isRocks then
@@ -153,12 +176,16 @@ local function add(args)
 	fs.write(configPath, json.encode(config))
 
 	local lockfile = p:readLockfile()
-	if lockfile then
-		lockfile.raw.dependencies = lockfile.raw.dependencies or {}
-		json.removeField(lockfile.raw.dependencies, name)
-		lockfile:setManifestHash(lde.Lockfile.manifestHash(config))
-		lockfile:save()
+	if not lockfile then
+		lockfile = lde.Lockfile.new(p:getLockfilePath(), {})
 	end
+	lockfile.raw.dependencies = lockfile.raw.dependencies or {}
+	json.removeField(lockfile.raw.dependencies, name)
+	if gitLockEntry then
+		json.addField(lockfile.raw.dependencies, name, gitLockEntry)
+	end
+	lockfile:setManifestHash(lde.Lockfile.manifestHash(config))
+	lockfile:save()
 
 	fs.delete(path.join(p:getModulesDir(), ".installed"))
 end

@@ -25,6 +25,31 @@ local function makeProject(name)
 	return dir
 end
 
+--- Create a local git repo with one commit, usable as an offline --git source
+--- (lsRemote + clone both work on local paths). Returns the repo dir.
+---@param name string # repo dir name
+---@param pkgName string? # package name in the repo's lde.json (defaults to name)
+---@return string
+local function makeGitRepo(name, pkgName)
+	local repoDir = path.join(tmpBase, name)
+	fs.rmdir(repoDir)
+	fs.mkdir(repoDir)
+	fs.mkdir(path.join(repoDir, "src"))
+	fs.write(path.join(repoDir, "src", "init.lua"), 'return "from ' .. name .. '"')
+	fs.write(path.join(repoDir, "lde.json"), json.encode({
+		name = pkgName or name,
+		version = "0.1.0",
+		dependencies = {}
+	}))
+	assert(process.exec("git", { "init", "-q" }, { cwd = repoDir }), "git init failed")
+	process.exec("git", { "add", "-A" }, { cwd = repoDir })
+	local code = process.exec(
+		"git", { "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "init" },
+		{ cwd = repoDir })
+	assert(code == 0, "git commit failed: " .. tostring(code))
+	return repoDir
+end
+
 test.it("lde add rocks:<name> stores dependency without registry prefix", function()
 	local dir = makeProject("rocks-prefix-test")
 	ldecli({ "add", "rocks:lpeg" }, dir)
@@ -83,26 +108,30 @@ end)
 
 test.it("lde add --dev --git adds git dep to devDependencies", function()
 	local dir = makeProject("dev-git-test")
-	ldecli({ "add", "mypkg", "--dev", "--git", "https://example.com/mypkg.git" }, dir)
+	local repoDir = makeGitRepo("dev-git-repo")
+	ldecli({ "add", "mypkg", "--dev", "--git", repoDir }, dir)
 
 	local raw = fs.read(path.join(dir, "lde.json")) ---@cast raw -nil
 	local config = json.decode(raw) ---@cast config table<string, any>
 	test.truthy(config.devDependencies, "devDependencies should exist")
 	test.truthy(config.devDependencies["mypkg"], "mypkg should be in devDependencies")
-	test.equal(config.devDependencies["mypkg"].git, "https://example.com/mypkg.git")
+	test.equal(config.devDependencies["mypkg"].git, repoDir)
 	test.falsy(config.dependencies and config.dependencies["mypkg"], "mypkg should not be in dependencies")
 end)
 
 test.it("lde add --dev --git --branch stores branch in devDependencies", function()
 	local dir = makeProject("dev-git-branch-test")
-	ldecli({ "add", "mypkg", "--dev", "--git", "https://example.com/mypkg.git", "--branch", "main" }, dir)
+	local repoDir = makeGitRepo("dev-git-branch-repo")
+	-- Rename the default branch so the --branch ref actually exists.
+	assert(process.exec("git", { "branch", "-m", "main" }, { cwd = repoDir }), "git branch rename failed")
+	ldecli({ "add", "mypkg", "--dev", "--git", repoDir, "--branch", "main" }, dir)
 
 	local raw = fs.read(path.join(dir, "lde.json")) ---@cast raw -nil
 	local config = json.decode(raw) ---@cast config table<string, any>
 	test.truthy(config.devDependencies, "devDependencies should exist")
 	local dep = config.devDependencies["mypkg"]
 	test.truthy(dep, "mypkg should be in devDependencies")
-	test.equal(dep.git, "https://example.com/mypkg.git")
+	test.equal(dep.git, repoDir)
 	test.equal(dep.branch, "main")
 end)
 
@@ -196,24 +225,11 @@ test.it("lde add removes the dep entry from lde.lock if present", function()
 	test.falsy(fs.exists(path.join(dir, "target", ".installed")), ".installed should be deleted")
 end)
 
-test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde add --git records the dep and sync pins the commit in the lockfile", function()
+test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde add --git pins the commit in the lockfile at add time", function()
 	-- Local repo so the whole flow is offline (lsRemote + clone on local paths).
-	local repoDir = path.join(tmpBase, "add-git-repo")
-	fs.rmdir(repoDir)
-	fs.mkdir(repoDir)
-	fs.mkdir(path.join(repoDir, "src"))
-	fs.write(path.join(repoDir, "src", "init.lua"), 'return "add-git"')
-	fs.write(path.join(repoDir, "lde.json"), json.encode({
-		name = "addgit",
-		version = "0.1.0",
-		dependencies = {}
-	}))
-	assert(process.exec("git", { "init", "-q" }, { cwd = repoDir }), "git init failed")
-	process.exec("git", { "add", "-A" }, { cwd = repoDir })
-	local code = process.exec(
-		"git", { "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "init" },
-		{ cwd = repoDir })
-	assert(code == 0, "git commit failed: " .. tostring(code))
+	-- The package inside the repo must be named "addgit" — that's the require
+	-- alias findNamedPackage matches against during sync.
+	local repoDir = makeGitRepo("add-git-repo", "addgit")
 
 	local dir = makeProject("add-git-test")
 	local ok, out = ldecli({ "add", "addgit", "--git", repoDir }, dir)
@@ -224,22 +240,56 @@ test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde add --git records the dep and s
 	test.truthy(config.dependencies["addgit"], "addgit should be in dependencies")
 	test.equal(config.dependencies["addgit"].git, repoDir)
 
-	-- The commit is auto-pinned at install time, not by add itself.
+	-- The commit is auto-pinned by add itself (lsRemote at add time): the
+	-- lockfile is created immediately and carries the resolved HEAD sha.
 	local lockPath = path.join(dir, "lde.lock")
-	if fs.exists(lockPath) then
-		local lockBeforeRaw = fs.read(lockPath) ---@cast lockBeforeRaw -nil
-		local lockBefore = json.decode(lockBeforeRaw) ---@cast lockBefore table<string, any>
-		test.falsy(lockBefore.dependencies["addgit"], "add must not pin the commit yet")
-	end
+	test.truthy(fs.exists(lockPath), "lde add --git must create the lockfile")
+	local lockRaw = fs.read(lockPath) ---@cast lockRaw -nil
+	local lock = json.decode(lockRaw) ---@cast lock table<string, any>
+	local entry = lock.dependencies["addgit"]
+	test.truthy(entry and entry.commit, "add must pin the commit immediately")
+	test.truthy(entry.commit:match("^%x+$"), "expected a hex commit sha")
+	test.equal(entry.git, repoDir)
 
+	-- sync reuses the add-time pin (no re-resolution) and installs the dep.
 	local ok2, out2 = ldecli({ "sync" }, dir)
 	test.truthy(ok2, "sync failed: " .. tostring(out2))
-	local lockAfterRaw = fs.read(path.join(dir, "lde.lock")) ---@cast lockAfterRaw -nil
+	local lockAfterRaw = fs.read(lockPath) ---@cast lockAfterRaw -nil
 	local lockAfter = json.decode(lockAfterRaw) ---@cast lockAfter table<string, any>
-	local entry = lockAfter.dependencies["addgit"]
-	test.truthy(entry and entry.commit, "commit must be auto-pinned after sync")
-	test.truthy(entry.commit:match("^%x+$"), "expected a hex commit sha")
+	test.equal(lockAfter.dependencies["addgit"].commit, entry.commit, "sync must keep the add-time pin")
 	test.truthy(fs.exists(path.join(dir, "target", "addgit", "init.lua")))
+end)
+
+test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde add --git fails on a nonexistent repository and leaves the manifest untouched", function()
+	local dir = makeProject("add-git-missing-test")
+	local ok, out = ldecli({ "add", "missing", "--git", path.join(tmpBase, "no-such-repo") }, dir)
+	test.falsy(ok, "adding a nonexistent repo must fail")
+	test.includes(out or "", "Failed to resolve")
+
+	-- The failed add must not have written the manifest or a lockfile.
+	local raw = fs.read(path.join(dir, "lde.json")) ---@cast raw -nil
+	local config = json.decode(raw) ---@cast config table<string, any>
+	test.falsy(config.dependencies["missing"], "manifest must be untouched after a failed add")
+	test.falsy(fs.exists(path.join(dir, "lde.lock")), "no lockfile should be written on a failed add")
+end)
+
+test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde add --git --commit skips resolution and records the pin offline", function()
+	local dir = makeProject("add-git-commit-test")
+	-- A commit that need not exist: --commit is a deliberate pin, so add must
+	-- not reach the network. The manifest carries it verbatim.
+	local ok, out = ldecli({ "add", "pinned", "--git", "https://example.com/pinned.git", "--commit", "deadbeef" }, dir)
+	test.truthy(ok, "lde add --git --commit failed: " .. tostring(out))
+
+	local raw = fs.read(path.join(dir, "lde.json")) ---@cast raw -nil
+	local config = json.decode(raw) ---@cast config table<string, any>
+	local dep = config.dependencies["pinned"]
+	test.truthy(dep, "pinned should be in dependencies")
+	test.equal(dep.git, "https://example.com/pinned.git")
+	test.equal(dep.commit, "deadbeef")
+
+	local lockRaw = fs.read(path.join(dir, "lde.lock")) ---@cast lockRaw -nil
+	local lock = json.decode(lockRaw) ---@cast lock table<string, any>
+	test.equal(lock.dependencies["pinned"].commit, "deadbeef", "lockfile should carry the explicit commit")
 end)
 
 test.it("lde add <name>@latest pins the newest version", function()
@@ -334,7 +384,8 @@ end)
 
 test.it("lde add version on a git/path dep fails cleanly", function()
 	local dir = makeProject("repin-git-test")
-	local ok, out = ldecli({ "add", "mypkg", "--git", "https://example.com/mypkg.git" }, dir)
+	local repoDir = makeGitRepo("repin-git-repo")
+	local ok, out = ldecli({ "add", "mypkg", "--git", repoDir }, dir)
 	test.truthy(ok, "git add failed: " .. tostring(out))
 
 	ok, out = ldecli({ "add", "mypkg@1.0.0" }, dir)

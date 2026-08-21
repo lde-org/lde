@@ -168,6 +168,13 @@ Every assertion takes an optional trailing context message, appended to the fail
 
 Test files must match `**/*.test.lua`. During `lde test`, `tests/` is exposed as `target/tests` so test files can `require("tests.lib.something")`.
 
+Your own source is built into `target/<name>/` before tests run, so tests reach your modules by package name (the `name` field in `lde.json`) — never `require("src.foo")`:
+
+```lua
+-- tests/mathlib.test.lua
+local mathlib = require("my-package.mathlib")  -- resolves to src/mathlib.lua
+```
+
 ## Code Style
 
 Follow `STYLE.md` — the full style guide (naming, LuaCATs, comments, structure).

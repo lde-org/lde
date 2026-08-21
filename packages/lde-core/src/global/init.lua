@@ -337,6 +337,10 @@ local function resolveGitRef(repoUrl, ref)
 	return nil, err
 end
 
+-- Reused by `lde add` to validate a git source at add time and pin the
+-- resolved commit in the lockfile immediately.
+global.resolveGitRef = resolveGitRef
+
 --- Ensures a git repo is cached locally (via tarball for recognized hosts,
 --- shallow git clone otherwise). Always resolves to a specific commit.
 --- With `offline`, never touches the network: the commit must be given and the
