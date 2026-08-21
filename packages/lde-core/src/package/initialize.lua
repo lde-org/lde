@@ -217,7 +217,7 @@ local function hasBinary(name)
 				end
 			else
 				local stat = fs.stat(base)
-				if stat and bit.band(stat.mode or 0, 0x49) ~= 0 then -- any exec bit
+				if stat and (stat.mode ?? 0) & 0x49 ~= 0 then -- any exec bit
 					return true
 				end
 			end

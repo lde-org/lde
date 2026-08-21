@@ -181,7 +181,41 @@ if not file:sub(1, 1) == "/" or file:match("^%a:[/\\]") then
 
 Do NOT leave trailing whitespace.
 
-## 6. Performance
+## 6. LuaJIT 3.0 syntax
+
+lde runs on the latest LuaJIT, which backports most of the LuaJIT 3.0 syntax
+extensions (see https://luajit.org/extensions.html#lj30_bp_syntax). Use them
+where they simplify or clarify.
+
+Allowed and encouraged:
+
+| Syntax | Use instead of |
+|---|---|
+| `cond ? a : b` | `cond and a or b` (and its `false` pitfall) |
+| `x ?? default` | `x or default` when `x` can be `false` |
+| `x?.field` | `x and x.field` chains |
+| `a += b`, `s ..= t` | `a = a + b`, `s = s .. t` |
+| `a & b`, `a \| b`, `~a` | `bit.band`, `bit.bor`, `bit.bnot` |
+| `x = || -> expr` | anonymous function literals |
+
+Forbidden:
+
+1. Do NOT use `||` (logical or), `&&` (logical and), or `!=` (not equal).
+   Use `or`, `and`, `~=`. (The `||` in the lambda syntax `|| ->` is the empty
+   parameter list, not a logical operator.)
+2. Do NOT use the optional method-call form `obj?:method()`. It is confusing
+   and the language server cannot parse it.
+3. Do NOT use `//` (floor division). It is NOT backported to this LuaJIT.
+
+Language-server caveats:
+
+1. The language server cannot parse `a?.[key]` (bracket safe-navigation) —
+   write `a and a[key]`.
+2. The language server still reports `need-check-nil` on `?.` bases and in
+   some ternary branches. Prefer `and`/`or` when the checker complains rather
+   than adding casts.
+
+## 7. Performance
 
 Do minimize allocations. LuaJIT's GC is stop-the-world. Reuse tables. Use
 `table.concat` instead of string concatenation in hot loops.
@@ -190,7 +224,7 @@ Do NOT create closures inside tight loops.
 
 Do use FFI for hot paths. See AGENTS.md, section "Performance".
 
-## 7. Tests
+## 8. Tests
 
 Do name test files `*.test.lua` under `tests/`.
 

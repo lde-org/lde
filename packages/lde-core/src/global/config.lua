@@ -39,7 +39,7 @@ local function getConfig()
 	end
 
 	cache = Config.new({
-		registry = type(data.registry) == "string" and data.registry or defaults.registry
+		registry = type(data.registry) == "string" ? data.registry : defaults.registry
 	})
 
 	return cache

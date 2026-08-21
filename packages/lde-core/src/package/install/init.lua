@@ -133,7 +133,7 @@ local function makeBuildScheduler(ctx)
 		if not ok then
 			lde.error.raise("Build failed for '" .. job.alias .. "': " .. tostring(err))
 		end
-		ctx.builds = ctx.builds + 1
+		ctx.builds += 1
 		done[job.alias] = true
 		pumpQueue()
 	end
@@ -177,7 +177,7 @@ local function makeBuildScheduler(ctx)
 		if deferred then
 			pending[#pending + 1] = { alias = alias, build = deferred }
 		else
-			if hasBuilt then ctx.builds = ctx.builds + 1 end
+			if hasBuilt then ctx.builds += 1 end
 			done[alias] = true
 			pumpQueue()
 		end
@@ -229,7 +229,7 @@ local function makeBuildScheduler(ctx)
 					-- finalizeJob may pump the queue and append new jobs; keep
 					-- this index to re-check the element that shifted into it.
 				else
-					i = i + 1
+					i += 1
 				end
 			end
 			if not hasProgressed then
@@ -320,7 +320,7 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 	-- no-op because everything was already materialized.
 	local function noopResult()
 		local installs = 0
-		for _ in pairs(dependencies) do installs = installs + 1 end
+		for _ in pairs(dependencies) do installs += 1 end
 		return { checked = installs, installs = installs, hasChanged = false, isCached = true }
 	end
 
@@ -382,7 +382,7 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 	ctx.build = makeBuildScheduler(ctx)
 
 	local installs = 0
-	for _ in pairs(dependencies) do installs = installs + 1 end
+	for _ in pairs(dependencies) do installs += 1 end
 
 	-- Parallel download session: sources are prefetched in batches during the
 	-- graph walk and materialized afterwards. Always cleaned up, even on error.
@@ -398,7 +398,7 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 	local bar = nil
 	if not isSessionActive then
 		bar = lde.isVerbose and installs > 0
-			and ansi.progress("Downloading dependencies") or nil
+			? ansi.progress("Downloading dependencies") : nil
 		download.begin(bar and {
 			progress = function(done, total)
 				local ratio = total > 0 and (done / total) or nil
@@ -437,7 +437,7 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 	if bar and ctx.downloads > 0 then bar:done() end
 
 	local checked = 0
-	for _ in pairs(ctx.stack) do checked = checked + 1 end
+	for _ in pairs(ctx.stack) do checked += 1 end
 
 	-- With nothing downloaded or built the bar never rendered anything, so it
 	-- is discarded silently for summary callers (they print the "No changes"

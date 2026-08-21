@@ -188,6 +188,11 @@ primary way types are communicated across modules.
 - Casts go on the same line as the check that guarantees them:
   `test.truthy(value) ---@cast value -nil`. Prefer `local pkg = assert(lde.Package.open(dir))`
   over a guard-plus-cast, and never put two casts on one line.
+- lde runs on the latest LuaJIT, so LuaJIT 3.0 syntax is available: `?:`,
+  `??`, `?.`, `+=`, `..=`, bit operators (`&`, `|`, `~`), and `|| ->` lambdas.
+  Use them where they simplify. Never use `||`/`&&`/`!=` (use `or`/`and`/`~=`),
+  never `obj?:method()`, never `//`. See STYLE.md §6 for the full rules and
+  language-server caveats.
 - camelCase for everything; PascalCase only for class names.
 - Comments are for LuaCATs types, safety concerns, and non-obvious behavior.
   No narration, no LLM filler.

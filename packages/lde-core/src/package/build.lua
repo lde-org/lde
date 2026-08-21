@@ -136,7 +136,7 @@ local function buildPackage(package, destinationPath)
 
 		if inputsChanged then
 			local alreadyDone = alreadyBuilt[destinationPath] or fs.exists(path.join(destinationPath, ".lde-built"))
-			local p = (lde.isVerbose and not alreadyDone) and ansi.progress("Building " .. package:getName()) or nil
+			local p = (lde.isVerbose and not alreadyDone) ? ansi.progress("Building " .. package:getName()) : nil
 
 			-- Record the input state after a successful build (or a confirmed
 			-- no-change run) so the next build can skip. For the subprocess path

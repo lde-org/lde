@@ -37,7 +37,7 @@ do
 				-- GetConsoleMode fails when stdout isn't a console (redirected), in
 				-- which case there's nothing to enable.
 				if kernel32.GetConsoleMode(hOut, mode) ~= 0 then
-					kernel32.SetConsoleMode(hOut, bit.bor(mode[0], ENABLE_VIRTUAL_TERMINAL_PROCESSING))
+					kernel32.SetConsoleMode(hOut, mode[0] | ENABLE_VIRTUAL_TERMINAL_PROCESSING)
 				end
 			end)
 		end
@@ -256,7 +256,7 @@ function ansi.progress(label)
 	local function render(ratio, info)
 		lastRatio, lastInfo = ratio, info
 		local barStr = renderBar(ratio)
-		local pct = ratio and string.format("%3d%%", math.floor(ratio * 100)) or nil
+		local pct = ratio ? string.format("%3d%%", math.floor(ratio * 100)) : nil
 		local elapsed = formatElapsed(now() - startTime)
 
 		if pct == lastRendered then return end
@@ -264,12 +264,12 @@ function ansi.progress(label)
 
 		local line = ESC .. "2K\r" .. colors.gray .. "  - " .. colors.reset .. label
 		if barStr then
-			line = line .. " " .. barStr .. " " .. pct
+			line ..= " " .. barStr .. " " .. pct
 		end
 		if info then
-			line = line .. " " .. info
+			line ..= " " .. info
 		end
-		line = line .. " " .. colors.gray .. elapsed .. colors.reset
+		line ..= " " .. colors.gray .. elapsed .. colors.reset
 		io.write(line)
 		io.flush()
 	end

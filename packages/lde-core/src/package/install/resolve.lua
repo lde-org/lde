@@ -192,7 +192,7 @@ local function makeLuarocksNode(alias, depInfo)
 		sourceKey = "luarocks:" .. name .. "@" .. version,
 		hasMetadata = rockspecUrl ~= nil,
 		rockspecUrl = rockspecUrl,
-		rockspecFile = rockspecUrl and lde.util.rockspecCacheFile(rockspecUrl) or nil,
+		rockspecFile = rockspecUrl ? lde.util.rockspecCacheFile(rockspecUrl) : nil,
 		srcUrl = srcUrl, -- preferred content artifact; nil when no src rock exists
 		isExpandAfter = not rockspecUrl, -- without a rockspec the deps come from the content
 	}
@@ -692,7 +692,7 @@ local function resolveDependencies(dependencies, ctx)
 					if c.kind ~= "clone" then
 						download.prefetch(c.url --[[@as string]], c.file --[[@as string]])
 					end
-					ctx.downloads = ctx.downloads + 1
+					ctx.downloads += 1
 					contentBatch[#contentBatch + 1] = node
 				else
 					-- Content already cached: consume + expand without downloading.
@@ -738,7 +738,7 @@ local function resolveDependencies(dependencies, ctx)
 				download.prefetch(c.url --[[@as string]], c.file --[[@as string]])
 				contentByFile[c.file --[[@as string]]] = node
 			end
-			ctx.downloads = ctx.downloads + 1
+			ctx.downloads += 1
 			contentNodes[#contentNodes + 1] = node
 		end
 	end

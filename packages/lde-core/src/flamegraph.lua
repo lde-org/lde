@@ -10,7 +10,7 @@ function M.buildTree(stacks, rootName)
 	local root = { n = rootName or "root", v = 0, c = {} }
 
 	for stackStr, count in pairs(stacks) do
-		root.v = root.v + count
+		root.v += count
 		local node = root
 		for frame in stackStr:gmatch("([^;]+)") do
 			local child
@@ -21,7 +21,7 @@ function M.buildTree(stacks, rootName)
 				child = { n = frame, v = 0, c = {} }
 				node.c[#node.c + 1] = child
 			end
-			child.v = child.v + count
+			child.v += count
 			node = child
 		end
 	end

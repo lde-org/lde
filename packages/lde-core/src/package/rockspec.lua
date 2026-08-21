@@ -652,7 +652,7 @@ local function openRockspec(dir, rockspecPath)
 					local srcBase = path.basename(src)
 					-- .d.tl declaration files keep both suffixes; others keep their
 					-- last extension.
-					local ext = srcBase:match("%.d%.tl$") and "d.tl" or srcBase:match("%.([^%.]+)$")
+					local ext = srcBase:match("%.d%.tl$") ? "d.tl" : srcBase:match("%.([^%.]+)$")
 					local modBase = ext and srcBase:sub(1, -#ext - 1) or srcBase
 					if type(modname) == "number" then
 						-- LuaRocks semantics: a numeric key installs the file under its
@@ -730,21 +730,21 @@ local function openRockspec(dir, rockspecPath)
 				local args = {}
 				local i = 1
 				while i <= #cmd do
-					while i <= #cmd and cmd:sub(i, i) == " " do i = i + 1 end
+					while i <= #cmd and cmd:sub(i, i) == " " do i += 1 end
 					if i > #cmd then break end
 					local token = ""
 					while i <= #cmd and cmd:sub(i, i) ~= " " do
 						local c = cmd:sub(i, i)
 						if c == '"' then
-							i = i + 1
+							i += 1
 							while i <= #cmd and cmd:sub(i, i) ~= '"' do
 								token = token .. cmd:sub(i, i)
-								i = i + 1
+								i += 1
 							end
-							if i <= #cmd then i = i + 1 end -- skip closing quote
+							if i <= #cmd then i += 1 end -- skip closing quote
 						else
 							token = token .. c
-							i = i + 1
+							i += 1
 						end
 					end
 					args[#args + 1] = token

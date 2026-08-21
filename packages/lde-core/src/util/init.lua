@@ -247,7 +247,7 @@ function util.resolveLuarocksBest(name, constraint)
 	if cachedEntry then
 		local url = type(cachedEntry) == "table" and cachedEntry.url or cachedEntry ---@cast url string
 		local arch = type(cachedEntry) == "table" and cachedEntry.arch or "rockspec"
-		local suffix = arch == "src" and "%.src%.rock$" or "%.rockspec$"
+		local suffix = arch == "src" ? "%.src%.rock$" : "%.rockspec$"
 		local version = url:match("^.*/" .. name:gsub("([%-%.%+%*%?%[%]%^%$%(%)%%])", "%%%1") .. "%-([^/]+)" .. suffix)
 		if version then
 			local rockspecUrl = url:gsub("%.src%.rock$", ".rockspec")

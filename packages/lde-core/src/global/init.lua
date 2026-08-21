@@ -73,7 +73,7 @@ end
 ---@param label string
 local function downloadTarball(url, commit, hostType, repoDir, label)
 	local tarballUrl = buildTarballUrl(url, commit, hostType)
-	local bar = lde.isVerbose and ansi.progress("Downloading " .. label) or nil
+	local bar = lde.isVerbose ? ansi.progress("Downloading " .. label) : nil
 	-- mkdirAll: namespaced names nest the cache dir (git/ns/pkg-<commit>).
 	fs.mkdirAll(repoDir)
 
@@ -83,7 +83,7 @@ local function downloadTarball(url, commit, hostType, repoDir, label)
 	if bar then
 		dlOpts = {
 			progress = function(dltotal, dlnow)
-				local ratio = dltotal > 0 and (dlnow / dltotal) or nil
+				local ratio = dltotal > 0 ? dlnow / dltotal : nil
 				local info = dltotal > 0
 					and (ansi.formatBytes(dlnow) .. " / " .. ansi.formatBytes(dltotal))
 					or ansi.formatBytes(dlnow)
@@ -371,14 +371,14 @@ function global.getOrInitGitRepo(repoName, repoUrl, branch, commit, isOffline)
 			downloadTarball(repoUrl, commit, hostType, repoDir, repoName)
 		else
 			local progress
-			local bar = lde.isVerbose and ansi.progress("Cloning " .. repoName) or nil
+			local bar = lde.isVerbose ? ansi.progress("Cloning " .. repoName) : nil
 			if bar then
 				local totalObjs = 0
 				progress = function(stats)
 					if stats.total_objects > 0 then
 						totalObjs = stats.total_objects
 					end
-					local ratio = totalObjs > 0 and (stats.indexed_objects / totalObjs) or nil
+					local ratio = totalObjs > 0 ? stats.indexed_objects / totalObjs : nil
 					local info = totalObjs > 0
 						and string.format("%d/%d objects", stats.indexed_objects, totalObjs)
 						or string.format("%d objects, %s", stats.received_objects, ansi.formatBytes(stats.received_bytes))
@@ -466,7 +466,7 @@ function global.getOrInitArchive(url, isOffline)
 	end
 	if not fs.exists(archiveDir) then
 		local filename = url:match("([^/]+)$") or url
-		local bar = lde.isVerbose and ansi.progress("Downloading " .. filename) or nil
+		local bar = lde.isVerbose ? ansi.progress("Downloading " .. filename) : nil
 		-- Created up front: curl.download opens archiveDir .. ".archive" directly,
 		-- so the parent must exist. Removed again on failure (see below).
 		fs.mkdir(archiveDir)
@@ -477,7 +477,7 @@ function global.getOrInitArchive(url, isOffline)
 		if bar then
 			dlOpts = {
 				progress = function(dltotal, dlnow)
-					local ratio = dltotal > 0 and (dlnow / dltotal) or nil
+					local ratio = dltotal > 0 ? dlnow / dltotal : nil
 					local info = dltotal > 0
 						and (ansi.formatBytes(dlnow) .. " / " .. ansi.formatBytes(dltotal))
 						or ansi.formatBytes(dlnow)
@@ -720,7 +720,7 @@ function global.ensureMingw(opts)
 	local code = process.exec("gcc", { "--version" })
 	if code == 0 then return end
 
-	local p1 = lde.isVerbose and ansi.progress("Downloading 7z extractor") or nil
+	local p1 = lde.isVerbose ? ansi.progress("Downloading 7z extractor") : nil
 
 	local tmpDir = path.join(global.getDir(), "mingw-tmp")
 	fs.mkdir(tmpDir)
@@ -732,7 +732,7 @@ function global.ensureMingw(opts)
 	if p1 then
 		dlOpts1 = {
 			progress = function(dltotal, dlnow)
-				local ratio = dltotal > 0 and (dlnow / dltotal) or nil
+				local ratio = dltotal > 0 ? dlnow / dltotal : nil
 				local info = dltotal > 0
 					and (ansi.formatBytes(dlnow) .. " / " .. ansi.formatBytes(dltotal))
 					or ansi.formatBytes(dlnow)
@@ -748,12 +748,12 @@ function global.ensureMingw(opts)
 	end
 	if p1 then p1:done("Downloaded 7z extractor") end
 
-	local p2 = lde.isVerbose and ansi.progress("Downloading toolchain") or nil
+	local p2 = lde.isVerbose ? ansi.progress("Downloading toolchain") : nil
 	local dlOpts2
 	if p2 then
 		dlOpts2 = {
 			progress = function(dltotal, dlnow)
-				local ratio = dltotal > 0 and (dlnow / dltotal) or nil
+				local ratio = dltotal > 0 ? dlnow / dltotal : nil
 				local info = dltotal > 0
 				and (ansi.formatBytes(dlnow) .. " / " .. ansi.formatBytes(dltotal))
 				or ansi.formatBytes(dlnow)
@@ -769,7 +769,7 @@ function global.ensureMingw(opts)
 	end
 	if p2 then p2:done("Downloaded toolchain") end
 
-	local p3 = lde.isVerbose and ansi.progress("Extracting toolchain") or nil
+	local p3 = lde.isVerbose ? ansi.progress("Extracting toolchain") : nil
 	fs.mkdir(mingwDir)
 	code, _, stderr = process.exec(sevenzPath, { "x", archivePath, "-o" .. mingwDir, "-y" })
 	fs.rmdir(tmpDir)

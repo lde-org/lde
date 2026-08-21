@@ -258,7 +258,7 @@ end
 ---@param total number
 ---@param skipped number
 local function printSummary(failures, passed, total, skipped)
-	local skipStr = skipped > 0 and ansi.format(", {yellow}%d skipped", skipped) or ""
+	local skipStr = skipped > 0 ? ansi.format(", {yellow}%d skipped", skipped) : ""
 	if failures > 0 then
 		ansi.printf("{white}Tests:  {red}%d failed{white}, {green}%d passed{white}, {cyan}%d total" .. skipStr, failures,
 			passed, total)

@@ -465,14 +465,14 @@ local function runTests(package, reporter, filters, opts)
 		local failCount = 0
 		local skipCount = 0
 		for _, r in ipairs(fileResult.results) do
-			if r.skipped then skipCount = skipCount + 1
-			elseif not r.ok then failCount = failCount + 1
+			if r.skipped then skipCount += 1
+			elseif not r.ok then failCount += 1
 			end
 		end
 
 		-- A file that fails to load ran no tests, but is itself a failure.
 		local fileFailed = fileResult.error and true or false
-		if fileFailed then failCount = failCount + 1 end
+		if fileFailed then failCount += 1 end
 
 		totalTests    = totalTests    + #fileResult.results - skipCount + (fileFailed and 1 or 0)
 		totalFailures = totalFailures + failCount
