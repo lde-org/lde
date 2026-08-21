@@ -682,7 +682,7 @@ local function openRockspec(dir, rockspecPath)
 					-- .d.tl declaration files keep both suffixes; others keep their
 					-- last extension.
 					local ext = srcBase:match("%.d%.tl$") ? "d.tl" : srcBase:match("%.([^%.]+)$")
-					local modBase = ext and srcBase:sub(1, -#ext - 1) or srcBase
+					local modBase = ext and srcBase:sub(1, -#ext - 2) or srcBase
 					if type(modname) == "number" then
 						-- LuaRocks semantics: a numeric key installs the file under its
 						-- own basename (e.g. "tl.tl" becomes module "tl").

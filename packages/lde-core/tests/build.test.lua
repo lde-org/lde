@@ -1490,6 +1490,39 @@ build = {
 	test.equal(cfg.bin, "myscript")
 end)
 
+test.it("rockspec: array install.lua entries install under their basename (semver pattern)", function()
+	-- A type="none" rock (e.g. luarocks semver) lists its module in
+	-- build.install.lua as a bare array entry. The basename-derived module name
+	-- must not keep the trailing dot (which used to produce target/semver/.lua
+	-- and make require("semver") fail).
+	local dir = path.join(tmpBase, "array-install-none-rock")
+	fs.mkdir(dir)
+	fs.write(path.join(dir, "semver.lua"), 'return { version = "1.0" }')
+	fs.write(path.join(dir, "none-install-1.0-1.rockspec"), [[
+package = "none-install"
+version = "1.0-1"
+source = { url = "https://example.com" }
+build = {
+  type = "none",
+  install = {
+    lua = { "semver.lua" }
+  }
+}
+]])
+
+	local pkg, err = lde.Package.openRockspec(dir)
+	test.truthy(pkg, err) ---@cast pkg -nil
+
+	local outputDir = path.join(dir, "target", "none-install")
+	local ok, berr = pkg:runBuildScript(outputDir)
+	test.truthy(ok, berr)
+
+	-- The module lands at target/semver.lua, not target/semver/.lua.
+	test.truthy(fs.exists(path.join(dir, "target", "semver.lua")))
+	test.falsy(fs.exists(path.join(dir, "target", "semver", ".lua")),
+		"the module must not land under a dir named after itself with a leading-dot filename")
+end)
+
 --
 -- Regression: platform build.install.lua must merge over the base build, and
 -- array-style lua entries install under their basename (LuaSec pattern).

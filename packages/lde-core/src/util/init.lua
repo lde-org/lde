@@ -281,6 +281,7 @@ function util.suggestPackage(name, wasRocks)
 			end
 		end
 	end
+
 	return "Search available packages with: `lde search " .. name .. "`"
 end
 
