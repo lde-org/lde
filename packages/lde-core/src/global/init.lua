@@ -20,7 +20,7 @@ local git2 = util.lazy(|| -> require("git2-sys"))
 global.getConfig = require("lde-core.global.config")
 global.currentVersion = (function()
 	local ok, v = pcall(require, "lde.version")
-	return ok and v or "0.10.0"
+	return ok and v or "0.11.0"
 end)()
 
 ---@param s string?

@@ -304,7 +304,7 @@ end
 ---@return string
 local function versionFooter()
 	local ok, v = pcall(require, "lde.version")
-	return string.format("lde v%s", ok and v or "0.10.0")
+	return string.format("lde v%s", ok and v or "0.11.0")
 end
 
 --- Render an error Bun-style for `lde run` / `lde x` / loose files:

@@ -6,7 +6,7 @@
 
 local build = require("lde-build")
 
-local BASE_VERSION = "0.10.0"
+local BASE_VERSION = "0.11.0"
 
 local releaseEnv = os.getenv("LDE_RELEASE")
 local release = releaseEnv ~= nil and releaseEnv ~= ""
