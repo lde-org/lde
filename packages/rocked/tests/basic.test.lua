@@ -436,3 +436,23 @@ test.it("runBackend exercises the extended polyfill surface", function()
 	})
 	test.truthy(ok, err)
 end)
+
+--
+-- rocked.gitDependency
+--
+
+test.it("gitDependency detects git+https URLs", function()
+	test.equal(rocked.gitDependency("git+https://github.com/lde-org/path"), "git+https://github.com/lde-org/path")
+	test.equal(rocked.gitDependency("git+https://github.com/lde-org/path.git"), "git+https://github.com/lde-org/path.git")
+end)
+
+test.it("gitDependency detects git:// and .git URLs", function()
+	test.equal(rocked.gitDependency("git://github.com/lde-org/path"), "git://github.com/lde-org/path")
+	test.equal(rocked.gitDependency("https://github.com/lde-org/path.git"), "https://github.com/lde-org/path.git")
+end)
+
+test.it("gitDependency returns nil for rock deps", function()
+	test.falsy(rocked.gitDependency("luafilesystem >= 1.8.0"))
+	test.falsy(rocked.gitDependency("lua >= 5.1"))
+	test.falsy(rocked.gitDependency("some-rock 1.0-1"))
+end)

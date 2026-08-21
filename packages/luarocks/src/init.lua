@@ -252,6 +252,37 @@ local function cmpVer(a, b)
 	return 0
 end
 
+--- Best version matching an exact-version constraint ("1.8.0-1") or a bare
+--- version without the luarocks revision suffix ("1.8.0" → "1.8.0-1"; "1.8"
+--- matches every 1.8.x). Returns nil when nothing matches.
+---@param versions table<string, any> # manifest version -> entries
+---@param constraint string
+---@return string? version
+local function matchExactOrPrefix(versions, constraint)
+	if versions[constraint] then return constraint end
+
+	-- parseVer appends a synthetic 0 for a missing revision; drop it so the
+	-- constraint's remaining parts prefix the candidate's (revision included).
+	local cparts = parseVer(constraint)
+	local prefix = {}
+	for i = 1, #cparts - 1 do prefix[i] = cparts[i] end
+
+	local best, bestParts ---@type string?, number[]?
+	for v in pairs(versions) do
+		local vparts = parseVer(v)
+		local ok = #vparts >= #prefix
+		for i = 1, #prefix do
+			if vparts[i] ~= prefix[i] then ok = false break end
+		end
+		-- best and bestParts are set together, so bestParts is non-nil
+		-- whenever the `not best` short-circuit lets cmpVer run.
+		if ok and (not best or cmpVer(vparts, bestParts or {}) > 0) then
+			best, bestParts = v, vparts
+		end
+	end
+	return best
+end
+
 ---@param ver string
 ---@param op string
 ---@param constraint string
@@ -307,8 +338,10 @@ function luarocks.getRockspecUrl(manifest, name, constraint)
 	end
 
 	if #constraints == 0 then
-		local url = urls[constraint]
-		return url or nil, url and nil or "Version '" .. constraint .. "' not found for: " .. name
+		-- Exact version ("1.8.0-1") or a bare version prefix ("1.8.0", "1.8")
+		local v = matchExactOrPrefix(urls, constraint)
+		if v then return urls[v] end
+		return nil, "Version '" .. constraint .. "' not found for: " .. name
 	end
 
 	for _, v in ipairs(sorted) do
@@ -345,8 +378,9 @@ local function pickUrl(urlMap, name, constraint)
 	end
 
 	if #constraints == 0 then
-		local url = urlMap[constraint]
-		return url or nil, url and nil or "Version '" .. constraint .. "' not found for: " .. name
+		local v = matchExactOrPrefix(urlMap, constraint)
+		if v then return urlMap[v] end
+		return nil, "Version '" .. constraint .. "' not found for: " .. name
 	end
 
 	for _, v in ipairs(sorted) do
@@ -412,8 +446,9 @@ function luarocks.getBest(manifest, name, constraint)
 			constraints[#constraints + 1] = { op = op, ver = ver }
 		end
 		if #constraints == 0 then
-			-- Exact version string
-			sorted = { constraint }
+			-- Exact version ("1.8.0-1") or a bare version prefix ("1.8.0", "1.8")
+			local v = matchExactOrPrefix(versions, constraint)
+			if v then sorted = { v } else sorted = {} end
 		end
 	end
 
@@ -469,8 +504,9 @@ function luarocks.listBest(manifest, name, constraint)
 			constraints[#constraints + 1] = { op = op, ver = ver }
 		end
 		if #constraints == 0 then
-			-- Exact version string
-			sorted = { constraint }
+			-- Exact version ("1.8.0-1") or a bare version prefix ("1.8.0", "1.8")
+			local v = matchExactOrPrefix(versions, constraint)
+			if v then sorted = { v } else sorted = {} end
 		end
 	end
 

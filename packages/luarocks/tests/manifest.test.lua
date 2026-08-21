@@ -303,3 +303,44 @@ test.it("listBest returns versions sorted descending, filtered by constraint", f
 
 	test.equal(#luarocks.listBest(m, "doesnotexist"), 0)
 end)
+
+--
+-- version constraints without the luarocks revision suffix
+--
+
+test.it("bare version resolves to the highest revision of that version", function()
+	local m = Manifest.new(MANIFEST)
+	local url, err = luarocks.getRockspecUrl(m, "luafilesystem", "1.8.0")
+	test.falsy(err)
+	test.truthy(url and url:find("luafilesystem-1.8.0-1.rockspec", 1, true))
+end)
+
+test.it("partial version prefix matches every minor of that series", function()
+	local m = Manifest.new(MANIFEST)
+	-- 1.7 → the only 1.7.x version (1.7.0-2); 1.8 → 1.8.0-1
+	local url = luarocks.getRockspecUrl(m, "luafilesystem", "1.7")
+	test.truthy(url and url:find("luafilesystem-1.7.0-2.rockspec", 1, true))
+	url = luarocks.getRockspecUrl(m, "luafilesystem", "1.8")
+	test.truthy(url and url:find("luafilesystem-1.8.0-1.rockspec", 1, true))
+end)
+
+test.it("exact version with revision still matches exactly", function()
+	local m = Manifest.new(MANIFEST)
+	local url, err = luarocks.getRockspecUrl(m, "luafilesystem", "1.7.0-2")
+	test.falsy(err)
+	test.truthy(url and url:find("luafilesystem-1.7.0-2.rockspec", 1, true))
+end)
+
+test.it("bare version with no matching release reports an error", function()
+	local m = Manifest.new(MANIFEST)
+	local url, err = luarocks.getRockspecUrl(m, "luafilesystem", "1.9")
+	test.falsy(url)
+	test.truthy(err and err:find("not found", 1, true))
+end)
+
+test.it("listBest resolves a bare version to the best revision", function()
+	local m = Manifest.new(MANIFEST)
+	local best = luarocks.listBest(m, "luafilesystem", "1.8.0")
+	test.equal(#best, 1)
+	test.equal(best[1].version, "1.8.0-1")
+end)

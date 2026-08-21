@@ -139,12 +139,18 @@ local function updateDependencies(package, dependencies)
 	local results = {}
 	for name, depInfo in pairs(dependencies) do
 		local updated, message
-		if depInfo.version then ---@cast depInfo lde.Package.Config.RegistryDependency
+		if depInfo.luarocks then
+			if package.isRockspec then
+				-- Rockspec dependencies are pinned by the rockspec itself;
+				-- there's no lde.json to write an updated version to.
+				updated, message = false, "managed by rockspec"
+			else
+				updated, message = updateLuarocksDependency(package, name, depInfo)
+			end
+		elseif depInfo.version then ---@cast depInfo lde.Package.Config.RegistryDependency
 			updated, message = updateRegistryDependency(package, name, depInfo)
 		elseif depInfo.git then ---@cast depInfo lde.Package.Config.GitDependency
 			updated, message = updateGitDependency(package, name, depInfo)
-		elseif depInfo.luarocks then
-			updated, message = updateLuarocksDependency(package, name, depInfo)
 		else
 			updated, message = false, "skipped (path dependency)"
 		end

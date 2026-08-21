@@ -208,6 +208,18 @@ function rocked.parseDependency(depStr)
 	return name, (rest ~= "" and rest or nil)
 end
 
+--- Detects a git dependency in a rockspec dependency string (e.g.
+--- "git+https://github.com/x/y", "git://github.com/x/y", or a plain
+--- "https://...git" URL) and returns the raw URL, or nil for rock deps.
+---@param depStr string
+---@return string? gitUrl
+function rocked.gitDependency(depStr)
+	local url = depStr:match("^%s*(git%+?%w+://%S+)%s*$")
+		or depStr:match("^%s*(git://%S+)%s*$")
+		or depStr:match("^%s*(https?://%S+%.git)%s*$")
+	return url
+end
+
 -- ─── Custom build backends ────────────────────────────────────────────────
 
 --- Run a custom build backend (e.g. "rust-mlua") inside the sandbox.

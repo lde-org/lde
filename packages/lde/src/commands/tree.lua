@@ -42,6 +42,8 @@ local function tree(_args)
 				desc = "git: " .. cfg.git
 			elseif cfg.path then
 				desc = "path: " .. cfg.path
+			elseif cfg.luarocks then
+				desc = "luarocks: " .. cfg.luarocks
 			end
 			ansi.printf("%s%s%s {gray}(%s)", prefix, connector, name, desc)
 		else
@@ -70,7 +72,7 @@ local function tree(_args)
 				local depPath, err = pkg:getDependencyPath(dep.name, info)
 				if not depPath then
 					local treeChar = last and "└── " or "├── "
-					local why = err or "not pinned yet. run `lde sync`"
+					local why = err or "not installed yet — run `lde sync`"
 					ansi.printf("%s%s{red}%s {gray}(%s)", childPrefix, treeChar, dep.name, why)
 				else
 					local depPkg, err2 = lde.Package.open(depPath)

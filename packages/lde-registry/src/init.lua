@@ -209,10 +209,11 @@ end
 
 --- Resolves a version string (or nil for latest) to a commit hash.
 ---@param portfile lde.Portfile
----@param version string? # nil means latest
+---@param version string? # nil or "latest" means the newest version
 ---@return string version
 ---@return string commit
 function Registry:resolveVersion(portfile, version)
+	if version == "latest" then version = nil end
 	local versions = portfile.versions
 	if not versions then
 		self.raise("Package '" .. portfile.name .. "' has no versions in registry")

@@ -91,7 +91,15 @@ local function add(args)
 			lde.error.raise(err)
 		end
 
-		dep = { luarocks = name, version = registryVersion or nil }
+		-- @latest resolves the newest version now and pins that concrete
+		-- version; any other constraint is stored as given (a bare name stays
+		-- version-less, so installs keep resolving the newest).
+		local pinnedVersion = registryVersion
+		if registryVersion == "latest" then
+			pinnedVersion = lde.util.resolveLuarocksBest(name, "latest")
+		end
+
+		dep = { luarocks = name, version = pinnedVersion or nil }
 		ansi.printf("{green}Added luarocks %s: %s{reset}", isDevelopment and "dev dependency" or "dependency", name)
 	else
 		-- Registry dependency
@@ -102,7 +110,9 @@ local function add(args)
 			lde.error.raise(err)
 		end ---@cast portfile -nil
 
-		local resolvedVersion = lde.global.resolveRegistryVersion(portfile, registryVersion or nil)
+		-- resolveRegistryVersion treats "latest" as "newest", so @latest pins
+		-- the concrete latest version here.
+		local resolvedVersion = lde.global.resolveRegistryVersion(portfile, registryVersion)
 		dep = { version = resolvedVersion }
 		ansi.printf("{green}Added %s: %s{reset} ({cyan}version: %s{reset})", isDevelopment and "dev dependency" or "dependency", name, resolvedVersion)
 	end

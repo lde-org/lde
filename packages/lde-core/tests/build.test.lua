@@ -457,7 +457,7 @@ end)
 -- installDependencies: rockspec path dep rebuild stamping
 --
 
-test.it("installDependencies skips a rockspec dep's rebuild while its rockspec is unchanged", function()
+test.it("installDependencies rebuilds a rockspec path dep when its source changes", function()
 	local rockDir = path.join(tmpBase, "rockspec-stamp")
 	fs.mkdir(rockDir)
 	fs.mkdir(path.join(rockDir, "src"))
@@ -473,13 +473,15 @@ build = { type = "builtin", modules = { ["rockspec-stamp"] = "src/init.lua" } }
 	pkg:installDependencies()
 	test.truthy(fs.exists(path.join(pkg:getModulesDir(), "rockspec-stamp", ".lde-built")))
 
-	-- Rewrite the rock's source: the stamp keys on the rockspec content, not the
-	-- sources (a published rock is immutable), so the copy must NOT be refreshed.
+	-- Rewrite the rock's source: a local path dep's sources are not immutable
+	-- (unlike a published rock from a luarocks archive), so the stamp must
+	-- detect the change and refresh the copy — otherwise `lde run`/`lde test`
+	-- on a rockspec project silently serves stale build output.
 	fs.write(path.join(rockDir, "src", "init.lua"), 'return "v2"')
 	pkg:installDependencies(nil, nil, nil, { isLocked = true })
 	local copied = fs.read(path.join(pkg:getModulesDir(), "rockspec-stamp", "init.lua")) ---@cast copied -nil
-	test.includes(copied, "v1")
-	test.falsy(copied:find("v2", 1, true))
+	test.includes(copied, "v2")
+	test.falsy(copied:find("v1", 1, true))
 end)
 
 test.it("installDependencies rebuilds a rockspec dep when the rockspec changes", function()

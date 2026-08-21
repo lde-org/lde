@@ -14,7 +14,32 @@ local function outdated(_args)
 	local found = false
 
 	for name, depInfo in pairs(deps) do
-		if depInfo.version then
+		if depInfo.luarocks then
+			-- luarocks dep: pick latest from manifest, compare with the
+			-- version pinned in the lockfile (the archive URL), not the
+			-- rockspec constraint (">= 1.6").
+			local manifest, merr = lde.util.getManifest()
+			if not manifest then
+				ansi.printf("{red}%s: %s", name, merr)
+				goto continue
+			end
+
+			local latestUrl, _ = luarocks.getRockspecUrl(manifest, depInfo.luarocks)
+			if not latestUrl then goto continue end
+
+			-- extract version from url: name-VERSION.rockspec
+			local latest = latestUrl:match(depInfo.luarocks .. "%-([^/]+)%.rockspec$")
+			local current
+			if depInfo.archive then
+				current = depInfo.archive:match(depInfo.luarocks .. "%-([^/]+)%.src%.rock$")
+					or depInfo.archive:match(depInfo.luarocks .. "%-([^/]+)%.tar%.gz$")
+			end
+
+			if latest and current and latest ~= current then
+				ansi.printf("{yellow}%s{reset}  {gray}%s{reset} → {green}%s {gray}(luarocks)", name, current, latest)
+				found = true
+			end
+		elseif depInfo.version then
 			-- lde registry dep
 			lde.global.syncRegistry()
 			local portfile, rerr = lde.global.lookupRegistryPackage(depInfo.name or name)
@@ -30,25 +55,6 @@ local function outdated(_args)
 
 			if latest ~= depInfo.version then
 				ansi.printf("{yellow}%s{reset}  {gray}%s{reset} → {green}%s", name, depInfo.version, latest)
-				found = true
-			end
-		elseif depInfo.luarocks then
-			-- luarocks dep: pick latest from manifest
-			local manifest, merr = lde.util.getManifest()
-			if not manifest then
-				ansi.printf("{red}%s: %s", name, merr)
-				goto continue
-			end
-
-			local latestUrl, _ = luarocks.getRockspecUrl(manifest, depInfo.luarocks)
-			if not latestUrl then goto continue end
-
-			-- extract version from url: name-VERSION.rockspec
-			local latest = latestUrl:match(depInfo.luarocks .. "%-([^/]+)%.rockspec$")
-			local current = depInfo.version
-
-			if latest and current and latest ~= current then
-				ansi.printf("{yellow}%s{reset}  {gray}%s{reset} → {green}%s {gray}(luarocks)", name, current, latest)
 				found = true
 			end
 		end

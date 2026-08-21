@@ -235,3 +235,11 @@ test.it("sync is a no-op without a git provider", function()
 	registry:sync() -- must not raise
 	test.truthy(true)
 end)
+
+test.it("resolveVersion treats 'latest' as the highest version", function()
+	local registry = newRegistry()
+	local portfile = { name = "foo", git = "https://x/y.git", versions = { ["1.0.0"] = "abc", ["2.1.0"] = "def" } }
+	local version, commit = registry:resolveVersion(portfile, "latest")
+	test.equal(version, "2.1.0")
+	test.equal(commit, "def")
+end)

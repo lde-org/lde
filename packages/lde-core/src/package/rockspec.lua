@@ -379,7 +379,36 @@ local function openRockspec(dir, rockspecPath)
 	-- Include the lde runtime version in the stamp so build outputs are
 	-- rebuilt when the binary is upgraded (build logic may have changed, e.g.
 	-- module layout rules).
-	local buildStamp = util.hash(content .. "\n" .. tostring(lde.global.currentVersion))
+	--
+	-- The stamp must also cover the rock's own sources: the rockspec text
+	-- alone doesn't change when a user edits src/, and serving the stale
+	-- build output on the next `lde run`/`lde test` is a silent trap.
+	local sourceHash = {} ---@type string[]
+	---@param rel string # package-relative path of a file or directory
+	local function stampSource(rel)
+		if rel:match("^https?://") then return end -- remote sources are fetched per build
+		local p = path.isAbsolute(rel) and rel or path.join(dir, rel)
+		if fs.isdir(p) then
+			for _, f in ipairs(fs.scan(p, "**")) do
+				local c = fs.read(path.join(p, f))
+				if c then sourceHash[#sourceHash + 1] = util.hash(c) end
+			end
+		else
+			local c = fs.read(p)
+			if c then sourceHash[#sourceHash + 1] = util.hash(c) end
+		end
+	end
+	for _, src in pairs(modules) do stampSource(src) end
+	for _, m in pairs(nativeModules) do
+		local srcs = m.sources
+		if type(srcs) == "string" then srcs = { srcs } end ---@cast srcs -string
+		for _, s in ipairs(srcs or {}) do stampSource(s) end
+	end
+	for _, src in pairs(binScripts) do stampSource(src) end
+	for _, src in pairs(installLuaFiles) do stampSource(src) end
+	for _, copyDir in ipairs(spec.build and spec.build.copy_directories or {}) do stampSource(copyDir) end
+	table.sort(sourceHash)
+	local buildStamp = util.hash(content .. "\n" .. tostring(lde.global.currentVersion) .. "\n" .. table.concat(sourceHash, ","))
 
 	pkg.buildfn = function(_, outputDir)
 		if not fs.isdir(outputDir) then fs.mkdirAll(outputDir) end
@@ -815,20 +844,10 @@ local function openRockspec(dir, rockspecPath)
 
 	pkg.readConfig = function()
 		local deps = {}
-		for _, depStr in ipairs(spec.dependencies or {}) do
-			local name, version = rocked.parseDependency(depStr)
-			if name and name ~= "lua" and name ~= "luajit" then
-				deps[name] = { luarocks = name, version = version }
-			end
-		end
+		lde.util.addRockspecDeps(deps, spec.dependencies or {})
 		-- Build backends (e.g. luarocks-build-rust-mlua) install alongside
 		-- runtime deps so their modules resolve at build time.
-		for _, depStr in ipairs(spec.build_dependencies or {}) do
-			local name, version = rocked.parseDependency(depStr)
-			if name and name ~= "lua" and name ~= "luajit" then
-				deps[name] = { luarocks = name, version = version }
-			end
-		end
+		lde.util.addRockspecDeps(deps, spec.build_dependencies or {})
 
 		local resolvedBin = binEntry
 		if not resolvedBin and (buildType == "make" or buildType == "cmake") then

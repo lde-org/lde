@@ -583,20 +583,10 @@ handlers.luarocks = {
 			end ---@cast spec rocked.raw.Output
 			n.spec = spec
 			n.deps = {}
-			for _, depStr in ipairs(spec.dependencies or {}) do
-				local name, version = rocked.parseDependency(depStr)
-				if name and name ~= "lua" and name ~= "luajit" then
-					n.deps[name] = { luarocks = name, version = version }
-				end
-			end
+			lde.util.addRockspecDeps(n.deps, spec.dependencies or {})
 			-- Build backends (e.g. luarocks-build-rust-mlua) install alongside
 			-- runtime deps so their modules resolve at build time.
-			for _, depStr in ipairs(spec.build_dependencies or {}) do
-				local name, version = rocked.parseDependency(depStr)
-				if name and name ~= "lua" and name ~= "luajit" then
-					n.deps[name] = { luarocks = name, version = version }
-				end
-			end
+			lde.util.addRockspecDeps(n.deps, spec.build_dependencies or {})
 		elseif n.srcUrl then
 			-- No published rockspec: read deps from the extracted content.
 			local pkg = open(n)

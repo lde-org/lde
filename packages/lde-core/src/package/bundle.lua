@@ -89,6 +89,14 @@ local function bundlePackage(package, opts)
 	local files = {}
 	local modulesDir = package:getModulesDir()
 
+	-- Native modules (.so/.dll/.dylib): embedded as raw bytes and extracted
+	-- next to the bundle at load time, so `require("cmod.core")` resolves
+	-- through package.cpath like it does in a normal lde project.
+	local nativeExts = jit.os == "Windows" and { "dll" }
+		or (jit.os == "OSX" and { "so", "dylib" } or { "so" })
+	---@type table<string, string> # cpath-relative path ("cmod/core.so") -> bytes
+	local nativeFiles = {}
+
 	for entry in fs.readdir(modulesDir) do
 		local p = path.join(modulesDir, entry.name)
 		if entry.name == "tests" and package:getName() ~= "tests" then
@@ -100,11 +108,42 @@ local function bundlePackage(package, opts)
 
 		if fs.isdir(p) then
 			bundleDir(entry.name, p, files)
+			for _, relativePath in ipairs(fs.scan(p, "**")) do
+				local ext = relativePath:match("%.([^.]+)$")
+				local isNative = false
+				for _, e in ipairs(nativeExts) do
+					if ext == e then isNative = true break end
+				end
+				if isNative then
+					local absPath = path.join(p, relativePath)
+					local content = fs.read(absPath)
+					if content then
+						local relName = relativePath:gsub("%." .. ext .. "$", "")
+						local moduleName = relName ~= "" and (entry.name .. "." .. relName) or entry.name
+						nativeFiles[moduleName:gsub("%.", "/") .. "." .. ext] = content
+					end
+				end
+			end
 		elseif entry.name:match("%.lua$") and not isTestFile(entry.name) then
 			local content = fs.read(p)
 			if content then
 				local moduleName = entry.name:gsub("%.lua$", "")
 				files[moduleName] = content
+			end
+		else
+			-- Top-level native module (e.g. lfs.so from a rock that installs a
+			-- single module into target/): embedded like the nested ones.
+			local ext = entry.name:match("%.([^.]+)$")
+			local isNative = false
+			for _, e in ipairs(nativeExts) do
+				if ext == e then isNative = true break end
+			end
+			if isNative then
+				local content = fs.read(p)
+				if content then
+					local moduleName = entry.name:gsub("%." .. ext .. "$", "")
+					nativeFiles[moduleName .. "." .. ext] = content
+				end
 			end
 		end
 		::continue::
@@ -128,6 +167,47 @@ local function bundlePackage(package, opts)
 	end
 
 	local parts = {}
+	if next(nativeFiles) then
+		-- Extract embedded native libraries next to the bundle and put the
+		-- directory on package.cpath before any module loads.
+		--
+		-- Binary bytes are embedded as a short string with \xNN escapes, NOT a
+		-- long string: the Lua lexer normalizes \r and \r\n to \n inside long
+		-- strings, which would silently corrupt the .so.
+		local entries = {}
+		for relPath, content in pairs(nativeFiles) do
+			entries[#entries + 1] = string.format('\t["%s"] = "%s"', relPath, escapeBytes(content))
+		end
+		table.sort(entries)
+		parts[#parts + 1] = table.concat({
+			"local __lde_native = {",
+			table.concat(entries, ",\n"),
+			"}",
+			"do",
+			"\tlocal __lde_sep = package.config:sub(1, 1)",
+			'\tlocal __lde_src = (debug.getinfo(1, "S").source or ""):gsub("^@", "")',
+			'\tlocal __lde_dir = __lde_src:match("^(.*)[/\\\\]") or "."',
+			'\tlocal __lde_libdir = __lde_dir .. __lde_sep .. ".lde-native"',
+			"\tlocal __lde_mkdir = function(d)",
+			'\t\tif __lde_sep == "/" then',
+			'\t\t\tos.execute(\'mkdir -p "\' .. d .. \'"\')',
+			"\t\telse",
+			'\t\t\tos.execute(\'mkdir "\' .. d .. \'"\')',
+			"\t\tend",
+			"\tend",
+			"\t__lde_mkdir(__lde_libdir)",
+			"\tfor __lde_name, __lde_bytes in pairs(__lde_native) do",
+			'\t\tlocal __lde_file = __lde_libdir .. __lde_sep .. __lde_name:gsub("/", __lde_sep)',
+			'\t\tlocal __lde_d = __lde_file:match("^(.*)[/\\\\]")',
+			"\t\tif __lde_d and __lde_d ~= __lde_libdir then __lde_mkdir(__lde_d) end",
+			'\t\tlocal __lde_f = assert(io.open(__lde_file, "wb"))',
+			"\t\t__lde_f:write(__lde_bytes)",
+			"\t\t__lde_f:close()",
+			"\tend",
+			'\tpackage.cpath = __lde_libdir .. __lde_sep .. "?.so;" .. __lde_libdir .. __lde_sep .. "?.dll;" .. __lde_libdir .. __lde_sep .. "?.dylib;" .. package.cpath',
+			"end",
+		}, "\n") .. "\n"
+	end
 	for moduleName, content in pairs(files) do
 		if useBytecode then
 			content = escapeBytes(compileBytecode(content, moduleName))

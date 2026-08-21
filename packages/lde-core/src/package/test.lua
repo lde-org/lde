@@ -11,6 +11,7 @@ local ldetest        = require("lde-test.test")
 local coverageModule = require("lde-core.coverage")
 local teal           = require("lde-core.teal")
 local moonscript     = require("lde-core.moonscript")
+local lde            = require("lde-core")
 
 ---@class lde.TestFileResult
 ---@field file    string
@@ -25,6 +26,7 @@ local moonscript     = require("lde-core.moonscript")
 ---@field skipped  number
 ---@field error    string?
 ---@field external boolean? # true when tests ran under an external runner (busted)
+---@field coverageRan boolean? # external runner was asked to collect coverage (busted --coverage)
 ---@field exitCode number? # exit code of the external runner
 ---@field coverage lde.Coverage? # line coverage collected during the run (--coverage)
 
@@ -169,8 +171,9 @@ end
 --- running its in-tree `src/bin/luarocks`) work without a system Lua install.
 ---@param package  lde.Package
 ---@param filters  string[]? # extra args passed through to the test runner
+---@param coverage boolean? # --coverage: run busted under luacov, which prints its own report
 ---@return lde.TestResults
-local function runRockspecTests(package, filters)
+local function runRockspecTests(package, filters, coverage)
 	local spec = package.rockspecData
 	local testSpec = spec and spec.test
 	local testType = testSpec and testSpec.type or "busted"
@@ -185,12 +188,11 @@ local function runRockspecTests(package, filters)
 	-- Test-only rocks: the busted framework itself plus whatever the rockspec
 	-- declares in test_dependencies (e.g. coverage runners, output handlers).
 	local testDeps = { busted = { luarocks = "busted" } }
-	for _, depStr in ipairs(spec.test_dependencies or {}) do
-		local name, version = rocked.parseDependency(depStr)
-		if name and name ~= "lua" and name ~= "luajit" then
-			testDeps[name] = { luarocks = name, version = version }
-		end
+	if coverage then
+		-- busted --coverage runs luacov, which prints its own report.
+		testDeps.luacov = { luarocks = "luacov" }
 	end
+	lde.util.addRockspecDeps(testDeps, spec.test_dependencies or {})
 	package:installDependencies(testDeps, package.dir)
 
 	-- Per-platform flags from the rockspec's test section.
@@ -238,6 +240,9 @@ local function runRockspecTests(package, filters)
 	end
 
 	local runArgs = { cliEntry }
+	if coverage then
+		runArgs[#runArgs + 1] = "--coverage"
+	end
 	for _, flag in ipairs(rawFlags or {}) do
 		runArgs[#runArgs + 1] = (flag:gsub("%$%(LUA%)", luaBin):gsub("%$%(LUA_DIR%)", luaDir))
 	end
@@ -260,6 +265,31 @@ local function runRockspecTests(package, filters)
 		stderr = "inherit",
 	})
 
+	-- busted --coverage runs luacov, which only collects stats during the run
+	-- (runreport defaults to false). Run the luacov CLI afterwards to turn
+	-- luacov.stats.out into a report, then print its summary table.
+	if coverage then
+		local luacovCli = path.join(modulesDir, "luacov", "luacov")
+		if fs.exists(luacovCli) then
+			process.exec(luaBin, { luacovCli }, {
+				cwd = package.dir,
+				env = { LUA_PATH = luaPath, LUA_CPATH = luaCPath },
+				stdout = "inherit",
+				stderr = "inherit",
+			})
+			local reportPath = path.join(package.dir, "luacov.report.out")
+			local report = fs.read(reportPath)
+			if report then
+				local summaryAt = report:find("\nSummary", 1, true)
+				if summaryAt then
+					print()
+					print("Coverage report: " .. reportPath)
+					print(report:sub(summaryAt + 1))
+				end
+			end
+		end
+	end
+
 	-- busted reports counts in its own output; the summary here is derived from
 	-- its exit code. external marks results that came from an external runner.
 	local failed = exitCode ~= 0
@@ -270,6 +300,7 @@ local function runRockspecTests(package, filters)
 		failures = failed and 1 or 0,
 		skipped  = 0,
 		external = true,
+		coverageRan = coverage,
 		exitCode = exitCode,
 	}
 end
@@ -350,7 +381,7 @@ local function runTests(package, reporter, filters, opts)
 	-- Rockspec-based packages run their test specification (busted) instead of
 	-- lde-test files.
 	if package.isRockspec then
-		return runRockspecTests(package, filters)
+		return runRockspecTests(package, filters, opts.coverage)
 	end
 
 	-- In-scope files for coverage: the package's built output (target/<name>,

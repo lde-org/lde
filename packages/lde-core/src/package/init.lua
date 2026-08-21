@@ -224,8 +224,26 @@ function Package.open(dir, rockspec)
 		return Package.openLDE(dir)
 	end
 
-	local pkg, _ = Package.openRockspec(dir, rockspec)
+	local pkg, perr = Package.openRockspec(dir, rockspec)
 	if not pkg then
+		-- A rockspec that exists but fails to open (bad syntax, unreadable)
+		-- should report the real error instead of the generic "no package"
+		-- message, which makes a typo'd rockspec look like a missing one.
+		local hasRockspec = rockspec ~= nil
+		if not hasRockspec and fs.isdir(dir) then
+			local iter = fs.readdir(dir)
+			if iter then
+				for entry in iter do
+					if entry.type == "file" and entry.name:match("%.rockspec$") then
+						hasRockspec = true
+						break
+					end
+				end
+			end
+		end
+		if hasRockspec then
+			return nil, perr
+		end
 		return nil, "No package found in directory: " .. dir
 	end
 

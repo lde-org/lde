@@ -241,3 +241,40 @@ test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde add --git records the dep and s
 	test.truthy(entry.commit:match("^%x+$"), "expected a hex commit sha")
 	test.truthy(fs.exists(path.join(dir, "target", "addgit", "init.lua")))
 end)
+
+test.it("lde add <name>@latest pins the newest version", function()
+	-- Fully offline fake registry (see the --dev registry test above).
+	local repoDir = path.join(tmpBase, "add-latest-repo")
+	fs.rmdir(repoDir)
+	fs.mkdir(repoDir)
+	fs.mkdir(path.join(repoDir, "src"))
+	fs.write(path.join(repoDir, "src", "init.lua"), 'return "add-latest"')
+	fs.write(path.join(repoDir, "lde.json"), json.encode({
+		name = "add-latest",
+		version = "0.1.0",
+		dependencies = {}
+	}))
+
+	local treeDir = path.join(tmpBase, "add-latest-reg")
+	fs.rmdir(treeDir)
+	fs.mkdir(treeDir)
+	fs.mkdirAll(path.join(treeDir, "registry", "packages"))
+	fs.write(path.join(treeDir, "registry", "packages", "add-latest.json"), json.encode({
+		name = "add-latest",
+		description = "offline test package",
+		git = repoDir,
+		branch = "master",
+		versions = { ["1.0.0"] = "1111111", ["2.0.0"] = "2222222" }
+	}))
+
+	local dir = makeProject("add-latest-test")
+	local ok, out = ldecli({ "--tree", treeDir, "add", "add-latest@latest" }, dir)
+	test.truthy(ok, "lde add add-latest@latest failed: " .. tostring(out)) ---@cast out -nil
+
+	local raw = fs.read(path.join(dir, "lde.json")) ---@cast raw -nil
+	local config = json.decode(raw) ---@cast config table<string, any>
+	local dep = config.dependencies["add-latest"]
+	test.truthy(dep, "add-latest should be in dependencies")
+	-- @latest must resolve to the concrete newest version, not a "latest" marker.
+	test.equal(dep.version, "2.0.0")
+end)

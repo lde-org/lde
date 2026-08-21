@@ -410,7 +410,7 @@ end
 -- Print a notice when coverage was requested but the runner can't provide it.
 ---@param results lde.TestResults
 local function printCoverageNotice(results)
-	if results.external then
+	if results.external and not results.coverageRan then
 		ansi.printf("  {yellow}Coverage is not supported for rockspec (busted) tests")
 	end
 end

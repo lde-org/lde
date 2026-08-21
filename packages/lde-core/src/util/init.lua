@@ -226,6 +226,26 @@ function util.resolveLuarocksSource(name, version, isOffline)
 	return url, arch
 end
 
+--- Populates a dependencies table from rockspec dependency strings, routing
+--- git URLs ("git+https://", "git://", "*.git") to git deps and everything
+--- else to luarocks deps (skipping the "lua"/"luajit" pseudo-deps).
+---@param deps table<string, lde.Package.Config.Dependency>
+---@param depStrs string[]
+function util.addRockspecDeps(deps, depStrs)
+	for _, depStr in ipairs(depStrs) do
+		local gitUrl = rocked.gitDependency(depStr)
+		if gitUrl then
+			gitUrl = util.normalizeGitUrl(gitUrl)
+			deps[lde.global.repoNameFromUrl(gitUrl)] = { git = gitUrl }
+		else
+			local name, version = rocked.parseDependency(depStr)
+			if name and name ~= "lua" and name ~= "luajit" then
+				deps[name] = { luarocks = name, version = version }
+			end
+		end
+	end
+end
+
 --- Resolves the best version of a luarocks package plus the rockspec (metadata)
 --- and .src.rock (content) URLs for that exact version. Uses the persisted URL
 --- cache when possible; falls back to a manifest scan otherwise.
@@ -241,9 +261,15 @@ end
 ---@return string? srcUrl
 ---@return string? err
 function util.resolveLuarocksBest(name, constraint)
+	-- "@latest" always re-checks the manifest for the newest version; it must
+	-- not reuse the cached resolution (which pins whatever was latest at the
+	-- time it was recorded).
+	local isLatest = constraint == "latest"
+	if isLatest then constraint = nil end
+
 	-- URL cache fast path (unversioned lookups only)
 	local cache = loadUrlCache()
-	local cachedEntry = (not constraint) and cache[name] or nil
+	local cachedEntry = (not constraint) and not isLatest and cache[name] or nil
 	if cachedEntry then
 		local url = type(cachedEntry) == "table" and cachedEntry.url or cachedEntry ---@cast url string
 		local arch = type(cachedEntry) == "table" and cachedEntry.arch or "rockspec"

@@ -51,12 +51,18 @@ local function resolvePackage(args, parsed)
 		local name = args:pop()
 		if not name then return nil, "no name" end
 
+		local packageName, versionStr = name:match("^([^@]+)@(.+)$")
+		if not packageName then packageName = name end
+
+		-- @latest always re-checks for the newest version, which needs the
+		-- network — incompatible with --offline.
+		if versionStr == "latest" and isOffline then
+			return nil, "Cannot resolve '@latest' offline (it always checks for the newest version)"
+		end
+
 		if name:match("^rocks:") then
 			return resolveRocks(name, isOffline)
 		end
-
-		local packageName, versionStr = name:match("^([^@]+)@(.+)$")
-		if not packageName then packageName = name end
 
 		if not isOffline then
 			lde.global.syncRegistry()
