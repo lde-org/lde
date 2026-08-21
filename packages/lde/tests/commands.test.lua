@@ -114,6 +114,33 @@ test.it("lde tree marks skipped optional dependencies", function()
 	test.includes(text, "optional, skipped")
 end)
 
+test.it("lde tree --why renders the chain to a transitive dependency", function()
+	makeProject("why-leaf", nil, { name = "why-leaf" })
+	makeProject("why-mid", { ["why-leaf"] = { path = "../why-leaf" } }, { name = "why-mid" })
+	makeProject("why-other", nil, { name = "why-other" })
+	local dir = makeProject("why-app", {
+		["why-mid"] = { path = "../why-mid" },
+		["why-other"] = { path = "../why-other" }
+	})
+
+	-- With colors disabled (CI/pipes) everything renders plain, so assert the
+	-- structure: both branches present, no errors.
+	local ok, out = cli({ "tree", "--why", "why-leaf" }, dir)
+	test.truthy(ok, "lde tree --why failed: " .. tostring(out))
+	local text = plain(out or "")
+	test.includes(text, "why-app")
+	test.includes(text, "why-mid")
+	test.includes(text, "why-leaf")
+	test.includes(text, "why-other")
+end)
+
+test.it("lde tree --why reports an unknown dependency", function()
+	local dir = makeProject("why-unknown")
+	local ok, out = cli({ "tree", "--why", "nope" }, dir)
+	test.falsy(ok, "unknown --why target must fail")
+	test.includes(plain(out or ""), "'nope' is not a dependency of why-unknown")
+end)
+
 --
 -- lde x
 --

@@ -136,8 +136,11 @@ local commands = {
 		arguments = "<name>  Dependency key to remove",
 	},
 	tree = {
-		usage = "lde tree",
-		description = "Show the dependency tree.",
+		usage = "lde tree [--why <name>]",
+		description = "Show the dependency tree. --why highlights the chain that pulls in <name> and dims the rest.",
+		options = {
+			["--why"] = { arg = "name", desc = "Highlight the dependency chain leading to <name>; everything else is dimmed" },
+		},
 	},
 	update = {
 		usage = "lde update [<name>]",
