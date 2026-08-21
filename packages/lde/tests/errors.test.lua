@@ -50,6 +50,28 @@ test.it("unknown command is a clean error", function()
 	expectCleanError({ "frobnicate" }, "Unknown command")
 end)
 
+test.it("unknown command suggests a close command", function()
+	local code, out = run({ "isntall" })
+	test.truthy(code ~= 0, "typo'd command must exit non-zero")
+	test.includes(plain(out), "Did you mean `install`?")
+
+	-- A partial command lists every matching name.
+	code, out = run({ "com" })
+	test.truthy(code ~= 0, "partial command must exit non-zero")
+	test.includes(plain(out), "Did you mean one of: `compile`, `completion`?")
+
+	-- A command far from any real name gets no suggestion.
+	code, out = run({ "frobnicate" })
+	test.truthy(code ~= 0)
+	test.falsy(plain(out):find("Did you mean", 1, true), "garbage input must not get a suggestion")
+end)
+
+test.it("unknown help target suggests a close command", function()
+	local code, out = run({ "help", "hlep" })
+	test.truthy(code ~= 0, "typo'd help target must exit non-zero")
+	test.includes(plain(out), "Did you mean `help`?")
+end)
+
 test.it("unknown help target is a clean error", function()
 	expectCleanError({ "help", "frobnicate" }, "Unknown command")
 	-- The --help fast path runs outside the error boundary; it must still fail

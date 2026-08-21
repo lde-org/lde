@@ -4,6 +4,8 @@ if select("#", ...) == 0 then
 end
 
 local clap = require("clap")
+local usage = require("lde.commands.usage")
+local suggest = require("lde.util.suggest")
 
 local args = clap.parse({ ... })
 
@@ -272,7 +274,8 @@ end
 				lde.error.raise("Script '" .. commandName .. "' failed: " .. (serr or "exited with a non-zero exit code"))
 			end
 		else
-			lde.error.raise("Unknown command " .. ansi.colorize("yellow", '"' .. tostring(commandName) .. '"'))
+			local hint = suggest.command(commandName, usage.names)
+			lde.error.raise("Unknown command " .. ansi.colorize("yellow", '"' .. tostring(commandName) .. '"'), { hint = hint })
 		end
 	end
 end, function(e)

@@ -2,6 +2,7 @@ local ansi = require("ansi")
 local util = require("util")
 
 local usage = require("lde.commands.usage")
+local suggest = require("lde.util.suggest")
 
 local ok, currentVersion = pcall(require, "lde.version")
 currentVersion = ok and currentVersion or "0.10.0"
@@ -36,7 +37,9 @@ local function forCommand(name)
 	local canonical = usage.aliases[name] or name
 	local spec = usage.commands[canonical]
 	if not spec then
-		lde().error.raise("Unknown command " .. ansi.colorize("yellow", '"' .. name .. '"'), { hint = "Run 'lde help' to see all commands." })
+		local hint = suggest.command(name, usage.names)
+			or "Run 'lde help' to see all commands."
+		lde().error.raise("Unknown command " .. ansi.colorize("yellow", '"' .. name .. '"'), { hint = hint })
 	end
 
 	ansi.printf("{bold}{blue}Usage:{reset} %s", spec.usage)

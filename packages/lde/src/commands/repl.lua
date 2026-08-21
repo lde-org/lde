@@ -16,8 +16,13 @@ end
 
 ---@param _args clap.Args
 local function repl(_args)
-	ansi.printf("{blue}{bold}lde repl{reset} — LuaJIT interactive shell")
-	ansi.printf("{gray}Type {bold}exit(){reset}{gray} or press Ctrl+C to quit.\n")
+	-- Piped/redirected stdin (scripts, `echo ... | lde repl`): behave like a
+	-- stdin script — no banner and no prompts, just evaluate the lines. The
+	-- banner and prompts are interactive-terminal furniture.
+	if prompt.interactive then
+		ansi.printf("{blue}{bold}lde repl{reset} — LuaJIT interactive shell")
+		ansi.printf("{gray}Type {bold}exit(){reset}{gray} or press Ctrl+C to quit.\n")
+	end
 
 	local globals = {
 		exit = function(code) os.exit(code or 0) end,
@@ -30,8 +35,10 @@ local function repl(_args)
 		-- module paths — the same setup lde run uses.
 		state, g, cleanup = pkg:createState({ args = { [0] = "repl" }, globals = globals })
 
-		local config = pkg:readConfig()
-		ansi.printf("{gray}Project: {green}%s {gray}(%s)", config.name or "unknown", pkg:getDir())
+		if prompt.interactive then
+			local config = pkg:readConfig()
+			ansi.printf("{gray}Project: {green}%s {gray}(%s)", config.name or "unknown", pkg:getDir())
+		end
 	else
 		state, g, cleanup = runtime.createState({ args = { [0] = "repl" }, globals = globals })
 	end
@@ -157,8 +164,8 @@ local function repl(_args)
 			local p = ansi.format(buffer ~= "" and "{gray}...{reset} " or "{blue}>{reset} ")
 			line = readline.read(p, highlight, complete)
 		else
-			io.write(buffer ~= "" and "... " or "> ")
-			io.flush()
+			-- Piped/redirected stdin: no prompts (they would pollute the
+			-- output of `echo ... | lde repl` / `lde repl < script.lua`).
 			line = io.read()
 		end
 

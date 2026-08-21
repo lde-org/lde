@@ -215,13 +215,22 @@ end)
 -- lde repl
 --
 
-test.it("lde repl prints the banner and exits cleanly on EOF", function()
-	-- No stdin content: readline sees EOF immediately, the REPL exits, and the
-	-- banner + prompt prove it started (same pattern as the --lua -i test).
+test.it("lde repl evaluates piped stdin as a script (no banner, no prompts)", function()
+	-- Piped stdin is script mode: input is evaluated line by line (locals
+	-- persist across lines), and the banner + prompts are suppressed so the
+	-- output stays clean for piping.
+	local ok, out = cli({ "repl" }, nil, { stdin = "print(1 + 1)\nlocal x = 40\nprint(x + 2)\n" })
+	test.truthy(ok, "lde repl failed: " .. tostring(out))
+	test.includes(plain(out or ""), "2")
+	test.includes(plain(out or ""), "42")
+	test.falsy(plain(out or ""):find("lde repl", 1, true), "banner must not print when stdin is piped")
+	test.falsy(plain(out or ""):find(">", 1, true), "prompts must not print when stdin is piped")
+end)
+
+test.it("lde repl exits cleanly on empty piped stdin", function()
 	local ok, out = cli({ "repl" }, nil, { stdin = "" })
 	test.truthy(ok, "lde repl failed: " .. tostring(out))
-	test.includes(plain(out or ""), "lde repl")
-	test.includes(plain(out or ""), ">")
+	test.falsy(plain(out or ""):find(">", 1, true), "no prompts on empty piped stdin")
 end)
 
 --
