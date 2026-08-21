@@ -84,3 +84,37 @@ build = { type = "builtin", modules = { zqcachetool = "src/init.lua" } }
 	test.equal(pkg:getName(), "zqcachetool")
 	test.truthy(lockEntry, "offline fallback must return a lock entry")
 end)
+
+--
+-- The manifest package-name index (search fast path)
+--
+
+test.it("getManifestNames extracts quoted and bare keys and caches them", function()
+	fs.write(path.join(userDir, "luarocks-manifest.raw"), [[
+repository = {
+  ["alpha-pkg"] = {
+    ["1.0.0-1"] = { arch = "src" }
+  },
+  beta = {
+    ["2.0.0-1"] = { arch = "rockspec" }
+  }
+}
+]])
+
+	local names = lde.util.getManifestNames()
+	test.equal(#names, 2)
+	test.includes(names[1] .. "," .. names[2], "alpha-pkg")
+	test.includes(names[1] .. "," .. names[2], "beta")
+
+	-- The derived index is persisted and served on the next call.
+	local cachePath = path.join(userDir, "luarocks-names-5.1.json")
+	test.truthy(fs.exists(cachePath), "the name index must be written")
+	local cached = lde.util.getManifestNames()
+	test.equal(#cached, 2)
+
+	-- A newer manifest rebuilds the index.
+	fs.write(path.join(userDir, "luarocks-manifest.raw"), "repository = {\n  gamma = {\n    [\"3.0.0-1\"] = { arch = \"src\" }\n  }\n}\n")
+	local rebuilt = lde.util.getManifestNames()
+	test.equal(#rebuilt, 1)
+	test.equal(rebuilt[1], "gamma")
+end)

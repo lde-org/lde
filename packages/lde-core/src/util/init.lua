@@ -132,6 +132,92 @@ function util.decodeJson(content)
 	return decoded, nil
 end
 
+--- Extract every package name from the luarocks manifest. A single
+--- depth-tracking scan: string patterns over the 4.2MB repository block cost
+--- ~250ms (Lua patterns match byte-by-byte), this reads the key at each
+--- package block in ~8ms.
+---@param raw string
+---@return string[]
+local function collectManifestNames(raw)
+	local names, seen = {}, {}
+	local depth = 0
+	local i, n = 1, #raw
+
+	---@param b integer?
+	---@return boolean
+	local function isWordByte(b)
+		return b ~= nil and ((b >= 48 and b <= 57) or (b >= 65 and b <= 90)
+			or (b >= 97 and b <= 122) or b == 46 or b == 45 or b == 95)
+	end
+
+	while i <= n do
+		local c = raw:byte(i)
+		if c == 123 then -- {
+			depth = depth + 1
+			i = i + 1
+		elseif c == 125 then -- }
+			depth = depth - 1
+			i = i + 1
+		elseif depth == 1 and (c == 91 or (c >= 97 and c <= 122) or c == 95) then
+			if c == 91 then
+				-- ["name"] = { ...
+				local close = raw:find('"] = {', i, true)
+				if not close then break end
+				local name = raw:sub(i + 2, close - 1)
+				i = close + 1
+				if not seen[name] and name:find("^[%w%.%-_]+$") then
+					seen[name] = true
+					names[#names + 1] = name
+				end
+			else
+				-- bare name = { ...
+				local s = i
+				while i <= n and isWordByte(raw:byte(i)) do i = i + 1 end
+				local name = raw:sub(s, i - 1)
+				while i <= n and (raw:byte(i) == 32 or raw:byte(i) == 9) do i = i + 1 end
+				if raw:byte(i) == 61 then -- =
+					i = i + 1
+					while i <= n and (raw:byte(i) == 32 or raw:byte(i) == 9) do i = i + 1 end
+					if raw:byte(i) == 123 and not seen[name] then
+						seen[name] = true
+						names[#names + 1] = name
+					end
+				end
+			end
+		else
+			i = i + 1
+		end
+	end
+	return names
+end
+
+--- All package names in the luarocks manifest, from a derived cache rebuilt
+--- when the manifest file changes. Searching filters the ~5k names with plain
+--- string.find (memchr) instead of re-parsing the 4.2MB manifest every time.
+---@return string[]
+function util.getManifestNames()
+	local userDir = lde.global.getUserDir()
+	local manifestPath = path.join(userDir, "luarocks-manifest.raw")
+	local cachePath = path.join(userDir, "luarocks-names-5.1.json")
+	local mstat = fs.stat(manifestPath)
+	local cstat = fs.stat(cachePath)
+	-- Strictly newer: same-second writes (refresh + rebuild in one second) must
+	-- not be mistaken for a fresh cache.
+	if mstat and cstat and cstat.modifyTime > mstat.modifyTime then
+		local raw = fs.read(cachePath)
+		if raw then
+			local ok, decoded = pcall(json.decode, raw)
+			if ok and type(decoded) == "table" then return decoded end
+		end
+	end
+
+	local content = fs.read(manifestPath)
+	local names = content and collectManifestNames(content) or {}
+	fs.mkdirAll(userDir)
+	fs.write(cachePath, json.encode(names))
+	return names
+end
+
 --- Normalises various git URL formats to a plain https:// URL.
 ---@param url string
 ---@return string

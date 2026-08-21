@@ -22,6 +22,7 @@
 ---@class lde.RegistryFs
 ---@field read fun(p: string): string?
 ---@field exists fun(p: string): boolean
+---@field stat? fun(p: string): { modifyTime: number }?
 
 ---@class lde.RegistryPath
 ---@field join fun(...: string): string
@@ -103,6 +104,12 @@ function Registry:getDir()
 	return self.dirFn()
 end
 
+--- How often the registry checkout may be re-fetched, in seconds. Every
+--- command invocation is a fresh process and search/add/install all sync, so
+--- without this `lde search` pays a git fetch (network round trip) every time.
+---@type integer
+local SYNC_TTL = 10 * 60
+
 --- Clone the registry if not present, otherwise pull to update. A failed pull
 --- (e.g. offline) is non-fatal; cached data is used. Only runs once per
 --- Registry instance.
@@ -122,8 +129,15 @@ function Registry:sync()
 		end
 		if repo.updateSubmodules then repo:updateSubmodules() end
 	else
-		local repo = git.open(registryDir)
-		if repo and repo.pull then repo:pull() end
+		-- A recent fetch means the checkout is current: skip the network
+		-- round trip. FETCH_HEAD is touched by every fetch. (fs.stat may be
+		-- absent on minimal test doubles — then always pull.)
+		local fetchHead = self.path.join(registryDir, ".git", "FETCH_HEAD")
+		local fstat = self.fs.stat and self.fs.stat(fetchHead)
+		if not (fstat and (os.time() - fstat.modifyTime) < SYNC_TTL) then
+			local repo = git.open(registryDir)
+			if repo and repo.pull then repo:pull() end
+		end
 	end
 end
 

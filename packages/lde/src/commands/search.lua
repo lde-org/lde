@@ -83,14 +83,9 @@ local function searchRocks(query)
 	local manifest = lde.util.getManifest()
 	if not manifest then return {} end
 
-	local repoBlock = manifest._raw:match("repository%s*=%s*(%b{})") or manifest._raw
-	local seen = {} ---@type table<string, true>
-	for name in repoBlock:gmatch('%["([^"]+)"%]%s*=%s*%{%s*%["') do seen[name] = true end
-	for name in repoBlock:gmatch('([%w%._%-]+)%s*=%s*%{%s*%["') do seen[name] = true end
-
 	---@type lde.search.Result[]
 	local results = {}
-	for name in pairs(seen) do
+	for _, name in ipairs(lde.util.getManifestNames()) do
 		if name:lower():find(query, 1, true) then
 			results[#results + 1] = { name = name, kind = "rocks" }
 		end
