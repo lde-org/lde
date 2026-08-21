@@ -155,8 +155,12 @@ local function parseError(err)
 end
 
 --- Resolve the file to read for a failure. The path in the error prefix uses
---- short_src and may be truncated (".../x") for long paths, so fall back to
---- the file the caller knows it was executing.
+--- short_src, which LuaJIT truncates to "..." + the tail of the path for long
+--- chunk names, so a required module deep under target/ arrives as
+--- ".../target/tests/tl-components/page-tilt.lua". The tail keeps the end of
+--- the real path, so it is searched under the package dir (stripping leading
+--- fragments, since the cut can land mid-component) before falling back to the
+--- file the caller knows it was executing.
 ---@param pkgDir string
 ---@param msgFile string
 ---@param knownFile? string
@@ -165,7 +169,18 @@ local function resolveSource(pkgDir, msgFile, knownFile)
 	local candidates = {}
 	msgFile = msgFile:gsub("^@", "")
 
-	if not msgFile:match("^%.%.%.") then
+	if msgFile:match("^%.%.%.") then
+		-- Truncated short_src: find the real file by its path tail.
+		local rest = msgFile:gsub("^%.%.%.[/\\]*", "")
+		while rest ~= "" do
+			local candidate = path.join(pkgDir, rest)
+			if fs.exists(candidate) then
+				candidates[#candidates + 1] = candidate
+				break
+			end
+			rest = rest:match("^[^/\\]*[/\\](.*)$") or ""
+		end
+	else
 		candidates[#candidates + 1] = msgFile
 		if not (msgFile:match("^/") or msgFile:match("^%a:[/\\]")) then
 			candidates[#candidates + 1] = path.join(pkgDir, msgFile)
@@ -176,7 +191,16 @@ local function resolveSource(pkgDir, msgFile, knownFile)
 	for _, c in ipairs(candidates) do
 		if fs.exists(c) then
 			local src = fs.read(c)
-			if src then return c, src end
+			if src then
+				-- Prefer the source tests/ copy over the built target/tests/
+				-- mirror (the error line belongs to the same file).
+				local testsPrefix = path.join(pkgDir, "target", "tests") .. path.separator
+				if c:sub(1, #testsPrefix) == testsPrefix then
+					local srcTests = path.join(pkgDir, "tests", c:sub(#testsPrefix + 1))
+					if fs.exists(srcTests) then c = srcTests end
+				end
+				return c, src
+			end
 		end
 	end
 

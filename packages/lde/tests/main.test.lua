@@ -71,6 +71,43 @@ test.it("lde test skips packages with no tests/ directory", function()
 	fs.rmdir(tmpDir)
 end)
 
+test.it("errors in nested test modules point at the module, not the test file", function()
+	local tmpDir = path.join(env.tmpdir(), "lde-test-nested-errors")
+	fs.rmdir(tmpDir)
+	fs.mkdir(tmpDir)
+
+	-- The test file loads a nested module through a dynamic require; the module
+	-- itself fails to require a missing sibling. The module's path under
+	-- target/tests/ is long enough to hit LuaJIT's short_src truncation, which
+	-- used to make the error get attributed to the test file instead.
+	local pkg = path.join(tmpDir, "nested-err")
+	fs.mkdir(pkg)
+	fs.mkdir(path.join(pkg, "src"))
+	fs.write(path.join(pkg, "src", "init.lua"), "return true")
+	fs.write(path.join(pkg, "lde.json"), json.encode({ name = "nested-err", version = "0.1.0" }))
+
+	fs.mkdir(path.join(pkg, "tests"))
+	fs.mkdirAll(path.join(pkg, "tests", "deep", "nested", "modules"))
+	fs.write(path.join(pkg, "tests", "loads.test.lua"), [[
+		local test = require("lde-test")
+		test.it("loads a page", function()
+			local page = require("tests.deep.nested.modules.page-tilt")
+			test.truthy(page)
+		end)
+	]])
+	fs.write(path.join(pkg, "tests", "deep", "nested", "modules", "page-tilt.lua"), [[
+		local button = require("tests.deep.nested.modules.buttonx-tilt")
+		return { button = button }
+	]])
+
+	local ok, out = ldecli({ "test" }, pkg)
+	test.falsy(ok, "the failing test must fail the run") ---@cast out -nil
+	test.truthy(out:find("page%-tilt%.lua:%d+:", 1), "error must point at the nested module: " .. tostring(out))
+	test.falsy(out:find("loads%.test%.lua:%d+:", 1), "error must not be attributed to the test file")
+
+	fs.rmdir(tmpDir)
+end)
+
 test.it("lde test fails when no tests are found", function()
 	local tmpDir = path.join(env.tmpdir(), "lde-test-none-found")
 	fs.rmdir(tmpDir)
