@@ -63,9 +63,15 @@ local function getManifest()
 end
 
 --- Cache of resolved rockspec URLs: name -> url, persisted alongside the manifest.
---- Invalidated when the manifest file is refreshed.
----@type table<string, string>?
+--- Entries survive manifest refreshes (see loadUrlCache); only the unversioned
+--- fast path is skipped while the cache is older than the manifest.
+---@type table<string, any>?
 local urlCache
+
+---@type boolean? # whether the loaded entries are fresh enough for the
+--- unversioned fast path: entries older than the manifest may pin versions
+--- that are no longer the newest, so they are re-resolved when online
+local isCacheFresh
 
 local function getUrlCachePath()
 	return path.join(lde.global.getUserDir(), "luarocks-url-cache-5.1.json")
@@ -79,17 +85,22 @@ local function loadUrlCache(isOffline)
 	local manifestPath = path.join(lde.global.getUserDir(), "luarocks-manifest.raw")
 	local cstat = fs.stat(cachePath)
 	local mstat = fs.stat(manifestPath)
-	if cstat and (isOffline or (mstat and cstat.modifyTime >= mstat.modifyTime)) then
+	-- A manifest refresh means newer versions may exist, so the fast path is
+	-- skipped (isCacheFresh) — but the persisted entries are always loaded,
+	-- never dropped: they are still valid pointers for offline resolution, and
+	-- saveUrlCache rewrites the file with whatever is in memory, so dropping
+	-- them here would permanently lose every cached URL.
+	isCacheFresh = isOffline or not (cstat and mstat and cstat.modifyTime < mstat.modifyTime)
+	urlCache = {}
+	if cstat then
 		local raw = fs.read(cachePath)
 		if raw then
 			local ok, decoded = pcall(json.decode, raw)
 			if ok and type(decoded) == "table" then
 				urlCache = decoded
-				return urlCache
 			end
 		end
 	end
-	urlCache = {}
 	return urlCache
 end
 
@@ -198,7 +209,7 @@ function util.resolveLuarocksSource(name, version, isOffline)
 	-- For unversioned lookups, check the URL cache first to skip manifest scan
 	local cache = loadUrlCache(isOffline)
 	local cacheKey = name .. (version and ("@" .. version) or "")
-	local cachedEntry = (not version) and cache[cacheKey] or nil
+	local cachedEntry = (not version) and isCacheFresh and cache[cacheKey] or nil
 
 	local url, arch
 	if cachedEntry then
@@ -296,7 +307,7 @@ function util.resolveLuarocksBest(name, constraint)
 
 	-- URL cache fast path (unversioned lookups only)
 	local cache = loadUrlCache()
-	local cachedEntry = (not constraint) and not isLatest and cache[name] or nil
+	local cachedEntry = (not constraint) and not isLatest and isCacheFresh and cache[name] or nil
 	if cachedEntry then
 		local url = type(cachedEntry) == "table" and cachedEntry.url or cachedEntry ---@cast url string
 		local arch = type(cachedEntry) == "table" and cachedEntry.arch or "rockspec"
@@ -330,15 +341,23 @@ function util.resolveLuarocksBest(name, constraint)
 	return c.version, c.rockspecUrl, c.srcUrl, nil
 end
 
---- Finds a materialized .src.rock archive for a package by scanning the tar
+--- Finds a materialized .src.rock archive dir for a package by scanning the tar
 --- cache, for when the URL cache can't resolve the name (offline runs, or the
---- URL cache entry was lost when the manifest refreshed).
+--- URL cache entry was lost when the manifest refreshed). Cache dirs are named
+--- by the sanitized download URL (<name>-<version>-<revision>.src.rock), so the
+--- package name must appear followed by "-" — and not as the tail of a longer
+--- name (lua-cjson vs cjson) — which is what the boundary check enforces.
 ---@param name string
 ---@return string? dir
 local function findCachedSrcRock(name)
-	for _, p in ipairs(fs.scan(lde.global.getTarCacheDir(), "*")) do
-		if path.basename(p):find(name, 1, true) then
-			return p
+	local iter = fs.readdir(lde.global.getTarCacheDir())
+	if not iter then return nil end
+	for entry in iter do
+		if entry.type == "dir" then
+			local start = entry.name:find(name .. "-", 1, true)
+			if start and start > 1 and not entry.name:sub(start - 1, start - 1):match("[%w%-]") then
+				return path.join(lde.global.getTarCacheDir(), entry.name)
+			end
 		end
 	end
 	return nil
