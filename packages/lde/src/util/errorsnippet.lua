@@ -110,27 +110,48 @@ local function makeRelative(packageDir, msg)
 	return (string.gsub(msg, prefix, ""))
 end
 
---- Parse the meaningful part of a Lua error: the innermost chunk name, line,
---- and message. Chunk loaders (e.g. lua-sys's compile frame) prefix the real
---- error with their own frame:
----   [string "lua-sys"]:459: [string "/abs/init.lua"]:4: '=' expected
---- The innermost `name:line:` is the one the user can act on.
 ---@param err string
 ---@return string? file # chunk name (brackets stripped for file paths)
 ---@return integer? line
+---@return integer? col # compiler-reported column, when available
 ---@return string msg
 local function parseError(err)
+	-- Compile errors: strip the "Failed to compile <path>:" wrapper and prefer
+	-- the compiler's "path:line:col: msg" position.
+	local compileFile, compileErr = err:match("^Failed to compile (.-):\n(.*)$")
+	if compileFile then
+		local file, line, col, msg = compileErr:match("^(.-):(%d+):(%d+): (.*)$")
+		if file then
+			return path.normalize(file), tonumber(line), tonumber(col), msg
+		end
+
+		-- Moonscript reports the line only:
+		--   Failed to parse:
+		--    [N] >>    <source line>
+		local mLine = compileErr:match("%[(%d+)%]")
+		if mLine then
+			return path.normalize(compileFile), tonumber(mLine), nil, (compileErr:match("^([^\n]*)"))
+		end
+
+		-- Unrecognized compiler error (e.g. Moonscript's format): parse the
+		-- unwrapped text below instead of the wrapper-prefixed original.
+		err = compileErr
+	end
+
 	local file, line, msg = err:match("^(.*):(%d+): (.*)$")
-	if not file then return nil, nil, err end
+	if not file then return nil, nil, nil, err end
+
 	-- The outermost match may still contain nested loader frames; take the
 	-- last bracketed chunk name, which is the innermost source. Real files are
 	-- chunk-named by their path; eval chunks ("-e", "...") keep their brackets.
 	local inner = file:match(".*%[string \"(.-)\"%]$")
 		or file:match(".*%[(.-)%]$")
+
 	if inner and inner:match("[/\\]") then
-		return inner, tonumber(line), msg
+		return inner, tonumber(line), nil, msg
 	end
-	return file, tonumber(line), msg
+
+	return file, tonumber(line), nil, msg
 end
 
 --- Resolve the file to read for a failure. The path in the error prefix uses
@@ -143,12 +164,14 @@ end
 local function resolveSource(pkgDir, msgFile, knownFile)
 	local candidates = {}
 	msgFile = msgFile:gsub("^@", "")
+
 	if not msgFile:match("^%.%.%.") then
 		candidates[#candidates + 1] = msgFile
 		if not (msgFile:match("^/") or msgFile:match("^%a:[/\\]")) then
 			candidates[#candidates + 1] = path.join(pkgDir, msgFile)
 		end
 	end
+
 	if knownFile then candidates[#candidates + 1] = knownFile end
 	for _, c in ipairs(candidates) do
 		if fs.exists(c) then
@@ -156,6 +179,7 @@ local function resolveSource(pkgDir, msgFile, knownFile)
 			if src then return c, src end
 		end
 	end
+
 	return nil, nil
 end
 
@@ -215,7 +239,7 @@ end
 ---@param remap? fun(file: string): string? # alternate path for the error file
 ---@return boolean rendered # true when a file:line error was printed
 local function printError(pkgDir, err, knownFile, remap)
-	local mfile, mline, rest = parseError(err)
+	local mfile, mline, _mcol, rest = parseError(err)
 	if not mfile or not mline then
 		return false
 	end
@@ -278,7 +302,7 @@ end
 ---@param remap? fun(file: string): string? # alternate path for the error file
 ---@return boolean rendered # true when a file:line error was printed
 local function printRunError(pkgDir, err, knownFile, remap)
-	local mfile, mline, rest = parseError(err)
+	local mfile, mline, mcol, rest = parseError(err)
 	if not mfile or not mline then
 		return false
 	end
@@ -304,20 +328,23 @@ local function printRunError(pkgDir, err, knownFile, remap)
 		end
 	end
 
-	-- Column of the failing token (Lua errors carry no column; the caret
-	-- position is the best approximation).
-	local col, caretLen = 1, 1
+	-- Column of the failing token. Compilers (Teal/Moonscript) report an exact
+	-- column; plain Lua errors carry none, so the caret position is the best
+	-- approximation.
+	local col, caretLen = mcol or 1, 1
 	if actual and src then
 		local lines = splitLines(src)
 		local startLine = math.max(1, displayLine - CONTEXT)
 		local endLine = math.min(#lines, displayLine + CONTEXT)
 		local width = #tostring(endLine)
 		local failing = expandTabs(lines[displayLine])
-		col, caretLen = findCaretCol(failing, rest)
-		if rest and rest:find("<eof>", 1, true) then
-			-- An '<eof>' error has nothing after the statement: point the
-			-- caret at the end of the line.
-			col, caretLen = #failing + 1, 1
+		if not mcol then
+			col, caretLen = findCaretCol(failing, rest)
+			if rest and rest:find("<eof>", 1, true) then
+				-- An '<eof>' error has nothing after the statement: point the
+				-- caret at the end of the line.
+				col, caretLen = #failing + 1, 1
+			end
 		end
 
 		for ln = startLine, endLine do
@@ -328,7 +355,7 @@ local function printRunError(pkgDir, err, knownFile, remap)
 		ansi.printf("    at %s:%d:%d", actual, displayLine, col)
 	else
 		ansi.printf("{red}error{reset}: %s", rest)
-		ansi.printf("    at %s:%d", mfile, mline)
+		ansi.printf("    at %s:%d%s", mfile, mline, mcol and (":" .. mcol) or "")
 	end
 	print()
 	ansi.printf("{gray}%s{reset}", versionFooter())
