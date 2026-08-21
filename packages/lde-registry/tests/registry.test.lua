@@ -4,26 +4,28 @@ local test = require("lde-test")
 
 local Registry = require("lde-registry")
 
-local fs = require("fs")
 local path = require("path")
 local semver = require("semver")
 
-local tmpBase = os.tmpname() .. ".d"
-fs.rmdir(tmpBase)
-fs.mkdirAll(tmpBase)
-
 --- Builds a fake fs table backed by an in-memory table of path -> content.
+--- Keys are written in POSIX form; lookups are normalized to the same form so
+--- the fake works on Windows too, where path.join mixes separators
+--- (e.g. "/fake/registry\packages\foo.json").
 ---@param files table<string, string>?
 ---@return { read: fun(p: string): string?, exists: fun(p: string): boolean, mkdir: fun(p: string): boolean }
 local function fakeFs(files)
 	files = files or {}
+	---@param p string
+	---@return string
+	local function norm(p)
+		return (p:gsub("[\\/]", "/"))
+	end
 	return {
 		read = function(p)
-			return files[p] or files[p:gsub("/", path.separator)] or nil
+			return files[norm(p)] or nil
 		end,
 		exists = function(p)
-			local key = files[p] ~= nil and p or p:gsub("/", path.separator)
-			return files[key] ~= nil
+			return files[norm(p)] ~= nil
 		end,
 		mkdir = function() return true end,
 	}
