@@ -462,8 +462,9 @@ local function runWatch(filters, coverage)
 	end
 
 	if #watchers == 0 then
-		ansi.printf("{yellow}No packages with tests found")
-		return
+		lde.error.raise("No packages with tests found", {
+			hint = "Add tests/*.test.lua to a package to get started.",
+		})
 	end
 
 	local spawnArgs = { "test" }
@@ -506,6 +507,7 @@ local function test(args)
 	if jsonOut then coverage = true end
 
 	-- Collect remaining positional args as test file filter globs
+	args:flag("") -- consume the `--` separator if present
 	local filters = {}
 	while true do
 		local v = args:pop()
@@ -565,13 +567,18 @@ local function test(args)
 		end
 
 		if #packages == 0 then
-			ansi.printf("{yellow}No packages with tests found")
-			return
+			lde.error.raise("No packages with tests found", {
+				hint = "Add tests/*.test.lua to a package to get started.",
+			})
 		end
 
 		ansi.printf("{white}Running tests from {cyan}%d {white}%s",
 			#packages, #packages == 1 and "package" or "packages")
 		print()
+
+		-- Whether any package actually ran a file: with a filter, a run where
+		-- nothing matched anywhere is a mistake (typo'd glob), not a pass.
+		local anyMatched = false
 
 		for _, pkg in ipairs(packages) do
 			ansi.printf("{gray}%s", pkg:getName())
@@ -584,6 +591,7 @@ local function test(args)
 				totalFailures = totalFailures + 1
 			elseif results.external then
 				-- External runners (busted) print their own results.
+				anyMatched = true
 				if results.exitCode ~= 0 then
 					ansi.printf("  {red}Tests: failed (exit %s)", tostring(results.exitCode))
 					hadFailures = true
@@ -592,9 +600,16 @@ local function test(args)
 					ansi.printf("  {green}Tests: passed")
 					totalPassed = totalPassed + 1
 				end
-			elseif #results.files == 0 and #filters > 0 then
-				ansi.printf("  {gray}No files matched")
+			elseif #results.files == 0 then
+				-- Nothing matched in this package; a per-package miss is only
+				-- an error when no package matched anywhere (checked below).
+				if #filters > 0 then
+					ansi.printf("  {gray}No files matched")
+				else
+					ansi.printf("  {gray}No tests found")
+				end
 			else
+				anyMatched = true
 				printFileErrors(results, pkg:getDir())
 				totalPassed = totalPassed + (results.total - results.failures)
 				totalFailures = totalFailures + results.failures
@@ -620,6 +635,15 @@ local function test(args)
 		local totalTests = totalPassed + totalFailures
 		printSummary(totalFailures, totalPassed, totalTests, totalSkipped)
 
+		-- A filter that matched nothing anywhere is a typo, and a run where no
+		-- package had any tests is nothing to celebrate — both must fail.
+		if #filters > 0 and not anyMatched then
+			lde.error.raise("No test files match: " .. table.concat(filters, ", "))
+		end
+		if not hadFailures and totalTests == 0 then
+			lde.error.raise("No tests found in any package (expected *.test.lua files)")
+		end
+
 		if hadFailures then
 			os.exit(1)
 		end
@@ -643,8 +667,13 @@ local function test(args)
 		print()
 		os.exit(results.exitCode ~= 0 and 1 or 0)
 		return
-	elseif #results.files == 0 and #filters > 0 then
-		ansi.printf("  {gray}No files matched")
+	elseif #results.files == 0 then
+		-- Nothing ran: a filter that matched no file, or no test files at all
+		-- (an empty or typo'd tests/ dir must not pass silently).
+		if #filters > 0 then
+			lde.error.raise("No test files match: " .. table.concat(filters, ", "))
+		end
+		lde.error.raise("No tests found in: " .. package:getTestDir() .. " (expected *.test.lua files)")
 	else
 		printFileErrors(results, package:getDir())
 	end

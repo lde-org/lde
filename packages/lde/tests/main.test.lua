@@ -71,6 +71,49 @@ test.it("lde test skips packages with no tests/ directory", function()
 	fs.rmdir(tmpDir)
 end)
 
+test.it("lde test fails when no tests are found", function()
+	local tmpDir = path.join(env.tmpdir(), "lde-test-none-found")
+	fs.rmdir(tmpDir)
+	fs.mkdir(tmpDir)
+
+	-- No packages at all: errors with a hint (a typo'd tests/ dir must not
+	-- silently pass).
+	local ok, out = ldecli({ "test" }, tmpDir)
+	test.falsy(ok, "lde test with no packages must fail")
+	test.includes(out or "", "No packages with tests found")
+
+	-- A package whose tests/ dir is empty: errors.
+	local emptyPkg = path.join(tmpDir, "empty-tests")
+	fs.mkdir(emptyPkg)
+	fs.mkdir(path.join(emptyPkg, "src"))
+	fs.mkdir(path.join(emptyPkg, "tests"))
+	fs.write(path.join(emptyPkg, "src", "init.lua"), "return true")
+	fs.write(path.join(emptyPkg, "lde.json"), json.encode({ name = "empty-tests", version = "0.1.0" }))
+
+	ok, out = ldecli({ "test" }, emptyPkg)
+	test.falsy(ok, "lde test with an empty tests/ dir must fail")
+	test.includes(out or "", "No tests found in")
+
+	-- A filter that matches no file: errors.
+	local withTests = path.join(tmpDir, "with-tests")
+	fs.mkdir(withTests)
+	fs.mkdir(path.join(withTests, "src"))
+	fs.mkdir(path.join(withTests, "tests"))
+	fs.write(path.join(withTests, "src", "init.lua"), "return true")
+	fs.write(path.join(withTests, "lde.json"), json.encode({ name = "with-tests", version = "0.1.0" }))
+	fs.write(path.join(withTests, "tests", "a.test.lua"), 'local test = require("lde-test")\ntest.it("passes", function() end)')
+
+	ok, out = ldecli({ "test", "--", "nope.test.lua" }, withTests)
+	test.falsy(ok, "a filter matching nothing must fail")
+	test.includes(out or "", "No test files match")
+
+	-- A matching filter still passes.
+	ok, out = ldecli({ "test", "--", "a.test.lua" }, withTests)
+	test.truthy(ok, "a matching filter must pass: " .. tostring(out))
+
+	fs.rmdir(tmpDir)
+end)
+
 test.it("--tree overrides the global lde directory", function()
 	local tmpTree = path.join(env.tmpdir(), "lde-tree-test")
 	fs.rmdir(tmpTree)
