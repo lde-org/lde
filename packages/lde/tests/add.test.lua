@@ -106,7 +106,7 @@ test.it("lde add --dev creates devDependencies if not present in config", functi
 	test.truthy(updated.devDependencies["mylib"], "mylib should be in devDependencies")
 end)
 
-test.it("lde add --dev --git adds git dep to devDependencies", function()
+test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde add --dev --git adds git dep to devDependencies", function()
 	local dir = makeProject("dev-git-test")
 	local repoDir = makeGitRepo("dev-git-repo")
 	ldecli({ "add", "mypkg", "--dev", "--git", repoDir }, dir)
@@ -119,7 +119,7 @@ test.it("lde add --dev --git adds git dep to devDependencies", function()
 	test.falsy(config.dependencies and config.dependencies["mypkg"], "mypkg should not be in dependencies")
 end)
 
-test.it("lde add --dev --git --branch stores branch in devDependencies", function()
+test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde add --dev --git --branch stores branch in devDependencies", function()
 	local dir = makeProject("dev-git-branch-test")
 	local repoDir = makeGitRepo("dev-git-branch-repo")
 	-- Rename the default branch so the --branch ref actually exists.
@@ -382,7 +382,7 @@ test.it("lde add an existing dep to a nonexistent version fails cleanly", functi
 	test.includes(out or "", "No version of")
 end)
 
-test.it("lde add version on a git/path dep fails cleanly", function()
+test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde add version on a git/path dep fails cleanly", function()
 	local dir = makeProject("repin-git-test")
 	local repoDir = makeGitRepo("repin-git-repo")
 	local ok, out = ldecli({ "add", "mypkg", "--git", repoDir }, dir)
