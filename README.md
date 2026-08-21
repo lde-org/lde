@@ -24,6 +24,7 @@ To get started, [read the docs](https://lde.sh/docs/general/getting-started/intr
 - `lde compile` — Compile your project into a single distributable executable
 - `lde bundle` — Bundle your project into a single Lua file
 - `lde add` — Add dependencies from a path, git repo, or the registry
+- `lde search` — Search the lde registry and luarocks, then add/install a match
 - `lde x` / `ldx` — Execute a remote project directly, great for CLIs
 - `lde tree` — Visualize your dependency graph
 - `lde update` — Update dependencies to their latest versions

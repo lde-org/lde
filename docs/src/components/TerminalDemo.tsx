@@ -38,6 +38,7 @@ const tabs: { id: string; label: string; lines: Line[] }[] = [
 			{ type: "out", text: `  ${E}1m${E}33mupdate    ${E}0m  ${E}90mclap        ${E}0m Update dependencies to their latest versions` },
 			{ type: "out", text: `  ${E}1m${E}33moutdated  ${E}0m  ${E}90m            ${E}0m Show dependencies with newer versions available` },
 			{ type: "out", text: `  ${E}1m${E}33mpublish   ${E}0m  ${E}90m            ${E}0m Create a PR to add your package to the registry` },
+			{ type: "out", text: `  ${E}1m${E}33msearch    ${E}0m  ${E}90mjson        ${E}0m Search the lde registry and luarocks` },
 			{ type: "blank" },
 			{ type: "out", text: `  ${E}1m${E}35mcompile   ${E}0m  ${E}90m            ${E}0m Compile current project into an executable` },
 			{ type: "out", text: `  ${E}1m${E}35mbundle    ${E}0m  ${E}90m            ${E}0m Bundle current project into a single lua file` },
