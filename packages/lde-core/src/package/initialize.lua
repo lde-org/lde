@@ -313,6 +313,15 @@ local function entryContent(projectType, language)
 	return "print('Hello, world!')"
 end
 
+--- Write a scaffold file as a proper POSIX text file: guaranteed trailing
+--- newline (a missing one trips `git diff --check` and other tooling).
+---@param p string
+---@param content string
+local function writeText(p, content)
+	if content:sub(-1) ~= "\n" then content = content .. "\n" end
+	fs.write(p, content)
+end
+
 --- Initializes a package at the given directory.
 --- If the directory already contains an lde.json, this will throw an error to avoid overwriting existing packages.
 ---@param dir string
@@ -350,19 +359,21 @@ local function initPackage(dir, opts)
 		fs.mkdir(dir)
 	end
 
+	-- One tab of indentation per JSON nesting level, root brace unindented —
+	-- the same shape the json encoder produces (see lde add rewriting lde.json).
 	local configLines = {
-		"\t{",
-		'\t\t"name": "' .. packageName .. '",',
-		'\t\t"version": "0.1.0",',
+		"{",
+		'\t"name": "' .. packageName .. '",',
+		'\t"version": "0.1.0",',
 	}
 	if language == "teal" then
-		configLines[#configLines + 1] = '\t\t"scripts": {'
-		configLines[#configLines + 1] = '\t\t\t"check": "tl check -I target src/init.tl"'
-		configLines[#configLines + 1] = '\t\t},'
+		configLines[#configLines + 1] = '\t"scripts": {'
+		configLines[#configLines + 1] = '\t\t"check": "tl check -I target src/init.tl"'
+		configLines[#configLines + 1] = '\t},'
 	end
-	configLines[#configLines + 1] = '\t\t"dependencies": {}'
-	configLines[#configLines + 1] = '\t}'
-	fs.write(configPath, table.concat(configLines, "\n"))
+	configLines[#configLines + 1] = '\t"dependencies": {}'
+	configLines[#configLines + 1] = '}'
+	writeText(configPath, table.concat(configLines, "\n"))
 
 	local idealGitignore = util.dedent([[
 		/target/
@@ -370,7 +381,7 @@ local function initPackage(dir, opts)
 
 	local gitignorePath = path.join(dir, ".gitignore")
 	if not fs.exists(gitignorePath) then
-		fs.write(gitignorePath, idealGitignore)
+		writeText(gitignorePath, idealGitignore)
 	else -- Try to append to it
 		local content = fs.read(gitignorePath)
 		if not content then
@@ -379,14 +390,14 @@ local function initPackage(dir, opts)
 
 		if not string.find(content, "/target/", 1, true) then
 			content = content .. "\n" .. idealGitignore
-			fs.write(gitignorePath, content)
+			writeText(gitignorePath, content)
 		end
 	end
 
 	if language == "teal" then
 		local tlconfigPath = path.join(dir, "tlconfig.lua")
 		if not fs.exists(tlconfigPath) then
-			fs.write(tlconfigPath, util.dedent([[
+			writeText(tlconfigPath, util.dedent([[
 				return {
 					include_dir = { "target" },
 				}
@@ -396,7 +407,7 @@ local function initPackage(dir, opts)
 
 	local luarcPath = path.join(dir, ".luarc.json")
 	if not fs.exists(luarcPath) then
-		fs.write(luarcPath, util.dedent([[
+		writeText(luarcPath, util.dedent([[
 			{
 				"$schema": "https://raw.githubusercontent.com/sumneko/vscode-lua/master/setting/schema.json",
 				"diagnostics": {
@@ -437,7 +448,7 @@ local function initPackage(dir, opts)
 			or "init.lua"
 
 		fs.mkdir(src)
-		fs.write(path.join(src, entryFile), entryContent(projectType, language))
+		writeText(path.join(src, entryFile), entryContent(projectType, language))
 	end
 
 	-- Write agent instructions if a known coding agent is present. claude reads
@@ -454,7 +465,7 @@ local function initPackage(dir, opts)
 		agentFile = "CLAUDE.md"
 	end
 	if agentFile then
-		fs.write(path.join(dir, agentFile), AGENT_TEMPLATE)
+		writeText(path.join(dir, agentFile), AGENT_TEMPLATE)
 	end
 
 	return package
