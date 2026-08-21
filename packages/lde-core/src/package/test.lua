@@ -429,8 +429,12 @@ local function runTests(package, reporter, filters, opts)
 		end
 		for i, filter in ipairs(filters) do
 			local first = filter:sub(1, 1)
-			if first == "." or first == "/" or (ffi.os == "Windows" and filter:match("^%a:\\")) then
-				local resolved = path.resolve(env.cwd(), filter)
+			-- A filter is treated as a project-relative path when it is
+			-- explicitly rooted ("./", "/", "C:\") or when it points at a real
+			-- file (e.g. `lde test -- tests/foo.test.lua`); anything else
+			-- stays a glob matched against paths under tests/.
+			local resolved = path.resolve(env.cwd(), filter)
+			if first == "." or first == "/" or (ffi.os == "Windows" and filter:match("^%a:\\")) or fs.exists(resolved) then
 				local rel = path.relative(testDir, resolved)
 				if rel and not rel:match("^%.%.") then
 					filters[i] = rel == "." and "*" or rel

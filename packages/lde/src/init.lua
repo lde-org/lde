@@ -159,7 +159,7 @@ end
 		lde.error.raise("Current working directory no longer exists (it may have been deleted); use an absolute path with -C or cd to an existing directory")
 	end
 
-	if args:flag("ensure-mingw") then
+	if commandName == "--ensure-mingw" or args:flag("ensure-mingw") then
 		lde.global.ensureMingw()
 		return
 	end
@@ -195,7 +195,7 @@ end
 		end
 
 		if not eok then
-			ansi.printf("{red}%s", tostring(result))
+			lde.error.raise(tostring(result))
 		elseif result ~= nil then
 			print(tostring(result))
 		end

@@ -134,7 +134,7 @@ test.afterEach(function() ... end)  -- runs after each test
 test.afterAll(function() ... end)   -- runs once after all tests
 ```
 
-Assertions take no message argument — the test name serves as the description.
+Every assertion takes an optional trailing context message, appended to the failure output.
 
 ## Compiling
 
@@ -391,7 +391,6 @@ local function initPackage(dir, opts)
 				"$schema": "https://raw.githubusercontent.com/sumneko/vscode-lua/master/setting/schema.json",
 				"diagnostics": {
 					"disable": [
-						"duplicate-doc-field",
 						"duplicate-doc-field",
 						"duplicate-index",
 						"duplicate-set-field",

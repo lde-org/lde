@@ -7,6 +7,11 @@ local prompt = require("lde.util.prompt")
 
 ---@param args clap.Args
 local function init(args)
+	local opts = prompt.scaffoldOptions(args)
+	-- Consume the --name option before popping the positional so
+	-- `lde init --name foo [dir]` parses the same as `lde init [dir] --name foo`.
+	local nameFlag = args:option("name")
+
 	local dir = args:pop() or env.cwd()
 
 	-- Fail fast (and before any interactive prompts) when this is already a project.
@@ -15,8 +20,7 @@ local function init(args)
 		lde.error.raise("Directory already contains lde.json: " .. dir)
 	end
 
-	local opts = prompt.scaffoldOptions(args)
-	opts.name = prompt.resolveName(args, path.basename(dir))
+	opts.name = nameFlag or prompt.resolveName(args, path.basename(dir))
 
 	local package = lde.Package.init(dir, opts)
 	if package and opts.language then

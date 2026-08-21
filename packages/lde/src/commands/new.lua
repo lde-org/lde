@@ -9,6 +9,7 @@ local prompt = require("lde.util.prompt")
 ---@param args clap.Args
 local function new(args)
 	local opts = prompt.scaffoldOptions(args)
+	local nameFlag = args:option("name")
 
 	local name = args:pop()
 	if not name then
@@ -25,9 +26,9 @@ local function new(args)
 			lde.error.raise("Invalid project name: '" .. asked .. "' (no spaces or path separators)")
 		end
 		name = asked
-		opts.name = asked
+		opts.name = nameFlag or asked
 	else
-		opts.name = prompt.resolveName(args, path.basename(name))
+		opts.name = nameFlag or prompt.resolveName(args, path.basename(name))
 	end
 
 	-- The tests/ fixtures are exposed as target/tests during lde test, so a

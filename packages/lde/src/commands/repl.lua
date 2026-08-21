@@ -4,6 +4,7 @@ local highlight = require("readline.highlight")
 
 local lde     = require("lde-core")
 local runtime = require("lde-core.runtime")
+local prompt  = require("lde.util.prompt")
 
 ---@param v any
 ---@return boolean
@@ -151,8 +152,15 @@ local function repl(_args)
 	end
 
 	while true do
-		local prompt = ansi.format(buffer ~= "" and "{gray}...{reset} " or "{blue}>{reset} ")
-		local line = readline.read(prompt, highlight, complete)
+		local line
+		if prompt.interactive then
+			local p = ansi.format(buffer ~= "" and "{gray}...{reset} " or "{blue}>{reset} ")
+			line = readline.read(p, highlight, complete)
+		else
+			io.write(buffer ~= "" and "... " or "> ")
+			io.flush()
+			line = io.read()
+		end
 
 		if line == nil or line == "exit()" or line == "quit()" then
 			break

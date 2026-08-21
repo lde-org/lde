@@ -70,7 +70,8 @@ local function tree(_args)
 				local depPath, err = pkg:getDependencyPath(dep.name, info)
 				if not depPath then
 					local treeChar = last and "└── " or "├── "
-					ansi.printf("%s%s{red}%s {gray}(error: %s)", childPrefix, treeChar, dep.name, err)
+					local why = err or "not pinned yet. run `lde sync`"
+					ansi.printf("%s%s{red}%s {gray}(%s)", childPrefix, treeChar, dep.name, why)
 				else
 					local depPkg, err2 = lde.Package.open(depPath)
 					if not depPkg then

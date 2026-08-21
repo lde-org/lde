@@ -103,8 +103,18 @@ end
 
 ---@param cmd string
 function Instance:sh(cmd)
-	local res = os.execute(cmd)
-	assert(res == 0 or res == true, "failed to execute " .. cmd)
+	-- Run relative to the output dir so `build:sh("echo x > out.txt")` lands
+	-- where the rest of the build API writes. Stream output (don't capture) so
+	-- configure-style scripts keep their progress visible.
+	local shell, flag = jit.os == "Windows" and "cmd" or "sh", jit.os == "Windows" and "/c" or "-c"
+	local child, serr = process.spawn(shell, { flag, cmd }, {
+		cwd = self.outDir,
+		stdout = "inherit",
+		stderr = "inherit",
+	})
+	assert(child, "failed to execute " .. cmd .. ": " .. (serr or "unknown error")) ---@cast child -nil
+	local code = child:wait()
+	assert(code == 0, "failed to execute " .. cmd)
 end
 
 --- Run the C compiler (gcc/mingw on Windows, system gcc elsewhere).

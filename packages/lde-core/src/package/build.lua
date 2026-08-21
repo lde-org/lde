@@ -157,7 +157,10 @@ local function buildPackage(package, destinationPath)
 				local ldeBin = assert(env.execPath(), "no executable path")
 				local child, serr = process.spawn(ldeBin,
 					{ "__build-pkg", package:getDir(), destinationPath },
-					{ stdout = "inherit", stderr = "inherit" })
+					-- cwd = destinationPath so the worker's os.execute calls
+					-- (build:sh) resolve relative paths against the output dir,
+					-- matching the write/read/exists API.
+					{ stdout = "inherit", stderr = "inherit", cwd = destinationPath })
 				if not child then ---@cast child -nil
 				end
 				if not child then

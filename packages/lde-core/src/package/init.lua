@@ -74,7 +74,15 @@ function Package:getLockfilePath() return path.join(self.dir, "lde.lock") end
 ---@param pkg lde.Package
 ---@param outputDir string
 local function defaultBuildFn(pkg, outputDir)
-	fs.copy(pkg:getSrcDir(), outputDir)
+	-- fs.copy silently fails (and creates nothing) when src/ is missing, which
+	-- would leave build:sh's cwd pointing at a nonexistent output dir. Ensure
+	-- the output dir exists regardless so relative build-script paths always
+	-- resolve against it.
+	if fs.isdir(pkg:getSrcDir()) then
+		fs.copy(pkg:getSrcDir(), outputDir)
+	else
+		fs.mkdirAll(outputDir)
+	end
 
 	local buildScriptPath = pkg:getBuildScriptPath()
 	if not fs.exists(buildScriptPath) then

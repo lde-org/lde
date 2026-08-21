@@ -643,6 +643,8 @@ local function test(args)
 		print()
 		os.exit(results.exitCode ~= 0 and 1 or 0)
 		return
+	elseif #results.files == 0 and #filters > 0 then
+		ansi.printf("  {gray}No files matched")
 	else
 		printFileErrors(results, package:getDir())
 	end
