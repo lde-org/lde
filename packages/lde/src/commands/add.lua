@@ -72,12 +72,33 @@ local function add(args)
 		dependencyTable = config.dependencies
 	end ---@cast dependencyTable -nil
 
-	if dependencyTable[name] then
-		ansi.warning("Dependency already exists: %s", name)
-		return
+	-- Whether the name routes through the luarocks branch. Existing deps are
+	-- re-pinned through whatever kind they already are, so `lde add
+	-- semver@1.0.0` works on a luarocks dep without needing the rocks: prefix.
+	local isRocks = rawName:match("^rocks:") ~= nil
+	local isUpdate = false
+
+	local existing = dependencyTable[name]
+	if existing then
+		if not registryVersion and not depType then
+			ansi.warning("Dependency already exists: %s", name)
+			return
+		end
+
+		-- An explicit spec (version, or a --git/--path source) replaces the
+		-- existing entry: `lde add semver@1.0.0` upgrades/downgrades the pin.
+		isUpdate = true
+		if not depType and existing.luarocks then
+			isRocks = true
+		elseif not depType and (existing.git or existing.path) then
+			lde.error.raise("Cannot set a version on '" .. name .. "': it is a " .. (existing.git and "git" or "path") .. " dependency", {
+				hint = "Use `lde add " .. name .. " --" .. (existing.git and "git" or "path") .. " <value>` to change its source.",
+			})
+		end
 	end
 
 	local dep
+	local verb = isUpdate and "Updated" or "Added"
 	if depType == "path" then
 		dep = { path = depValue }
 	elseif depType == "git" then
@@ -85,7 +106,7 @@ local function add(args)
 		local commit = args:option("commit")
 
 		dep = { git = depValue, branch = branch, commit = commit }
-	elseif rawName:match("^rocks:") then
+	elseif isRocks then
 		local _, _, err = lde.util.openLuarocksPackage(name, registryVersion)
 		if err then
 			lde.error.raise(err, { hint = lde.util.suggestPackage(name, true) })
@@ -100,7 +121,8 @@ local function add(args)
 		end
 
 		dep = { luarocks = name, version = pinnedVersion or nil }
-		ansi.printf("{green}Added luarocks %s: %s{reset}", isDevelopment and "dev dependency" or "dependency", name)
+		ansi.printf("{green}%s luarocks %s: %s{reset}%s", verb, isDevelopment and "dev dependency" or "dependency", name,
+			pinnedVersion and ansi.format(" ({cyan}version: %s{reset})", pinnedVersion) or "")
 	else
 		-- Registry dependency
 		lde.global.syncRegistry()
@@ -114,13 +136,18 @@ local function add(args)
 		-- the concrete latest version here.
 		local resolvedVersion = lde.global.resolveRegistryVersion(portfile, registryVersion)
 		dep = { version = resolvedVersion }
-		ansi.printf("{green}Added %s: %s{reset} ({cyan}version: %s{reset})", isDevelopment and "dev dependency" or "dependency", name, resolvedVersion)
+		ansi.printf("{green}%s %s: %s{reset} ({cyan}version: %s{reset})", verb, isDevelopment and "dev dependency" or "dependency", name, resolvedVersion)
 	end
 
 	if depType then
-		ansi.printf("{green}Added %s: %s{reset} ({cyan}%s: %s{reset})", isDevelopment and "dev dependency" or "dependency", name, depType, depValue)
+		ansi.printf("{green}%s %s: %s{reset} ({cyan}%s: %s{reset})", verb, isDevelopment and "dev dependency" or "dependency", name, depType, depValue)
 	end
 
+	-- removeField first: addField appends the key to the encoder's key store,
+	-- so re-adding an existing key without removing it would emit a duplicate.
+	if isUpdate then
+		json.removeField(dependencyTable, name)
+	end
 	json.addField(dependencyTable, name, dep)
 
 	fs.write(configPath, json.encode(config))

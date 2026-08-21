@@ -278,3 +278,111 @@ test.it("lde add <name>@latest pins the newest version", function()
 	-- @latest must resolve to the concrete newest version, not a "latest" marker.
 	test.equal(dep.version, "2.0.0")
 end)
+
+--
+-- Re-pinning existing dependencies (lde add name@version / --version)
+--
+
+test.it("lde add name@version re-pins an existing luarocks dep", function()
+	local dir = makeProject("repin-rocks-test")
+	local ok, out = ldecli({ "add", "rocks:semver" }, dir)
+	test.truthy(ok, "first add failed: " .. tostring(out)) ---@cast out -nil
+
+	-- No rocks: prefix needed: the existing entry's kind routes the update.
+	ok, out = ldecli({ "add", "semver@1.1.0" }, dir)
+	test.truthy(ok, "re-pin failed: " .. tostring(out))
+	test.includes(out or "", "Updated")
+
+	local raw = fs.read(path.join(dir, "lde.json")) ---@cast raw -nil
+	local config = json.decode(raw) ---@cast config table<string, any>
+	test.equal(config.dependencies.semver.version, "1.1.0")
+
+	-- The --version flag form re-pins the same way.
+	ok, out = ldecli({ "add", "semver", "--version", "1.2.0" }, dir)
+	test.truthy(ok, "--version re-pin failed: " .. tostring(out))
+	test.includes(out or "", "Updated")
+
+	raw = fs.read(path.join(dir, "lde.json")) ---@cast raw -nil
+	config = json.decode(raw) ---@cast config table<string, any>
+	test.equal(config.dependencies.semver.version, "1.2.0")
+end)
+
+test.it("lde add with no version on an existing dep still warns", function()
+	local dir = makeProject("repin-warn-test")
+	local ok, out = ldecli({ "add", "rocks:semver" }, dir)
+	test.truthy(ok, "first add failed: " .. tostring(out)) ---@cast out -nil
+
+	ok, out = ldecli({ "add", "semver" }, dir)
+	test.truthy(ok)
+	test.includes(out or "", "already exists")
+
+	-- The manifest is untouched: no version pin appears.
+	local raw = fs.read(path.join(dir, "lde.json")) ---@cast raw -nil
+	local config = json.decode(raw) ---@cast config table<string, any>
+	test.falsy(config.dependencies.semver.version, "bare add must not pin a version")
+end)
+
+test.it("lde add an existing dep to a nonexistent version fails cleanly", function()
+	local dir = makeProject("repin-badver-test")
+	local ok, out = ldecli({ "add", "rocks:semver" }, dir)
+	test.truthy(ok, "first add failed: " .. tostring(out)) ---@cast out -nil
+
+	ok, out = ldecli({ "add", "semver@99.0.0" }, dir)
+	test.falsy(ok, "nonexistent version must fail")
+	test.includes(out or "", "No version of")
+end)
+
+test.it("lde add version on a git/path dep fails cleanly", function()
+	local dir = makeProject("repin-git-test")
+	local ok, out = ldecli({ "add", "mypkg", "--git", "https://example.com/mypkg.git" }, dir)
+	test.truthy(ok, "git add failed: " .. tostring(out))
+
+	ok, out = ldecli({ "add", "mypkg@1.0.0" }, dir)
+	test.falsy(ok, "version on a git dep must fail")
+	test.includes(out or "", "git dependency")
+
+	ok, out = ldecli({ "add", "mypkg", "--path", "../mylib" }, dir)
+	test.truthy(ok, "switching to a path dep failed: " .. tostring(out))
+	test.includes(out or "", "Updated")
+	ok, out = ldecli({ "add", "mypkg@1.0.0" }, dir)
+	test.falsy(ok, "version on a path dep must fail")
+	test.includes(out or "", "path dependency")
+end)
+
+test.it("lde add name@version re-pins an existing registry dep", function()
+	-- Fully offline fake registry (same shape as the @latest test above).
+	local repoDir = path.join(tmpBase, "repin-reg-repo")
+	fs.rmdir(repoDir)
+	fs.mkdir(repoDir)
+	fs.mkdir(path.join(repoDir, "src"))
+	fs.write(path.join(repoDir, "src", "init.lua"), 'return "repin-reg"')
+	fs.write(path.join(repoDir, "lde.json"), json.encode({
+		name = "repin-reg",
+		version = "0.1.0",
+		dependencies = {}
+	}))
+
+	local treeDir = path.join(tmpBase, "repin-reg-tree")
+	fs.rmdir(treeDir)
+	fs.mkdir(treeDir)
+	fs.mkdirAll(path.join(treeDir, "registry", "packages"))
+	fs.write(path.join(treeDir, "registry", "packages", "repin-reg.json"), json.encode({
+		name = "repin-reg",
+		description = "offline test package",
+		git = repoDir,
+		branch = "master",
+		versions = { ["1.0.0"] = "1111111", ["2.0.0"] = "2222222" }
+	}))
+
+	local dir = makeProject("repin-reg-test")
+	local ok, out = ldecli({ "--tree", treeDir, "add", "repin-reg" }, dir)
+	test.truthy(ok, "first add failed: " .. tostring(out)) ---@cast out -nil
+
+	ok, out = ldecli({ "--tree", treeDir, "add", "repin-reg@1.0.0" }, dir)
+	test.truthy(ok, "re-pin failed: " .. tostring(out))
+	test.includes(out or "", "Updated")
+
+	local raw = fs.read(path.join(dir, "lde.json")) ---@cast raw -nil
+	local config = json.decode(raw) ---@cast config table<string, any>
+	test.equal(config.dependencies["repin-reg"].version, "1.0.0")
+end)

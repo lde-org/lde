@@ -77,7 +77,16 @@ end
 -- `-v` is the single-dash alias for `--version` and shares its fast path and
 -- override-combination semantics (`lde -v --tree <dir>` applies the override
 -- before printing).
-local versionRequested = args:flag("version") or args:flagShort("v")
+-- A top-level `--version`/`-v` prints the version, but only when it is the
+-- first remaining argument (the cwd/tree overrides above are consumed first).
+-- A command's own `--version <value>` option — e.g. `lde add x --version
+-- 1.0` — must not be intercepted here: clap's flag() would consume it and the
+-- command would silently never see its value.
+local versionRequested = false
+if args:peek() == "--version" or args:peek() == "-v" then
+	args:pop()
+	versionRequested = true
+end
 
 if versionRequested and args:count() == 0 then
 	if cwdOverride or treeOverride then
