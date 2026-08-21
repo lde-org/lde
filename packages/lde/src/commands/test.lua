@@ -5,7 +5,7 @@ local env = require("env")
 local process = require("process")
 local ffi = require("ffi")
 
-local highlight = require("readline.highlight")
+local errorsnippet = require("lde.util.errorsnippet")
 
 local lde = require("lde-core")
 
@@ -17,199 +17,6 @@ if jit.os == "Windows" then
 else
 	pcall(ffi.cdef, "int usleep(unsigned int usec);")
 	sleep = function(ms) ffi.C.usleep(ms * 1000) end
-end
-
----@param packageDir string
----@param msg string
-local function makeRelative(packageDir, msg)
-	-- Escape pattern magic characters so a path with "-", ".", etc. matches literally.
-	local prefix = packageDir .. path.separator
-	prefix = prefix:gsub("([^%w])", "%%%1")
-	return (string.gsub(msg, prefix, ""))
-end
-
--- Lines of context shown above and below the failing line.
-local CONTEXT = 2
-
--- Split source text into lines (dropping the empty entry left by a final newline).
----@param src string
----@return string[]
-local function splitLines(src)
-	local lines = {}
-	local pos = 1
-	while true do
-		local nl = src:find("\n", pos, true)
-		if nl then
-			lines[#lines + 1] = src:sub(pos, nl - 1)
-			pos = nl + 1
-		else
-			lines[#lines + 1] = src:sub(pos)
-			break
-		end
-	end
-	if #lines > 1 and lines[#lines] == "" then lines[#lines] = nil end
-	return lines
-end
-
----@param line string
----@return string
-local function expandTabs(line)
-	return (line:gsub("\t", "    "))
-end
-
--- Assertion names, longest first so e.g. "greaterEqual" wins over "equal".
-local ASSERT_NAMES = {
-	"greaterEqual", "lessEqual", "notEqual", "deepEqual",
-	"includes", "truthy", "falsy", "greater", "less", "match", "equal",
-}
-
---- Search a line for the assertion call (or a variable named in the error
---- message) so the caret points at what actually failed.
----@param line string
----@param msg string?
----@return number col, number len
-local function findCaretCol(line, msg)
-	---@param word string
-	---@return integer?
-	local function findWord(word)
-		local i = 1
-		while i <= #line do
-			local s = line:find(word, i, true)
-			if not s then return nil end
-			local e = s + #word
-			local before = s > 1 and line:sub(s - 1, s - 1) or ""
-			local after = line:sub(e, e)
-			if not before:match("[%w_]") and not after:match("[%w_]") then
-				return s
-			end
-			i = e
-		end
-	end
-
-	-- Failing assertion call, e.g. `test.deepEqual(a, b)`.
-	for _, name in ipairs(ASSERT_NAMES) do
-		local i = 1
-		while i <= #line do
-			local s = line:find(name, i, true)
-			if not s then break end
-			local e = s + #name
-			local before = s > 1 and line:sub(s - 1, s - 1) or ""
-			if not before:match("[%w_]") then
-				local j = e
-				while j <= #line and line:sub(j, j):match("%s") do j = j + 1 end
-				if line:sub(j, j) == "(" then
-					return s, #name
-				end
-			end
-			i = e
-		end
-	end
-
-	-- A variable/field called out in a runtime error, e.g.
-	-- `attempt to index a nil value (local 'x')`.
-	if msg then
-		local var = msg:match("^.*'([^']+)'")
-		if var then
-			local s = findWord(var)
-			if s then return s, #var end
-		end
-	end
-
-	-- Fallback: start of the statement.
-	local first = line:find("%S")
-	return first or 1, 1
-end
-
--- Resolve the file to read for a failure. The path in the error prefix uses
--- short_src and may be truncated (".../x") for long paths, so fall back to the
--- test file the runner knows it was executing.
----@param pkgDir string
----@param msgFile string
----@param knownFile? string
----@return string? actual, string? src
-local function resolveSource(pkgDir, msgFile, knownFile)
-	local candidates = {}
-	msgFile = msgFile:gsub("^@", "")
-	if not msgFile:match("^%.%.%.") then
-		candidates[#candidates + 1] = msgFile
-		if not (msgFile:match("^/") or msgFile:match("^%a:[/\\]")) then
-			candidates[#candidates + 1] = path.join(pkgDir, msgFile)
-		end
-	end
-	if knownFile then candidates[#candidates + 1] = knownFile end
-	for _, c in ipairs(candidates) do
-		if fs.exists(c) then
-			local src = fs.read(c)
-			if src then return c, src end
-		end
-	end
-	return nil, nil
-end
-
--- Print the gutter + highlighted code window for a failing line, with a caret
--- placed directly under the failing line. The caret line keeps a blank gutter
--- (a gap where the line number would be) so the arrows have vertical room.
----@param src string
----@param line number
----@param msg string?
-local function printSnippet(src, line, msg)
-	local lines = splitLines(src)
-	if line < 1 or line > #lines then return end
-
-	local startLine = math.max(1, line - CONTEXT)
-	local endLine   = math.min(#lines, line + CONTEXT)
-	local width     = #tostring(endLine)
-	local indent    = "     "
-	local bar       = ansi.colorize("gray", "│")
-	local pad       = string.rep(" ", width)
-
-	-- Code lines with the gutter prefix: indent + right-aligned number +
-	-- separator + bar + separator. Every other line (bars, caret) reuses the
-	-- same prefix so the gutter stays horizontally aligned.
-	local prefix = indent .. pad .. " " .. bar .. " "
-	local gutter = {}
-	for ln = startLine, endLine do
-		local num = string.rep(" ", width - #tostring(ln)) .. tostring(ln)
-		local code = highlight(expandTabs(lines[ln]))
-		gutter[ln] = indent .. ansi.colorize("gray", num) .. " " .. bar .. " " .. code
-	end
-
-	local failing = expandTabs(lines[line])
-	local col, len = findCaretCol(failing, msg)
-	local caret = ansi.format("{red}{bold}%s{reset}", string.rep("^", len))
-
-	print(indent .. pad .. " " .. bar)
-	for ln = startLine, line - 1 do print(gutter[ln]) end
-	print(gutter[line])
-	print(prefix .. string.rep(" ", col - 1) .. caret)
-	for ln = line + 1, endLine do print(gutter[ln]) end
-	print(indent .. pad .. " " .. bar)
-end
-
--- Print a failure message, followed by a source snippet when the failing
--- line can be located.
----@param pkgDir string
----@param err string
----@param knownFile? string
-local function printError(pkgDir, err, knownFile)
-	local mfile, mline, rest = err:match("^(.*):(%d+): (.*)$")
-	if not mfile then
-		ansi.printf("     {red}%s", makeRelative(pkgDir, err))
-		return
-	end
-	local line = tonumber(mline) ---@cast line -nil
-	local actual, src = resolveSource(pkgDir, mfile, knownFile)
-	-- If the fallback file doesn't contain the failing line, the line belongs to
-	-- a different (unresolvable, truncated) file — show the path as reported
-	-- instead of pairing a wrong path with the line.
-	if src then
-		local lines = splitLines(src)
-		if line < 1 or line > #lines then actual, src = nil, nil end
-	end
-	ansi.printf("     {red}%s", makeRelative(pkgDir, actual or mfile) .. ":" .. line .. ": " .. rest)
-	if actual and src then
-		printSnippet(src, line, rest)
-	end
 end
 
 ---@param pkgDir string
@@ -232,7 +39,11 @@ local function makeReporter(pkgDir)
 		end,
 		onFail = function(name, err, handle, file)
 			handle:fail(name)
-			printError(pkgDir, err or "unknown error", file)
+			-- Errors without a file position (e.g. error("boom", 0)) fall back
+			-- to a plain message.
+			if not errorsnippet.printError(pkgDir, err or "unknown error", file) then
+				ansi.printf("     {red}%s", err or "unknown error")
+			end
 		end,
 		onSkip = function(name)
 			ansi.printf("   {yellow}- {gray}%s {yellow}(skipped)", name)
@@ -247,7 +58,9 @@ local function printFileErrors(results, pkgDir)
 		if file.error then
 			ansi.printf("  {red}FAIL {white}%s", file.file)
 			local testDir = results.package and results.package:getTestDir() or pkgDir
-			printError(pkgDir, file.error, path.join(testDir, file.file))
+			if not errorsnippet.printError(pkgDir, file.error, path.join(testDir, file.file)) then
+				ansi.printf("     {red}%s", file.error)
+			end
 			print()
 		end
 	end

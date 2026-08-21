@@ -3,8 +3,24 @@ local fs = require("fs")
 local path = require("path")
 local ansi = require("ansi")
 
+local errorsnippet = require("lde.util.errorsnippet")
+
 local lde = require("lde-core")
 local runtime = require("lde-core.runtime")
+
+--- Print a run error with a highlighted source snippet when the file can be
+--- located (mirroring test-failure rendering); fall back to the clean error
+--- for errors without a file position.
+---@param err string
+---@param pkgDir string
+---@param knownFile? string # the file being executed
+---@param remap? fun(file: string): string? # rewrite the error file (target/<name>/X -> src/X)
+local function raiseRunError(err, pkgDir, knownFile, remap)
+	if errorsnippet.printError(pkgDir, err, knownFile, remap) then
+		os.exit(1)
+	end
+	lde.error.raise(err)
+end
 
 --- Resolve the entry point for `lde run [name]` and drive the in-process
 --- --hot/--watch loop: the guest state runs in this process, and the driver
@@ -161,7 +177,7 @@ local function run(args)
 			})
 
 			if not ok then
-				lde.error.raise("Failed to run script: " .. (err or "Script exited with a non-zero exit code"))
+				raiseRunError(err or "Script exited with a non-zero exit code", env.cwd(), path.resolve(env.cwd(), name))
 			end
 
 			return
@@ -177,12 +193,25 @@ local function run(args)
 	local ok, err
 	if name and scripts and scripts[name] then
 		ok, err = pkg:runScript(name, nil, scriptArgs)
+		if not ok then
+			lde.error.raise(err or "Script exited with a non-zero exit code")
+		end
 	else
+		-- Map the built entry (target/<name>/X) back to its source (src/X) so
+		-- the snippet points at what the user wrote.
+		local targetPrefix = pkg:getTargetDir() .. path.separator
+		local srcDir = pkg:getSrcDir()
+		local remap = function(file)
+			if file:sub(1, #targetPrefix) == targetPrefix then
+				local mapped = path.join(srcDir, file:sub(#targetPrefix + 1))
+				if fs.exists(mapped) then return mapped end
+			end
+			return nil
+		end
 		ok, err = pkg:runFile(name, scriptArgs, nil, nil, profile, flamegraph, profileJson)
-	end
-
-	if not ok then
-		lde.error.raise(err or "Script exited with a non-zero exit code")
+		if not ok then
+			raiseRunError(err or "Script exited with a non-zero exit code", pkg:getDir(), nil, remap)
+		end
 	end
 end
 

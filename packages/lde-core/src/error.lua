@@ -67,6 +67,17 @@ function M.message(err)
 	return tostring(err)
 end
 
+--- Strip a nested chunk-loader frame from a message. Compiling source raises
+--- through lua-sys's loader, which prefixes the real error with its own frame:
+---   [string "lua-sys"]:459: [string "-e"]:1: msg
+--- Only strip when another chunk frame follows, so a single-frame error (the
+--- real one) keeps its source position.
+---@param msg string
+---@return string
+local function stripLoaderFrame(msg)
+	return (msg:gsub("^%[string \"[^\"]*\"%]:%d+: %[", "%[", 1))
+end
+
 --- Renders the boundary's catch and exits. Known errors print one clean line
 --- (exit 1); anything else is treated as a bug in lde and prints the crash
 --- screen with the traceback (exit 2).
@@ -76,7 +87,7 @@ function M.show(err, trace)
 	local ansi = require("ansi")
 
 	if M.isKnown(err) then
-		ansi.error("%s", err.message)
+		ansi.error("%s", stripLoaderFrame(err.message))
 		if err.hint then
 			ansi.tip("%s", err.hint)
 		end
