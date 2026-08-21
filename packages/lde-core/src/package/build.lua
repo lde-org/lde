@@ -155,6 +155,11 @@ local function buildPackage(package, destinationPath)
 			-- keep their own async-gcc path.
 			if asyncBuild.isActive() and package.buildfn == nil and fs.exists(package:getBuildScriptPath()) then
 				local ldeBin = assert(env.execPath(), "no executable path")
+				-- CreateProcess (Windows) fails when the cwd doesn't exist, and
+				-- this is usually the first build: the output dir is created
+				-- only once the worker runs its build script. Create it up
+				-- front so the spawn succeeds on every platform.
+				if not fs.isdir(destinationPath) then fs.mkdir(destinationPath) end
 				local child, serr = process.spawn(ldeBin,
 					{ "__build-pkg", package:getDir(), destinationPath },
 					-- cwd = destinationPath so the worker's os.execute calls
