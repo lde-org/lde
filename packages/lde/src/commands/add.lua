@@ -73,7 +73,7 @@ local function add(args)
 	end ---@cast dependencyTable -nil
 
 	if dependencyTable[name] then
-		ansi.printf("{yellow}Dependency already exists: %s", name)
+		ansi.warning("Dependency already exists: %s", name)
 		return
 	end
 
@@ -88,7 +88,7 @@ local function add(args)
 	elseif rawName:match("^rocks:") then
 		local _, _, err = lde.util.openLuarocksPackage(name, registryVersion)
 		if err then
-			lde.error.raise(err)
+			lde.error.raise(err, { hint = lde.util.suggestPackage(name, true) })
 		end
 
 		-- @latest resolves the newest version now and pins that concrete
@@ -107,7 +107,7 @@ local function add(args)
 
 		local portfile, err = lde.global.lookupRegistryPackage(name)
 		if not portfile then
-			lde.error.raise(err)
+			lde.error.raise(err, { hint = lde.util.suggestPackage(name, false) })
 		end ---@cast portfile -nil
 
 		-- resolveRegistryVersion treats "latest" as "newest", so @latest pins

@@ -11,9 +11,17 @@ local function executePackage(pkg, scriptArgs, cwd)
 	pkg:build()
 	pkg:installDependencies()
 
-	local ok, err = pkg:runFile(nil, scriptArgs, nil, cwd)
+	local ok, result = pkg:runFile(nil, scriptArgs, nil, cwd)
 	if not ok then
-		lde.error.raise(err or "Script exited with a non-zero exit code")
+		lde.error.raise(result or "Script exited with a non-zero exit code")
+	end
+
+	-- A module (library) entry returns its table instead of running; exiting
+	-- 0 with no output reads as "broken", so say what happened.
+	if result ~= nil then
+		local name = pkg:getName()
+		ansi.note("'%s' returned a value instead of running — it looks like a library.", name)
+		ansi.tip("Add it as a dependency with `lde add %s` and use `require('%s')` from your own code.", name, name)
 	end
 end
 
@@ -28,9 +36,9 @@ local function x(args)
 		return
 	end
 
-	local pkg, err = resolvePackage(args)
+	local pkg, err, hint = resolvePackage(args)
 	if not pkg then
-		lde.error.raise(err)
+		lde.error.raise(err, { hint = hint })
 	end ---@cast pkg -nil
 
 	args:flag("") -- consume -- separator if present

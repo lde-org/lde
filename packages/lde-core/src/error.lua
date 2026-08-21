@@ -76,9 +76,9 @@ function M.show(err, trace)
 	local ansi = require("ansi")
 
 	if M.isKnown(err) then
-		ansi.printf("{red}error{gray}:{reset} %s", err.message)
+		ansi.error("%s", err.message)
 		if err.hint then
-			ansi.printf("{yellow}Hint: %s", err.hint)
+			ansi.tip("%s", err.hint)
 		end
 		os.exit(err.code or 1)
 	end

@@ -220,6 +220,7 @@ end
 		remove    = "lde.commands.remove",
 		run       = "lde.commands.run",
 		x         = "lde.commands.x",
+		search    = "lde.commands.search",
 		install   = "lde.commands.install",
 		i         = "lde.commands.install",
 		sync      = "lde.commands.sync",

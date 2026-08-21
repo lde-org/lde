@@ -46,3 +46,32 @@ test.it("NO_COLOR wins over GitHub Actions", function()
 		end)
 	end)
 end)
+
+--
+-- ansi.supportsEmoji
+--
+
+test.it("NO_EMOJI disables emoji", function()
+	withEnv("NO_EMOJI", "1", function()
+		local ansi = require("ansi")
+		test.falsy(ansi.supportsEmoji())
+	end)
+end)
+
+test.it("NO_EMOJI=0 keeps emoji enabled", function()
+	withEnv("NO_EMOJI", "0", function()
+		withEnv("TERM", "xterm-256color", function()
+			withEnv("LANG", "en_US.UTF-8", function()
+				local ansi = require("ansi")
+				test.truthy(ansi.supportsEmoji())
+			end)
+		end)
+	end)
+end)
+
+test.it("dumb terminals disable emoji", function()
+	withEnv("TERM", "dumb", function()
+		local ansi = require("ansi")
+		test.falsy(ansi.supportsEmoji())
+	end)
+end)

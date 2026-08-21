@@ -105,6 +105,7 @@ local function main(args)
 			{ cmd = "update",    ex = "clap",        color = "yellow",  desc = "Update dependencies to their latest versions" },
 			{ cmd = "outdated",  ex = nil,           color = "yellow",  desc = "Show dependencies with newer versions available" },
 			{ cmd = "publish",   ex = nil,           color = "yellow",  desc = "Create a PR to add your package to the registry" },
+			{ cmd = "search",    ex = "json",        color = "yellow",   desc = "Search the lde registry and luarocks" },
 			{},
 			{ cmd = "compile",   ex = nil,           color = "magenta", desc = "Compile current project into an executable" },
 			{ cmd = "bundle",    ex = nil,           color = "magenta", desc = "Bundle current project into a single lua file" },

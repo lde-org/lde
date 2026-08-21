@@ -246,6 +246,33 @@ function util.addRockspecDeps(deps, depStrs)
 	end
 end
 
+--- Suggests where a package that wasn't found might actually live, for
+--- "not found" error hints: a name missing from the lde registry may be a
+--- luarocks rock (and vice versa); otherwise point at `lde search`.
+---@param name string
+---@param wasRocks boolean # true when the luarocks lookup failed
+---@return string hint
+function util.suggestPackage(name, wasRocks)
+	if wasRocks then
+		local ok = pcall(lde.global.syncRegistry)
+		if ok then
+			local portfile = lde.global.lookupRegistryPackage(name)
+			if portfile then
+				return "This package exists in the lde registry: `lde add " .. name .. "`"
+			end
+		end
+	else
+		local manifest = getManifest()
+		if manifest then
+			local urls = luarocks.getRockspecUrls(manifest, name)
+			if urls and next(urls) then
+				return "This package exists on luarocks: `lde add rocks:" .. name .. "`"
+			end
+		end
+	end
+	return "Search available packages with: `lde search " .. name .. "`"
+end
+
 --- Resolves the best version of a luarocks package plus the rockspec (metadata)
 --- and .src.rock (content) URLs for that exact version. Uses the persisted URL
 --- cache when possible; falls back to a manifest scan otherwise.

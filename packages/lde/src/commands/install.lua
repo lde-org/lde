@@ -18,7 +18,9 @@ local function installRocks(name)
 
 	-- Metadata-only resolution (URL cache / cached manifest — no network).
 	local srcUrl, arch, uerr = lde.util.resolveLuarocksSource(rocksName, versionStr)
-	if not srcUrl then lde.error.raise("Failed to resolve '" .. name .. "': " .. (uerr or "")) end ---@cast srcUrl -nil
+	if not srcUrl then
+		lde.error.raise("Failed to resolve '" .. name .. "': " .. (uerr or ""), { hint = lde.util.suggestPackage(rocksName, true) })
+	end ---@cast srcUrl -nil
 
 	if arch ~= "src" then
 		-- No published .src.rock: classic synchronous path.
@@ -133,8 +135,8 @@ local function install(args)
 		return
 	end
 
-	local pkg, err = resolvePackage(args, { git = gitUrl, path = pathDir })
-	if not pkg then lde.error.raise(err) end ---@cast pkg -nil
+	local pkg, err, hint = resolvePackage(args, { git = gitUrl, path = pathDir })
+	if not pkg then lde.error.raise(err, { hint = hint }) end ---@cast pkg -nil
 
 	pkg:build()
 	pkg:installDependencies()

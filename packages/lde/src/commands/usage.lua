@@ -45,6 +45,14 @@ local commands = {
 			["--offline"] = { desc = "Resolve from the local cache only; fail instead of updating the registry" },
 		},
 	},
+	search = {
+		usage = "lde search <query> [--all]",
+		description = "Search package names and descriptions in the lde registry and on luarocks (rocks marked with a rock emoji); rocks:<query> searches luarocks only.",
+		arguments = "<query>  Substring matched against package names and descriptions; rocks:<query> searches luarocks only",
+		options = {
+			["--all"] = { desc = "Show every match instead of the first 10 (still scrollable interactively)" },
+		},
+	},
 	repl = {
 		usage = "lde repl",
 		description = "Start an interactive LuaJIT REPL in the project context.",
@@ -204,7 +212,7 @@ local fileFlags = { "--outfile" }
 local valueFlags = { "-C", "--cwd", "--tree", "--path", "--git", "--branch", "--commit", "--version", "--outfile", "--flamegraph", "--type", "--language", "--name" }
 
 -- Canonical command names in display order.
-local names = { "help", "run", "x", "repl", "test", "new", "init", "upgrade", "sync", "install", "uninstall", "add", "remove", "tree", "update", "outdated", "publish", "compile", "bundle", "completion" }
+local names = { "help", "run", "x", "search", "repl", "test", "new", "init", "upgrade", "sync", "install", "uninstall", "add", "remove", "tree", "update", "outdated", "publish", "compile", "bundle", "completion" }
 
 -- Every name the completions may offer, including aliases.
 local completionNames = {}

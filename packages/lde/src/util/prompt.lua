@@ -62,6 +62,7 @@ local function escSequencePending()
 	p[0].events = 1 -- POLLIN
 	return ffi.C.poll(p, 1, 60) > 0
 end
+prompt.escSequencePending = escSequencePending
 
 ---@class lde.prompt.Option
 ---@field key string

@@ -61,7 +61,12 @@ local function resolvePackage(args, parsed)
 		end
 
 		if name:match("^rocks:") then
-			return resolveRocks(name, isOffline)
+			local pkg, err = resolveRocks(name, isOffline)
+			if not pkg then
+				local rocksName = name:match("^rocks:([^@]+)") or name
+				return nil, err, lde.util.suggestPackage(rocksName, true)
+			end
+			return pkg
 		end
 
 		if not isOffline then
@@ -71,7 +76,9 @@ local function resolvePackage(args, parsed)
 		end
 
 		local portfile, err = lde.global.lookupRegistryPackage(packageName)
-		if not portfile then return nil, err end
+		if not portfile then
+			return nil, err, lde.util.suggestPackage(packageName, false)
+		end
 
 		local _, commit = lde.global.resolveRegistryVersion(portfile, versionStr or nil)
 		local repoDir

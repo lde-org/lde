@@ -324,4 +324,65 @@ function ansi.formatElapsed(seconds)
 	return formatElapsed(seconds)
 end
 
+-- ─── Notice prefixes ─────────────────────────────────────────────────────
+-- Consistent `label:` prefixes for user-facing output (colored label, gray
+-- colon). Callers pass a format string plus args, exactly like ansi.printf.
+
+---@param msg string
+---@param ... any
+function ansi.error(msg, ...)
+	ansi.printf("{red}error{gray}:{reset} " .. msg, ...)
+end
+
+---@param msg string
+---@param ... any
+function ansi.warning(msg, ...)
+	ansi.printf("{yellow}warning{gray}:{reset} " .. msg, ...)
+end
+
+---@param msg string
+---@param ... any
+function ansi.note(msg, ...)
+	ansi.printf("{blue}note{gray}:{reset} " .. msg, ...)
+end
+
+---@param msg string
+---@param ... any
+function ansi.tip(msg, ...)
+	ansi.printf("{green}tip{gray}:{reset} " .. msg, ...)
+end
+
+-- ─── Emoji support ───────────────────────────────────────────────────────
+-- Emoji (e.g. the 🪨 rock marker in `lde search`) render only when the
+-- terminal has an emoji font with glyph fallback. A program can't query glyph
+-- coverage, so this is a heuristic over the environment: block the known-bad
+-- cases (dumb/linux terminals, non-UTF-8 locales) and let NO_EMOJI force it
+-- off. Most modern terminals fall through to true.
+local emojiSupported = true
+do
+	local term = os.getenv("TERM") or ""
+	if term == "dumb" or term == "linux" then
+		emojiSupported = false
+	end
+
+	-- Non-UTF-8 locales can't even encode emoji.
+	local locale = os.getenv("LC_ALL") or os.getenv("LC_CTYPE") or os.getenv("LANG") or ""
+	local l = locale:lower()
+	if locale == "" or locale == "C" or locale == "POSIX"
+		or (not l:find("utf-8", 1, true) and not l:find("utf8", 1, true)) then
+		emojiSupported = false
+	end
+
+	local noEmoji = os.getenv("NO_EMOJI")
+	if noEmoji and noEmoji ~= "0" then
+		emojiSupported = false
+	end
+end
+
+--- Whether the terminal can be expected to render emoji glyphs.
+---@return boolean
+function ansi.supportsEmoji()
+	return emojiSupported
+end
+
 return ansi
