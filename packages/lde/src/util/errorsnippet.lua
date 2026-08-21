@@ -348,7 +348,9 @@ local function printRunError(pkgDir, err, knownFile, remap)
 		end
 
 		for ln = startLine, endLine do
-			print(string.format("%" .. width .. "d | %s", ln, highlight(expandTabs(lines[ln]))))
+			-- Gray gutter (line number + bar), matching the test-failure renderer.
+			local num = string.format("%" .. width .. "d | ", ln)
+			print(ansi.colorize("gray", num) .. highlight(expandTabs(lines[ln])))
 		end
 		print(string.rep(" ", width + 3 + col - 1) .. ansi.format("{red}{bold}%s{reset}", string.rep("^", caretLen)))
 		ansi.printf("{red}error{reset}: %s", rest)
