@@ -28,7 +28,7 @@ local function executePackage(pkg, scriptArgs, cwd)
 			end
 			return nil
 		end
-		if errorsnippet.printError(pkg:getDir(), result or "Script exited with a non-zero exit code", nil, remap) then
+		if errorsnippet.printRunError(pkg:getDir(), result or "Script exited with a non-zero exit code", nil, remap) then
 			os.exit(1)
 		end
 		lde.error.raise(result or "Script exited with a non-zero exit code")

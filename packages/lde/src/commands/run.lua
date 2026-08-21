@@ -8,15 +8,14 @@ local errorsnippet = require("lde.util.errorsnippet")
 local lde = require("lde-core")
 local runtime = require("lde-core.runtime")
 
---- Print a run error with a highlighted source snippet when the file can be
---- located (mirroring test-failure rendering); fall back to the clean error
---- for errors without a file position.
+--- Print a run error with a Bun-style source snippet when the file can be
+--- located; fall back to the clean error for errors without a file position.
 ---@param err string
 ---@param pkgDir string
 ---@param knownFile? string # the file being executed
 ---@param remap? fun(file: string): string? # rewrite the error file (target/<name>/X -> src/X)
 local function raiseRunError(err, pkgDir, knownFile, remap)
-	if errorsnippet.printError(pkgDir, err, knownFile, remap) then
+	if errorsnippet.printRunError(pkgDir, err, knownFile, remap) then
 		os.exit(1)
 	end
 	lde.error.raise(err)

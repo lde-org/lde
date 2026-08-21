@@ -250,6 +250,92 @@ local function printError(pkgDir, err, knownFile, remap)
 	return true
 end
 
+--- The lde version + platform line printed under run errors, mirroring how
+--- Bun annotates its errors. Kept separate so it can be extended with trace
+--- frames in between.
+---@return string
+local function versionFooter()
+	local ok, v = pcall(require, "lde.version")
+	return string.format("lde v%s", ok and v or "0.10.0")
+end
+
+--- Render an error Bun-style for `lde run` / `lde x` / loose files:
+---
+---   2 | print(x.foo)
+---     |       ^
+---   error: attempt to index local 'x' (a nil value)
+---       at /abs/src/init.lua:2:8
+---
+---   lde v0.10.0-nightly+... (Linux x64)
+---
+--- The source is left-aligned (no indent), the position has a column, and the
+--- "at <file>:<line>:<col>" line plus the footer leave room for a full stack
+--- trace to slot in between. Returns false (printing nothing) when the error
+--- has no file position, so the caller can fall back to its own rendering.
+---@param pkgDir string
+---@param err string
+---@param knownFile? string # the file being executed when the error path can't be resolved
+---@param remap? fun(file: string): string? # alternate path for the error file
+---@return boolean rendered # true when a file:line error was printed
+local function printRunError(pkgDir, err, knownFile, remap)
+	local mfile, mline, rest = parseError(err)
+	if not mfile or not mline then
+		return false
+	end
+	if remap then
+		local mapped = remap(mfile)
+		if mapped then
+			knownFile = knownFile or mfile
+			mfile = mapped
+		end
+	end
+	local actual, src = resolveSource(pkgDir, mfile, knownFile)
+	local displayLine = mline
+	if src then
+		local lines = splitLines(src)
+		if mline > #lines then
+			if mline == #lines + 1 and #lines > 0 then
+				-- '<eof>' errors report one past the last line; highlight the
+				-- last line instead.
+				displayLine = #lines
+			else
+				actual, src = nil, nil
+			end
+		end
+	end
+
+	-- Column of the failing token (Lua errors carry no column; the caret
+	-- position is the best approximation).
+	local col, caretLen = 1, 1
+	if actual and src then
+		local lines = splitLines(src)
+		local startLine = math.max(1, displayLine - CONTEXT)
+		local endLine = math.min(#lines, displayLine + CONTEXT)
+		local width = #tostring(endLine)
+		local failing = expandTabs(lines[displayLine])
+		col, caretLen = findCaretCol(failing, rest)
+		if rest and rest:find("<eof>", 1, true) then
+			-- An '<eof>' error has nothing after the statement: point the
+			-- caret at the end of the line.
+			col, caretLen = #failing + 1, 1
+		end
+
+		for ln = startLine, endLine do
+			print(string.format("%" .. width .. "d | %s", ln, highlight(expandTabs(lines[ln]))))
+		end
+		print(string.rep(" ", width + 3 + col - 1) .. ansi.format("{red}{bold}%s{reset}", string.rep("^", caretLen)))
+		ansi.printf("{red}error{reset}: %s", rest)
+		ansi.printf("    at %s:%d:%d", actual, displayLine, col)
+	else
+		ansi.printf("{red}error{reset}: %s", rest)
+		ansi.printf("    at %s:%d", mfile, mline)
+	end
+	print()
+	ansi.printf("{gray}%s{reset}", versionFooter())
+	return true
+end
+
 errorsnippet.printError = printError
+errorsnippet.printRunError = printRunError
 
 return errorsnippet
