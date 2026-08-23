@@ -10,7 +10,10 @@ local json = require("json")
 
 local cli = require("tests.lib.ldecli")
 
-local tmpBase = path.join(env.tmpdir(), "lde-bloat-tests")
+-- Normalized so paths match the command's output: env.tmpdir() can end with a
+-- trailing slash (macOS), which a naive path.join would double up while the
+-- command renders the canonical form via env.cwd()/path.resolve.
+local tmpBase = path.normalize(path.join(env.tmpdir(), "lde-bloat-tests"))
 fs.rmdir(tmpBase)
 fs.mkdir(tmpBase)
 
