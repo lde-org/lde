@@ -112,6 +112,7 @@ local function main(args)
 			{},
 			{ cmd = "compile",   ex = nil,           color = "magenta", desc = "Compile current project into an executable" },
 			{ cmd = "bundle",    ex = nil,           color = "magenta", desc = "Bundle current project into a single lua file" },
+			{ cmd = "bloat",     ex = nil,           color = "magenta", desc = "Show what makes up the compiled binary" },
 			{},
 			{ cmd = "completion", ex = "bash",       color = "cyan", desc = "Print a shell completion script (bash|zsh|fish)" },
 			{ cmd = "<command>", ex = "--help", color = "gray", exColor = "cyan", desc = "Print help text for command." }

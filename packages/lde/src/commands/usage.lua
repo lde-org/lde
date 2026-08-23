@@ -170,6 +170,14 @@ local commands = {
 			["--bytecode"] = { desc = "Precompile bundled modules to bytecode" },
 		},
 	},
+	bloat = {
+		usage = "lde bloat [--binary [<path>]] [--json [<path>]]",
+		description = "Build the project and show what makes up the compiled bundle: a proportional bar and per-dependency, per-file sizes as a percentage of the total. Interactive in a terminal (↑/↓ select, enter expands a dependency).",
+		options = {
+			["--binary"] = { arg = "path", desc = "Also show the LuaJIT runtime share against a compiled executable (default: ./<name> from a previous lde compile)" },
+			["--json"] = { arg = "path", desc = "Print the report as JSON (default: stdout; a path writes to that file)" },
+		},
+	},
 	completion = {
 		usage = "lde completion <bash|zsh|fish>",
 		description = "Print a shell completion script. Add it to your shell rc, e.g. eval \"$(lde completion bash)\".",
@@ -215,7 +223,7 @@ local fileFlags = { "--outfile" }
 local valueFlags = { "-C", "--cwd", "--tree", "--path", "--git", "--branch", "--commit", "--version", "--outfile", "--flamegraph", "--type", "--language", "--name" }
 
 -- Canonical command names in display order.
-local names = { "help", "run", "x", "search", "repl", "test", "new", "init", "upgrade", "sync", "install", "uninstall", "add", "remove", "tree", "update", "outdated", "publish", "compile", "bundle", "completion" }
+local names = { "help", "run", "x", "search", "repl", "test", "new", "init", "upgrade", "sync", "install", "uninstall", "add", "remove", "tree", "update", "outdated", "publish", "compile", "bundle", "bloat", "completion" }
 
 -- Every name the completions may offer, including aliases.
 local completionNames = {}

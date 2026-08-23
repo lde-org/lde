@@ -74,6 +74,7 @@ lde test             # run all *.test.lua files
 lde test --coverage  # run tests and print a per-file line coverage report
 lde test --watch     # re-run tests on file changes
 lde compile         # compile to a single executable
+lde bloat           # build and show what makes up the compiled binary (per-dependency and per-file sizes as % of the bundle; --binary [path] includes the LuaJIT runtime share)
 lde -e "..."        # run a Lua expression in project context
 lde ./file.lua      # run a file in project context
 

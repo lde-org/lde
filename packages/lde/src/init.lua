@@ -237,6 +237,7 @@ end
 		sync      = "lde.commands.sync",
 		bundle    = "lde.commands.bundle",
 		compile   = "lde.commands.compile",
+		bloat     = "lde.commands.bloat",
 		test      = "lde.commands.test",
 		tree      = "lde.commands.tree",
 		update    = "lde.commands.update",

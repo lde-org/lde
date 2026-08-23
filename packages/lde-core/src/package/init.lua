@@ -391,6 +391,7 @@ end
 
 Package.bundle = require("lde-core.package.bundle")
 Package.compile = require("lde-core.package.compile")
+Package.bloat = require("lde-core.package.bloat")
 local run = require("lde-core.package.run")
 Package.runFile = run.runFile
 Package.runString = run.runString
