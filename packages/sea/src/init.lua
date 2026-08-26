@@ -235,7 +235,9 @@ local function getLuajitPath(compiler, target)
 	)
 	local tarballPath = path.join(cacheDir, tarballName)
 
-	local bar = ansi.progress("Downloading " .. tarballName)
+	local ljLabel = "luajit for " .. (target and target.name or (platform .. "-" .. arch))
+
+	local bar = ansi.progress("Downloading " .. ljLabel, { indent = false })
 	local ok, dlErr = curl().download(downloadUrl, tarballPath, {
 		progress = function(dltotal, dlnow)
 			local ratio = dltotal > 0 and (dlnow / dltotal) or nil
@@ -246,10 +248,10 @@ local function getLuajitPath(compiler, target)
 		end
 	})
 	if not ok then
-		bar:fail("Downloading " .. tarballName)
+		bar:fail("Downloading " .. ljLabel)
 		error("Failed to download LuaJIT from " .. downloadUrl .. ": " .. (dlErr or ""))
 	end
-	bar:done("Downloaded " .. tarballName)
+	bar:done("Downloaded " .. ljLabel)
 
 	local ok, err = Archive().new(tarballPath):extract(cacheDir)
 	if not ok then

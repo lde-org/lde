@@ -301,9 +301,15 @@ end
 ---@field fail fun(self: ansi.Progress, msg: string?)
 
 ---@param label string
+---@param opts { indent: boolean? }? # indent=false prints flush-left (compact install output); default indented (test runner)
 ---@return ansi.Progress
-function ansi.progress(label)
+function ansi.progress(label, opts)
 	local startTime = now()
+	local indent = opts == nil or opts.indent ~= false
+	local donePrefix, failPrefix, livePrefix = "  ✓ ", "  ✗ ", "  - "
+	if not indent then
+		donePrefix, failPrefix, livePrefix = "✓ ", "✗ ", "- "
+	end
 
 	if not isTTY then
 		return {
@@ -314,12 +320,12 @@ function ansi.progress(label)
 			done = function(_, msg)
 				local elapsed = formatElapsed(now() - startTime)
 				io.write(colors.green ..
-				"  ✓ " ..
+				donePrefix ..
 				colors.reset .. (msg or label) .. " " .. colors.gray .. "(" .. elapsed .. ")" .. colors.reset .. "\n")
 				io.flush()
 			end,
 			fail = function(_, msg)
-				io.write(colors.red .. "  ✗ " .. colors.reset .. (msg or label) .. "\n")
+				io.write(colors.red .. failPrefix .. colors.reset .. (msg or label) .. "\n")
 				io.flush()
 			end
 		}
@@ -351,7 +357,7 @@ function ansi.progress(label)
 		if pct == lastRendered then return end
 		lastRendered = pct
 
-		local line = colors.gray .. "  - " .. colors.reset .. label
+		local line = colors.gray .. livePrefix .. colors.reset .. label
 		if barStr then
 			line ..= " " .. barStr .. " " .. pct
 		end
@@ -384,13 +390,13 @@ function ansi.progress(label)
 			local elapsed = formatElapsed(now() - startTime)
 			clearLine()
 			io.write(colors.green ..
-			"  ✓ " ..
+			donePrefix ..
 			colors.reset .. (msg or label) .. " " .. colors.gray .. "(" .. elapsed .. ")" .. colors.reset .. "\n")
 			io.flush()
 		end,
 		fail = function(_, msg)
 			clearLine()
-			io.write(colors.red .. "  ✗ " .. colors.reset .. (msg or label) .. "\n")
+			io.write(colors.red .. failPrefix .. colors.reset .. (msg or label) .. "\n")
 			io.flush()
 		end
 	}
@@ -449,6 +455,7 @@ function ansi.installProgress(fallbackLabel)
 	--- clear to the end of the screen. Each row is a single short line, so no
 	--- horizontal clearing is needed.
 	local function clearRegion()
+		if not isTTY then return end
 		if lastLines > 1 then io.write(ESC .. (lastLines - 1) .. "A") end
 		io.write("\r" .. ESC .. "J")
 		lastLines = 0

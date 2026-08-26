@@ -113,7 +113,7 @@ local function upgrade(args)
 	local tempZipLocation = path.join(binDir, binName .. ".zip")
 	local tempExtractDir = path.join(binDir, binName .. ".tmp")
 
-	local bar = ansi.progress("Downloading " .. artifactName)
+	local bar = ansi.progress("Downloading " .. artifactName, { indent = false })
 
 	-- Download the archive directly to file
 	local dlOk, dlErr = curl.download(downloadUrl, tempZipLocation, {
