@@ -8,6 +8,7 @@ lde.isVerbose = false
 lde.isQuiet = false
 
 lde.error = require("lde-core.error")
+lde.timings = require("lde-core.util.timings")
 
 lde.Registry = require("lde-registry")
 

@@ -4,6 +4,9 @@ local path = require("path")
 
 local lde = require("lde-core")
 
+-- Build timings collection (no-op while inactive; no dependency on lde-core).
+local timings = require("lde-core.util.timings")
+
 local bundlePackage = require("lde-core.package.bundle")
 
 ---@param fileName string
@@ -57,13 +60,19 @@ local function compilePackage(package, targetName)
 	end
 
 	local ok, result = pcall(function()
+		local rootBuild = timings.active()
+			and timings.start("build " .. package:getName(), "build") or nil
 		package:build()
+		if rootBuild then timings.finish(rootBuild) end
 		package:installDependencies()
 
 		-- Raw bytecode: sea embeds the per-module bytecode as a raw blob (.incbin)
 		-- and registers lazy preload loaders over it, so startup only deserializes
 		-- the modules a command actually requires.
+		local bundleHandle = timings.active()
+			and timings.start("bundle " .. package:getName(), "bundle") or nil
 		local source = bundlePackage(package, { raw = true })
+		if bundleHandle then timings.finish(bundleHandle) end
 
 		-- sea.compile throws a raw string when the main module is missing; check
 		-- first so a broken project (no src/init.lua, src as a file, ...) fails
@@ -121,7 +130,10 @@ local function compilePackage(package, targetName)
 		-- sea.compile raises plain strings (unknown target, missing cross
 		-- toolchain, compiler failure, dist download); they are surfaced as
 		-- clean user-facing errors below, not "lde crashed".
-		return sea.compile(package:getName(), source, sharedLibs, lde.global.getCCBin(), targetName)
+		local seaHandle = timings.active() and timings.start("sea compile", "compile") or nil
+		local executable = sea.compile(package:getName(), source, sharedLibs, lde.global.getCCBin(), targetName)
+		if seaHandle then timings.finish(seaHandle) end
+		return executable
 	end)
 	lde.global.setTarget(nil)
 

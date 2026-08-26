@@ -7,6 +7,16 @@ local sea = require("sea")
 
 ---@param args clap.Args
 local function compile(args)
+	-- --timings collects wall-clock units for the whole pipeline (build,
+	-- install/resolve, per-dependency builds, bundle, sea link) and writes an
+	-- HTML report to target/timings.html; --json switches to JSON
+	-- (target/timings.json). --json implies collection on its own.
+	local wantJSON = args:flag("json")
+	local timings = nil
+	if args:flag("timings") or wantJSON then
+		timings = lde.timings
+	end
+
 	local outFile = args:option("outfile")
 	local targetName = args:option("target")
 
@@ -25,6 +35,15 @@ local function compile(args)
 	if not pkg then
 		lde.error.raise(err)
 	end ---@cast pkg -nil
+
+	if timings then
+		local ok, version = pcall(require, "lde.version")
+		timings.begin({
+			command = "compile",
+			package = pkg:getName(),
+			version = ok and version or nil,
+		})
+	end
 
 	-- A --target matching the host is a native build (same naming); only a
 	-- genuine cross compile gets the target in the default output name.
@@ -72,6 +91,20 @@ local function compile(args)
 
 	if jit.os ~= "Windows" then ---@cast fs fs.raw.posix
 		fs.chmod(outFile, tonumber("755", 8))
+	end
+
+	if timings then
+		local reportPath = path.join(pkg:getModulesDir(), wantJSON and "timings.json" or "timings.html")
+		local okWrite, werr
+		if wantJSON then
+			okWrite, werr = timings.writeJSON(reportPath)
+		else
+			okWrite, werr = timings.writeHTML(reportPath)
+		end
+		if not okWrite then
+			lde.error.raise("Failed to write timings report: " .. (werr or "unknown error"))
+		end
+		ansi.printf("{green}Timings report: {bold}%s", reportPath)
 	end
 
 	ansi.printf("{green}Executable created: %s", outFile)

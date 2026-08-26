@@ -98,11 +98,13 @@ local commands = {
 		},
 	},
 	sync = {
-		usage = "lde sync",
+		usage = "lde sync [--locked] [--production] [--timings [--json]]",
 		description = "Install the project's dependencies.",
 		options = {
 			["--locked"] = { desc = "Install only what is recorded in the lockfile" },
 			["--production"] = { desc = "Skip dev dependencies" },
+			["--timings"] = { desc = "Write a build timings HTML report to target/timings.html" },
+			["--json"] = { desc = "With --timings: write the report as JSON (target/timings.json) instead of HTML" },
 		},
 	},
 	install = {
@@ -158,11 +160,13 @@ local commands = {
 		description = "Create a PR to add your package to the registry.",
 	},
 	compile = {
-		usage = "lde compile [--outfile <path>] [--target <target>]",
+		usage = "lde compile [--outfile <path>] [--target <target>] [--timings [--json]]",
 		description = "Compile the current project into a single executable.",
 		options = {
 			["--outfile"] = { arg = "path", desc = "Output path (defaults to ./<project-name>)" },
 			["--target"] = { arg = "target", desc = "Cross-compile for a release target (linux-x86-64, linux-aarch64, windows-x86-64, windows-aarch64, macos-x86-64, macos-aarch64, android-aarch64); defaults to the host" },
+			["--timings"] = { desc = "Write a build timings HTML report to target/timings.html" },
+			["--json"] = { desc = "With --timings: write the report as JSON (target/timings.json) instead of HTML" },
 		},
 	},
 	bundle = {

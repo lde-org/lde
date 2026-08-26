@@ -12,6 +12,9 @@ local resolve = require("lde-core.package.install.resolve")
 -- buildPackage plus the isStale stamp check the install fast path consults.
 local build = require("lde-core.package.build")
 
+-- Build timings collection (no-op while inactive; no dependency on lde-core).
+local timings = require("lde-core.util.timings")
+
 ---@type table<string, lde.Package.Config.FeatureFlag>
 local platformLookup = { Windows = "windows", Linux = "linux", OSX = "macos" }
 
@@ -107,7 +110,7 @@ local function makeBuildScheduler(ctx)
 		sleep = function(ms) ffi.C.usleep(ms * 1000) end
 	end
 
-	---@type { alias: string, build: lde.install.DeferredBuild }[]
+	---@type { alias: string, build: lde.install.DeferredBuild, handle: timings.Handle? }[]
 	local pending = {}
 	---@type table<string, boolean>
 	local done = {}      -- alias -> build finished or skipped
@@ -193,12 +196,13 @@ local function makeBuildScheduler(ctx)
 	end
 
 	--- Run a deferred finalizer once its spawned compiles finished.
-	---@param job { alias: string, build: lde.install.DeferredBuild }
+	---@param job { alias: string, build: lde.install.DeferredBuild, handle: timings.Handle? }
 	local function finalizeJob(job)
 		local ok, err = job.build.finalize()
 		if not ok then
 			lde.error.raise("Build failed for '" .. job.alias .. "': " .. tostring(err))
 		end
+		if job.handle then timings.finish(job.handle) end
 		ctx.builds += 1
 		done[job.alias] = true
 		finishAlias(job.alias)
@@ -260,10 +264,14 @@ local function makeBuildScheduler(ctx)
 			ctx.progress:setCurrent(alias, kind)
 		end
 
+		-- The unit spans the real build: from pkg:build() to the deferred
+		-- finalizer (spawned compiles draining) or the synchronous return.
+		local buildHandle = timings.active() and timings.start("build " .. alias, "build") or nil
 		local hasBuilt, deferred = pkg:build(dest)
 		if deferred then
-			pending[#pending + 1] = { alias = alias, build = deferred }
+			pending[#pending + 1] = { alias = alias, build = deferred, handle = buildHandle }
 		else
+			if buildHandle then timings.finish(buildHandle) end
 			done[alias] = true
 			if hasBuilt then ctx.builds += 1 end
 			-- finish is a no-op when the dep never spawned a row (no build
@@ -512,6 +520,8 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 		} or nil)
 	end
 
+	local resolveHandle = timings.active()
+		and timings.start("resolve " .. package:getName(), "download") or nil
 	local ok, err = pcall(resolve.resolveDependencies, dependencies, ctx)
 	if not ok then
 		download.abort()
@@ -520,6 +530,7 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 		lde.error.raise(err)
 	end
 	if not isSessionActive then download.finish() end
+	if resolveHandle then timings.finish(resolveHandle) end
 
 	-- Overlapped `install rocks:` installs start the root package's .src.rock
 	-- download before resolution; materialize it now that the content batch has

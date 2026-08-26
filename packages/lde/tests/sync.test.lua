@@ -608,3 +608,52 @@ test.it("lde sync builds the package itself (target/<name> is materialized)", fu
 	local outputDir = path.join(dir, "target", "sync-build-self")
 	test.truthy(fs.exists(path.join(outputDir, ".lde-build-stamp")))
 end)
+
+--
+-- --timings / --json reports
+--
+
+test.it("lde sync --timings writes an HTML report to target/timings.html", function()
+	local dir = makeBuildProject("sync-timings-html", "timings-count-html.txt")
+
+	local ok, out = cli({ "sync", "--timings" }, dir)
+	test.truthy(ok, "sync --timings failed: " .. tostring(out))
+
+	local report = path.join(dir, "target", "timings.html")
+	test.truthy(fs.exists(report), "timings.html must be written")
+	local html = fs.read(report) ---@cast html -nil
+	test.truthy(html:find("<!DOCTYPE html>", 1, true))
+	test.truthy(html:find("sync-timings-html", 1, true), "report names the package")
+	test.truthy(html:find("Total time", 1, true))
+	test.truthy(html:find("build sync-timings-html", 1, true), "report records the build unit")
+end)
+
+test.it("lde sync --timings --json writes a JSON report to target/timings.json", function()
+	local dir = makeBuildProject("sync-timings-json", "timings-count-json.txt")
+
+	local ok, out = cli({ "sync", "--timings", "--json" }, dir)
+	test.truthy(ok, "sync --timings --json failed: " .. tostring(out))
+
+	local report = path.join(dir, "target", "timings.json")
+	test.truthy(fs.exists(report), "timings.json must be written")
+	local raw = fs.read(report) ---@cast raw -nil
+	local decoded = json.decode(raw) ---@cast decoded table
+	test.equal(decoded.version, 1)
+	test.equal(decoded.command, "sync")
+	test.equal(decoded.package, "sync-timings-json")
+	test.equal(type(decoded.totalTime), "number")
+	test.equal(type(decoded.units), "table")
+	test.truthy(#decoded.units > 0, "report records at least the root build unit")
+end)
+
+test.it("lde sync --json alone writes the JSON report (implies --timings)", function()
+	local dir = makeBuildProject("sync-timings-json-alone", "timings-count-json-alone.txt")
+
+	local ok, out = cli({ "sync", "--json" }, dir)
+	test.truthy(ok, "sync --json failed: " .. tostring(out))
+
+	local report = path.join(dir, "target", "timings.json")
+	test.truthy(fs.exists(report), "timings.json must be written")
+	test.falsy(fs.exists(path.join(dir, "target", "timings.html")),
+		"--json must not write the HTML report")
+end)
