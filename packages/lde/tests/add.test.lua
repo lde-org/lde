@@ -60,6 +60,53 @@ test.it("lde add rocks:<name> stores dependency without registry prefix", functi
 	test.truthy(config.dependencies["lpeg"], "dependency should be stored as 'lpeg'")
 end)
 
+test.it("lde add gh:owner/repo stores an expanded git dependency", function()
+	local dir = makeProject("add-shorthand-test")
+	local ok, out = ldecli({ "add", "gh:codebycruz/hood" }, dir)
+	test.truthy(ok, "lde add gh:... failed: " .. tostring(out)) ---@cast out -nil
+
+	local raw = fs.read(path.join(dir, "lde.json")) ---@cast raw -nil
+	local config = json.decode(raw) ---@cast config table<string, any>
+	local dep = config.dependencies["hood"]
+	test.truthy(dep, "shorthand should be stored under the repo basename 'hood'")
+	test.equal(dep.git, "https://github.com/codebycruz/hood")
+
+	-- The commit is auto-pinned at add time, exactly like `lde add --git`.
+	local lockRaw = fs.read(path.join(dir, "lde.lock")) ---@cast lockRaw -nil
+	local lock = json.decode(lockRaw) ---@cast lock table<string, any>
+	local entry = lock.dependencies["hood"]
+	test.truthy(entry, "git shorthand must create a lockfile entry")
+	test.equal(entry.git, "https://github.com/codebycruz/hood")
+	test.truthy(entry.commit)
+end)
+
+test.it("lde add gh:<pkg>@owner/repo stores a git dep keyed by the sub-package", function()
+	local dir = makeProject("add-shorthand-mono-test")
+	local ok, out = ldecli({ "add", "gh:triangle@codebycruz/hood" }, dir)
+	test.truthy(ok, "lde add gh:<pkg>@... failed: " .. tostring(out)) ---@cast out -nil
+
+	local raw = fs.read(path.join(dir, "lde.json")) ---@cast raw -nil
+	local config = json.decode(raw) ---@cast config table<string, any>
+	local dep = config.dependencies["triangle"]
+	test.truthy(dep, "shorthand should be stored under the sub-package name 'triangle'")
+	test.equal(dep.git, "https://github.com/codebycruz/hood")
+
+	local lockRaw = fs.read(path.join(dir, "lde.lock")) ---@cast lockRaw -nil
+	local lock = json.decode(lockRaw) ---@cast lock table<string, any>
+	local entry = lock.dependencies["triangle"]
+	test.truthy(entry, "git shorthand must create a lockfile entry")
+	test.equal(entry.git, "https://github.com/codebycruz/hood")
+	test.truthy(entry.commit)
+end)
+
+test.it("lde add gh:owner/repo@version rejects malformed shorthands", function()
+	local dir = makeProject("add-shorthand-version-test")
+	local ok, out = ldecli({ "add", "gh:foo/bar@1.0.0" }, dir)
+	test.falsy(ok)
+	test.includes(tostring(out), "Invalid git shorthand")
+	test.falsy(fs.exists(path.join(dir, "lde.lock")), "nothing should be written on failure")
+end)
+
 test.it("lde add creates dependencies field when config has none", function()
 	local dir = makeProject("create-dependencies-test")
 	-- makeProject writes a config with dependencies = {}; overwrite it without the key

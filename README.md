@@ -44,8 +44,8 @@ _Already installed? Run `lde upgrade` to update._
 ## Quickstart
 
 ```bash
-lde new myproject && cd myproject
-lde add hood --git https://github.com/bycruz/hood
+lde new && cd myproject
+lde add hood
 echo "print(require('hood'))" > ./src/init.lua
 lde run
 # Output: table: 0x7f53326fd030
@@ -54,7 +54,7 @@ lde run
 Or run a remote project in one command:
 
 ```bash
-ldx triangle --git https://github.com/bycruz/hood
+ldx gh:triangle@bycruz/hood
 ```
 
 ## How does lde compare to other tools?

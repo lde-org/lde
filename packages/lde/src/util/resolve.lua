@@ -3,6 +3,7 @@ local fs = require("fs")
 local path = require("path")
 
 local lde = require("lde-core")
+local gitShorthand = require("lde.util.gitShorthand")
 
 --- Resolves a rocks: name to a Package
 ---@param name string e.g. "rocks:busted@2.0"
@@ -50,6 +51,26 @@ local function resolvePackage(args, parsed)
 	else
 		local name = args:pop()
 		if not name then return nil, "no name" end
+
+		-- Git shorthand (gh:owner/repo, gh:<pkg>@owner/repo, github:...,
+		-- codeberg:..., gitlab:...): behaves like `--git <url> [package-name]`.
+		-- The <pkg>@ form carries the sub-package name in the shorthand itself;
+		-- otherwise an optional positional is popped (a literal "--" is the arg
+		-- separator, not a package name).
+		local shorthandUrl, subPackage, serr = gitShorthand.expand(name)
+		if serr then return nil, serr end
+		if shorthandUrl then
+			local cloneUrl, branch = lde.global.parseGitUrl(shorthandUrl)
+			local repoName = lde.global.repoNameFromUrl(cloneUrl)
+			local repoDir = lde.global.getOrCloneRepo(repoName, cloneUrl, branch)
+
+			local subName = subPackage or args:pop()
+			if subName == "--" then subName = nil end
+			if subName then
+				return lde.global.findNamedPackageIn(repoDir, subName)
+			end
+			return lde.Package.open(repoDir)
+		end
 
 		local packageName, versionStr = name:match("^([^@]+)@(.+)$")
 		if not packageName then packageName = name end

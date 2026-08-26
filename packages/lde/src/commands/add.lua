@@ -4,6 +4,7 @@ local fs = require("fs")
 local path = require("path")
 
 local lde = require("lde-core")
+local gitShorthand = require("lde.util.gitShorthand")
 
 ---@param args clap.Args
 local function add(args)
@@ -37,6 +38,20 @@ local function add(args)
 	elseif pathValue then
 		depType = "path"
 		depValue = pathValue
+	else
+		-- Git shorthand: gh:owner/repo, or gh:<pkg>@owner/repo for a package
+		-- inside a monorepo. The dependency key is the sub-package name (or
+		-- the repo basename for the plain form) — the name lde expects to find
+		-- inside the repo.
+		local shorthandUrl, subPackage, serr = gitShorthand.expand(rawName)
+		if serr then
+			lde.error.raise(serr)
+		end
+		if shorthandUrl then
+			depType = "git"
+			depValue = shorthandUrl
+			name = subPackage or lde.global.repoNameFromUrl(shorthandUrl)
+		end
 	end
 
 	local registryVersion = args:option("version") or versionFromName

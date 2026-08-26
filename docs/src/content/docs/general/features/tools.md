@@ -25,6 +25,31 @@ ldx triangle --git https://github.com/codebycruz/hood
 
 This clones the hood repository, resolves the triangle package, and then instantly runs the package. You can do this with --path dependencies as well.
 
+### Git shorthands
+
+Instead of `--git <url>`, the common git hosts have shorthands that take the `owner/repo` form directly:
+
+```bash
+ldx gh:codebycruz/hood        # https://github.com/codebycruz/hood
+ldx github:codebycruz/hood    # same repo, explicit prefix
+ldx gitlab:owner/repo         # https://gitlab.com/owner/repo
+ldx codeberg:owner/repo       # https://codeberg.org/owner/repo
+```
+
+They work anywhere a git source is accepted — `lde x`, `lde install`, and `lde add`:
+
+```bash
+lde install gh:codebycruz/hood
+lde add gh:codebycruz/hood     # adds the git dep under the key "hood"
+```
+
+For a package inside a monorepo, the `@` form carries the package name, the same as the `[package-name]` positional of `--git`:
+
+```bash
+ldx gh:triangle@codebycruz/hood   # package "triangle" inside github.com/codebycruz/hood
+lde add gh:triangle@codebycruz/hood  # adds the git dep under the key "triangle"
+```
+
 ### Offline
 
 Registry and luarocks lookups normally refresh their metadata on every run. If you're offline (or just want to avoid the network), pass `--offline`:

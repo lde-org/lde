@@ -35,6 +35,76 @@ test.it("should not ignore --git in ldx", function()
 	fs.rmdir(repoDir)
 end)
 
+test.it("ldx gh:owner/repo resolves the shorthand to a git repo", function()
+	local cloneUrl = "https://github.com/codebycruz/hood"
+
+	-- Resolve the real commit so the cache key matches what getOrCloneRepo expects.
+	local commit = assert(git2.lsRemote(cloneUrl, "HEAD")) ---@cast commit string
+
+	-- Pre-populate the cache with a fake repo (same trick as the --git test above).
+	local repoDir = lde.global.getGitRepoDir("hood", commit)
+	fs.rmdir(repoDir)
+	fs.mkdir(repoDir)
+	fs.write(path.join(repoDir, "lde.json"), json.encode({
+		name = "hood",
+		version = "1.0.0",
+		dependencies = {}
+	}))
+	fs.mkdir(path.join(repoDir, "src"))
+	fs.write(path.join(repoDir, "src", "init.lua"), 'print("from shorthand hood")')
+
+	-- The repo root package runs, exactly as `ldx --git <url>` would.
+	local ok, out = ldecli({ "x", "gh:codebycruz/hood" })
+	test.truthy(ok, "ldx gh:... failed: " .. tostring(out)) ---@cast out -nil
+	test.includes(out, "from shorthand hood")
+
+	-- An extra positional is a sub-package name, like --git's [package-name].
+	local _, out2 = ldecli({ "x", "gh:codebycruz/hood", "triangle" }) ---@cast out2 -nil
+	test.includes(out2, "No package named 'triangle'")
+
+	fs.rmdir(repoDir)
+end)
+
+test.it("ldx gh:<pkg>@owner/repo runs the sub-package of a monorepo", function()
+	local cloneUrl = "https://github.com/codebycruz/hood"
+
+	-- Resolve the real commit so the cache key matches what getOrCloneRepo expects.
+	local commit = assert(git2.lsRemote(cloneUrl, "HEAD")) ---@cast commit string
+
+	-- Pre-populate the cache with a fake monorepo: a root package plus a
+	-- "triangle" package in a subdirectory.
+	local repoDir = lde.global.getGitRepoDir("hood", commit)
+	fs.rmdir(repoDir)
+	fs.mkdir(repoDir)
+	fs.write(path.join(repoDir, "lde.json"), json.encode({
+		name = "hood",
+		version = "1.0.0",
+		dependencies = {}
+	}))
+	fs.mkdir(path.join(repoDir, "src"))
+	fs.write(path.join(repoDir, "src", "init.lua"), "")
+	fs.mkdir(path.join(repoDir, "triangle"))
+	fs.mkdir(path.join(repoDir, "triangle", "src"))
+	fs.write(path.join(repoDir, "triangle", "lde.json"), json.encode({
+		name = "triangle",
+		version = "1.0.0",
+		dependencies = {}
+	}))
+	fs.write(path.join(repoDir, "triangle", "src", "init.lua"), 'print("from triangle subpackage")')
+
+	local ok, out = ldecli({ "x", "gh:triangle@codebycruz/hood" })
+	test.truthy(ok, "ldx gh:<pkg>@... failed: " .. tostring(out)) ---@cast out -nil
+	test.includes(out, "from triangle subpackage")
+
+	fs.rmdir(repoDir)
+end)
+
+test.it("ldx gh:owner/repo@version rejects malformed shorthands", function()
+	local ok, out = ldecli({ "x", "gh:foo/bar@1.0.0" })
+	test.falsy(ok)
+	test.includes(tostring(out), "Invalid git shorthand")
+end)
+
 test.it("lde test skips packages with no tests/ directory", function()
 	local tmpDir = path.join(env.tmpdir(), "lde-test-skip-test")
 	fs.rmdir(tmpDir)

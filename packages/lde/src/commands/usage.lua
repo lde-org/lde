@@ -39,6 +39,7 @@ local commands = {
 	x = {
 		usage = "lde x <name>[@<version>] [--offline] [args...]",
 		description = "Run a package from the registry, a git repo, or a local path without adding it as a dependency.",
+		arguments = "<name>  Registry name, rocks:<name>, or a git shorthand (gh:owner/repo, gh:<pkg>@owner/repo for a monorepo package, github:owner/repo, codeberg:owner/repo, gitlab:owner/repo)",
 		options = {
 			["--git"] = { arg = "url", desc = "Run a package cloned from a git repository" },
 			["--path"] = { arg = "dir", desc = "Run a package from a local directory" },
@@ -106,7 +107,7 @@ local commands = {
 	},
 	install = {
 		usage = "lde install [<name>[@<version>]]",
-		description = "Install the current project's dependencies, or install a tool to PATH via --git, --path, or rocks:.",
+		description = "Install the current project's dependencies, or install a tool to PATH via --git, --path, rocks:, or a git shorthand (gh:owner/repo).",
 		options = {
 			["--git"] = { arg = "url", desc = "Install a tool from a git repository" },
 			["--path"] = { arg = "dir", desc = "Install a tool from a local directory" },
@@ -121,6 +122,7 @@ local commands = {
 	add = {
 		usage = "lde add <name>[@<version>] [--git <url> | --path <dir>]",
 		description = "Add a dependency to lde.json. Always use this instead of editing the manifest by hand, so the lockfile stays in sync.",
+		arguments = "<name>  Dependency key; rocks:<name> adds a luarocks dep, and a git shorthand (gh:owner/repo or gh:<pkg>@owner/repo) adds a git dep",
 		options = {
 			["--dev"] = { desc = "Add to devDependencies" },
 			["--git"] = { arg = "url", desc = "Add a git dependency (commit auto-pinned)" },

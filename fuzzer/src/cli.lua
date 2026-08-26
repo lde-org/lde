@@ -63,6 +63,8 @@ local function randomValue(rng)
 		"..", ".", "/", "/tmp/x", "C:\\Windows", "~", "~/x",
 		"http://example.com", "git@github.com:user/repo.git",
 		"name", "name@1.0.0", "ns/name", "rocks:luasocket",
+		"gh:user/repo", "github:user/repo", "gitlab:user/repo", "codeberg:user/repo",
+		"gh:pkg@user/repo",
 		"tests", "target", "src", "src/init.lua", "lde.json", "lde.lock",
 		"123", "0", "-1", "1e999", "0x10", "true", "false", "nil",
 		"%s", "%d", "%%", "%n", "'\"\\", "{|}[];,:=&|",

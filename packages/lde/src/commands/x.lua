@@ -51,6 +51,7 @@ local function x(args)
 		ansi.printf("{red}Usage: lde x <name>[@<version>] [--offline] [args...]")
 		ansi.printf("{red}       lde x --git <repo-url> [package-name] [args...]")
 		ansi.printf("{red}       lde x --path <dir> [package-name] [args...]")
+		ansi.printf("{red}       lde x gh:owner/repo | gh:<pkg>@owner/repo (or github:/gitlab:/codeberg:) [args...]")
 		return
 	end
 

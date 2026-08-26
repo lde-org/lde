@@ -24,6 +24,8 @@ Git dependencies are cloned with `--recurse-submodules`, so any submodules in th
 
 This can be automated with the `lde add` command. For git dependencies, do `lde add <name> --git <repo>` and for local dependencies, do `lde add --path <package>`.
 
+Git host shorthands accept the `owner/repo` form directly and expand to the matching host URL, so `lde add gh:codebycruz/hood` is the same as `lde add hood --git https://github.com/codebycruz/hood`. Supported: `gh:`/`github:` (GitHub), `gitlab:` (GitLab), and `codeberg:` (Codeberg). For a package inside a monorepo, the `@` form selects it: `lde add gh:triangle@codebycruz/hood` is the same as `lde add triangle --git https://github.com/codebycruz/hood`.
+
 ## Removing a dependency
 
 Simply remove the entry from your `lde.json`, or use `lde remove <name>`.
