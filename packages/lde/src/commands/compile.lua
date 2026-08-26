@@ -53,9 +53,21 @@ local function compile(args)
 	end
 
 	local executable = pkg:compile(targetName)
-	local ok, moveErr = fs.move(executable, outFile)
+
+	-- sea compiles into the temp dir, often a different filesystem than the
+	-- destination — the cross-device copy fallback then can't overwrite the
+	-- running binary (ETXTBSY) when rebuilding the binary with itself. Stage
+	-- beside the destination so the final move is a same-device rename.
+	local staged = outFile .. ".tmp"
+	local ok, moveErr = fs.move(executable, staged)
 	if not ok then
 		lde.error.raise("Failed to move executable: " .. moveErr)
+	end
+
+	local finalOk, finalErr = fs.move(staged, outFile)
+	if not finalOk then
+		fs.delete(staged)
+		lde.error.raise("Failed to move executable: " .. finalErr)
 	end
 
 	if jit.os ~= "Windows" then ---@cast fs fs.raw.posix
