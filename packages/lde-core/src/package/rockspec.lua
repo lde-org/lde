@@ -607,7 +607,7 @@ local function openRockspec(dir, rockspecPath)
 				end
 			end
 
-			---@type { child: process.Child?, modname: string }[]
+			---@type { child: process.Child?, modname: string, code: number? }[]
 			local nativeChildren = {}
 			for modname, src in pairs(nativeModules) do
 				-- LuaJIT uses .so on macOS too (its default cpath is ?.so), and
@@ -660,9 +660,17 @@ local function openRockspec(dir, rockspecPath)
 			-- Post-compile steps: verify any spawned gcc children, install
 			-- binaries/extra files, and stamp the build. Deferred to the caller
 			-- in async mode; run inline otherwise (no children in that case).
+			-- child:poll() reaps the process on POSIX, so exit codes are
+			-- captured in pollNative; wait() here only drains the pipes.
 			local function finishNative()
 				for _, nc in ipairs(nativeChildren) do
-					local code, _, stderr = nc.child:wait()
+					local code = nc.code
+					local stderr
+					if code == nil then
+						code, _, stderr = nc.child:wait()
+					else
+						_, _, stderr = nc.child:wait() -- drain pipes (already reaped)
+					end
 					if code ~= 0 then
 						local msg = (stderr ~= "" and stderr) or ("exited with code " .. code)
 						return nil, "Failed to compile native module '" .. nc.modname .. "': " .. msg
@@ -726,11 +734,17 @@ local function openRockspec(dir, rockspecPath)
 
 			if #nativeChildren > 0 then
 				-- Async mode: the install build loop polls the children, then
-				-- finalizes (verifies exit codes + stamps). poll() reports when all
-				-- gcc children have exited so the loop can finalize promptly.
+				-- finalizes (verifies exit codes + stamps). poll() reports when
+				-- all gcc children have exited so the loop can finalize
+				-- promptly; it also captures each child's exit code, since the
+				-- poll reaps the process on POSIX.
 				local function pollNative()
 					for _, nc in ipairs(nativeChildren) do
-						if nc.child:poll() == nil then return nil end
+						if nc.code == nil then
+							local code = nc.child:poll()
+							if code == nil then return nil end
+							nc.code = code
+						end
 					end
 					return true
 				end

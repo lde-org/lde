@@ -404,10 +404,12 @@ local function bloat(args)
 	-- build/install progress bars (which print to stdout); file mode keeps them.
 	local report
 	if jsonPath == "" then
-		local wasVerbose = lde.isVerbose
+		local wasVerbose, wasQuiet = lde.isVerbose, lde.isQuiet
 		lde.isVerbose = false
+		lde.isQuiet = true
 		report = pkg:bloat()
 		lde.isVerbose = wasVerbose
+		lde.isQuiet = wasQuiet
 	else
 		report = pkg:bloat()
 	end

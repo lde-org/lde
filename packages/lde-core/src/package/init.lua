@@ -73,7 +73,8 @@ function Package:getLockfilePath() return path.join(self.dir, "lde.lock") end
 
 ---@param pkg lde.Package
 ---@param outputDir string
-local function defaultBuildFn(pkg, outputDir)
+---@param captureLog lde.buildLog.Capture? # non-nil in compact mode: guest print + sh/cc output is captured (hidden) instead of streamed
+local function defaultBuildFn(pkg, outputDir, captureLog)
 	-- fs.copy silently fails (and creates nothing) when src/ is missing, which
 	-- would leave build:sh's cwd pointing at a nonexistent output dir. Ensure
 	-- the output dir exists regardless so relative build-script paths always
@@ -99,9 +100,21 @@ local function defaultBuildFn(pkg, outputDir)
 
 	local luaPath, luaCPath = require("lde-core.package.run").getLuaPaths(pkg)
 	local state = lua.new()
-	local g     = state:globals() --[[@as { package: { path: string?, cpath: string? } }]]
+	local g     = state:globals() --[[@as { package: { path: string?, cpath: string? }, [any]: any }]]
 	g.package.path  = luaPath
 	g.package.cpath = luaCPath
+
+	-- Compact mode: guest print() output joins the captured build log instead
+	-- of the terminal (build:sh/build:cc capture their own subprocess output).
+	if captureLog then
+		g.print = function(...)
+			local parts = {}
+			for i = 1, select("#", ...) do
+				parts[i] = tostring(select(i, ...))
+			end
+			captureLog:append(table.concat(parts, "\t") .. "\n")
+		end
+	end
 
 	-- Set LDE_OUTPUT_DIR so build scripts can read it via os.getenv
 	env.set("LDE_OUTPUT_DIR", outputDir)
@@ -129,7 +142,7 @@ local function defaultBuildFn(pkg, outputDir)
 
 	-- Inject lde-build instance into the guest state: build:cc() gets the
 	-- cross compiler and build.target reports the triple being built for.
-	Instance.setup(state, outputDir, ccBin, global.getTargetTriple(), global.getTargetFlag())
+	Instance.setup(state, outputDir, ccBin, global.getTargetTriple(), global.getTargetFlag(), captureLog)
 
 	local cwd = pkg:getDir()
 	local oldCwd = env.cwd()
@@ -153,11 +166,12 @@ function Package:hasBuildScript()
 end
 
 ---@param outputDir string
+---@param captureLog lde.buildLog.Capture? # non-nil in compact mode: build output is captured (hidden) and dumped to a temp file on failure
 ---@return boolean? ok
 ---@return string? err
 ---@return lde.install.DeferredBuild? deferred # non-nil when the build spawned async native compiles
-function Package:runBuildScript(outputDir)
-	return (self.buildfn or defaultBuildFn)(self, outputDir)
+function Package:runBuildScript(outputDir, captureLog)
+	return (self.buildfn or defaultBuildFn)(self, outputDir, captureLog)
 end
 
 ---@param dir string?

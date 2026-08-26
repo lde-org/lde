@@ -11,11 +11,17 @@ local process = require("process")
 ---@class lua.Chunk
 ---@field call fun(self: lua.Chunk, ...: any): any
 
+--- Capture buffer for hidden build output (created by lde-core's build-log;
+--- lde-build only ever appends to it).
+---@class lde.buildLog.Capture
+---@field append fun(self: lde.buildLog.Capture, ...: string?)
+
 ---@class lde.build.Instance
 ---@field outDir string
 ---@field gccBin string
 ---@field target string # clang triple for the current build (target triple when cross-compiling, host triple otherwise)
 ---@field targetFlag string? # clang -target flag when cross-compiling, nil when native
+---@field captureLog lde.buildLog.Capture? # non-nil: capture build:sh/build:cc output instead of streaming it
 local Instance = {}
 Instance.__index = Instance
 
@@ -23,13 +29,15 @@ Instance.__index = Instance
 ---@param gccBin? string # compiler binary; defaults to "gcc"
 ---@param target? string # triple reported by build:target()/build.target
 ---@param targetFlag? string # clang -target flag to prepend to every cc invocation
+---@param captureLog lde.buildLog.Capture? # non-nil in compact mode: build output is captured (hidden) and dumped to a temp file on failure
 ---@return lde.build.Instance
-function Instance.new(outDir, gccBin, target, targetFlag)
+function Instance.new(outDir, gccBin, target, targetFlag, captureLog)
 	return setmetatable({
 		outDir = outDir,
 		gccBin = gccBin or "gcc",
 		target = target or "unknown",
 		targetFlag = targetFlag,
+		captureLog = captureLog,
 	}, Instance)
 end
 
@@ -113,8 +121,23 @@ end
 ---@param cmd string
 function Instance:sh(cmd)
 	-- Run relative to the output dir so `build:sh("echo x > out.txt")` lands
-	-- where the rest of the build API writes. Stream output (don't capture) so
-	-- configure-style scripts keep their progress visible.
+	-- where the rest of the build API writes. Compact mode captures the output
+	-- (hidden from the user, dumped to a temp file if the build fails) so
+	-- configure-style scripts can't flood the terminal; verbose mode streams
+	-- it live to keep the current behavior. Both stdout and stderr are piped
+	-- so the concurrent fd drain (readFds) can't deadlock on >64KB output.
+	if self.captureLog then
+		local shell, flag = jit.os == "Windows" and "cmd" or "sh", jit.os == "Windows" and "/c" or "-c"
+		local code, stdout, stderr = process.exec(shell, { flag, cmd }, {
+			cwd = self.outDir,
+			stdout = "pipe",
+			stderr = "pipe",
+		})
+		self.captureLog:append("$ " .. cmd .. "\n", stdout, stderr)
+		assert(code == 0, "failed to execute " .. cmd)
+		return
+	end
+
 	local shell, flag = jit.os == "Windows" and "cmd" or "sh", jit.os == "Windows" and "/c" or "-c"
 	local child, serr = process.spawn(shell, { flag, cmd }, {
 		cwd = self.outDir,
@@ -153,6 +176,7 @@ function Instance:cc(args)
 		cwd = self.outDir,
 		env = execEnv,
 	})
+	if self.captureLog then self.captureLog:append(stdout or "", stderr or "") end
 	assert(code == 0, "cc failed: " .. (stderr or stdout or ""))
 	return stdout or "", stderr or ""
 end
@@ -195,8 +219,9 @@ local GUEST_SOURCE = [==[
 ---@param gccBin?   string # path to gcc binary; defaults to "gcc"
 ---@param target?   string # clang triple for build:target() (defaults to "unknown")
 ---@param targetFlag? string # clang -target flag prepended to cc invocations when cross-compiling
-function Instance.setup(state, outputDir, gccBin, target, targetFlag)
-	local inst = Instance.new(outputDir, gccBin, target, targetFlag)
+---@param captureLog lde.buildLog.Capture? # non-nil in compact mode: sh/cc output is captured instead of streamed
+function Instance.setup(state, outputDir, gccBin, target, targetFlag, captureLog)
+	local inst = Instance.new(outputDir, gccBin, target, targetFlag, captureLog)
 	state:load(GUEST_SOURCE, "@lde-build"):call(
 		inst.outDir, inst.gccBin, inst.target,
 		function(url)          return inst:fetch(url)     end,

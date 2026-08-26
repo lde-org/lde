@@ -201,6 +201,7 @@ local globalFlags = {
 	["--cwd"] = { arg = "dir", desc = "Change working directory before running" },
 	["-C"] = { arg = "dir", desc = "Change working directory (alias for --cwd)" },
 	["--tree"] = { arg = "dir", desc = "Use <dir> as the global lde directory" },
+	["--verbose"] = { desc = "Stream full build/install output (default: compact progress + summary)" },
 }
 
 -- Global flags that only make sense before a command.

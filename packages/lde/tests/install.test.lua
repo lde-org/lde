@@ -231,3 +231,55 @@ print(rock.greet("cli"))
 	test.truthy(ok, "lde run with rockspec dep failed: " .. tostring(out))
 	test.includes(out or "", "hi cli")
 end)
+
+--
+-- Compact install output: build.lua stdout is hidden by default, shown with --verbose
+--
+
+test.it("build.lua output is hidden by default and streamed with --verbose", function()
+	-- A path dep whose build.lua writes a marker to stdout. In compact mode
+	-- the marker must never reach the terminal; with --verbose it must.
+	local depDir = path.join(tmpBase, "noisy-dep")
+	fs.rmdir(depDir)
+	fs.mkdir(depDir)
+	fs.mkdir(path.join(depDir, "src"))
+	fs.write(path.join(depDir, "src", "init.lua"), 'return {}')
+	fs.write(path.join(depDir, "lde.json"), json.encode({
+		name = "noisy-dep",
+		version = "0.1.0",
+		dependencies = {}
+	}))
+	fs.write(path.join(depDir, "build.lua"), [[
+local build = require("lde-build")
+build:sh("echo NOISY-MARKER")
+build:write("init.lua", "return {}")
+]])
+
+	local appDir = makeProject("noisy-app")
+	fs.write(path.join(appDir, "src", "init.lua"), 'print("app-ran")')
+	fs.write(path.join(appDir, "lde.json"), json.encode({
+		name = "noisy-app",
+		version = "0.1.0",
+		dependencies = {
+			["noisy-dep"] = { path = "../noisy-dep" }
+		}
+	}))
+
+	local ok, out = ldecli({ "run" }, appDir)
+	test.truthy(ok, "lde run failed: " .. tostring(out))
+	test.includes(out or "", "app-ran")
+	test.falsy((out or ""):find("NOISY-MARKER", 1, true),
+		"build.lua output must be hidden by default: " .. tostring(out))
+	-- Compact install output is a single summary line — no per-dependency
+	-- check marks in the scrollback.
+	test.includes(out or "", "packages installed")
+	test.falsy((out or ""):find("✓ noisy%-dep", 1, true),
+		"no per-dependency lines in compact mode: " .. tostring(out))
+
+	-- Touch the dep's source so the stamp is stale and the build re-runs.
+	fs.write(path.join(depDir, "src", "init.lua"), 'return {}\n-- touched\n')
+
+	local ok2, out2 = ldecli({ "--verbose", "run" }, appDir)
+	test.truthy(ok2, "lde run --verbose failed: " .. tostring(out2))
+	test.includes(out2 or "", "NOISY-MARKER", "--verbose must stream build.lua output")
+end)

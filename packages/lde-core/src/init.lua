@@ -3,6 +3,9 @@ local lde = {}
 package.loaded[(...)] = lde
 
 lde.isVerbose = false
+-- Suppresses even the compact install progress line (e.g. `lde bloat --json`
+-- pipes a report to stdout and must not have progress output mixed in).
+lde.isQuiet = false
 
 lde.error = require("lde-core.error")
 

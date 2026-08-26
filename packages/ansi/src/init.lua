@@ -203,18 +203,52 @@ local function formatElapsed(seconds)
 	end
 end
 
+-- Truecolor (24-bit) terminals can render the red→green bar gradient; others
+-- fall back to a plain ASCII bar.
+local truecolor = colorEnabled and (os.getenv("COLORTERM") == "truecolor" or os.getenv("COLORTERM") == "24bit")
+
+--- HSV → RGB, each 0..1.
+---@param h number # hue in degrees
+---@param s number
+---@param v number
+---@return number r
+---@return number g
+---@return number b
+local function hsvToRgb(h, s, v)
+	h = h / 60
+	local i = math.floor(h)
+	local f = h - i
+	local p = v * (1 - s)
+	local q = v * (1 - s * f)
+	local t = v * (1 - s * (1 - f))
+	if i == 0 then return v, t, p end
+	if i == 1 then return q, v, p end
+	if i == 2 then return p, v, t end
+	if i == 3 then return p, q, v end
+	if i == 4 then return t, p, v end
+	return v, p, q
+end
+
+--- One filled bar run, colored on the red→green gradient by the bar's ratio:
+--- the whole run is red at 0% and fades smoothly to green at 100% (truecolor
+--- terminals only; plain `=` otherwise).
 ---@param ratio number?
 local function renderBar(ratio)
 	if not ratio then return nil end
 	local filled = math.floor(ratio * BAR_WIDTH)
 	if filled < 0 then filled = 0 end
 	if filled > BAR_WIDTH then filled = BAR_WIDTH end
-	if filled == BAR_WIDTH then
-		return "[" .. string.rep("=", BAR_WIDTH) .. "]"
-	else
-		local remaining = BAR_WIDTH - filled
-		return "[" .. string.rep("=", filled) .. ">" .. string.rep(" ", remaining - 1) .. "]"
+
+	local body = string.rep("=", filled)
+	local head = filled < BAR_WIDTH and ">" or ""
+	local colored = body .. head
+	if truecolor and colored ~= "" then
+		local r, g, b = hsvToRgb(ratio * 120, 0.85, 0.9)
+		colored = "\27[38;2;" .. math.floor(r * 255) .. ";" .. math.floor(g * 255) .. ";" .. math.floor(b * 255) .. "m"
+			.. colored .. colors.reset
 	end
+	local rest = string.rep(" ", BAR_WIDTH - filled - (head ~= "" and 1 or 0))
+	return colors.gray .. "[" .. colors.reset .. colored .. rest .. colors.gray .. "]" .. colors.reset
 end
 
 ---@class ansi.Progress
@@ -299,6 +333,160 @@ function ansi.progress(label)
 			io.flush()
 		end
 	}
+end
+
+-- ─── Install progress ────────────────────────────────────────────────────
+-- Live region for the dependency install pass. Each dependency currently
+-- being materialized or built gets its own row, appearing when its work
+-- starts and clearing when it finishes: `marker label built/total elapsed`,
+-- where built/total is how many of the packages that dependency pulls in are
+-- built. The marker is picked lazily from what is already known: 🔧 for an
+-- lde package (git/path), 🪨 for a luarocks package, 🛠️ once a build.lua is
+-- discovered. Below the rows sits the total bar (gray brackets, a single
+-- red→green fill) with the install-wide built/building count. Nothing is
+-- committed to the scrollback, so an install prints exactly one line (the
+-- summary) plus whatever the caller prints. Non-TTY output prints only the
+-- summary.
+
+---@type table<string, string> # row marker key -> emoji
+local INSTALL_EMOJI = {
+	wrench = "🔧", -- lde package (git/path): copied or symlinked
+	rock = "🪨", -- luarocks package
+	tools = "🛠️", -- package running a build.lua
+}
+
+---@class ansi.InstallProgress
+---@field setCurrent fun(self: ansi.InstallProgress, label: string, kind?: "wrench"|"rock"|"tools") # spawn (or refresh) a dependency's row; resets its timer
+---@field setDepCount fun(self: ansi.InstallProgress, label: string, built: integer, total: integer) # update a row's built/building count
+---@field update fun(self: ansi.InstallProgress, ratio: number?, info: string?) # move the total progress bar
+---@field finish fun(self: ansi.InstallProgress, label: string) # remove a finished dependency's row
+---@field tick fun(self: ansi.InstallProgress) # redraw the region so elapsed counters animate while builds run
+---@field done fun(self: ansi.InstallProgress, summary: string) # finalize: clear the region, print `✓ summary`
+---@field fail fun(self: ansi.InstallProgress, msg: string) # finalize on error: clear the region, print `✗ msg`
+---@field clear fun(self: ansi.InstallProgress) # clear the region without printing anything (caller prints its own summary)
+
+---@param fallbackLabel string # label shown on the total line while nothing is building
+---@return ansi.InstallProgress
+function ansi.installProgress(fallbackLabel)
+	local startTime = now()
+	---@type string[] # active dependency labels, in build-start order
+	local rows = {}
+	---@type table<string, number> # label -> build start time
+	local rowStart = {}
+	---@type table<string, "wrench"|"rock"|"tools"> # label -> work-kind marker
+	local rowKind = {}
+	---@type table<string, { built: integer, total: integer }> # label -> per-dependency built/building count
+	local depCount = {}
+	local ratio, info = nil, nil
+	local lastRatio, lastInfo = nil, nil
+	local lastRowKey = ""
+	local lastDraw = 0
+	---@type integer # rows the previous frame occupied
+	local lastLines = 0
+
+	--- Erase the previously rendered live region: move to its first row and
+	--- clear to the end of the screen. Each row is a single short line, so no
+	--- horizontal clearing is needed.
+	local function clearRegion()
+		if lastLines > 1 then io.write(ESC .. (lastLines - 1) .. "A") end
+		io.write("\r" .. ESC .. "J")
+		lastLines = 0
+		io.flush()
+	end
+
+	--- Write the live region (TTY only). Deduped to ~10Hz so the elapsed
+	--- counters can animate without spamming the terminal.
+	local function render()
+		if not isTTY then return end
+		local nowT = now()
+		local rowKey = table.concat(rows, "\0")
+		if rowKey == lastRowKey and ratio == lastRatio and info == lastInfo and nowT - lastDraw < 0.1 then
+			return
+		end
+		lastRowKey, lastRatio, lastInfo, lastDraw = rowKey, ratio, info, nowT
+
+		local lines = {}
+		for _, label in ipairs(rows) do
+			-- Each row: `marker label built/total elapsed`. The built/total
+			-- count is shown only when the dependency pulls in other packages
+			-- (a leaf's `0/1` is noise).
+			local c = depCount[label]
+			local count = c and c.total > 1 and (" " .. colors.gray .. c.built .. "/" .. c.total .. colors.reset) or ""
+			local marker = ansi.supportsEmoji() and INSTALL_EMOJI[rowKind[label] or "wrench"] or ""
+			lines[#lines + 1] = marker
+				.. (marker ~= "" and " " or "") .. label .. count
+				.. " " .. colors.gray .. formatElapsed(nowT - rowStart[label]) .. colors.reset
+		end
+
+		local total = ""
+		local barStr = renderBar(ratio)
+		if barStr then total ..= barStr end
+		if info then total ..= " " .. colors.gray .. info .. colors.reset end
+		if #rows == 0 and not barStr and not info then total ..= fallbackLabel end
+		lines[#lines + 1] = total
+
+		clearRegion()
+		io.write(table.concat(lines, "\n"))
+		io.flush()
+		lastLines = #lines
+	end
+
+	local progress = {}
+
+	function progress:setCurrent(label, kind)
+		if not rowStart[label] then rows[#rows + 1] = label end
+		rowStart[label] = now()
+		rowKind[label] = kind or "wrench"
+		render()
+	end
+
+	function progress:setDepCount(label, built, total)
+		depCount[label] = { built = built, total = total }
+		render()
+	end
+
+	function progress:update(newRatio, newInfo)
+		ratio, info = newRatio, newInfo
+		render()
+	end
+
+	function progress:finish(label)
+		for i, l in ipairs(rows) do
+			if l == label then
+				table.remove(rows, i)
+				break
+			end
+		end
+		rowStart[label] = nil
+		rowKind[label] = nil
+		depCount[label] = nil
+		render()
+	end
+
+	function progress:tick()
+		render()
+	end
+
+	function progress:done(summary)
+		clearRegion()
+		io.write(colors.green ..
+			"✓ " ..
+			colors.reset .. summary .. " " .. colors.gray .. "(" .. formatElapsed(now() - startTime) .. ")" .. colors.reset .. "\n")
+		io.flush()
+	end
+
+	function progress:fail(msg)
+		clearRegion()
+		io.write(colors.red .. "✗ " .. colors.reset .. msg .. "\n")
+		io.flush()
+	end
+
+	function progress:clear()
+		clearRegion()
+	end
+
+	render()
+	return progress
 end
 
 -- Format a byte count for human display.

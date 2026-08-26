@@ -117,10 +117,65 @@ local function makeBuildScheduler(ctx)
 	local queued = {}    -- alias -> addNode already ran
 	---@type table<string, boolean>
 	local attempted = {} -- alias -> attemptBuild already ran
+	---@type table<string, table<string, true>> # alias -> direct dependency aliases (build graph edges)
+	local children = {}
+	---@type table<string, boolean>
+	local building = {}  -- alias -> a build is in flight (row shown on the progress region)
 
 	-- Forward declarations: the functions below reference each other.
 	local pumpQueue
 	local attemptBuild
+
+	--- How many of a dependency's transitive closure (itself included) are
+	--- built so far, and its total size. Shown on that dependency's progress
+	--- row as `built/total` — e.g. `curl-sys 3/8` means 3 of the 8 packages
+	--- curl-sys pulls in are built.
+	---@param alias string
+	---@return integer built
+	---@return integer total
+	local function subtreeCount(alias)
+		local seen = { [alias] = true }
+		local frontier = { alias }
+		local built, total = done[alias] and 1 or 0, 1
+		while #frontier > 0 do
+			local a = table.remove(frontier)
+			for child in pairs(children[a] or {}) do
+				if not seen[child] then
+					seen[child] = true
+					total += 1
+					if done[child] then built += 1 end
+					frontier[#frontier + 1] = child
+				end
+			end
+		end
+		return built, total
+	end
+
+	--- Push the completed/total counts onto the install progress region:
+	--- the total bar (install-wide done/total) and each building row's own
+	--- built/total count.
+	local function updateProgress()
+		if not ctx.progress then return end
+		local doneCount, total = 0, 0
+		for _ in pairs(done) do doneCount += 1 end
+		for _ in pairs(ctx.stack) do total += 1 end
+		ctx.progress:update(total > 0 and doneCount / total or nil, doneCount .. "/" .. total)
+		for alias in pairs(building) do
+			local built, sub = subtreeCount(alias)
+			ctx.progress:setDepCount(alias, built, sub)
+		end
+	end
+
+	--- Drop a finished dependency from the progress region (its row clears)
+	--- and push the total bar forward.
+	---@param alias string
+	local function finishAlias(alias)
+		building[alias] = nil
+		if ctx.progress then
+			ctx.progress:finish(alias)
+			updateProgress()
+		end
+	end
 
 	--- Whether a node's build may run now: its package is open, and every dep
 	--- it can read outputs from has finished building.
@@ -146,6 +201,7 @@ local function makeBuildScheduler(ctx)
 		end
 		ctx.builds += 1
 		done[job.alias] = true
+		finishAlias(job.alias)
 		pumpQueue()
 	end
 
@@ -158,11 +214,13 @@ local function makeBuildScheduler(ctx)
 		if not entry then return end
 
 		-- Optional deps that aren't enabled for this platform: skip, but mark
-		-- them done so dependents don't wait on them.
+		-- them done so dependents don't wait on them (clearing any
+		-- download-time row the resolver spawned).
 		local depInfo = ctx.dependencies[alias]
 		if depInfo and depInfo.optional and not ctx.enabledOptional[alias] then
 			attempted[alias] = true
 			done[alias] = true
+			if ctx.progress then ctx.progress:finish(alias) end
 			return
 		end
 
@@ -179,17 +237,42 @@ local function makeBuildScheduler(ctx)
 		end
 
 		-- Already a symlink (path deps / no-build git deps): nothing to build.
+		-- Clear any download-time row the resolver spawned for this dep.
 		if fs.islink(dest) then
 			done[alias] = true
+			if ctx.progress then
+				ctx.progress:finish(alias)
+				updateProgress()
+			end
 			return
 		end
 
-		local hasBuilt, deferred = entry.pkg:build(dest)
+		-- The progress region keeps (or spawns) a row for this dependency while
+		-- its build runs (cleared again by finishAlias). Only deps that do real
+		-- work build here; the marker is picked lazily from what is already
+		-- known — no I/O beyond the one stat below.
+		local pkg = entry.pkg
+		local hasBuildLua = fs.exists(pkg:getBuildScriptPath())
+		local isBuild = pkg.buildfn ~= nil or hasBuildLua
+		if ctx.progress and isBuild then
+			building[alias] = true
+			local kind = hasBuildLua and "tools" or (pkg.isRockspec and "rock" or "wrench")
+			ctx.progress:setCurrent(alias, kind)
+		end
+
+		local hasBuilt, deferred = pkg:build(dest)
 		if deferred then
 			pending[#pending + 1] = { alias = alias, build = deferred }
 		else
-			if hasBuilt then ctx.builds += 1 end
 			done[alias] = true
+			if hasBuilt then ctx.builds += 1 end
+			-- finish is a no-op when the dep never spawned a row (no build
+			-- script, or a cached build that returned early).
+			building[alias] = nil
+			if ctx.progress then
+				ctx.progress:finish(alias)
+				updateProgress()
+			end
 			pumpQueue()
 		end
 	end
@@ -217,6 +300,10 @@ local function makeBuildScheduler(ctx)
 		if queued[alias] then return end
 		queued[alias] = true
 		queue[#queue + 1] = node
+		-- Record the build-graph edge (used for per-dependency subtree counts).
+		local set = children[alias] or {}
+		for depAlias in pairs(node.deps or {}) do set[depAlias] = true end
+		children[alias] = set
 		if not ctx.stack[alias] then
 			resolve.registerNode(node, ctx)
 		end
@@ -245,6 +332,10 @@ local function makeBuildScheduler(ctx)
 			end
 			if not hasProgressed then
 				sleep(20)
+				-- Refresh the progress region while spawned build workers run:
+				-- per-row elapsed counters animate and each row's built/total
+				-- count stays current as dependencies finish around it.
+				if ctx.progress then updateProgress() end
 			end
 		end
 		pumpQueue()
@@ -397,8 +488,11 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 
 	-- Parallel download session: sources are prefetched in batches during the
 	-- graph walk and materialized afterwards. Always cleaned up, even on error.
-	-- Only show the bar when there's something to download — packages with no
-	-- dependencies shouldn't print a spurious "Downloading dependencies".
+	--
+	-- Compact mode shows one bun-style live line for the whole pass: the
+	-- currently building dependency, a moving total progress bar, and the
+	-- elapsed time for that dependency. Verbose mode keeps the old per-item
+	-- progress bars.
 	--
 	-- A session may already be active when this install runs inside an
 	-- overlapped `install rocks:` flow (the root package's own download started
@@ -406,14 +500,14 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 	-- ends it.
 	local download = require("lde-core.util.download")
 	local isSessionActive = download.active()
-	local bar = nil
+	local progress = (not lde.isVerbose and not lde.isQuiet and installs > 0)
+		and ansi.installProgress("Downloading dependencies") or nil
+	ctx.progress = progress
 	if not isSessionActive then
-		bar = lde.isVerbose and installs > 0
-			? ansi.progress("Downloading dependencies") : nil
-		download.begin(bar and {
+		download.begin(progress and {
 			progress = function(done, total)
 				local ratio = total > 0 and (done / total) or nil
-				bar:update(ratio, done .. "/" .. total)
+				progress:update(ratio, ansi.formatBytes(done) .. " / " .. ansi.formatBytes(total))
 			end
 		} or nil)
 	end
@@ -421,9 +515,8 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 	local ok, err = pcall(resolve.resolveDependencies, dependencies, ctx)
 	if not ok then
 		download.abort()
-		-- Only fail the bar if it actually rendered (downloads were in flight);
-		-- a resolution error (e.g. --locked pin check) never drew anything.
-		if bar and ctx.downloads > 0 then bar:fail() end
+		-- Clear the live progress line; the error boundary prints the message.
+		if progress then progress:clear() end
 		lde.error.raise(err)
 	end
 	if not isSessionActive then download.finish() end
@@ -441,24 +534,22 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 
 	if not fs.exists(modulesDir) then fs.mkdir(modulesDir) end
 
-	-- Finalize the download bar once downloads are done. When nothing was
-	-- downloaded the bar never rendered anything, so it is finalized after the
-	-- build pass below — where it either reports the builds or is discarded
-	-- silently (the caller prints its own summary).
-	if bar and ctx.downloads > 0 then bar:done() end
-
+	-- Finalize the unified progress line: committed ✓ lines stay above, the
+	-- live line is replaced by a summary (or cleared when the caller prints
+	-- its own summary). Nothing was downloaded or built → clear silently so
+	-- summary callers render their "No changes" line identically.
 	local checked = 0
 	for _ in pairs(ctx.stack) do checked += 1 end
 
-	-- With nothing downloaded or built the bar never rendered anything, so it
-	-- is discarded silently for summary callers (they print the "No changes"
-	-- line themselves, so both paths render identically) and finalized with the
-	-- old "2ms" line for default callers (run/test/compile).
-	if bar and ctx.downloads == 0 then
-		if ctx.builds > 0 then
-			bar:done()
-		elseif not opts.summary then
-			bar:done()
+	if progress then
+		if ctx.downloads > 0 or ctx.builds > 0 then
+			if opts.summary then
+				progress:clear()
+			else
+				progress:done(string.format("%d packages installed", checked))
+			end
+		else
+			progress:clear()
 		end
 	end
 

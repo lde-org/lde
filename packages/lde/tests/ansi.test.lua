@@ -75,3 +75,34 @@ test.it("dumb terminals disable emoji", function()
 		test.falsy(ansi.supportsEmoji())
 	end)
 end)
+
+--
+-- ansi.installProgress (compact install UI)
+--
+
+-- In a pipe (tests run non-TTY) the live line never renders: no per-dep
+-- lines, just the final summary — an install prints exactly one line.
+test.it("installProgress prints only the summary in non-TTY mode", function()
+	local ansi = require("ansi")
+	local buf = {}
+	local oldWrite = io.write
+	io.write = function(...)
+		for i = 1, select("#", ...) do buf[#buf + 1] = tostring(select(i, ...)) end
+	end
+
+	local p = ansi.installProgress("Downloading dependencies")
+	p:update(0.5, "1/2")
+	p:setCurrent("curl-sys")
+	p:setCurrent("git2-sys")
+	p:tick()
+	p:finish("curl-sys")
+	p:finish("git2-sys")
+	p:done("2 packages installed")
+
+	io.write = oldWrite
+	local out = table.concat(buf)
+	test.includes(out, "2 packages installed")
+	-- No per-dependency lines and no live-line frames reached the output.
+	test.falsy(out:find("curl%-sys", 1, true))
+	test.falsy(out:find("1/2", 1, true))
+end)

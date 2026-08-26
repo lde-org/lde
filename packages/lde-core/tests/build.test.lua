@@ -1848,6 +1848,52 @@ assert(shellContent:match("hello"), "sh/read mismatch: " .. shellContent)
 	test.truthy(fs.read(path.join(outputDir, "shell.txt")):match("hello"))
 end)
 
+test.it("build failure writes captured output to a temp log and reports its path", function()
+	local dir = makePackageWithSrc("build-fail-log", {
+		["init.lua"] = 'return true'
+	})
+	fs.write(path.join(dir, "build.lua"), [[
+local build = require("lde-build")
+build:sh("echo first-line")
+print("guest line")
+build:sh("echo last-line && exit 7")
+]])
+
+	local pkg = assert(lde.Package.open(dir))
+	local outputDir = path.join(dir, "target", pkg:getName())
+
+	-- Compact mode (not verbose): output is captured, the failing build must
+	-- raise an error that points at the temp log containing everything.
+	local oldVerbose, oldQuiet = lde.isVerbose, lde.isQuiet
+	lde.isVerbose, lde.isQuiet = false, false
+	local ok, err = pcall(function() pkg:build(outputDir) end)
+	lde.isVerbose, lde.isQuiet = oldVerbose, oldQuiet
+
+	test.falsy(ok, "build must fail")
+	local msg = lde.error.message(err)
+	local logPath = msg:match("Full build output at (%S+)")
+	test.truthy(logPath, "error must point at the log file: " .. msg)
+	-- The full captured output is printed in the error itself.
+	test.includes(msg, "first-line")
+	test.includes(msg, "guest line")
+	test.includes(msg, "last-line")
+	local content = fs.read(logPath)
+	test.includes(content or "", "first-line")
+	test.includes(content or "", "guest line")
+	test.includes(content or "", "last-line")
+	fs.delete(logPath)
+end)
+
+test.it("buildLog.pathFor is deterministic and lives under the temp dir", function()
+	local buildLog = require("lde-core.util.build-log")
+	local p1 = buildLog.pathFor("/tmp/example/target/curl-sys")
+	local p2 = buildLog.pathFor("/tmp/example/target/curl-sys")
+	test.equal(p1, p2)
+	test.truthy(p1:find("lde%-build%-curl%-sys%-"))
+	local tmp = jit.os == "Windows" and (os.getenv("TEMP") or os.getenv("TMP")) or (os.getenv("TMPDIR") or "/tmp")
+	test.truthy(p1:find(tmp, 1, true), "log must live under the temp dir: " .. p1)
+end)
+
 test.it("rockspec: make build.variables are substituted and passed to make", function()
 	local dir = path.join(tmpBase, "make-vars-rock")
 	fs.mkdir(dir)

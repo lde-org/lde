@@ -20,6 +20,11 @@ local args = clap.parse({ ... })
 		luaCliArgs = args:drain()
 	end
 
+-- --verbose is a global flag, consumed before the command name is popped so
+-- it works anywhere on the command line (`lde --verbose run` and
+-- `lde run --verbose` both enable it). Applied after lde-core loads below.
+local verboseRequested = args:flag("verbose")
+
 -- Parse the overrides up front so --version is detected even when combined
 -- with -C/--tree (matching the historical behavior), but don't apply them
 -- until after the version check.
@@ -64,7 +69,6 @@ local function applyOverrides()
 
 	if treeOverride then
 		local lde = require("lde-core")
-		lde.isVerbose = true
 		lde.global.setDir(treeOverride)
 		lde.global.init()
 	end
@@ -160,7 +164,13 @@ end
 	-- above (bare `lde`, `lde help`, `--setup`) free of lde-core so startup
 	-- stays ~1ms; the boundary's crash renderer requires it lazily instead.
 	local lde = require("lde-core")
-	lde.isVerbose = true
+	-- Build/install output is compact by default (one bun-style progress line
+	-- plus a summary; build.lua stdout is captured and only dumped on failure).
+	-- --verbose restores the old streaming per-item output. The hidden build
+	-- worker inherits the parent's choice via LDE_VERBOSE.
+	if os.getenv("LDE_VERBOSE") == "1" or verboseRequested then
+		lde.isVerbose = true
+	end
 
 	-- env.cwd() returns nil when the shell's cwd was deleted out from under
 	-- it (relative FS ops then act on the orphaned directory, so commands
@@ -182,25 +192,36 @@ end
 		local pkgDir = args:pop()
 		local outDir = args:pop()
 		local targetName = args:pop()
-		if not pkgDir or not outDir then
-			lde.error.raise("__build-pkg: missing package dir or output dir")
-		end ---@cast outDir -nil
-		-- The worker inherits the parent's compile target so build.lua C code
-		-- compiles for the target platform (build:cc()/build.target read it).
-		if targetName and targetName ~= "" then
-			local target, terr = require("sea").getTarget(targetName)
-			if not target then
-				lde.error.raise("__build-pkg: " .. (terr or ("unknown target '" .. targetName .. "'")))
-			end ---@cast target -nil
-			lde.global.setTarget(target)
-		end
-		local pkg, perr = lde.Package.open(pkgDir)
-		if not pkg then
-			lde.error.raise("__build-pkg: " .. (perr or "failed to open package"))
-		end ---@cast pkg -nil
-		local bok, berr = pkg:runBuildScript(outDir)
-		if not bok then
-			lde.error.raise("__build-pkg: " .. (berr or "build failed"))
+		local buildLog = require("lde-core.util.build-log")
+		-- Compact mode: capture the whole build output (build:sh subprocesses
+		-- and guest prints) and write it to a temp file on failure, then exit
+		-- silently — the parent renders the error and points at the log. The
+		-- path is deterministic (buildLog.pathFor), so parent and worker agree
+		-- on it without passing it over the wire.
+		local capture = (not lde.isVerbose) and buildLog.newCapture() or nil
+		local ok = pcall(function()
+			if not pkgDir or not outDir then
+				error("__build-pkg: missing package dir or output dir", 0)
+			end
+			-- The worker inherits the parent's compile target so build.lua C code
+			-- compiles for the target platform (build:cc()/build.target read it).
+			if targetName and targetName ~= "" then
+				local target, terr = require("sea").getTarget(targetName)
+				if not target then
+					error("__build-pkg: " .. (terr or ("unknown target '" .. targetName .. "'")), 0)
+				end ---@cast target -nil
+				lde.global.setTarget(target)
+			end
+			local pkg, perr = lde.Package.open(pkgDir)
+			if not pkg then
+				error("__build-pkg: " .. (perr or "failed to open package"), 0)
+			end ---@cast pkg -nil
+			local bok, berr = pkg:runBuildScript(outDir, capture)
+			if not bok then error(berr or "build failed", 0) end
+		end)
+		if not ok then
+			if capture and outDir then capture:write(outDir) end
+			os.exit(1)
 		end
 		return
 	end

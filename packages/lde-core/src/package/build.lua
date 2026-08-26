@@ -9,6 +9,7 @@ local lde = require("lde-core")
 local teal = require("lde-core.teal")
 local moonscript = require("lde-core.moonscript")
 local asyncBuild = require("lde-core.util.async-build")
+local buildLog = require("lde-core.util.build-log")
 
 ---@type table<lde.Package, boolean>
 local currentlyBuilding = setmetatable({}, { __mode = "k" })
@@ -142,6 +143,9 @@ local function buildPackage(package, destinationPath)
 			local buildKey = destinationPath .. "\n" .. lde.global.getTargetKey()
 			local alreadyDone = alreadyBuilt[buildKey] or fs.exists(path.join(destinationPath, ".lde-built"))
 			local p = (lde.isVerbose and not alreadyDone) ? ansi.progress("Building " .. package:getName()) : nil
+			-- Compact mode: build.lua output is hidden by default and only
+			-- dumped to a temp file if the build fails (see util/build-log).
+			local capture = (not lde.isVerbose) and buildLog.newCapture() or nil
 
 			-- Record the input state after a successful build (or a confirmed
 			-- no-change run) so the next build can skip. For the subprocess path
@@ -171,12 +175,21 @@ local function buildPackage(package, destinationPath)
 				if not fs.isdir(destinationPath) then fs.mkdir(destinationPath) end
 				local buildTarget = lde.global.getTarget()
 				local targetName = buildTarget and buildTarget.name or ""
+				-- The worker captures its own output (compact mode) or streams
+				-- it (verbose mode, via LDE_VERBOSE). stdout stays "inherit":
+				-- the worker prints nothing unless verbose, so there is no pipe
+				-- to deadlock on.
 				local child, serr = process.spawn(ldeBin,
 					{ "__build-pkg", package:getDir(), destinationPath, targetName },
 					-- cwd = destinationPath so the worker's os.execute calls
 					-- (build:sh) resolve relative paths against the output dir,
 					-- matching the write/read/exists API.
-					{ stdout = "inherit", stderr = "inherit", cwd = destinationPath })
+					{
+						stdout = "inherit",
+						stderr = "inherit",
+						cwd = destinationPath,
+						env = lde.isVerbose and { LDE_VERBOSE = "1" } or nil,
+					})
 				if not child then ---@cast child -nil
 				end
 				if not child then
@@ -185,15 +198,31 @@ local function buildPackage(package, destinationPath)
 				end
 				hasBuilt = true
 				alreadyBuilt[buildKey] = true
+				-- child:poll() reaps the process on POSIX, so the exit code
+				-- must be captured there — a later child:wait() on a reaped
+				-- child returns ECHILD with an uninitialized status.
+				local exitCode
 				deferred = {
 					poll = function()
-						if child:poll() == nil then return nil end
+						local code = child:poll()
+						if code == nil then return nil end
+						exitCode = code
 						return true
 					end,
 					finalize = function()
-						local code = child:wait()
+						local code = exitCode or child:wait()
 						if code ~= 0 then
-							return nil, "build worker exited with code " .. tostring(code)
+							-- The worker wrote the captured output to the
+							-- deterministic log path before exiting; read it
+							-- back so the failure prints the full output.
+							local msg = "build worker exited with code " .. tostring(code)
+							local logPath = buildLog.pathFor(destinationPath)
+							if fs.exists(logPath) then
+								local content = fs.read(logPath)
+								msg ..= "\n  Full build output at " .. logPath
+								if content and content ~= "" then msg ..= "\n\n" .. content end
+							end
+							return nil, msg
 						end
 						writeStamp()
 						if p then p:done("Built " .. package:getName()) end
@@ -201,10 +230,15 @@ local function buildPackage(package, destinationPath)
 					end,
 				}
 			else
-				local ok, err, asyncFinalizer = package:runBuildScript(destinationPath)
+				local ok, err, asyncFinalizer = package:runBuildScript(destinationPath, capture)
 				if not ok and not asyncFinalizer then
 					if p then p:fail("Building " .. package:getName()) end
-					lde.error.raise("Build script failed for package '" .. package:getName() .. "': " .. lde.error.message(err))
+					local msg = "Build script failed for package '" .. package:getName() .. "': " .. lde.error.message(err)
+					local logPath = capture and capture:write(destinationPath) or nil
+					if logPath then msg ..= "\n  Full build output at " .. logPath end
+					local content = capture and table.concat(capture.parts) or nil
+					if content and content ~= "" then msg ..= "\n\n" .. content end
+					lde.error.raise(msg)
 				end
 				if p and not asyncFinalizer then p:done("Built " .. package:getName()) end
 				deferred = asyncFinalizer

@@ -313,29 +313,27 @@ local function executeSource(source, chunkName, opts)
 	-- Collect profiling results
 	if stopProfiler then
 		local counts, vmstates, stacks, total = stopProfiler()
-		if opts.profile and lde.isVerbose then
+		-- Profiling is explicitly requested via --profile/--flamegraph/--json,
+		-- so its report is always printed (independent of --verbose).
+		if opts.profile then
 			printProfileReport(counts, vmstates, total, opts.cwd or env.cwd())
 		end
 		if opts.flamegraph then
 			local title = chunkName and chunkName:match("[^/\\\\]+$")
 			local fgOk, fgErr = lde.flamegraph.write(
 				stacks, total, PROFILER_MS_PER_SAMPLE, opts.flamegraph, title)
-			if lde.isVerbose then
-				if fgOk then
-					ansi.printf("{cyan}Flamegraph written to %s", opts.flamegraph)
-				else
-					ansi.printf("{red}Flamegraph error: %s", fgErr or "unknown error")
-				end
+			if fgOk then
+				ansi.printf("{cyan}Flamegraph written to %s", opts.flamegraph)
+			else
+				ansi.printf("{red}Flamegraph error: %s", fgErr or "unknown error")
 			end
 		end
 		if opts.profileJson then
 			local jOk, jErr = writeProfileJson(opts.profileJson, counts, vmstates, stacks, total)
-			if lde.isVerbose then
-				if jOk then
-					ansi.printf("{cyan}Profile JSON written to %s", opts.profileJson)
-				else
-					ansi.printf("{red}Profile JSON error: %s", jErr or "unknown error")
-				end
+			if jOk then
+				ansi.printf("{cyan}Profile JSON written to %s", opts.profileJson)
+			else
+				ansi.printf("{red}Profile JSON error: %s", jErr or "unknown error")
 			end
 		end
 	end

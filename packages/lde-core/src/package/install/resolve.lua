@@ -35,6 +35,7 @@ end
 ---@field modulesDir string
 ---@field enabledOptional table<string, true>
 ---@field build { addNode: fun(node: lde.install.Node), finish: fun() }
+---@field progress ansi.InstallProgress? # unified install progress line (compact mode)
 ---@field order lde.install.Node[]?
 
 ---@class lde.install.DeferredBuild
@@ -683,6 +684,11 @@ local function resolveDependencies(dependencies, ctx)
 						download.prefetch(c.url --[[@as string]], c.file --[[@as string]])
 					end
 					ctx.downloads += 1
+					-- Lazily spawn the dependency's progress row (marker from
+					-- the node kind alone; refined to 🛠️ once a build starts).
+					if ctx.progress then
+						ctx.progress:setCurrent(node.alias, node.kind == "luarocks" and "rock" or "wrench")
+					end
 					contentBatch[#contentBatch + 1] = node
 				else
 					-- Content already cached: consume + expand without downloading.
@@ -729,6 +735,11 @@ local function resolveDependencies(dependencies, ctx)
 				contentByFile[c.file --[[@as string]]] = node
 			end
 			ctx.downloads += 1
+			-- Lazily spawn the dependency's progress row (marker from the node
+			-- kind alone; refined to 🛠️ once a build starts).
+			if ctx.progress then
+				ctx.progress:setCurrent(node.alias, node.kind == "luarocks" and "rock" or "wrench")
+			end
 			contentNodes[#contentNodes + 1] = node
 		end
 	end
