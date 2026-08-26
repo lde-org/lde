@@ -175,6 +175,49 @@ end
 -- ANSI escape helpers
 local ESC = "\27["
 
+-- Terminal width in columns. Used by ansi.progress to clear live lines that
+-- wrapped to multiple physical rows (a long label/bar on a narrow terminal);
+-- `\x1b[2K` alone only clears the current row and leaves the wrapped residue.
+-- Queried once via ioctl(TIOCGWINSZ) / GetConsoleScreenBufferInfo; defaults to 80.
+---@class ansi.ffi.COORD: ffi.cdata*
+---@field x number
+---@field y number
+---@class ansi.ffi.ConsoleScreenBufferInfo: ffi.cdata*
+---@field size ansi.ffi.COORD
+---@type integer
+local columns = 80
+do
+	if ffi.os == "Windows" then
+		pcall(ffi.cdef, [[
+			typedef struct { short x, y; } COORD;
+			typedef struct { short left, top, right, bottom; } SMALL_RECT;
+			typedef struct { COORD size; COORD cursorPosition; short attributes; SMALL_RECT window; COORD maximumWindowSize; } CONSOLE_SCREEN_BUFFER_INFO;
+			int GetConsoleScreenBufferInfo(void* hConsoleOutput, CONSOLE_SCREEN_BUFFER_INFO* info);
+		]])
+		pcall(function()
+			local info = ffi.new("CONSOLE_SCREEN_BUFFER_INFO") --[[@as ansi.ffi.ConsoleScreenBufferInfo]]
+			local hOut = ffi.C.GetStdHandle(ffi.cast("DWORD", -11))
+			if ffi.C.GetConsoleScreenBufferInfo(hOut, info) ~= 0 then
+				columns = math.floor(tonumber(info.size.x) or 80)
+			end
+		end)
+	else
+		-- ioctl may be re-cdef'd freely; `struct winsize` may NOT (readline
+		-- defines it too, and LuaJIT rejects struct redefinition), so read the
+		-- size into an anonymous uint16_t[4] instead of a named struct.
+		pcall(ffi.cdef, "int ioctl(int fd, unsigned long request, void* argp);")
+		pcall(function()
+			-- TIOCGWINSZ: Linux/Android = 0x5413, macOS/BSD = 0x40087468.
+			local TIOCGWINSZ = (jit.os == "OSX" or jit.os == "BSD") and 0x40087468 or 0x5413
+			local ws = ffi.new("uint16_t[4]") -- ws_row, ws_col, ws_xpixel, ws_ypixel
+			if ffi.C.ioctl(1, TIOCGWINSZ, ws) == 0 and tonumber(ws[1]) > 0 then
+				columns = math.floor(tonumber(ws[1]) or 80)
+			end
+		end)
+	end
+	if columns < 20 then columns = 80 end
+end
+
 function ansi.clearLine()
 	if not isTTY then return end
 	io.write(ESC .. "2K\r")
@@ -284,6 +327,18 @@ function ansi.progress(label)
 
 	local lastRendered = nil
 	local lastRatio, lastInfo
+	---@type integer # physical rows the previous frame occupied (the line may wrap)
+	local lastLines = 0
+
+	--- Erase the previously rendered frame. It may have wrapped to several
+	--- rows on a narrow terminal: move to its first row and clear to the end
+	--- of the screen.
+	local function clearLine()
+		if lastLines > 1 then io.write(ESC .. (lastLines - 1) .. "A") end
+		io.write("\r" .. ESC .. "J")
+		lastLines = 0
+		io.flush()
+	end
 
 	---@param ratio number?
 	---@param info string?
@@ -296,7 +351,7 @@ function ansi.progress(label)
 		if pct == lastRendered then return end
 		lastRendered = pct
 
-		local line = ESC .. "2K\r" .. colors.gray .. "  - " .. colors.reset .. label
+		local line = colors.gray .. "  - " .. colors.reset .. label
 		if barStr then
 			line ..= " " .. barStr .. " " .. pct
 		end
@@ -304,8 +359,14 @@ function ansi.progress(label)
 			line ..= " " .. info
 		end
 		line ..= " " .. colors.gray .. elapsed .. colors.reset
+
+		clearLine()
 		io.write(line)
 		io.flush()
+		-- Bytes == display columns for the ASCII frame; how many rows the next
+		-- clear must cover if the line wrapped.
+		local plain = line:gsub("\27%[[0-9;]*[A-Za-z]", "")
+		lastLines = math.ceil(#plain / columns)
 	end
 
 	render(nil, nil)
@@ -321,15 +382,15 @@ function ansi.progress(label)
 		end,
 		done = function(_, msg)
 			local elapsed = formatElapsed(now() - startTime)
-			io.write(ESC ..
-			"2K\r" ..
-			colors.green ..
+			clearLine()
+			io.write(colors.green ..
 			"  ✓ " ..
 			colors.reset .. (msg or label) .. " " .. colors.gray .. "(" .. elapsed .. ")" .. colors.reset .. "\n")
 			io.flush()
 		end,
 		fail = function(_, msg)
-			io.write(ESC .. "2K\r" .. colors.red .. "  ✗ " .. colors.reset .. (msg or label) .. "\n")
+			clearLine()
+			io.write(colors.red .. "  ✗ " .. colors.reset .. (msg or label) .. "\n")
 			io.flush()
 		end
 	}
