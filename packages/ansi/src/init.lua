@@ -84,11 +84,27 @@ end
 
 local ansi = {}
 
+-- When true, ansi.progress() returns a silent handle. The test runner sets it
+-- while installing dependencies so compact install bars and one-off downloads
+-- (e.g. the LuaJIT tree) don't interleave flush-left with the indented test
+-- results. Distinct from lde.isQuiet, which suppresses the install progress
+-- line at its call site.
+ansi.isQuiet = false
+
+--- Shared no-op progress handle returned in quiet mode.
+local silentProgress = {
+	update = function() end,
+	setLabel = function() end,
+	done = function() end,
+	fail = function() end,
+}
+
 ---@alias ansi.Color
 --- | "reset"
 --- | "red"
 --- | "green"
 --- | "yellow"
+--- | "orange"
 --- | "blue"
 --- | "magenta"
 --- | "cyan"
@@ -111,6 +127,7 @@ local colors = {
 	red = "\27[31m",
 	green = "\27[32m",
 	yellow = "\27[33m",
+	orange = "\27[38;5;208m",
 	blue = "\27[34m",
 	magenta = "\27[35m",
 	cyan = "\27[36m",
@@ -246,35 +263,10 @@ local function formatElapsed(seconds)
 	end
 end
 
--- Truecolor (24-bit) terminals can render the red→green bar gradient; others
--- fall back to a plain ASCII bar.
-local truecolor = colorEnabled and (os.getenv("COLORTERM") == "truecolor" or os.getenv("COLORTERM") == "24bit")
-
---- HSV → RGB, each 0..1.
----@param h number # hue in degrees
----@param s number
----@param v number
----@return number r
----@return number g
----@return number b
-local function hsvToRgb(h, s, v)
-	h = h / 60
-	local i = math.floor(h)
-	local f = h - i
-	local p = v * (1 - s)
-	local q = v * (1 - s * f)
-	local t = v * (1 - s * (1 - f))
-	if i == 0 then return v, t, p end
-	if i == 1 then return q, v, p end
-	if i == 2 then return p, v, t end
-	if i == 3 then return p, q, v end
-	if i == 4 then return t, p, v end
-	return v, p, q
-end
-
---- One filled bar run, colored on the red→green gradient by the bar's ratio:
---- the whole run is red at 0% and fades smoothly to green at 100% (truecolor
---- terminals only; plain `=` otherwise).
+-- One filled bar run, colored by the bar's ratio in discrete stock-ANSI
+-- steps (red → orange → yellow → green). The terminal remaps these codes to
+-- the user's theme, unlike a fixed truecolor gradient — and they render on
+-- any color terminal, not just truecolor ones.
 ---@param ratio number?
 local function renderBar(ratio)
 	if not ratio then return nil end
@@ -285,10 +277,14 @@ local function renderBar(ratio)
 	local body = string.rep("=", filled)
 	local head = filled < BAR_WIDTH and ">" or ""
 	local colored = body .. head
-	if truecolor and colored ~= "" then
-		local r, g, b = hsvToRgb(ratio * 120, 0.85, 0.9)
-		colored = "\27[38;2;" .. math.floor(r * 255) .. ";" .. math.floor(g * 255) .. ";" .. math.floor(b * 255) .. "m"
-			.. colored .. colors.reset
+	if colored ~= "" then
+		-- colors[] entries are empty strings when colors are disabled, so this
+		-- is a no-op there.
+		local step = ratio < 0.25 and "red"
+			or ratio < 0.5 and "orange"
+			or ratio < 0.75 and "yellow"
+			or "green"
+		colored = colors[step] .. colored .. colors.reset
 	end
 	local rest = string.rep(" ", BAR_WIDTH - filled - (head ~= "" and 1 or 0))
 	return colors.gray .. "[" .. colors.reset .. colored .. rest .. colors.gray .. "]" .. colors.reset
@@ -304,6 +300,7 @@ end
 ---@param opts { indent: boolean? }? # indent=false prints flush-left (compact install output); default indented (test runner)
 ---@return ansi.Progress
 function ansi.progress(label, opts)
+	if ansi.isQuiet then return silentProgress end
 	local startTime = now()
 	local indent = opts == nil or opts.indent ~= false
 	local donePrefix, failPrefix, livePrefix = "  ✓ ", "  ✗ ", "  - "
@@ -410,7 +407,7 @@ end
 -- built. The marker is picked lazily from what is already known: 🔧 for an
 -- lde package (git/path), 🪨 for a luarocks package, 🛠️ once a build.lua is
 -- discovered. Below the rows sits the total bar (gray brackets, a single
--- red→green fill) with the install-wide built/building count. Nothing is
+-- red→green fill in discrete theme steps) with the install-wide built/building count. Nothing is
 -- committed to the scrollback, so an install prints exactly one line (the
 -- summary) plus whatever the caller prints. Non-TTY output prints only the
 -- summary.

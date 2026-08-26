@@ -7,6 +7,7 @@ local util           = require("util")
 local lua            = require("lua-sys")
 local process        = require("process")
 local rocked         = require("rocked")
+local ansi           = require("ansi")
 local ldetest        = require("lde-test.test")
 local coverageModule = require("lde-core.coverage")
 local teal           = require("lde-core.teal")
@@ -29,6 +30,23 @@ local lde            = require("lde-core")
 ---@field coverageRan boolean? # external runner was asked to collect coverage (busted --coverage)
 ---@field exitCode number? # exit code of the external runner
 ---@field coverage lde.Coverage? # line coverage collected during the run (--coverage)
+
+--- Run fn() with install/build progress silenced: compact install bars and
+--- one-off downloads (e.g. the LuaJIT tree) print flush-left, which would
+--- interleave with the indented test results. The reporter's own progress
+--- (created while test files run, outside fn()) is untouched. Skipped in
+--- verbose mode, where streaming build output is the point. Flags are always
+--- restored, even when fn() raises.
+---@param fn fun()
+local function quiet(fn)
+	if lde.isVerbose then return fn() end
+	local wasQuiet, wasAnsiQuiet = lde.isQuiet, ansi.isQuiet
+	lde.isQuiet, ansi.isQuiet = true, true
+	local ok, result = pcall(fn)
+	ansi.isQuiet, lde.isQuiet = wasAnsiQuiet, wasQuiet
+	if not ok then error(result, 0) end
+	return result
+end
 
 ---@param pkg lde.Package
 ---@return string luaPath
@@ -101,6 +119,19 @@ local function runTestFile(testFile, luaPath, luaCPath, reporter, coverage)
 	-- relative to their own source file at load time.
 	local ok, err = pcall(state.eval, state, source, "@" .. testFile)
 	if ok then
+		-- Test bodies may install dependencies themselves (e.g. luarocks
+		-- integration tests); silence their flush-left install/build progress
+		-- the same way runTests silences the package's own install. The flags
+		-- are set on the guest's module copies (fresh per state), so the
+		-- host-side reporter progress — and --verbose streaming — is untouched.
+		if not lde.isVerbose then
+			pcall(state.eval, state,
+				"local lde = package.loaded[\"lde-core\"]\n"
+				.. "if lde then lde.isQuiet = true end\n"
+				.. "local ansi = package.loaded[\"ansi\"]\n"
+				.. "if ansi then ansi.isQuiet = true end\n",
+				"@lde-test.quiet")
+		end
 		ok, err = pcall(runSuite)
 	end
 
@@ -193,7 +224,14 @@ local function runRockspecTests(package, filters, coverage)
 		testDeps.luacov = { luarocks = "luacov" }
 	end
 	lde.util.addRockspecDeps(testDeps, spec.test_dependencies or {})
-	package:installDependencies(testDeps, package.dir)
+	-- Quiet: the test rocks and the mock-Lua setup (which may download the
+	-- LuaJIT tree) print flush-left progress; busted runs below with output
+	-- restored.
+	local luaDir, luaBin
+	quiet(function()
+		package:installDependencies(testDeps, package.dir)
+		luaDir, luaBin = ensureMockLuaDir()
+	end)
 
 	-- Per-platform flags from the rockspec's test section.
 	local platform = ffi.os == "Windows" and "windows" or "unix"
@@ -211,7 +249,6 @@ local function runRockspecTests(package, filters, coverage)
 	-- runs the lde binary as plain Lua (so scripts see the harness's env paths,
 	-- not any package context), and `$(LUA_DIR)` is the mock Lua install dir
 	-- (~/.lde/lua) with headers/libs for C rocks the harness builds.
-	local luaDir, luaBin = ensureMockLuaDir()
 
 	local modulesDir = package:getModulesDir()
 	local bustedBin = path.join(modulesDir, "busted", "busted")
@@ -374,9 +411,14 @@ end
 ---@return lde.TestResults
 local function runTests(package, reporter, filters, opts)
 	opts = opts or {}
-	package:installDependencies()
-	package:installDevDependencies()
-	package:build()
+	-- Dependencies and the build happen before any test output: their
+	-- progress (compact bars, luajit downloads) prints flush-left, so silence
+	-- it here instead of interleaving it with the indented test results.
+	quiet(function()
+		package:installDependencies()
+		package:installDevDependencies()
+		package:build()
+	end)
 
 	-- Rockspec-based packages run their test specification (busted) instead of
 	-- lde-test files.

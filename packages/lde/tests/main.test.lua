@@ -141,6 +141,56 @@ test.it("lde test skips packages with no tests/ directory", function()
 	fs.rmdir(tmpDir)
 end)
 
+test.it("lde test silences install/build output", function()
+	local tmpDir = path.join(env.tmpdir(), "lde-test-quiet-output")
+	fs.rmdir(tmpDir)
+	fs.mkdir(tmpDir)
+
+	-- A path dep with a build.lua, so `lde test` actually installs and builds
+	-- something before running the tests.
+	local depDir = path.join(tmpDir, "quiet-dep")
+	fs.mkdir(depDir)
+	fs.mkdir(path.join(depDir, "src"))
+	fs.write(path.join(depDir, "src", "init.lua"), "return {}")
+	fs.write(path.join(depDir, "lde.json"), json.encode({
+		name = "quiet-dep",
+		version = "0.1.0",
+		dependencies = {}
+	}))
+	fs.write(path.join(depDir, "build.lua"), [[
+		local build = require("lde-build")
+		build:sh("echo QUIET-MARKER")
+		build:write("init.lua", "return {}")
+	]])
+
+	local pkg = path.join(tmpDir, "quiet-pkg")
+	fs.mkdir(pkg)
+	fs.mkdir(path.join(pkg, "src"))
+	fs.write(path.join(pkg, "src", "init.lua"), 'return "quiet-pkg"')
+	fs.write(path.join(pkg, "lde.json"), json.encode({
+		name = "quiet-pkg",
+		version = "0.1.0",
+		dependencies = { ["quiet-dep"] = { path = "../quiet-dep" } }
+	}))
+	fs.mkdir(path.join(pkg, "tests"))
+	fs.write(path.join(pkg, "tests", "dummy.test.lua"), [[
+		local test = require("lde-test")
+		test.it("dummy passes", function() end)
+	]])
+
+	local ok, out = ldecli({ "test" }, pkg)
+	test.truthy(ok, "lde test failed: " .. tostring(out)) ---@cast out -nil
+	test.includes(out, "dummy passes")
+	-- Install/build progress prints flush-left, which would break the
+	-- indentation of the test results — it must be silenced during tests.
+	test.falsy((out or ""):find("packages installed", 1, true),
+		"install summary must not interleave with test results: " .. tostring(out))
+	test.falsy((out or ""):find("QUIET%-MARKER", 1, true),
+		"build.lua output must not interleave with test results: " .. tostring(out))
+
+	fs.rmdir(tmpDir)
+end)
+
 test.it("errors in nested test modules point at the module, not the test file", function()
 	local tmpDir = path.join(env.tmpdir(), "lde-test-nested-errors")
 	fs.rmdir(tmpDir)

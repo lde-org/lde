@@ -31,6 +31,15 @@ test.it("CLICOLOR_FORCE emits ANSI escapes", function()
 	end)
 end)
 
+test.it("orange uses the extended-color ANSI code", function()
+	withEnv("CLICOLOR_FORCE", "1", function()
+		local ansi = require("ansi")
+		-- 38;5;208 is the stock 256-color orange (there's no base-16 orange);
+		-- it's what the progress bar uses for its red→orange→yellow→green steps.
+		test.includes(ansi.colorize("orange", "x"), "\27[38;5;208m")
+	end)
+end)
+
 test.it("GitHub Actions emits ANSI escapes", function()
 	withEnv("GITHUB_ACTIONS", "true", function()
 		local ansi = require("ansi")
@@ -105,4 +114,25 @@ test.it("installProgress prints only the summary in non-TTY mode", function()
 	-- No per-dependency lines and no live-line frames reached the output.
 	test.falsy(out:find("curl%-sys", 1, true))
 	test.falsy(out:find("1/2", 1, true))
+end)
+
+test.it("ansi.isQuiet silences progress output entirely", function()
+	local ansi = require("ansi")
+	local buf = {}
+	local oldWrite = io.write
+	io.write = function(...)
+		for i = 1, select("#", ...) do buf[#buf + 1] = tostring(select(i, ...)) end
+	end
+
+	local wasQuiet = ansi.isQuiet
+	ansi.isQuiet = true
+	local p = ansi.progress("Downloading luajit for macos-aarch64", { indent = false })
+	p:update(0.5, "1.2 MB")
+	p:setLabel("Downloading luajit for macos-aarch64")
+	p:done("Downloaded luajit for macos-aarch64")
+	p:fail("Downloaded luajit for macos-aarch64")
+	ansi.isQuiet = wasQuiet
+
+	io.write = oldWrite
+	test.equal(table.concat(buf), "", "no progress output may reach the terminal in quiet mode")
 end)
