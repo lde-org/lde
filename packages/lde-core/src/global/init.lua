@@ -16,6 +16,7 @@ package.loaded[(...)] = global
 local curl = util.lazy(|| -> require("curl-sys"))
 local Archive = util.lazy(|| -> require("archive"))
 local git2 = util.lazy(|| -> require("git2-sys"))
+local sea = util.lazy(|| -> require("sea"))
 
 global.getConfig = require("lde-core.global.config")
 global.currentVersion = (function()
@@ -156,10 +157,115 @@ function global.getMingwDir()
 	return path.join(global.getDir(), "mingw")
 end
 
+--- Whether `clang` resolves on PATH. Probed once per process (env vars and
+--- PATH don't change mid-run for the compile pipeline).
+local clangProbe = nil
+local function clangOnPath()
+	if clangProbe == nil then
+		local code = process.exec("clang", { "--version" })
+		clangProbe = code == 0
+	end
+	return clangProbe
+end
+
+--- The compile target for the current build, set around `lde compile
+--- --target=X` (nil = native). The whole build/install pipeline (build.lua,
+--- rockspec native modules, sea) reads this so native dependencies are built
+--- for the target, not the host.
+---@type sea.Target?
+local currentTarget = nil
+
+---@param target sea.Target? # nil = native build
+function global.setTarget(target)
+	currentTarget = target
+end
+
+---@return sea.Target?
+function global.getTarget()
+	return currentTarget
+end
+
+--- Stable key for the current target, mixed into build/install stamps so a
+--- target switch forces native dependencies to rebuild.
+---@return string
+function global.getTargetKey()
+	local target = currentTarget
+	return target and target.name or ""
+end
+
+--- The clang -target flag for the current cross target, nil when native.
+---@return string?
+function global.getTargetFlag()
+	local target = currentTarget
+	if not target then return nil end
+	return "--target=" .. target.triple
+end
+
+--- The clang triple for the current build: the target triple when
+--- cross-compiling, the host triple otherwise (e.g. for build:target()).
+---@return string
+function global.getTargetTriple()
+	local target = currentTarget
+	if target then return target.triple end
+	return sea().getTriple(nil, global.getCCBin())
+end
+
+--- The compiler invocation for the current target: the compiler binary plus
+--- the clang -target flag when cross-compiling. Suitable for CC=/LD= env
+--- vars passed to make/cmake from build scripts and rockspec builds.
+---@return string
+function global.getCCCommand()
+	local cc = global.getCCBin()
+	local flag = global.getTargetFlag()
+	return flag ? (cc .. " " .. flag) : cc
+end
+
+--- Resolve the C compiler used for builds and sea compilation. Prefers clang
+--- (SEA_CC override, the bundled Windows toolchain, then PATH) so cross
+--- compilation works through clang's --target; falls back to gcc when no clang
+--- is available (native builds only — cross requires clang).
+---@return string
 function global.getCCBin()
 	local override = env.var("SEA_CC")
-	if override then
+	if override and override ~= "" then
 		return override
+	end
+
+	if currentTarget then
+		-- Cross compile: clang only (it carries -target). Prefer the bundled
+		-- clang toolchain on Windows — it is llvm-mingw and cross-compiles
+		-- every Windows target out of the box. Otherwise a clang on PATH (the
+		-- target's sysroot, if needed, must then be reachable by clang).
+		local clang
+		if jit.os == "Windows" then
+			local mingwClang = path.join(global.getMingwDir(), "bin", "clang.exe")
+			if fs.exists(mingwClang) then
+				clang = mingwClang
+			end
+		end
+		if not clang and clangOnPath() then
+			clang = "clang"
+		end
+		if not clang then
+			lde.error.raise("Cross-compiling to '" .. currentTarget.name
+				.. "' requires clang, but none was found. Install clang, or set SEA_CC to a clang with a sysroot for '"
+				.. currentTarget.triple .. "'.")
+		end
+		return clang
+	end
+
+	-- The bundled Windows toolchain is llvm-mingw (Clang/LLD + sysroot): its
+	-- clang is guaranteed compatible with the LuaJIT Windows dist, while a
+	-- PATH clang may be MSVC-targeted.
+	if jit.os == "Windows" then
+		local mingwClang = path.join(global.getMingwDir(), "bin", "clang.exe")
+		if fs.exists(mingwClang) then
+			return mingwClang
+		end
+	end
+
+	if clangOnPath() then
+		return "clang"
 	end
 
 	if jit.os == "Windows" then

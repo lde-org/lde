@@ -14,14 +14,23 @@ local process = require("process")
 ---@class lde.build.Instance
 ---@field outDir string
 ---@field gccBin string
+---@field target string # clang triple for the current build (target triple when cross-compiling, host triple otherwise)
+---@field targetFlag string? # clang -target flag when cross-compiling, nil when native
 local Instance = {}
 Instance.__index = Instance
 
 ---@param outDir string
----@param gccBin string
+---@param gccBin? string # compiler binary; defaults to "gcc"
+---@param target? string # triple reported by build:target()/build.target
+---@param targetFlag? string # clang -target flag to prepend to every cc invocation
 ---@return lde.build.Instance
-function Instance.new(outDir, gccBin)
-	return setmetatable({ outDir = outDir, gccBin = gccBin or "gcc" }, Instance)
+function Instance.new(outDir, gccBin, target, targetFlag)
+	return setmetatable({
+		outDir = outDir,
+		gccBin = gccBin or "gcc",
+		target = target or "unknown",
+		targetFlag = targetFlag,
+	}, Instance)
 end
 
 ---@param url string
@@ -117,7 +126,9 @@ function Instance:sh(cmd)
 	assert(code == 0, "failed to execute " .. cmd)
 end
 
---- Run the C compiler (gcc/mingw on Windows, system gcc elsewhere).
+--- Run the C compiler (clang on most systems; mingw clang on Windows).
+--- When cross-compiling, prepends the clang -target flag so the code is
+--- compiled for the target platform.
 --- On Windows, prepends the mingw bin dir to PATH so subtools (as.exe, ld.exe, etc.) are found.
 --- Errors if the compiler exits non-zero.
 ---@param args string[] # compiler arguments, e.g. {"-c", "foo.c", "-o", "foo.o"}
@@ -125,6 +136,11 @@ end
 ---@return string stderr
 function Instance:cc(args)
 	local bin = self.gccBin
+	local execArgs = args
+	if self.targetFlag then
+		execArgs = { self.targetFlag }
+		for _, arg in ipairs(args) do execArgs[#execArgs + 1] = arg end
+	end
 	local execEnv
 	if jit.os == "Windows" and bin ~= "gcc" then
 		local mingwBinDir = path.dirname(bin)
@@ -133,7 +149,10 @@ function Instance:cc(args)
 			execEnv = { PATH = mingwBinDir .. ";" .. curPath }
 		end
 	end
-	local code, stdout, stderr = process.exec(bin, args, execEnv and { env = execEnv } or nil)
+	local code, stdout, stderr = process.exec(bin, execArgs, {
+		cwd = self.outDir,
+		env = execEnv,
+	})
 	assert(code == 0, "cc failed: " .. (stderr or stdout or ""))
 	return stdout or "", stderr or ""
 end
@@ -146,10 +165,11 @@ end
 -- this chunk wires them into the table, forwarding calls. `cc` receives its
 -- argument table already unpacked — only primitives cross host↔guest.
 local GUEST_SOURCE = [==[
-	local outDir, gccBin, fetch, write, read, extract, copy, delete, move, exists, sh, cc = ...
+	local outDir, gccBin, target, fetch, write, read, extract, copy, delete, move, exists, sh, cc = ...
 	local build = {
 		outDir  = outDir,
 		gccBin  = gccBin,
+		target  = target,
 		fetch   = function(self, url)        return fetch(url)         end,
 		write   = function(self, rel, cnt)   write(rel, cnt)           end,
 		read    = function(self, rel)        return read(rel)          end,
@@ -173,10 +193,12 @@ local GUEST_SOURCE = [==[
 ---@param state     lua.State
 ---@param outputDir string
 ---@param gccBin?   string # path to gcc binary; defaults to "gcc"
-function Instance.setup(state, outputDir, gccBin)
-	local inst = Instance.new(outputDir, gccBin or "gcc")
+---@param target?   string # clang triple for build:target() (defaults to "unknown")
+---@param targetFlag? string # clang -target flag prepended to cc invocations when cross-compiling
+function Instance.setup(state, outputDir, gccBin, target, targetFlag)
+	local inst = Instance.new(outputDir, gccBin, target, targetFlag)
 	state:load(GUEST_SOURCE, "@lde-build"):call(
-		inst.outDir, inst.gccBin,
+		inst.outDir, inst.gccBin, inst.target,
 		function(url)          return inst:fetch(url)     end,
 		function(rel, content) inst:write(rel, content)   end,
 		function(rel)          return inst:read(rel)      end,

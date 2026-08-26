@@ -18,9 +18,10 @@ local alreadyBuilt = {}
 -- Stamp file written inside the build output dir. It records the size, mtime,
 -- and rapidhash hash of every build input (everything under src/, plus lde.json and
 -- build.lua) so the build script can be skipped on the next run when none of
--- the inputs changed.
+-- the inputs changed. The compile target is part of the stamp: switching
+-- --target must rebuild native dependencies for the new target.
 local STAMP_FILE = ".lde-build-stamp"
-local STAMP_VERSION = 1
+local STAMP_VERSION = 2
 
 ---Build inputs for a package: everything under src/, plus the config and build.lua.
 ---@param package lde.Package
@@ -39,29 +40,30 @@ local function collectInputFiles(package)
 end
 
 ---@param stampPath string
----@return table<string, { size: number, mtime: number, hash: string }>
+---@return table<string, { size: number, mtime: number, hash: string }> files
+---@return string target # target key the stamp was built for ("" = native)
 local function readStamp(stampPath)
 	local content = fs.read(stampPath)
-	if not content then return {} end
+	if not content then return {}, "" end
 	local ok, decoded = pcall(json.decode, content)
 	if not ok or type(decoded) ~= "table" or decoded.version ~= STAMP_VERSION or type(decoded.files) ~= "table" then
-		return {}
+		return {}, ""
 	end
-	return decoded.files
+	return decoded.files, type(decoded.target) == "string" ? decoded.target : ""
 end
 
 ---Compares the package's inputs against the stored stamp. Any file whose size or
 ---mtime changed is re-hashed; a differing hash (or a new/removed file) marks the
----build as stale. Returns whether the build must run and the current per-file
----state to persist afterwards.
+---build as stale. A stored stamp for a different compile target is always stale.
+---Returns whether the build must run and the current per-file state to persist afterwards.
 ---@param package lde.Package
 ---@param stampPath string
 ---@return boolean hasChanged
 ---@return table<string, { size: number, mtime: number, hash: string }> current
 local function checkInputs(package, stampPath)
-	local stored = readStamp(stampPath)
+	local stored, storedTarget = readStamp(stampPath)
 	local current = {}
-	local hasChanged = false
+	local hasChanged = storedTarget ~= lde.global.getTargetKey()
 
 	for relPath, absPath in pairs(collectInputFiles(package)) do
 		local stat = fs.stat(absPath)
@@ -135,7 +137,10 @@ local function buildPackage(package, destinationPath)
 		end
 
 		if inputsChanged then
-			local alreadyDone = alreadyBuilt[destinationPath] or fs.exists(path.join(destinationPath, ".lde-built"))
+			-- Key the in-process cache by target too: a cross compile after a
+			-- native build in the same process must not skip the rebuild.
+			local buildKey = destinationPath .. "\n" .. lde.global.getTargetKey()
+			local alreadyDone = alreadyBuilt[buildKey] or fs.exists(path.join(destinationPath, ".lde-built"))
 			local p = (lde.isVerbose and not alreadyDone) ? ansi.progress("Building " .. package:getName()) : nil
 
 			-- Record the input state after a successful build (or a confirmed
@@ -143,7 +148,11 @@ local function buildPackage(package, destinationPath)
 			-- this runs in the finalizer after the child exits successfully.
 			local writeStamp = function()
 				if current then
-					fs.write(stampPath, json.encode({ version = STAMP_VERSION, files = current }))
+					fs.write(stampPath, json.encode({
+						version = STAMP_VERSION,
+						target = lde.global.getTargetKey(),
+						files = current,
+					}))
 				end
 			end
 
@@ -160,8 +169,10 @@ local function buildPackage(package, destinationPath)
 				-- only once the worker runs its build script. Create it up
 				-- front so the spawn succeeds on every platform.
 				if not fs.isdir(destinationPath) then fs.mkdir(destinationPath) end
+				local buildTarget = lde.global.getTarget()
+				local targetName = buildTarget and buildTarget.name or ""
 				local child, serr = process.spawn(ldeBin,
-					{ "__build-pkg", package:getDir(), destinationPath },
+					{ "__build-pkg", package:getDir(), destinationPath, targetName },
 					-- cwd = destinationPath so the worker's os.execute calls
 					-- (build:sh) resolve relative paths against the output dir,
 					-- matching the write/read/exists API.
@@ -173,7 +184,7 @@ local function buildPackage(package, destinationPath)
 					lde.error.raise("Failed to spawn build worker for '" .. package:getName() .. "': " .. (serr or "spawn failed"))
 				end
 				hasBuilt = true
-				alreadyBuilt[destinationPath] = true
+				alreadyBuilt[buildKey] = true
 				deferred = {
 					poll = function()
 						if child:poll() == nil then return nil end
@@ -198,7 +209,7 @@ local function buildPackage(package, destinationPath)
 				if p and not asyncFinalizer then p:done("Built " .. package:getName()) end
 				deferred = asyncFinalizer
 				hasBuilt = true
-				alreadyBuilt[destinationPath] = true
+				alreadyBuilt[buildKey] = true
 				if not asyncFinalizer then writeStamp() end
 			end
 		end

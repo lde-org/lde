@@ -109,13 +109,16 @@ local function defaultBuildFn(pkg, outputDir)
 
 	-- Expose the C compiler and make binaries and, on Windows, prepend the
 	-- toolchain bin dir to PATH so child processes spawned by build:sh()
-	-- (cmake, ninja, make, sh, etc.) can find them.
+	-- (cmake, ninja, make, sh, etc.) can find them. Under --target the CC env
+	-- var and build:cc() use the cross compiler so build.lua C code compiles
+	-- for the target platform.
 	local ccBin = global.getCCBin()
+	local ccCommand = global.getCCCommand()
 	local makeBin = global.getMakeBin()
 	local oldCC  = env.var("CC") or ""
 	local oldMAKE = env.var("MAKE") or ""
 	local oldPATH = env.var("PATH") or ""
-	env.set("CC", ccBin)
+	env.set("CC", ccCommand)
 	env.set("MAKE", makeBin)
 	if jit.os == "Windows" then
 		local mingwBinDir = path.dirname(ccBin)
@@ -124,8 +127,9 @@ local function defaultBuildFn(pkg, outputDir)
 		end
 	end
 
-	-- Inject lde-build instance into the guest state
-	Instance.setup(state, outputDir, ccBin)
+	-- Inject lde-build instance into the guest state: build:cc() gets the
+	-- cross compiler and build.target reports the triple being built for.
+	Instance.setup(state, outputDir, ccBin, global.getTargetTriple(), global.getTargetFlag())
 
 	local cwd = pkg:getDir()
 	local oldCwd = env.cwd()

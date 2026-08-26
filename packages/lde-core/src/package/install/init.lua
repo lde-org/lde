@@ -35,6 +35,17 @@ local function resolveEnabledOptional(pkg, features)
 	return enabled
 end
 
+--- Hash of the lockfile, runtime version, manifest, and compile target. The
+--- .installed marker only matches when all four are unchanged, so a --target
+--- switch forces a reinstall that rebuilds native deps for the new target.
+---@param content string
+---@param manifest string
+---@return string
+local function installedHash(content, manifest)
+	return util.hash(content .. "\n" .. tostring(lde.global.currentVersion)
+		.. "\n" .. manifest .. "\n" .. lde.global.getTargetKey())
+end
+
 --- Saves the lockfile and writes the .installed hash marker.
 ---@param pkg lde.Package
 ---@param stack table<string, { pkg: lde.Package, lock: lde.Lockfile.Dependency }>
@@ -64,11 +75,11 @@ local function commitLockfile(pkg, stack, modulesDir)
 
 	local content = assert(fs.read(pkg:getLockfilePath()), "Failed to read " .. pkg:getLockfilePath())
 	-- Hash the lockfile together with the lde runtime version (binary upgrades
-	-- invalidate the cache) and the manifest (a hand-edited lde.json must too),
-	-- so the fast path only skips installs that are genuinely up to date.
+	-- invalidate the cache), the manifest (a hand-edited lde.json must too),
+	-- and the compile target (a --target switch must rebuild native deps), so
+	-- the fast path only skips installs that are genuinely up to date.
 	local manifest = fs.read(pkg:getConfigPath()) or ""
-	fs.write(path.join(modulesDir, ".installed"),
-		util.hash(content .. "\n" .. tostring(lde.global.currentVersion) .. "\n" .. manifest))
+	fs.write(path.join(modulesDir, ".installed"), installedHash(content, manifest))
 end
 
 --- Build scheduler for the install build pass.
@@ -337,10 +348,10 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 		local lockfilePath = package:getLockfilePath()
 		if fs.exists(lockfilePath) and fs.exists(installedPath) then
 			local content = fs.read(lockfilePath)
-			-- commitLockfile hashes lockfile + runtime version + manifest; the
-			-- check must use the same input or it can never match.
+			-- commitLockfile writes installedHash; the check must use the same
+			-- input or it can never match.
 			local manifest = fs.read(package:getConfigPath()) or ""
-			if content and fs.read(installedPath) == util.hash(content .. "\n" .. tostring(lde.global.currentVersion) .. "\n" .. manifest) then
+			if content and fs.read(installedPath) == installedHash(content, manifest) then
 				-- The hash only proves the lockfile didn't change; materialization
 				-- may still be gone (e.g. `rm -rf ~/.lde/git` dangling the git
 				-- symlinks in target/). Verify the install is intact before trusting

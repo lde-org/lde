@@ -78,18 +78,147 @@ local function getTargetFromCompiler(compiler)
 	return arch, "gnu"
 end
 
+---@class sea.Target
+---@field name string # release target name, e.g. "linux-x86-64"
+---@field platform string # "linux" | "windows" | "macos" — also the LuaJIT dist platform
+---@field arch string # "x86-64" | "aarch64"
+---@field libc? string # "gnu" | "musl" | "android"; nil on macos (no libc component in the dist name)
+---@field triple string # clang -target used for cross compilation
+
+-- The targets lde ships in GitHub releases (see .github/workflows/release.yml).
+-- Cross-compiling to one of these uses clang's --target with the target's
+-- LuaJIT dist; the compiler (and its sysroot, when the target needs one) is
+-- resolved automatically — the bundled toolchain covers Windows targets.
+sea.targets = {
+	["linux-x86-64"]    = { name = "linux-x86-64",    platform = "linux",   arch = "x86-64",  libc = "gnu",     triple = "x86_64-linux-gnu" },
+	["linux-aarch64"]   = { name = "linux-aarch64",   platform = "linux",   arch = "aarch64", libc = "gnu",     triple = "aarch64-linux-gnu" },
+	["windows-x86-64"]  = { name = "windows-x86-64",  platform = "windows", arch = "x86-64",  libc = "gnu",     triple = "x86_64-w64-windows-gnu" },
+	["windows-aarch64"] = { name = "windows-aarch64", platform = "windows", arch = "aarch64", libc = "gnu",     triple = "aarch64-w64-windows-gnu" },
+	["macos-x86-64"]    = { name = "macos-x86-64",    platform = "macos",   arch = "x86-64",                  triple = "x86_64-apple-darwin" },
+	["macos-aarch64"]   = { name = "macos-aarch64",   platform = "macos",   arch = "aarch64",                 triple = "aarch64-apple-darwin" },
+	["android-aarch64"] = { name = "android-aarch64", platform = "linux",   arch = "aarch64", libc = "android", triple = "aarch64-linux-android" },
+}
+
+--- Look up a release target by name.
+---@param name string
+---@return sea.Target? target
+---@return string? err # lists the valid names when the target is unknown
+function sea.getTarget(name)
+	local target = sea.targets[name]
+	if not target then
+		local names = {}
+		for n in pairs(sea.targets) do names[#names + 1] = n end
+		table.sort(names)
+		return nil, "Unknown compile target '" .. name .. "' (expected one of: " .. table.concat(names, ", ") .. ")"
+	end
+	return target
+end
+
+--- The host platform/arch/libc, shaped like a target (no name/triple).
+---@param compiler? string
+---@return { platform: string, arch: string, libc: string|nil }
+function sea.getHostTarget(compiler)
+	local platform, hostArch = getPlatformArch()
+	local probeArch, libc = getTargetFromCompiler(compiler or env.var("SEA_CC") or "gcc")
+	return { platform = platform, arch = probeArch or hostArch, libc = libc }
+end
+
+--- Whether a target matches the host (a native build, not a cross compile).
+---@param target sea.Target
+---@return boolean
+function sea.isHostTarget(target)
+	local host = sea.getHostTarget()
+	return target.platform == host.platform
+		and target.arch == host.arch
+		and (target.libc or "") == (host.libc or "")
+end
+
+---@param compiler string
+---@return boolean
+local function isClang(compiler)
+	local _, out = process.exec(compiler, { "--version" })
+	return out ~= nil and out:find("clang", 1, true) ~= nil
+end
+
+--- Extra link flags for a cross compile so a plain clang can link the target
+--- without gcc's runtime:
+---
+---  * `-fuse-ld=lld` — lld links any target (PE/COFF included) without needing
+---    target-specific binutils on PATH (clang otherwise falls back to the host
+---    linker). Only added when lld is actually available.
+---  * `--rtlib=compiler-rt --unwindlib=none` — clang's default runtime is
+---    gcc's libgcc (`-lgcc`/`-lgcc_eh`), which fails unless the target's gcc
+---    runtime is installed AND detected ("cannot find -lgcc"). Use clang's own
+---    runtime instead, when the target's builtins archive exists.
+---
+---@param compiler string
+---@param target sea.Target
+local function crossLinkArgs(compiler, target)
+	local extra = {}
+	local _, lldOut = process.exec("ld.lld", { "--version" })
+	if lldOut and lldOut ~= "" then
+		extra[#extra + 1] = "-fuse-ld=lld"
+	end
+
+	local _, builtins = process.exec(compiler, {
+		"--target=" .. target.triple,
+		"--rtlib=compiler-rt",
+		"-print-libgcc-file-name",
+	})
+	if builtins and builtins ~= "" then
+		local path = builtins:gsub("%s+$", "")
+		if fs.exists(path) then
+			extra[#extra + 1] = "--rtlib=compiler-rt"
+			extra[#extra + 1] = "--unwindlib=none"
+		end
+	end
+
+	return extra
+end
+
+--- The clang triple for a target, or the host triple when native (derived
+--- from the compiler's -dumpmachine, falling back to jit-derived defaults).
+---@param target? sea.Target
 ---@param compiler? string
 ---@return string
-local function getLuajitPath(compiler)
+function sea.getTriple(target, compiler)
+	if target then return target.triple end
+
+	compiler = compiler or env.var("SEA_CC") or "gcc"
+	local _, out = process.exec(compiler, { "-dumpmachine" })
+	if out and out ~= "" then
+		local triple = out:match("^%s*(.-)%s*$")
+		if triple and triple ~= "" then return triple end
+	end
+
+	local platform, arch = getPlatformArch()
+	local tripleArch = arch == "aarch64" and "aarch64" or "x86_64"
+	return (platform == "windows" and (tripleArch .. "-w64-windows-gnu"))
+		or (platform == "macos" and (tripleArch .. "-apple-darwin"))
+		or (tripleArch .. "-linux-gnu")
+end
+
+---@param compiler? string
+---@param target? sea.Target # cross-compile target; nil = native host build
+---@return string
+local function getLuajitPath(compiler, target)
 	compiler = compiler or env.var("SEA_CC") or "gcc"
 
 	local cacheDir = path.join(env.tmpdir(), "luajit-cache")
 	local platform, hostArch = getPlatformArch()
-	local compilerArch, libc = getTargetFromCompiler(compiler)
-	local arch = compilerArch or hostArch
+	local arch, libc
+	if target then
+		platform = target.platform
+		arch = target.arch
+		libc = target.libc
+	else
+		local compilerArch, probeLibc = getTargetFromCompiler(compiler)
+		arch = compilerArch or hostArch
+		libc = probeLibc
+	end
 
-	local target = table.concat({ "libluajit", platform, arch, libc }, "-")
-	local targetDir = path.join(cacheDir, target)
+	local distName = table.concat({ "libluajit", platform, arch, libc }, "-")
+	local targetDir = path.join(cacheDir, distName)
 
 	if fs.exists(path.join(targetDir, "include", "lua.h")) then
 		return targetDir
@@ -97,7 +226,7 @@ local function getLuajitPath(compiler)
 
 	fs.mkdir(cacheDir)
 
-	local tarballName = target .. ".tar.gz"
+	local tarballName = distName .. ".tar.gz"
 	local downloadUrl = string.format(
 		"https://github.com/%s/releases/download/%s/%s",
 		ljDistRepo,
@@ -160,11 +289,35 @@ end
 ---@param main string # name used as the chunk label
 ---@param source string|{ name: string, modules: { name: string, code: string }[] } # bundled lua: source string, LuaJIT bytecode string, or a raw bytecode table (bundlePackage { raw = true }) — raw tables are linked as a .incbin blob with lazy preload loaders
 ---@param sharedLibs? { name: string, content: string }[]
----@param compiler? string # path to compiler binary; defaults to SEA_CC env var or "gcc"
+---@param compiler? string # path to compiler binary; defaults to SEA_CC env var, a clang on PATH, then gcc
+---@param targetName? string # release target (e.g. "windows-x86-64") to cross-compile for; nil or a host-matching target = native build
 ---@return string
-function sea.compile(main, source, sharedLibs, compiler)
+function sea.compile(main, source, sharedLibs, compiler, targetName)
 	local outPath = path.join(env.tmpdir(), "sea.out")
 	sharedLibs = sharedLibs or {}
+	compiler = compiler or env.var("SEA_CC") or "gcc"
+
+	-- Resolve the compile target. A --target matching the host is a native
+	-- build: same LuaJIT dist, same flags, no -target flag.
+	local target
+	if targetName then
+		local resolved, terr = sea.getTarget(targetName)
+		if not resolved then
+			error(terr or ("Unknown compile target '" .. targetName .. "'"))
+		end ---@cast resolved -nil
+		target = resolved
+		if sea.isHostTarget(target) then
+			target = nil
+		end
+	end
+
+	-- Cross compilation goes through clang's -target; a bare gcc can't do it.
+	-- The normal pipeline resolves a clang via lde.global.getCCBin(); this is a
+	-- backstop for direct sea.compile callers.
+	if target and not isClang(compiler) then
+		error("Cross-compiling to '" .. target.name .. "' requires clang, but the resolved compiler is '"
+			.. compiler .. "'. Install clang, or set SEA_CC to a clang with a sysroot for '" .. target.triple .. "'.")
+	end
 
 	local filePreloads
 
@@ -176,18 +329,22 @@ function sea.compile(main, source, sharedLibs, compiler)
 	local libPreloads = {} -- package.preload registrations
 	local ffiShimEntries = {} -- name -> extracted path, for ffi.load shim
 
+	-- The platform this binary runs on: the target's when cross-compiling,
+	-- the host's otherwise. Drives lib naming, the ffi shim, and link flags.
+	local platform = target and target.platform
+		or (jit.os == "Windows" and "windows" or jit.os == "OSX" and "macos" or "linux")
+	local libExt = platform == "windows" and "dll" or "so"
+
 	for _, lib in ipairs(sharedLibs) do
 		local id                            = safeIdent(lib.name)
 		local hash                          = util.hash(lib.content)
-		local ext                           = jit.os == "Windows" and "dll"
-			or "so"
-		local libFileName                   = string.format("lde-lib-%s-%s.%s", lib.name, hash, ext)
+		local libFileName                   = string.format("lde-lib-%s-%s.%s", lib.name, hash, libExt)
 		ffiShimEntries[#ffiShimEntries + 1] = string.format('["%s"]="%s"', lib.name, libFileName)
 		-- alias as libcurl, libcurl.so/libcurl.dylib, and curl
 		local leaf                          = lib.name:match("[^.]+$")  -- e.g. "libcurl"
 		local bare                          = leaf:match("^lib(.+)$") or leaf -- e.g. "curl"
 		ffiShimEntries[#ffiShimEntries + 1] = string.format('["%s"]="%s"', leaf, libFileName)
-		if jit.os == "Windows" then
+		if platform == "windows" then
 			ffiShimEntries[#ffiShimEntries + 1] = string.format('["%s.dll"]="%s"', leaf, libFileName)
 		else
 			-- Runtime code may load the library by either a LuaJIT-style .so name
@@ -551,7 +708,7 @@ int main(int argc, char** argv) {
 }
 ]]
 
-	local ljPath = getLuajitPath()
+	local ljPath = getLuajitPath(compiler, target)
 	local includePath = path.join(ljPath, "include")
 	local libPath = path.join(ljPath, "lib")
 
@@ -562,7 +719,19 @@ int main(int argc, char** argv) {
 		"-xnone",
 	}
 
-	if jit.os == "Windows" then
+	-- Cross compilation: clang targets a foreign platform via -target. The
+	-- target's LuaJIT headers/libs come from the downloaded dist; the compiler
+	-- (resolved by lde.global.getCCBin) supplies the rest of the toolchain.
+	if target then
+		args[#args + 1] = "--target=" .. target.triple
+		-- Prefer lld and clang's own runtime so the link doesn't need the
+		-- target's gcc (libgcc) to be installed and detected.
+		for _, flag in ipairs(crossLinkArgs(compiler, target)) do
+			args[#args + 1] = flag
+		end
+	end
+
+	if platform == "windows" then
 		-- Wrap libluajit.a in --whole-archive: link in ALL of its object
 		-- files, not just the ones lde itself references. Symbols only ever
 		-- called by C modules at runtime (e.g. luaJIT_profile_*) must be
@@ -575,13 +744,13 @@ int main(int argc, char** argv) {
 		args[#args + 1] = path.join(libPath, "libluajit.a")
 	end
 
-	if jit.os == "Linux" then
+	if platform == "linux" then
 		args[#args + 1] = "-lm"
 		args[#args + 1] = "-ldl"
 		args[#args + 1] = "-Wl,--export-dynamic" -- expose lua symbols for lua dependencies
-	elseif jit.os == "OSX" then
+	elseif platform == "macos" then
 		args[#args + 1] = "-Wl,-export_dynamic" -- expose lua symbols for lua dependencies
-	elseif jit.os == "Windows" then
+	elseif platform == "windows" then
 		-- Export lua symbols so C modules can resolve them from the process
 		-- image (GetModuleHandle(NULL) + GetProcAddress), matching the
 		-- --export-dynamic behavior on Linux/macOS.
@@ -595,6 +764,17 @@ int main(int argc, char** argv) {
 	local code, stdout, stderr = process.exec(compiler, args, { stdin = code, env = execEnv })
 	if code ~= 0 or string.find(stderr or "", "is not recognized as an internal", 1, true) then
 		local err = (stderr and stderr ~= "" and stderr) or (stdout and stdout ~= "" and stdout) or ""
+		-- A clang that still links libgcc (no compiler-rt builtins for the
+		-- target) fails with "cannot find -lgcc" when the target's gcc runtime
+		-- isn't installed or wasn't detected — point at the missing piece.
+		if target
+			and (err:find("cannot find %-lgcc", 1)
+				or err:find("unable to find library %-lgcc", 1)) then
+			err = err
+				.. "\n[sea] the target's C runtime is missing: clang is linking libgcc (-lgcc), but no libgcc for '"
+				.. target.triple .. "' was found. Install the target's gcc runtime (e.g. on Fedora: dnf install mingw64-gcc),"
+				.. " or use a clang with compiler-rt builtins for the target (e.g. llvm-mingw)."
+		end
 		error("Compilation failed: " .. err)
 	end
 

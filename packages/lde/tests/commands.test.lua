@@ -446,6 +446,45 @@ print("compiled-ok:" .. (args[1] or "noargs"))
 	test.includes(runOut or "", "compiled-ok:hi")
 end)
 
+-- The release target matching the host (nil when none does, e.g. musl hosts).
+local sea = require("sea")
+local hostTargetName = (function()
+	local host = sea.getHostTarget()
+	for name, target in pairs(sea.targets) do
+		if target.platform == host.platform and target.arch == host.arch
+			and (target.libc or "") == (host.libc or "") then
+			return name
+		end
+	end
+	return nil
+end)()
+
+test.skipIf(hostTargetName == nil)("lde compile --target=<host> is a native build", function()
+	local dir = makeProject("compile-host-target", nil, { name = "compile-host-target" })
+	fs.write(path.join(dir, "src", "init.lua"), 'print("host-target-ok")')
+
+	local ok, out = cli({ "compile", "--target", hostTargetName }, dir)
+	test.truthy(ok, "lde compile --target failed: " .. tostring(out))
+	local binPath = path.join(dir, "compile-host-target")
+	if jit.os == "Windows" then binPath = binPath .. ".exe" end
+	test.truthy(fs.exists(binPath), "compiled binary missing")
+
+	local code, runOut = process.exec(binPath, {})
+	test.truthy(code == 0, "compiled binary failed: " .. tostring(runOut))
+	test.includes(runOut or "", "host-target-ok")
+end)
+
+test.it("lde compile --target=bogus is a clean error", function()
+	local dir = makeProject("compile-bogus-target", nil, { name = "compile-bogus-target" })
+
+	local ok, out = cli({ "compile", "--target", "bogus" }, dir)
+	test.falsy(ok, "unknown target must fail")
+	local msg = plain(out or "")
+	test.includes(msg, "Unknown compile target 'bogus'")
+	test.includes(msg, "expected one of")
+	test.includes(msg, "windows-x86-64")
+end)
+
 --
 -- lde run --profile / --flamegraph
 --

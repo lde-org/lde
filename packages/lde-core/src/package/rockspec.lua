@@ -135,6 +135,7 @@ end
 ---@field destAbs string
 ---@field jitOS string
 ---@field makePath? fun(path: string): string
+---@field targetFlag? string # clang -target flag, prepended when cross-compiling
 
 ---@param src lde.rockspec.NativeModuleSpec | lde.rockspec.NormalizedNativeModule
 ---@param ctx lde.rockspec.NativeGccContext
@@ -152,8 +153,16 @@ local function nativeGccArgs(src, ctx)
 		srcFiles[#srcFiles + 1] = path.join(dir, s)
 	end
 
-	local args = { "-shared", "-fPIC", "-DLUAJIT_VERSION=LuaJIT 2.1.0-beta3", "-DLUA_VERSION_NUM=501",
-		"-I" .. path.join(ljPath, "include") }
+	local args = {}
+	-- Cross compilation: clang compiles for the target via -target.
+	if ctx.targetFlag then
+		args[#args + 1] = ctx.targetFlag
+	end
+	args[#args + 1] = "-shared"
+	args[#args + 1] = "-fPIC"
+	args[#args + 1] = "-DLUAJIT_VERSION=LuaJIT 2.1.0-beta3"
+	args[#args + 1] = "-DLUA_VERSION_NUM=501"
+	args[#args + 1] = "-I" .. path.join(ljPath, "include")
 	local defines = src.defines or {} ---@cast defines string[]
 	for _, d in ipairs(defines) do args[#args + 1] = "-D" .. d end
 	if jitOS == "Windows" then
@@ -408,7 +417,10 @@ local function openRockspec(dir, rockspecPath)
 	for _, src in pairs(installLuaFiles) do stampSource(src) end
 	for _, copyDir in ipairs(spec.build and spec.build.copy_directories or {}) do stampSource(copyDir) end
 	table.sort(sourceHash)
-	local buildStamp = util.hash(content .. "\n" .. tostring(lde.global.currentVersion) .. "\n" .. table.concat(sourceHash, ","))
+	-- The stamp covers the compile target so a --target switch rebuilds the
+	-- native outputs for the new target.
+	local buildStamp = util.hash(content .. "\n" .. tostring(lde.global.currentVersion)
+		.. "\n" .. lde.global.getTargetKey() .. "\n" .. table.concat(sourceHash, ","))
 
 	pkg.buildfn = function(_, outputDir)
 		if not fs.isdir(outputDir) then fs.mkdirAll(outputDir) end
@@ -432,7 +444,7 @@ local function openRockspec(dir, rockspecPath)
 
 		-- Standard rock variables used to expand $(VAR) placeholders in build
 		-- variables, for both the make and cmake backends (mirrors LuaRocks).
-		local luajitPath = sea.getLuajitPath()
+		local luajitPath = sea.getLuajitPath(nil, lde.global.getTarget())
 		local stdVars = {
 			LUA_INCDIR  = makePath(path.join(luajitPath, "include")),
 			LUA_LIBDIR  = makePath(path.join(luajitPath, "lib")),
@@ -613,7 +625,7 @@ local function openRockspec(dir, rockspecPath)
 				end
 
 				lde.global.ensureMingw()
-				local ljPath = sea.getLuajitPath()
+				local ljPath = sea.getLuajitPath(nil, lde.global.getTarget())
 				local gccArgs = nativeGccArgs(src, {
 					packageDir = dir,
 					modulesDir = modulesDir,
@@ -621,6 +633,7 @@ local function openRockspec(dir, rockspecPath)
 					destAbs = destAbs,
 					jitOS = jit.os,
 					makePath = makePath,
+					targetFlag = lde.global.getTargetFlag(),
 				})
 
 				-- Async mode (install build pass): spawn gcc without blocking so
@@ -725,7 +738,7 @@ local function openRockspec(dir, rockspecPath)
 			end
 			return finishNative()
 		elseif buildType == "command" then
-			local luajitPath = sea.getLuajitPath()
+			local luajitPath = sea.getLuajitPath(nil, lde.global.getTarget())
 			local ldeBin = env.execPath()
 			local vars = {
 				LUA           = ldeBin,
@@ -734,8 +747,8 @@ local function openRockspec(dir, rockspecPath)
 				LIBDIR        = modulesDir,
 				LUADIR        = modulesDir,
 				PREFIX        = modulesDir,
-				CC            = lde.global.getCCBin(),
-				LD            = lde.global.getCCBin(),
+				CC            = lde.global.getCCCommand(),
+				LD            = lde.global.getCCCommand(),
 				MAKE          = lde.global.getMakeBin(),
 				CFLAGS        = "-fPIC",
 				LIBFLAG       = jit.os == "OSX" and "-shared -undefined dynamic_lookup" or "-shared",

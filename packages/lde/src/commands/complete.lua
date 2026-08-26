@@ -110,6 +110,15 @@ local function complete(args)
 		return
 	end
 
+	-- Value position of a flag with known values (e.g. --target): offer them.
+	if n >= 2 and usage.flagValues then
+		local values = usage.flagValues[words[n - 1]]
+		if values then
+			emit(values, cur)
+			return
+		end
+	end
+
 	-- The value position of a value-taking flag: no suggestions.
 	if n >= 2 and isValueFlag(words[n - 1]) then return end
 

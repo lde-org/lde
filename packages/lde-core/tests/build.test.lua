@@ -1688,6 +1688,37 @@ test.it("rockspec: string-valued native module fields are normalized to lists", 
 	end
 end)
 
+test.it("rockspec: native module compile args carry the cross -target flag", function()
+	local hasArg = function(args, want)
+		for _, arg in ipairs(args) do
+			if arg == want then return true end
+		end
+		return false
+	end
+
+	local args = lde.Package.nativeGccArgs({ sources = { "a.c" } }, {
+		packageDir = "/pkg",
+		modulesDir = "/pkg/target",
+		luajitPath = "/lj",
+		destAbs = "/pkg/target/a.so",
+		jitOS = "Linux",
+		targetFlag = "--target=aarch64-linux-gnu",
+	})
+	test.truthy(hasArg(args, "--target=aarch64-linux-gnu"), "expected the -target flag first")
+	test.equal(args[1], "--target=aarch64-linux-gnu", "-target must be the first arg")
+
+	-- Without a target flag (native build) the arg list is unchanged.
+	local native = lde.Package.nativeGccArgs({ sources = { "a.c" } }, {
+		packageDir = "/pkg",
+		modulesDir = "/pkg/target",
+		luajitPath = "/lj",
+		destAbs = "/pkg/target/a.so",
+		jitOS = "Linux",
+	})
+	test.falsy(native[1]:find("^%-%-target"), "no -target flag for native builds")
+	test.truthy(hasArg(native, "-shared"))
+end)
+
 --
 -- Regression: make build.variables / install_variables substitution + bin promotion
 --
@@ -1721,6 +1752,39 @@ build:write("output.txt", "hello from lde-build")
 	local writtenPath = path.join(outputDir, "output.txt")
 	test.truthy(fs.exists(writtenPath))
 	test.equal(fs.read(writtenPath), "hello from lde-build")
+end)
+
+test.it("build script sees the host target natively via build.target and build:cc()", function()
+	local dir = path.join(tmpBase, "ldebuild-target")
+	fs.mkdir(dir)
+	fs.mkdir(path.join(dir, "src"))
+	fs.write(path.join(dir, "src", "init.lua"), 'return true')
+	fs.write(path.join(dir, "lde.json"), json.encode({
+		name = "ldebuild-target",
+		version = "0.1.0",
+		dependencies = {}
+	}))
+
+	-- build.target is the compiler's dumpmachine triple; build:cc() runs the
+	-- resolved compiler (a -dumpmachine query needs no toolchain).
+	fs.write(path.join(dir, "build.lua"), [[
+local build = require("lde-build")
+local out = build:cc({ "-dumpmachine" })
+assert(build.target ~= nil and build.target ~= "", "build.target must be set")
+assert(out ~= nil and out ~= "", "cc -dumpmachine must output")
+build:write("target.txt", build.target .. "\n" .. out)
+]])
+
+	local pkg = assert(lde.Package.open(dir))
+	local outputDir = path.join(dir, "target", pkg:getName())
+	local ok, err = pkg:runBuildScript(outputDir)
+	test.truthy(ok, err)
+
+	local content = fs.read(path.join(outputDir, "target.txt")) or ""
+	local triple = content:match("^([^\n]*)")
+	test.truthy(triple and triple ~= "", "build.target should be a non-empty triple")
+	-- The dumpmachine output should match the reported target.
+	test.includes(content, triple, "cc -dumpmachine should agree with build.target")
 end)
 
 test.it("build script lde-build instance has correct outDir matching LDE_OUTPUT_DIR", function()

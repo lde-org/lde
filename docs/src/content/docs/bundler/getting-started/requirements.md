@@ -15,16 +15,18 @@ The `--bytecode` flag compiles modules to LuaJIT bytecode. The output is only co
 
 ## Compiling
 
-`lde compile` requires a C compiler:
+`lde compile` requires a C compiler. lde prefers **clang** — it is what makes cross-compilation possible — and falls back to `gcc` for native builds when no clang is available:
 
-- **Windows**: lde automatically downloads and sets up MinGW on first use. No manual setup is needed. See [Windows C Compilation](/docs/general/features/windows-mingw) for details.
-- **Linux**: install `gcc` via your package manager (e.g., `apt install gcc`, `dnf install gcc`).
-- **macOS**: GCC comes with Xcode Command Line Tools. Run `xcode-select --install` if not already installed.
+- **Windows**: lde automatically downloads and sets up a clang-based toolchain on first use. No manual setup is needed. See [Windows C Compilation](/docs/general/features/windows-mingw) for details.
+- **Linux**: install `clang` via your package manager (e.g., `apt install clang`, `dnf install clang`). `gcc` also works for native builds.
+- **macOS**: clang ships with Xcode Command Line Tools. Run `xcode-select --install` if not already installed.
 
-To use a different compiler, set the `SEA_CC` environment variable:
+To use a specific compiler (for example a custom cross toolchain), set the `SEA_CC` environment variable:
 
 ```sh
 SEA_CC=clang lde compile
 ```
+
+`SEA_CC` is only needed for fringe setups — normal compiles, including cross-compiles, resolve clang automatically.
 
 The resulting binary is fully self-contained and requires no Lua or LDE installation to run.

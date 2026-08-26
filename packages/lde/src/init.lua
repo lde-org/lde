@@ -177,13 +177,23 @@ end
 
 	-- Hidden build worker: run a package's build.lua in a subprocess so the
 	-- install scheduler can overlap independent native builds (see
-	-- lde-core/package/build.lua). Invoked as: lde __build-pkg <pkgDir> <outDir>.
+	-- lde-core/package/build.lua). Invoked as: lde __build-pkg <pkgDir> <outDir> [<target>].
 	if commandName == "__build-pkg" then
 		local pkgDir = args:pop()
 		local outDir = args:pop()
+		local targetName = args:pop()
 		if not pkgDir or not outDir then
 			lde.error.raise("__build-pkg: missing package dir or output dir")
 		end ---@cast outDir -nil
+		-- The worker inherits the parent's compile target so build.lua C code
+		-- compiles for the target platform (build:cc()/build.target read it).
+		if targetName and targetName ~= "" then
+			local target, terr = require("sea").getTarget(targetName)
+			if not target then
+				lde.error.raise("__build-pkg: " .. (terr or ("unknown target '" .. targetName .. "'")))
+			end ---@cast target -nil
+			lde.global.setTarget(target)
+		end
 		local pkg, perr = lde.Package.open(pkgDir)
 		if not pkg then
 			lde.error.raise("__build-pkg: " .. (perr or "failed to open package"))

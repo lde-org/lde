@@ -156,10 +156,11 @@ local commands = {
 		description = "Create a PR to add your package to the registry.",
 	},
 	compile = {
-		usage = "lde compile [--outfile <path>]",
+		usage = "lde compile [--outfile <path>] [--target <target>]",
 		description = "Compile the current project into a single executable.",
 		options = {
 			["--outfile"] = { arg = "path", desc = "Output path (defaults to ./<project-name>)" },
+			["--target"] = { arg = "target", desc = "Cross-compile for a release target (linux-x86-64, linux-aarch64, windows-x86-64, windows-aarch64, macos-x86-64, macos-aarch64, android-aarch64); defaults to the host" },
 		},
 	},
 	bundle = {
@@ -220,7 +221,15 @@ local fileFlags = { "--outfile" }
 
 -- Flags that take a value: completion suppresses suggestions for the value
 -- position (shells handle the common cases listed above).
-local valueFlags = { "-C", "--cwd", "--tree", "--path", "--git", "--branch", "--commit", "--version", "--outfile", "--flamegraph", "--type", "--language", "--name" }
+local valueFlags = { "-C", "--cwd", "--tree", "--path", "--git", "--branch", "--commit", "--version", "--outfile", "--flamegraph", "--type", "--language", "--name", "--target" }
+
+-- Known values for value-taking flags; the completion backend offers these
+-- instead of suppressing the value position. Kept as pure data (like the rest
+-- of this module) so completion stays fast.
+---@type table<string, string[]>
+local flagValues = {
+	["--target"] = { "linux-x86-64", "linux-aarch64", "windows-x86-64", "windows-aarch64", "macos-x86-64", "macos-aarch64", "android-aarch64" },
+}
 
 -- Canonical command names in display order.
 local names = { "help", "run", "x", "search", "repl", "test", "new", "init", "upgrade", "sync", "install", "uninstall", "add", "remove", "tree", "update", "outdated", "publish", "compile", "bundle", "bloat", "completion" }
@@ -243,6 +252,7 @@ return {
 	dirFlags = dirFlags,
 	fileFlags = fileFlags,
 	valueFlags = valueFlags,
+	flagValues = flagValues,
 	names = names,
 	completionNames = completionNames,
 }
