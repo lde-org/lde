@@ -512,12 +512,19 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 		and ansi.installProgress("Downloading dependencies") or nil
 	ctx.progress = progress
 	if not isSessionActive then
+		-- User-level archive cache: downloaded content bytes are reusable
+		-- across trees (they're immutable, URL-addressed bytes; the extracted
+		-- dirs stay per-tree). Fresh trees seed from it instead of the network,
+		-- mirroring how the URL cache and manifest are already user-level.
 		download.begin(progress and {
+			archiveCache = path.join(lde.global.getUserDir(), "archives"),
 			progress = function(done, total)
 				local ratio = total > 0 and (done / total) or nil
 				progress:update(ratio, ansi.formatBytes(done) .. " / " .. ansi.formatBytes(total))
 			end
-		} or nil)
+		} or {
+			archiveCache = path.join(lde.global.getUserDir(), "archives"),
+		})
 	end
 
 	local resolveHandle = timings.active()

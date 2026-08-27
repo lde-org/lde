@@ -163,8 +163,11 @@ local function installRocks(name)
 	end
 
 	-- Cold install: start the session and kick off the .src.rock download in
-	-- the background.
-	download.begin()
+	-- the background. The archive cache seeds already-downloaded content so a
+	-- fresh tree doesn't re-fetch bytes a previous tree already fetched.
+	download.begin({
+		archiveCache = path.join(lde.global.getUserDir(), "archives"),
+	})
 	download.background(srcUrl, archiveFile)
 
 	-- The published rockspec is tiny; wait only for it, then resolve deps while

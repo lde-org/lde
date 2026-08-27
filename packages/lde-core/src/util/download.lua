@@ -1,4 +1,5 @@
 local fs = require("fs")
+local path = require("path")
 local util = require("util")
 
 local curl = util.lazy(|| -> require("curl-sys"))
@@ -36,18 +37,20 @@ local download = {}
 ---@field background table<string, boolean>  destPath -> true for transfers drain() must not block on
 ---@field onTransfer fun(destPath: string)? # fired once per completed transfer, after its result is resolved
 ---@field progress fun(done: integer, total: integer)?
+---@field archiveCache string? # user-level dir of reusable downloaded bytes (keyed by destPath basename)
 
 ---@type download.Session?
 local session = nil
 
 --- Start a parallel download session. Blocks until everything finishes.
----@param opts table?  -- { progress: fun(done, total)? }
+---@param opts table?  -- { progress: fun(done, total)?, archiveCache: string? }
 function download.begin(opts)
 	assert(not session, "download session already active")
 	session = {
 		batch = curl().batch({ progress = opts and opts.progress or nil }) --[[@as download.Batch]],
 		pending = {},
 		background = {},
+		archiveCache = opts and opts.archiveCache,
 	}
 end
 
@@ -91,7 +94,9 @@ local function pendingNonBackground() ---@cast session -nil
 	return false
 end
 
---- Resolve a finished transfer's pending entry into its result table.
+--- Resolve a finished transfer's pending entry into its result table, and
+--- persist successful content into the user-level archive cache so future
+--- trees can seed from it instead of re-downloading.
 ---@param destPath string
 local function resolveTransfer(destPath) ---@cast session -nil
 	local index = session.pending[destPath]
@@ -99,6 +104,13 @@ local function resolveTransfer(destPath) ---@cast session -nil
 	local res = session.batch:results()[index] or { ok = false, err = "missing result" }
 	session.pending[destPath] = res
 	session.background[destPath] = nil
+	if res.ok and res.path and session.archiveCache then
+		local cached = path.join(session.archiveCache, path.basename(res.path))
+		if not fs.exists(cached) then
+			fs.mkdirAll(path.dirname(cached))
+			fs.copy(res.path, cached)
+		end
+	end
 end
 
 --- Pump the batch until `waitFor` finishes, or until every non-background
@@ -134,6 +146,21 @@ function download.onTransfer(fn)
 	if session then session.onTransfer = fn end
 end
 
+--- Seed `destPath` from the user-level archive cache when a copy exists
+--- (keyed by destPath basename, which is URL-derived). Returns true when
+--- seeded, so the caller can skip the network transfer entirely.
+---@param destPath string
+---@return boolean
+local function seedFromCache(destPath) ---@cast session -nil
+	if fs.exists(destPath) then return true end
+	if not session.archiveCache then return false end
+	local cached = path.join(session.archiveCache, path.basename(destPath))
+	if not fs.exists(cached) then return false end
+	fs.mkdirAll(path.dirname(destPath))
+	fs.copy(cached, destPath)
+	return true
+end
+
 --- Register a URL to be fetched into `destPath` as part of the current batch.
 --- Returns "pending" when a session is active (the file is not guaranteed to
 --- exist until `drain()` is called), or "done" when no session is active
@@ -143,6 +170,7 @@ end
 ---@return "pending"|"done"
 function download.prefetch(url, destPath)
 	if not session then return "done" end
+	if seedFromCache(destPath) then return "done" end
 	local index = session.batch:add(url, { path = destPath })
 	session.pending[destPath] = index
 	return "pending"
@@ -156,6 +184,7 @@ end
 ---@return "pending"|"done"
 function download.background(url, destPath)
 	if not session then return "done" end
+	if seedFromCache(destPath) then return "done" end
 	local index = session.batch:add(url, { path = destPath })
 	session.pending[destPath] = index
 	session.background[destPath] = true
