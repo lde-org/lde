@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 # Build on the newest macOS runner but target an older minimum OS so the
 # nightly binary (and every embedded dylib) runs on macOS 14+ too — without
@@ -27,9 +28,19 @@ jobs:
           - os: ubuntu-22.04
             outfile: lde-linux-x86-64
             zipfile: lde-linux-x86-64.zip
+          - os: ubuntu-22.04
+            outfile: lde-linux-x86-64-musl
+            zipfile: lde-linux-x86-64-musl.zip
+            # built inside an Alpine container (real musl environment)
+            musl: true
           - os: ubuntu-22.04-arm
             outfile: lde-linux-aarch64
             zipfile: lde-linux-aarch64.zip
+          - os: ubuntu-22.04-arm
+            outfile: lde-linux-aarch64-musl
+            zipfile: lde-linux-aarch64-musl.zip
+            # native arm64 runner + Alpine container
+            musl: true
           - os: windows-latest
             outfile: lde-windows-x86-64.exe
             zipfile: lde-windows-x86-64.zip
@@ -99,6 +110,7 @@ jobs:
         run: echo "SEA_CC=aarch64-w64-mingw32-clang" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - uses: lde-org/setup-lde@master
+        if: "!matrix.musl"
         with:
           version: nightly
           platform: ${{ matrix.android && 'Android' || '' }}
@@ -122,14 +134,32 @@ jobs:
           key: git2-sys-${{ matrix.os }}-${{ runner.arch }}${{ matrix.android && '-android' || '' }}
 
       - name: Build lde
-        if: "!matrix.android"
+        if: "!matrix.android && !matrix.musl"
         run: |
           lde -C ./packages/lde run -- compile --outfile ${{ matrix.outfile }}
 
       - name: Run tests
-        if: "!matrix.android"
+        if: "!matrix.android && !matrix.musl"
         run: ./packages/lde/${{ matrix.outfile }} test
 
+      # musl build: runs inside an Alpine container (real musl environment).
+      # The released musl LuaJIT crashes on large inputs, so the script builds
+      # LuaJIT from source inside the container first, then runs the suite.
+      - name: Build lde (musl alpine)
+        if: matrix.musl
+        run: |
+          docker run --rm -w /workspace \
+            -v "${{ github.workspace }}":/workspace \
+            alpine:3.20 \
+            sh -c '
+              apk add --no-cache gcc musl-dev make cmake ninja curl tar git openssl-dev linux-headers &&
+              case "$(uname -m)" in x86_64) A=x86-64;; aarch64) A=aarch64;; esac &&
+              curl -fsSLo /tmp/lj.tar.gz https://github.com/lde-org/luajit/releases/download/latest/luajit-linux-$A-musl.tar.gz &&
+              mkdir -p /tmp/lj && tar -xzf /tmp/lj.tar.gz -C /tmp/lj --strip-components=1 &&
+              PATH=/tmp/lj:$PATH luajit minilde.lua -C packages/lde run -- compile --outfile ${{ matrix.outfile }} &&
+              chmod -R a+rw /workspace &&
+              ./packages/lde/${{ matrix.outfile }} test
+            '
       - name: Fix workspace permissions (Android)
         if: matrix.android
         run: |
@@ -189,3 +219,14 @@ jobs:
             Run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
           files: packages/lde/${{ matrix.zipfile }}
           fail_on_unmatched_files: true
+
+  # After the nightly binaries are built and uploaded, dispatch the Docker
+  # workflow so the images track the latest nightly build too.
+  docker:
+    needs: build
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Dispatch docker image build
+        run: gh workflow run docker.yml -f version=nightly
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

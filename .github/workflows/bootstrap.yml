@@ -16,13 +16,17 @@ jobs:
           - os: ubuntu-22.04
             outfile: lde-linux-x86-64-musl
             zipfile: lde-linux-x86-64-musl.zip
-            # musl build created by glibc runner
-            luajit_tarball: luajit-linux-x86-64-gnu.tar.gz
+            # built inside an Alpine container (real musl environment)
             musl: true
           - os: ubuntu-22.04-arm
             outfile: lde-linux-aarch64
             zipfile: lde-linux-aarch64.zip
             luajit_tarball: luajit-linux-aarch64-gnu.tar.gz
+          - os: ubuntu-22.04-arm
+            outfile: lde-linux-aarch64-musl
+            zipfile: lde-linux-aarch64-musl.zip
+            # native arm64 runner + Alpine container
+            musl: true
           - os: windows-latest
             outfile: lde-windows-x86-64.exe
             zipfile: lde-windows-x86-64.zip
@@ -78,16 +82,8 @@ jobs:
         shell: pwsh
         run: echo "SEA_CC=${{ matrix.mingw_arch }}-w64-mingw32-clang" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: Install musl toolchain
-        if: matrix.musl
-        run: sudo apt-get update && sudo apt-get install -y musl-tools
-
-      - name: Set SEA_CC (musl)
-        if: matrix.musl
-        shell: bash
-        run: echo "SEA_CC=musl-gcc" >> "$GITHUB_ENV"
-
       - name: Cache LuaJIT
+        if: "!matrix.musl"
         id: cache-luajit
         uses: actions/cache@v5
         with:
@@ -95,7 +91,7 @@ jobs:
           key: ${{ matrix.luajit_tarball }}
 
       - name: Install LuaJIT
-        if: steps.cache-luajit.outputs.cache-hit != 'true'
+        if: steps.cache-luajit.outputs.cache-hit != 'true' && !matrix.musl
         shell: bash
         run: |
           curl -fL -o luajit.tar.gz \
@@ -105,15 +101,33 @@ jobs:
           rm luajit.tar.gz
 
       - name: Add LuaJIT to PATH
+        if: "!matrix.musl"
         shell: bash
         run: echo "$GITHUB_WORKSPACE/luajit-dist" >> "$GITHUB_PATH"
 
       - name: Build lde
-        if: "!matrix.android"
+        if: "!matrix.android && !matrix.musl"
         shell: bash
         run: |
           luajit minilde.lua -C packages/lde run -- compile --outfile ${{ matrix.outfile }}
 
+      # musl build: runs inside an Alpine container (real musl environment).
+      # The released musl LuaJIT crashes on large inputs, so the script builds
+      # LuaJIT from source inside the container first.
+      - name: Build lde (musl alpine)
+        if: matrix.musl
+        run: |
+          docker run --rm -w /workspace \
+            -v "${{ github.workspace }}":/workspace \
+            alpine:3.20 \
+            sh -c '
+              apk add --no-cache gcc musl-dev make cmake ninja curl tar git openssl-dev linux-headers &&
+              case "$(uname -m)" in x86_64) A=x86-64;; aarch64) A=aarch64;; esac &&
+              curl -fsSLo /tmp/lj.tar.gz https://github.com/lde-org/luajit/releases/download/latest/luajit-linux-$A-musl.tar.gz &&
+              mkdir -p /tmp/lj && tar -xzf /tmp/lj.tar.gz -C /tmp/lj --strip-components=1 &&
+              PATH=/tmp/lj:$PATH luajit minilde.lua -C packages/lde run -- compile --outfile ${{ matrix.outfile }} &&
+              chmod -R a+rw /workspace
+            '
       - name: Fix workspace permissions (Android)
         if: matrix.android
         run: chmod -R a+rw ${{ github.workspace }}

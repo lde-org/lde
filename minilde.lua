@@ -246,6 +246,11 @@ end
 local function runBuildScript(packagePath, outputDir)
 	setenv("LDE_OUTPUT_DIR", outputDir)
 	setenv("LPM_OUTPUT_DIR", outputDir)
+	-- Expose the C compiler to build scripts (cmake reads CC): lde-core does
+	-- the same, and without it a SEA_CC override (e.g. musl-gcc) never
+	-- reaches the cmake-based sys packages.
+	local seaCC = os.getenv("SEA_CC")
+	if seaCC and seaCC ~= "" then setenv("CC", seaCC) end
 
 	---@alias minilde.build { outDir: string }
 
