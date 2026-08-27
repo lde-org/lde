@@ -66,14 +66,17 @@ do
 
 		pcall(ffi.cdef, "typedef struct { long tv_sec; long tv_nsec; } timespec;")
 		pcall(ffi.cdef, "int clock_gettime(int clk_id, timespec *tp);")
+		local CLOCK_MONOTONIC = ffi.os == "OSX" and 6 or 1
 		local clockOk = pcall(function()
 			local t = ffi.new("timespec")
-			ffi.C.clock_gettime(1, t)
+			-- Verify the clock id actually works (returns 0), not just that the
+			-- call doesn't crash: a wrong id would silently zero the struct.
+			return ffi.C.clock_gettime(CLOCK_MONOTONIC, t) == 0
 		end)
 		if clockOk then
 			now = function()
 				local t = ffi.new("timespec")
-				ffi.C.clock_gettime(1, t)
+				ffi.C.clock_gettime(CLOCK_MONOTONIC, t)
 				local ts = t --[[@as ansi.ffi.timespec]]
 				return tonumber(ts.tv_sec) + tonumber(ts.tv_nsec) * 1e-9
 			end
