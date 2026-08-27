@@ -13,6 +13,12 @@ jobs:
             outfile: lde-linux-x86-64
             zipfile: lde-linux-x86-64.zip
             luajit_tarball: luajit-linux-x86-64-gnu.tar.gz
+          - os: ubuntu-22.04
+            outfile: lde-linux-x86-64-musl
+            zipfile: lde-linux-x86-64-musl.zip
+            # musl build created by glibc runner
+            luajit_tarball: luajit-linux-x86-64-gnu.tar.gz
+            musl: true
           - os: ubuntu-22.04-arm
             outfile: lde-linux-aarch64
             zipfile: lde-linux-aarch64.zip
@@ -21,10 +27,14 @@ jobs:
             outfile: lde-windows-x86-64.exe
             zipfile: lde-windows-x86-64.zip
             luajit_tarball: luajit-windows-x86-64-gnu.tar.gz
+            mingw_arch: x86_64
+            mingw_dir: llvm-mingw-20260311-ucrt-x86_64
           - os: windows-11-arm
             outfile: lde-windows-aarch64.exe
             zipfile: lde-windows-aarch64.zip
             luajit_tarball: luajit-windows-aarch64-gnu.tar.gz
+            mingw_arch: aarch64
+            mingw_dir: llvm-mingw-20260311-ucrt-aarch64
           - os: macos-15-intel
             outfile: lde-macos-x86-64
             zipfile: lde-macos-x86-64.zip
@@ -36,6 +46,8 @@ jobs:
           - os: ubuntu-22.04-arm
             outfile: lde-android-aarch64
             zipfile: lde-android-aarch64.zip
+            # Bionic build of LuaJIT; runs inside the termux container below.
+            luajit_tarball: luajit-linux-aarch64-android.tar.gz
             android: true
 
     runs-on: ${{ matrix.os }}
@@ -43,54 +55,39 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Cache llvm-mingw (Windows x86-64)
-        if: matrix.os == 'windows-latest'
-        id: cache-llvm-mingw-x64
+      - name: Cache llvm-mingw (Windows)
+        if: runner.os == 'Windows'
+        id: cache-llvm-mingw
         uses: actions/cache@v5
         with:
-          path: llvm-mingw-20260311-ucrt-x86_64
-          key: llvm-mingw-20260311-ucrt-x86_64
+          path: ${{ matrix.mingw_dir }}
+          key: ${{ matrix.mingw_dir }}
 
-      - name: Setup llvm-mingw (Windows x86-64)
-        if: matrix.os == 'windows-latest'
+      - name: Setup llvm-mingw (Windows)
+        if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          if ("${{ steps.cache-llvm-mingw-x64.outputs.cache-hit }}" -ne "true") {
-            curl -L -o llvm-mingw.zip https://github.com/mstorsjo/llvm-mingw/releases/download/20260311/llvm-mingw-20260311-ucrt-x86_64.zip
+          if ("${{ steps.cache-llvm-mingw.outputs.cache-hit }}" -ne "true") {
+            curl -L -o llvm-mingw.zip https://github.com/mstorsjo/llvm-mingw/releases/download/20260311/llvm-mingw-20260311-ucrt-${{ matrix.mingw_arch }}.zip
             Expand-Archive -Path llvm-mingw.zip -DestinationPath .
           }
-          echo "$env:GITHUB_WORKSPACE\llvm-mingw-20260311-ucrt-x86_64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          echo "$env:GITHUB_WORKSPACE\${{ matrix.mingw_dir }}\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
-      - name: Set SEA_CC (Windows x86-64)
-        if: matrix.os == 'windows-latest'
+      - name: Set SEA_CC (Windows)
+        if: runner.os == 'Windows'
         shell: pwsh
-        run: echo "SEA_CC=x86_64-w64-mingw32-clang" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        run: echo "SEA_CC=${{ matrix.mingw_arch }}-w64-mingw32-clang" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: Cache llvm-mingw (Windows ARM64)
-        if: matrix.os == 'windows-11-arm'
-        id: cache-llvm-mingw-arm64
-        uses: actions/cache@v5
-        with:
-          path: llvm-mingw-20260311-ucrt-aarch64
-          key: llvm-mingw-20260311-ucrt-aarch64
+      - name: Install musl toolchain
+        if: matrix.musl
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
 
-      - name: Setup llvm-mingw (Windows ARM64)
-        if: matrix.os == 'windows-11-arm'
-        shell: pwsh
-        run: |
-          if ("${{ steps.cache-llvm-mingw-arm64.outputs.cache-hit }}" -ne "true") {
-            curl -L -o llvm-mingw.zip https://github.com/mstorsjo/llvm-mingw/releases/download/20260311/llvm-mingw-20260311-ucrt-aarch64.zip
-            Expand-Archive -Path llvm-mingw.zip -DestinationPath .
-          }
-          echo "$env:GITHUB_WORKSPACE\llvm-mingw-20260311-ucrt-aarch64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
-      - name: Set SEA_CC (Windows ARM64)
-        if: matrix.os == 'windows-11-arm'
-        shell: pwsh
-        run: echo "SEA_CC=aarch64-w64-mingw32-clang" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Set SEA_CC (musl)
+        if: matrix.musl
+        shell: bash
+        run: echo "SEA_CC=musl-gcc" >> "$GITHUB_ENV"
 
       - name: Cache LuaJIT
-        if: "!matrix.android"
         id: cache-luajit
         uses: actions/cache@v5
         with:
@@ -98,7 +95,7 @@ jobs:
           key: ${{ matrix.luajit_tarball }}
 
       - name: Install LuaJIT
-        if: "!matrix.android && steps.cache-luajit.outputs.cache-hit != 'true'"
+        if: steps.cache-luajit.outputs.cache-hit != 'true'
         shell: bash
         run: |
           curl -fL -o luajit.tar.gz \
@@ -108,7 +105,6 @@ jobs:
           rm luajit.tar.gz
 
       - name: Add LuaJIT to PATH
-        if: "!matrix.android"
         shell: bash
         run: echo "$GITHUB_WORKSPACE/luajit-dist" >> "$GITHUB_PATH"
 
@@ -116,8 +112,7 @@ jobs:
         if: "!matrix.android"
         shell: bash
         run: |
-          cd packages/lde
-          luajit ../../minilde.lua run -- compile --outfile ${{ matrix.outfile }}
+          luajit minilde.lua -C packages/lde run -- compile --outfile ${{ matrix.outfile }}
 
       - name: Fix workspace permissions (Android)
         if: matrix.android
@@ -129,7 +124,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: /tmp/termux-android.tar
-          key: termux-android-v3
+          key: termux-android-v4
 
       - name: Build lde (Android)
         if: matrix.android
@@ -137,7 +132,7 @@ jobs:
           if [[ "${{ steps.cache-android-image.outputs.cache-hit }}" != "true" ]]; then
             docker run --privileged --platform linux/arm64 \
               --name termux-build termux/termux-docker:aarch64 \
-              bash -c "apt update && apt install -y luajit clang cmake ninja openssl git"
+              bash -c "apt update && apt install -y clang cmake ninja openssl git"
             docker commit termux-build termux-android:latest
             docker rm termux-build
             docker save termux-android:latest -o /tmp/termux-android.tar
@@ -147,9 +142,8 @@ jobs:
 
           docker run --rm --privileged --platform linux/arm64 \
             -v ${{ github.workspace }}:/workspace \
-            -w /workspace \
             termux-android:latest \
-            bash -c "cd /workspace/packages/lde && luajit /workspace/minilde.lua run -- compile --outfile /workspace/packages/lde/${{ matrix.outfile }}"
+            bash -c "export PATH=/workspace/luajit-dist:\$PATH && luajit /workspace/minilde.lua -C /workspace/packages/lde run -- compile --outfile ${{ matrix.outfile }}"
 
       - name: Package binary
         if: runner.os != 'Windows'
