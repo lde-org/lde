@@ -137,10 +137,19 @@ function Instance:sh(cmd)
 	-- configure-style scripts can't flood the terminal; verbose mode streams
 	-- it live to keep the current behavior. Both stdout and stderr are piped
 	-- so the concurrent fd drain (readFds) can't deadlock on >64KB output.
+	--
+	-- The command is a ready-to-run shell string (callers quote paths
+	-- themselves), so it must reach the shell verbatim: on Windows the
+	-- MSVCRT-style escaping process applies per argument is incompatible with
+	-- cmd.exe's /c quote handling and mangles embedded quotes (cmd re-parses
+	-- the line and prepends the cwd to the first quoted arg, doubling paths).
+	-- `unsafe` skips that escaping; on POSIX args reach sh -c directly and it
+	-- is a no-op.
+	local shell, flag = jit.os == "Windows" and "cmd" or "sh", jit.os == "Windows" and "/c" or "-c"
 	if self.captureLog then
-		local shell, flag = jit.os == "Windows" and "cmd" or "sh", jit.os == "Windows" and "/c" or "-c"
 		local code, stdout, stderr = process.exec(shell, { flag, cmd }, {
 			cwd = self.outDir,
+			unsafe = true,
 			stdout = "pipe",
 			stderr = "pipe",
 		})
@@ -149,9 +158,9 @@ function Instance:sh(cmd)
 		return
 	end
 
-	local shell, flag = jit.os == "Windows" and "cmd" or "sh", jit.os == "Windows" and "/c" or "-c"
 	local child, serr = process.spawn(shell, { flag, cmd }, {
 		cwd = self.outDir,
+		unsafe = true,
 		stdout = "inherit",
 		stderr = "inherit",
 	})

@@ -446,6 +446,10 @@ function Package:runScript(name, isCapture, args)
 	end
 
 	local shellBin, shellFlag, isCmd = global.getScriptShell()
+	-- cmd.exe re-parses the line with its own quote rules, so pass the already
+	-- cmd-quoted script string through verbatim instead of the MSVCRT-style
+	-- per-arg escaping process applies on Windows.
+	if isCmd then opts.unsafe = true end
 
 	local cmd = scripts[name]
 	if args and #args > 0 then

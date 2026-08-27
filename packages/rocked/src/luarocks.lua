@@ -38,7 +38,12 @@ end
 ---@return boolean
 local function runCommand(cmd, cwd, permissions)
 	if not checkPermission(permissions, "execute", cmd) then return false end
-	local code = process.exec(SHELL[1], { SHELL[2], cmd }, cwd and { cwd = cwd } or nil)
+	-- cmd.exe re-parses the command line with its own quote rules, so pass the
+	-- already-quoted script string through verbatim (unsafe) instead of the
+	-- MSVCRT-style per-arg escaping process applies on Windows.
+	local opts = jit.os == "Windows" and { unsafe = true } or nil
+	if cwd then opts = opts or {}; opts.cwd = cwd end
+	local code = process.exec(SHELL[1], { SHELL[2], cmd }, opts)
 	return code == 0
 end
 
