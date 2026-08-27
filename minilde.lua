@@ -257,7 +257,8 @@ local function runBuildScript(packagePath, outputDir)
 			assert(res == 0 or res == true, "failed to execute " .. cmd)
 		end
 		function build:cc(args)
-			local compiler = os.getenv("SEA_CC") or os.getenv("CC") or "gcc"
+			local cc = os.getenv("SEA_CC") or os.getenv("CC") or ""
+			local compiler = cc ~= "" and cc or "gcc"
 			local cmd = compiler .. " " .. table.concat(args, " ")
 			local res = sh(cmd)
 			assert(res == 0 or res == true, "cc failed: " .. cmd)
@@ -388,6 +389,8 @@ if command == "run" then
 	if launcher then setenv("LDE_BIN", launcher) end
 
 	local cwd = getcwd()
+	write(join(cwd, "target", ".skip"), "") -- tell lde to skip building
+
 	package.path = join(cwd, "target", "?.lua") .. ";" ..
 		join(cwd, "target", "?", "init.lua") .. ";" ..
 		package.path
