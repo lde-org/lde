@@ -193,63 +193,103 @@ else
 	end
 end
 
+-- Resolve this script's absolute path: launchers (which re-invoke luajit from
+-- an arbitrary cwd) need to point at it, and they're written next to it.
+local scriptPath = arg and arg[0] or ""
+if not (scriptPath:sub(1, 1) == "/" or scriptPath:match("^%a:")) then
+	scriptPath = join(getcwd(), scriptPath)
+end
+
+--- Writes a launcher executable that runs `luajit <this script> "$@"`, so
+--- lde-core can spawn `minilde __build-pkg ...` during bootstrap: env.execPath()
+--- resolves to the luajit binary, which can't take a script argument, so the
+--- spawn must go through a script that re-invokes luajit with this file first.
+--- Returns the launcher path, or nil when it couldn't be written.
+---@return string?
+local function ensureLauncher()
+	local dir = scriptPath:match("^(.*)[/\\][^/\\]*$") or "."
+	local launcher = join(dir, isWindows and "minilde.cmd" or "minilde.sh")
+	if isWindows then
+		write(launcher, "@echo off\r\nluajit \"" .. scriptPath .. "\" %*\r\nexit /b %errorlevel%\r\n")
+	else
+		local quoted = scriptPath:gsub("'", "'\\''")
+		write(launcher, "#!/bin/sh\nexec luajit '" .. quoted .. "' \"$@\"\n")
+		sh('chmod +x "' .. launcher .. '"')
+	end
+	return exists(launcher) and launcher or nil
+end
+
+--- Runs a package's build.lua with an lde-build context bound to outputDir.
+--- Does not copy src or recurse into dependencies (the caller handles those).
+---@param packagePath string
+---@param outputDir string
+---@return boolean ok
+---@return string? err
+local function runBuildScript(packagePath, outputDir)
+	setenv("LDE_OUTPUT_DIR", outputDir)
+	setenv("LPM_OUTPUT_DIR", outputDir)
+
+	---@alias minilde.build { outDir: string }
+
+	---@class minilde.build
+	local build = {}
+	build.__index = build
+
+	---@format disable-next
+	do
+		function build:fetch(url)
+			return assert(httpGet(url), "failed to fetch " .. url)
+		end
+		function build:write(rel, content) write(join(outputDir, rel), content) end
+		function build:read(rel) return read(join(outputDir, rel)) end
+		function build:extract(rel, dest)
+			mkdir(join(outputDir, dest))
+			local src = join(outputDir, rel)
+			local dst = join(outputDir, dest)
+			sh('tar -xzf "' .. src .. '" -C "' .. dst .. '"')
+		end
+		function build:copy(rel, dest) copy(join(outputDir, rel), join(outputDir, dest)) end
+		function build:delete(rel) rm(join(outputDir, rel)) end
+		function build:move(rel, dest) os.rename(join(outputDir, rel), join(outputDir, dest)) end
+		function build:exists(rel) return exists(join(outputDir, rel)) end
+		function build:sh(cmd)
+			local res = sh(cmd)
+			assert(res == 0 or res == true, "failed to execute " .. cmd)
+		end
+		function build:cc(args)
+			local compiler = os.getenv("SEA_CC") or os.getenv("CC") or "gcc"
+			local cmd = compiler .. " " .. table.concat(args, " ")
+			local res = sh(cmd)
+			assert(res == 0 or res == true, "cc failed: " .. cmd)
+		end
+	end
+
+	package.loaded["lde-build"] = setmetatable({ outDir = outputDir }, build)
+
+	local oldDir = getcwd()
+	chdir(packagePath)
+	local ok, err = pcall(dofile, join(packagePath, "build.lua"))
+	chdir(oldDir)
+	return ok, err
+end
+
 ---@param packagePath string
 ---@param targetDir string
-local function buildPackage(packagePath, targetDir)
+---@param alias string # install name in targetDir: the require key for deps, the package name for the root
+local function buildPackage(packagePath, targetDir, alias)
 	local config = jsonDecode(assert(read(join(packagePath, "lde.json")) or read(join(packagePath, "lpm.json")),
 		"No lde.json at " .. packagePath)) --[[@as { name: string, dependencies: { [string]: minilde.dep } }]]
+	alias = alias or config.name
 
 	mkdir(targetDir)
 	if exists(join(packagePath, "build.lua")) then
-		local outputDir = join(targetDir, config.name)
+		local outputDir = join(targetDir, alias)
 
 		copy(join(packagePath, "src"), outputDir)
-		setenv("LDE_OUTPUT_DIR", outputDir)
-		setenv("LPM_OUTPUT_DIR", outputDir)
-
-		---@alias minilde.build { outDir: string }
-
-		---@class minilde.build
-		local build = {}
-		build.__index = build
-
-		---@format disable-next
-		do
-			function build:fetch(url)
-				return assert(httpGet(url), "failed to fetch " .. url)
-			end
-			function build:write(rel, content) write(join(outputDir, rel), content) end
-			function build:read(rel) return read(join(outputDir, rel)) end
-			function build:extract(rel, dest)
-				mkdir(join(outputDir, dest))
-				local src = join(outputDir, rel)
-				local dst = join(outputDir, dest)
-				sh('tar -xzf "' .. src .. '" -C "' .. dst .. '"')
-			end
-			function build:copy(rel, dest) copy(join(outputDir, rel), join(outputDir, dest)) end
-			function build:delete(rel) rm(join(outputDir, rel)) end
-			function build:move(rel, dest) os.rename(join(outputDir, rel), join(outputDir, dest)) end
-			function build:exists(rel) return exists(join(outputDir, rel)) end
-			function build:sh(cmd)
-				local res = sh(cmd)
-				assert(res == 0 or res == true, "failed to execute " .. cmd)
-			end
-			function build:cc(args)
-				local compiler = os.getenv("SEA_CC") or os.getenv("CC") or "gcc"
-				local cmd = compiler .. " " .. table.concat(args, " ")
-				local res = sh(cmd)
-				assert(res == 0 or res == true, "cc failed: " .. cmd)
-			end
-		end
-
-		package.loaded["lde-build"] = setmetatable({ outDir = outputDir }, build)
-
-		local oldDir = getcwd()
-		chdir(packagePath)
-		dofile(join(packagePath, "build.lua"))
-		chdir(oldDir)
+		local ok, err = runBuildScript(packagePath, outputDir)
+		if not ok then error(err or "build failed", 0) end
 	else
-		mklink(join(packagePath, "src"), join(targetDir, config.name))
+		mklink(join(packagePath, "src"), join(targetDir, alias))
 	end
 
 	if not config.dependencies then return end
@@ -257,9 +297,9 @@ local function buildPackage(packagePath, targetDir)
 	for name, dep in pairs(config.dependencies) do
 		---@format disable-next
 		if dep.path then
-			buildPackage(join(packagePath, dep.path), targetDir)
+			buildPackage(join(packagePath, dep.path), targetDir, name)
 		elseif dep.git then -- downloads to tmpLDEDir/git/<name> then build to target
-			buildPackage(fetchGitRepo(name, dep.git, "master"), targetDir)
+			buildPackage(fetchGitRepo(name, dep.git, "master"), targetDir, name)
 		elseif dep.version then -- registry: portfile maps the version to a git repo + commit
 			local packageName = dep.name or name
 			local portfileUrl = registryUrl .. packageName .. ".json"
@@ -281,7 +321,7 @@ local function buildPackage(packagePath, targetDir)
 			end
 
 			local gitUrl = assert(portfile.git, "portfile for '" .. packageName .. "' has no git URL")
-			buildPackage(fetchGitRepo(name, gitUrl, commit), targetDir)
+			buildPackage(fetchGitRepo(name, gitUrl, commit), targetDir, name)
 		else
 			error("Unknown dependency type: " .. name)
 		end
@@ -316,8 +356,36 @@ if args[1] == "-C" then
 	assert(chdir(dir) == 0, "minilde: -C: cannot chdir to '" .. dir .. "'")
 end
 
-if pop() == "run" then
+local command = pop()
+
+-- Hidden build worker, mirroring `lde __build-pkg <pkgDir> <outDir> [<target>]`.
+-- lde-core spawns it with env.execPath() to overlap native builds; under
+-- bootstrap that resolves to luajit + this script, so the route must exist here.
+if command == "__build-pkg" then
+	local pkgDir = assert(pop(), "__build-pkg: missing package dir")
+	local outDir = assert(pop(), "__build-pkg: missing output dir")
+	pop() -- target name: bootstrap compiles for the host, so ignore it
+	if not exists(join(pkgDir, "build.lua")) then
+		io.stderr:write("__build-pkg: no build.lua at " .. pkgDir .. "\n")
+		os.exit(1)
+	end
+	mkdir(outDir)
+	local ok, err = runBuildScript(pkgDir, outDir)
+	if not ok then
+		io.stderr:write(tostring(err) .. "\n")
+		os.exit(1)
+	end
+	return
+end
+
+if command == "run" then
 	local config = assert(build())
+
+	-- lde-core spawns its build worker with env.execPath(); during bootstrap
+	-- that is the luajit binary, which can't take a script argument. Point it
+	-- at our launcher so the worker becomes `minilde __build-pkg ...`.
+	local launcher = ensureLauncher()
+	if launcher then setenv("LDE_BIN", launcher) end
 
 	local cwd = getcwd()
 	package.path = join(cwd, "target", "?.lua") .. ";" ..

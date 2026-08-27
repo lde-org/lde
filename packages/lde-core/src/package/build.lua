@@ -167,7 +167,9 @@ local function buildPackage(package, destinationPath)
 			-- already get from spawning gcc async. buildfn (rockspec) packages
 			-- keep their own async-gcc path.
 			if asyncBuild.isActive() and package.buildfn == nil and fs.exists(package:getBuildScriptPath()) then
-				local ldeBin = assert(env.execPath(), "no executable path")
+				-- Override for minilde
+				local ldeBin = os.getenv("LDE_BIN") or assert(env.execPath(), "no executable path")
+
 				-- CreateProcess (Windows) fails when the cwd doesn't exist, and
 				-- this is usually the first build: the output dir is created
 				-- only once the worker runs its build script. Create it up
@@ -175,6 +177,7 @@ local function buildPackage(package, destinationPath)
 				if not fs.isdir(destinationPath) then fs.mkdir(destinationPath) end
 				local buildTarget = lde.global.getTarget()
 				local targetName = buildTarget and buildTarget.name or ""
+
 				-- The worker captures its own output (compact mode) or streams
 				-- it (verbose mode, via LDE_VERBOSE). stdout stays "inherit":
 				-- the worker prints nothing unless verbose, so there is no pipe

@@ -12,3 +12,5 @@ fuzzer/.fuzz
 .lls
 .scratch
 .check*
+/minilde.sh
+/minilde.cmd
