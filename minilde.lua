@@ -11,17 +11,28 @@ end
 
 local isWindows = separator == '\\'
 
+local _P_WAIT = 0
+
 -- On Windows, os.execute uses cmd.exe which doesn't understand Unix commands.
 -- Use _spawnlp to invoke bash directly, bypassing cmd.exe entirely.
--- _P_WAIT = 2 (suspends caller until child exits, returns child exit code).
 local function sh(cmd)
 	if isWindows then
 		local ffi = require("ffi")
 		pcall(ffi.cdef, [[int _spawnlp(int mode, const char *cmdname, const char *arg0, ...);]])
+		pcall(ffi.cdef, [[int _getpid(void);]])
 		-- bash uses forward slashes; convert backslashes in the command string
 		cmd = cmd:gsub("\\", "/")
-		local _P_WAIT = 2
-		return ffi.C._spawnlp(_P_WAIT, "bash", "bash", "-c", cmd, ffi.cast("char *", nil))
+		-- The -c command string round-trips through the Windows command line,
+		-- whose parsing splits it on spaces before bash sees it. Hand the
+		-- command to bash via a temp script instead: the script path is a
+		-- single command-line token (quoted here, as _spawnlp concatenates its
+		-- args raw), so the string reaches bash verbatim.
+		local script = os.tmpname() .. "." .. tostring(ffi.C._getpid())
+		local f = io.open(script, "wb")
+		if f then f:write(cmd .. "\n"); f:close() end
+		local res = ffi.C._spawnlp(_P_WAIT, "bash", "bash", '"' .. script .. '"', ffi.cast("char *", nil))
+		os.remove(script)
+		return res
 	end
 	return os.execute(cmd)
 end
@@ -121,8 +132,13 @@ local registryUrl = "https://raw.githubusercontent.com/lde-org/registry/master/p
 
 ---@type fun(url: string): string?
 local function httpGet(url)
-	local content = readhandle(io.popen('curl -fsSL "' .. url .. '"'))
-	return content == "" and nil or content -- curl failures produce empty stdout
+	-- io.popen + curl can't handle large responses on Windows (the pipe write
+	-- fails mid-transfer), so download to a temp file via sh instead.
+	local tmp = os.tmpname() .. ".fetch"
+	sh('curl -fsSL --retry 3 --retry-all-errors "' .. url .. '" -o "' .. tmp .. '"')
+	local content = read(tmp)
+	rm(tmp)
+	return content ~= "" and content or nil
 end
 
 ---@param a string
@@ -151,13 +167,15 @@ local function fetchGitRepo(name, url, ref)
 	if not exists(finalDir) then
 		local tarballUrl = url .. "/archive/" .. ref .. ".tar.gz"
 		local tarball = join(tmpLDEDir, "tar", name)
-		local curlOk = sh('curl -fsSL "' .. tarballUrl .. '" -o "' .. tarball .. '"')
+		-- --retry: codeload truncates downloads intermittently
+		local curlOk = sh('curl -fsSL --retry 3 --retry-all-errors "' .. tarballUrl .. '" -o "' .. tarball .. '"')
 		assert(curlOk == 0 or curlOk == true, "failed to download " .. tarballUrl)
 		mkdir(finalDir)
 
-		-- On Windows, bsdtar misparses drive letters (C:) as remote hosts.
-		-- Use pushd to cd into the dest dir so neither -f nor -C see a drive letter path.
-		local tarOk = sh('tar -xzf "' .. tarball .. '" --strip-components=1 -C "' .. finalDir .. '"')
+		-- tar misparses drive-letter paths (C:\...) as remote hosts on some
+		-- tar builds; cd into tmpLDEDir first so -f and -C only see relative
+		-- paths.
+		local tarOk = sh('cd "' .. tmpLDEDir .. '" && tar -xzf "tar/' .. name .. '" --strip-components=1 -C "git/' .. name .. '"')
 		assert(tarOk == 0 or tarOk == true, "failed to extract tarball for " .. name .. " — repo may use submodules (not supported in bootstrap mode)")
 	end
 
@@ -244,9 +262,8 @@ local function runBuildScript(packagePath, outputDir)
 		function build:read(rel) return read(join(outputDir, rel)) end
 		function build:extract(rel, dest)
 			mkdir(join(outputDir, dest))
-			local src = join(outputDir, rel)
-			local dst = join(outputDir, dest)
-			sh('tar -xzf "' .. src .. '" -C "' .. dst .. '"')
+			-- cd first: tar misparses drive-letter paths as remote hosts
+			sh('cd "' .. outputDir .. '" && tar -xzf "' .. rel .. '" -C "' .. dest .. '"')
 		end
 		function build:copy(rel, dest) copy(join(outputDir, rel), join(outputDir, dest)) end
 		function build:delete(rel) rm(join(outputDir, rel)) end
