@@ -252,11 +252,21 @@ local function runBuildScript(packagePath, outputDir)
 	local seaCC = os.getenv("SEA_CC")
 	if seaCC and seaCC ~= "" then setenv("CC", seaCC) end
 
-	---@alias minilde.build { outDir: string }
+	---@alias minilde.build { outDir: string, target: string }
 
 	---@class minilde.build
 	local build = {}
 	build.__index = build
+
+	local isMusl = false
+	if jit.os == "Linux" then
+		local h = io.popen("ls /lib/ld-musl-*.so.1 2>/dev/null || ls /usr/lib/ld-musl-*.so.1 2>/dev/null")
+		isMusl = h and h:read("*a"):match("%S") ~= nil
+		if h then h:close() end
+	end
+
+	local arch = jit.arch == "arm64" and "aarch64" or (jit.arch == "x64" and "x86-64" or jit.arch)
+	build.target = arch .. "-" .. jit.os:lower() .. (jit.os == "Linux" and (isMusl and "-musl" or "-gnu") or "")
 
 	---@format disable-next
 	do
