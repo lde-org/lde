@@ -64,6 +64,175 @@ local function normalizeNativeModule(src, buildTable)
 	return src
 end
 
+--- Platform candidates for a rockspec external_dependency library (e.g.
+--- "yaml" -> libyaml.so on Linux), mirroring LuaRocks' external_deps_patterns.
+--- Only names the linker can actually consume: a bare runtime soname like
+--- libyaml-0.so.2 without the unversioned libyaml.so dev symlink cannot be
+--- linked with -lyaml, so it is not a match.
+---@param name string
+---@return string[]
+local function externalLibFiles(name)
+	if jit.os == "Windows" then
+		return { "lib" .. name .. ".dll.a", name .. ".dll.a", "lib" .. name .. ".a",
+			"cyg" .. name .. ".dll", "lib" .. name .. ".dll", name .. ".dll", name .. ".lib" }
+	end
+	local files = { "lib" .. name .. ".a", "lib" .. name .. ".so" }
+	if jit.os == "OSX" then
+		files[#files + 1] = "lib" .. name .. ".dylib"
+	end
+	return files
+end
+
+--- Library subdirs searched for a rockspec external_dependency. LuaRocks only
+--- checks "lib"; lib64 (Fedora) and the Debian/Ubuntu multiarch tuple dir
+--- (e.g. lib/x86_64-linux-gnu) cover the other common layouts.
+---@param prefix string
+---@return string[]
+local function externalLibSubdirs(prefix)
+	local subdirs = jit.os == "OSX" and { "lib" } or { "lib64", "lib" }
+	if jit.os ~= "Windows" and jit.os ~= "OSX" then
+		local iter = fs.readdir(path.join(prefix, "lib"))
+		if iter then
+			for entry in iter do
+				if entry.type == "dir" and entry.name:match("%-linux%-gnu$") then
+					subdirs[#subdirs + 1] = path.join("lib", entry.name)
+				end
+			end
+		end
+	end
+	return subdirs
+end
+
+--- First <prefix>/<subdir> containing any of the candidate files.
+---@param prefix string
+---@param subdirs string[]
+---@param files string[]
+---@return string? dir # absolute dir of the first match
+local function findExternalDir(prefix, subdirs, files)
+	for _, subdir in ipairs(subdirs) do
+		local dirPath = path.join(prefix, subdir)
+		for _, file in ipairs(files) do
+			if fs.isfile(path.join(dirPath, file)) then return dirPath end
+		end
+	end
+	return nil
+end
+
+--- Resolve rockspec external_dependencies into <NAME>_DIR/<NAME>_BINDIR/
+--- <NAME>_INCDIR/<NAME>_LIBDIR build variables (LuaRocks' check_external_deps
+--- contract). Each declared dependency's required files (library/header/
+--- program) are searched under the standard system prefixes, or under an
+--- explicit <NAME>_DIR environment override (e.g. YAML_DIR=/opt/homebrew).
+--- Missing dependencies fail with a clear message: without this check an
+--- unresolvable $(YAML_DIR) substitutes to "" and command-line build tools
+--- like luke treat the resulting "YAML_DIR=" argument as a build target
+--- ("no rule to make target 'YAML_DIR='"), which is a dead end for the user.
+---@param extDeps table<string, table|string> # spec.external_dependencies
+---@param vars table<string, string> # receives NAME_DIR/NAME_BINDIR/NAME_INCDIR/NAME_LIBDIR
+---@param packageName string # for the error message
+---@return string? err
+local function resolveExternalDeps(extDeps, vars, packageName)
+	for name, extFiles in pairs(extDeps) do
+		extFiles = type(extFiles) == "table" and extFiles or {}
+
+		local prefixes
+		local override = env.var(name .. "_DIR")
+		if override then
+			prefixes = { override }
+		elseif jit.os == "Windows" then
+			prefixes = { "c:/external/", "c:/mingw", "c:/windows/system32" }
+		else
+			prefixes = { "/usr/local", "/usr", "/" }
+			if jit.os == "OSX" then table.insert(prefixes, 1, "/opt/homebrew") end
+		end
+
+		-- kind -> where to look (subdirs + candidate files). Mirrors LuaRocks'
+		-- external_deps_subdirs/external_deps_patterns per platform.
+		---@type { kind: string, subdirs: string[], files: string[] }[]
+		local checks = {}
+		local library = extFiles.library
+		if library then
+			local names = type(library) == "table" and library or { library }
+			local files = {}
+			for _, lib in ipairs(names) do
+				for _, f in ipairs(externalLibFiles(lib)) do files[#files + 1] = f end
+			end
+			checks[#checks + 1] = { kind = "library", subdirs = externalLibSubdirs(prefixes[1]), files = files }
+		end
+		local header = extFiles.header
+		if header then
+			local names = type(header) == "table" and header or { header }
+			checks[#checks + 1] = { kind = "header", subdirs = { "include" }, files = names }
+		end
+		local program = extFiles.program
+		if program then
+			local names = type(program) == "table" and program or { program }
+			local files = {}
+			for _, p in ipairs(names) do
+				files[#files + 1] = jit.os == "Windows" and (p .. ".exe") or p
+			end
+			checks[#checks + 1] = { kind = "program", subdirs = { "bin" }, files = files }
+		end
+
+		-- Every required file must be found under one prefix; the first prefix
+		-- satisfying all checks wins and defines the four variables.
+		if #checks == 0 then
+			-- Nothing to verify (empty entry): still define the four variables
+			-- from the first prefix, like LuaRocks does.
+			local prefix = (prefixes[1]:gsub("/+$", ""))
+			vars[name .. "_DIR"] = prefix
+			vars[name .. "_BINDIR"] = path.join(prefix, "bin")
+			vars[name .. "_INCDIR"] = path.join(prefix, "include")
+			vars[name .. "_LIBDIR"] = path.join(prefix, "lib")
+		else
+			local matched = false
+			for _, rawPrefix in ipairs(prefixes) do
+				-- path.join is a plain concat, so drop the trailing slash from
+				-- root prefixes ("/" -> "") to avoid "//lib64" paths.
+				local prefix = (rawPrefix:gsub("/+$", ""))
+				---@type table<string, string>
+				local dirs = {}
+				local okAll = true
+				for _, check in ipairs(checks) do
+					local foundDir = findExternalDir(prefix, check.subdirs, check.files)
+					if not foundDir then
+						okAll = false
+						break
+					end
+					dirs[check.kind] = foundDir
+				end
+				if okAll then
+					vars[name .. "_DIR"] = prefix
+					vars[name .. "_BINDIR"] = dirs.program or path.join(prefix, "bin")
+					vars[name .. "_INCDIR"] = dirs.header or path.join(prefix, "include")
+					vars[name .. "_LIBDIR"] = dirs.library or path.join(prefix, "lib")
+					matched = true
+					break
+				end
+			end
+
+			if not matched then
+				local missing = checks[1]
+				local tried = {}
+				for _, rawPrefix in ipairs(prefixes) do
+					local prefix = (rawPrefix:gsub("/+$", ""))
+					for _, sub in ipairs(missing.subdirs) do
+						for _, f in ipairs(missing.files) do
+							tried[#tried + 1] = path.join(prefix, sub, f)
+						end
+					end
+				end
+				return "Could not find " .. missing.kind .. " file for " .. name
+					.. " (tried " .. table.concat(tried, ", ") .. "). " .. name
+					.. " is an external dependency of '" .. packageName .. "';"
+					.. " install it on your system or set " .. name .. "_DIR=<prefix>"
+					.. " so lde can find an existing install."
+			end
+		end
+	end
+	return nil
+end
+
 --- LuaRocks' builtin backend autodetects modules when a rockspec (format
 --- 3.0+) declares none: every .lua/.c file under the source root is installed
 --- as a module named by its path, with a leading src/, lua/ or lib/ stripped
@@ -136,6 +305,7 @@ end
 ---@field jitOS string
 ---@field makePath? fun(path: string): string
 ---@field targetFlag? string # clang -target flag, prepended when cross-compiling
+---@field extVars? table<string, string> # resolved rockspec external_dependencies
 
 ---@param src lde.rockspec.NativeModuleSpec | lde.rockspec.NormalizedNativeModule
 ---@param ctx lde.rockspec.NativeGccContext
@@ -182,6 +352,9 @@ local function nativeGccArgs(src, ctx)
 		LUADIR = modulesDir,
 		LIBDIR = modulesDir,
 	}
+	if ctx.extVars then
+		for k, v in pairs(ctx.extVars) do incVars[k] = v end
+	end
 	local incdirs = src.incdirs or {} ---@cast incdirs string[]
 	for _, inc in ipairs(incdirs) do
 		local resolved = (inc:gsub("%$%(([%w_]+)%)", function(k) return incVars[k] or "" end))
@@ -430,6 +603,18 @@ local function openRockspec(dir, rockspecPath)
 			return true
 		end
 
+		-- Rockspec external_dependencies (lyaml's YAML, luasec's OPENSSL, ...)
+		-- resolve to <NAME>_DIR/<NAME>_BINDIR/<NAME>_INCDIR/<NAME>_LIBDIR build
+		-- variables. Checked once so every backend (make, cmake, command,
+		-- builtin) gets the resolved values; a missing dependency fails here
+		-- with a clear message instead of reaching the build tool as an empty
+		-- $(NAME)_DIR substitution.
+		local extVars = {}
+		if spec.external_dependencies then
+			local extErr = resolveExternalDeps(spec.external_dependencies, extVars, spec.package or "?")
+			if extErr then return nil, extErr end
+		end
+
 		local modulesDir = path.dirname(outputDir)
 
 		-- On Windows, pass forward-slash paths to make: sh (busybox) eats
@@ -463,6 +648,7 @@ local function openRockspec(dir, rockspecPath)
 			PREFIX      = makePath(modulesDir),
 			LUA         = makePath(env.execPath() or "")
 		}
+		for k, v in pairs(extVars) do stdVars[k] = v end
 
 		---@param s string
 		---@return string
@@ -634,6 +820,7 @@ local function openRockspec(dir, rockspecPath)
 					jitOS = jit.os,
 					makePath = makePath,
 					targetFlag = lde.global.getTargetFlag(),
+					extVars = extVars,
 				})
 
 				-- Async mode (install build pass): spawn gcc without blocking so
@@ -773,6 +960,7 @@ local function openRockspec(dir, rockspecPath)
 				LIB_EXTENSION = jit.os == "Windows" and "dll" or "so",
 				OBJ_EXTENSION = "o"
 			}
+			for k, v in pairs(extVars) do vars[k] = v end
 
 			---@param cmd string
 			---@return string

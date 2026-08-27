@@ -54,6 +54,7 @@ local rocked = {}
 ---@field dependencies string[]?
 ---@field build_dependencies string[]?
 ---@field test_dependencies string[]?
+---@field external_dependencies table<string, { library?: string|string[], header?: string|string[], program?: string|string[] }>?
 ---@field test { type: string?, flags: string[]?, platforms: table<string, { flags: string[]? }>? }?
 ---@field build rocked.raw.Build
 

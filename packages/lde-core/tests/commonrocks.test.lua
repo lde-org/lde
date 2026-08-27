@@ -106,3 +106,55 @@ test.skipIf(isAndroid or jit.os == "Windows")("luarocks: luaposix gets pid", fun
 	]])
 	test.truthy(ok)
 end)
+
+-- lyaml's rockspec declares external_dependencies = { YAML = { library = "yaml" } }
+-- and passes YAML_DIR/YAML_INCDIR/YAML_LIBDIR into its luke build. Regression:
+-- lde used to leave $(YAML_DIR) unsubstituted, so luke saw a bare "YAML_DIR="
+-- argument, treated it as a build target and died with "no rule to make target
+-- 'YAML_DIR='". Resolving the external dep must either build (system libyaml,
+-- or a YAML_DIR=<prefix> env override) or fail with a clear message.
+local function libyamlIsAvailable()
+	if env.var("YAML_DIR") ~= nil then return true end
+	local prefixes = { "/usr/local", "/usr" }
+	if jit.os == "OSX" then table.insert(prefixes, 1, "/opt/homebrew") end
+	local libFiles = { "libyaml.so", "libyaml.a", "libyaml.dylib" }
+	for _, prefix in ipairs(prefixes) do
+		local dirs = { path.join(prefix, "lib64"), path.join(prefix, "lib") }
+		local iter = fs.readdir(path.join(prefix, "lib"))
+		if iter then
+			for entry in iter do
+				if entry.type == "dir" and entry.name:match("%-linux%-gnu$") then
+					dirs[#dirs + 1] = path.join(prefix, "lib", entry.name)
+				end
+			end
+		end
+		for _, d in ipairs(dirs) do
+			for _, f in ipairs(libFiles) do
+				if fs.isfile(path.join(d, f)) then return true end
+			end
+		end
+	end
+	return false
+end
+
+test.skipIf(not libyamlIsAvailable())("luarocks: lyaml parses YAML with system libyaml", function()
+	local app = makeApp("rocks-lyaml", { yaml = { luarocks = "lyaml" } })
+	app:installDependencies()
+	local ok, err = app:runString([[
+		local yaml = require("lyaml")
+		local t = yaml.load("a: 1\nb: two\n")
+		assert(t.b == "two", "load failed")
+		local out = yaml.dump({ t })
+		assert(type(out) == "string" and #out > 0, "dump failed")
+	]])
+	test.truthy(ok, err or "lyaml roundtrip failed")
+end)
+
+test.skipIf(libyamlIsAvailable())("luarocks: lyaml fails clearly when libyaml is missing", function()
+	local app = makeApp("rocks-lyaml-missing", { yaml = { luarocks = "lyaml" } })
+	local ok, err = pcall(function() app:installDependencies() end)
+	test.falsy(ok, "lyaml install unexpectedly succeeded without libyaml")
+	local msg = type(err) == "table" and (err.message or tostring(err)) or tostring(err)
+	test.includes(msg, "YAML", "error should name the missing external dependency")
+	test.falsy(msg:find("no rule to make target", 1, true), "luke internal error leaked into the message")
+end)
