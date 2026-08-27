@@ -75,14 +75,11 @@ function Package:getLockfilePath() return path.join(self.dir, "lde.lock") end
 ---@param outputDir string
 ---@param captureLog lde.buildLog.Capture? # non-nil in compact mode: guest print + sh/cc output is captured (hidden) instead of streamed
 local function defaultBuildFn(pkg, outputDir, captureLog)
-	-- fs.copy silently fails (and creates nothing) when src/ is missing, which
-	-- would leave build:sh's cwd pointing at a nonexistent output dir. Ensure
-	-- the output dir exists regardless so relative build-script paths always
-	-- resolve against it.
+	-- Need cwd to exist for createprocess to successfully execute
+	fs.mkdirAll(outputDir)
+
 	if fs.isdir(pkg:getSrcDir()) then
 		fs.copy(pkg:getSrcDir(), outputDir)
-	else
-		fs.mkdirAll(outputDir)
 	end
 
 	local buildScriptPath = pkg:getBuildScriptPath()
