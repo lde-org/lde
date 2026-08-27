@@ -113,28 +113,15 @@ end)
 -- argument, treated it as a build target and died with "no rule to make target
 -- 'YAML_DIR='". Resolving the external dep must either build (system libyaml,
 -- or a YAML_DIR=<prefix> env override) or fail with a clear message.
+--
+-- Availability is decided by the same resolver the build uses, so the branch
+-- a test takes always matches what installDependencies will do (and avoids a
+-- hand-rolled directory scan that broke on macOS x86-64, where the fs package
+-- reads dirents with the wrong struct layout).
 local function libyamlIsAvailable()
-	if env.var("YAML_DIR") ~= nil then return true end
-	local prefixes = { "/usr/local", "/usr" }
-	if jit.os == "OSX" then table.insert(prefixes, 1, "/opt/homebrew") end
-	local libFiles = { "libyaml.so", "libyaml.a", "libyaml.dylib" }
-	for _, prefix in ipairs(prefixes) do
-		local dirs = { path.join(prefix, "lib64"), path.join(prefix, "lib") }
-		local iter = fs.readdir(path.join(prefix, "lib"))
-		if iter then
-			for entry in iter do
-				if entry.type == "dir" and entry.name:match("%-linux%-gnu$") then
-					dirs[#dirs + 1] = path.join(prefix, "lib", entry.name)
-				end
-			end
-		end
-		for _, d in ipairs(dirs) do
-			for _, f in ipairs(libFiles) do
-				if fs.isfile(path.join(d, f)) then return true end
-			end
-		end
-	end
-	return false
+	local vars = {}
+	local err = lde.Package.resolveExternalDeps({ YAML = { library = "yaml" } }, vars, "test")
+	return err == nil
 end
 
 test.skipIf(not libyamlIsAvailable())("luarocks: lyaml parses YAML with system libyaml", function()

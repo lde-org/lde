@@ -1097,6 +1097,7 @@ local M = {
 	open = openRockspec,
 	nativeGccArgs = nativeGccArgs,
 	normalizeNativeModule = normalizeNativeModule,
+	resolveExternalDeps = resolveExternalDeps,
 }
 
 return M

@@ -229,6 +229,7 @@ Package.openRockspec = rockspecModule.open
 -- Exposed for unit tests: pure native-module helpers (no toolchain needed).
 Package.nativeGccArgs = rockspecModule.nativeGccArgs
 Package.normalizeNativeModule = rockspecModule.normalizeNativeModule
+Package.resolveExternalDeps = rockspecModule.resolveExternalDeps
 
 ---@param dir string?
 ---@param rockspec string? # Path to rockspec, forwarded to openRockspec if no lde.json
