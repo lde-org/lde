@@ -17,6 +17,19 @@ local tmpBase = path.normalize(path.join(env.tmpdir(), "lde-bloat-tests"))
 fs.rmdir(tmpBase)
 fs.mkdir(tmpBase)
 
+-- macOS getcwd resolves the /var -> /private/var symlink, and the command
+-- renders the default --binary path from env.cwd(), so it prints the real
+-- path while the test's tmpBase keeps the logical /var form. Mirror the
+-- resolution so the expected string matches the output.
+---@param p string
+---@return string
+local function asCommandPath(p)
+	if jit.os == "OSX" and p:sub(1, 5) == "/var/" then
+		return "/private" .. p
+	end
+	return p
+end
+
 ---Strip ANSI escape sequences so output matches work with or without colors.
 ---@param s string
 ---@return string
@@ -130,7 +143,7 @@ test.it("lde bloat --binary reports the LuaJIT runtime share", function()
 	local ok, out = cli({ "bloat", "--binary" }, dir)
 	test.truthy(ok, "lde bloat --binary failed: " .. tostring(out))
 	local text = plain(out or "")
-	test.includes(text, "binary: " .. binPath)
+	test.includes(text, "binary: " .. asCommandPath(binPath))
 	test.includes(text, "9.8 KB") -- the 10000-byte binary
 	test.includes(text, "LuaJIT runtime + C glue")
 	test.includes(text, "of binary")
