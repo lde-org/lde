@@ -199,6 +199,14 @@ local SOURCE = [==[
 						local aok, aerr = pcall(fn)
 						if not aok then ok, err = false, aerr end
 					end
+					-- Report errors as strings: a table error (raised guest-side)
+					-- crosses to the host reporter as an opaque proxy whose
+					-- :match() in errorsnippet would crash with a confusing
+					-- "attempt to call method 'match' (a nil value)" instead of
+					-- the real failure. tostring honors __tostring.
+					if not ok and type(err) ~= "string" then
+						err = tostring(err)
+					end
 					if ok and reporter.onPass then
 						reporter.onPass(callback.name, handle)
 					elseif not ok and reporter.onFail then

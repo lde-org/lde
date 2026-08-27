@@ -116,6 +116,13 @@ end
 ---@return integer? col # compiler-reported column, when available
 ---@return string msg
 local function parseError(err)
+	if type(err) ~= "string" then
+		-- Non-string errors (an lde.Error table raised by lde.error.raise, a
+		-- raw table, ...) would make the :match calls below raise a confusing
+		-- "attempt to call method 'match' (a nil value)" instead of the real
+		-- failure. Render their message; lde.Error.__tostring is the message.
+		err = tostring(err)
+	end
 	-- Compile errors: strip the "Failed to compile <path>:" wrapper and prefer
 	-- the compiler's "path:line:col: msg" position.
 	local compileFile, compileErr = err:match("^Failed to compile (.-):\n(.*)$")
