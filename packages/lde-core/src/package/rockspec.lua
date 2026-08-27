@@ -962,6 +962,13 @@ local function openRockspec(dir, rockspecPath)
 			}
 			for k, v in pairs(extVars) do vars[k] = v end
 
+			local cmdEnv = {}
+			for k, v in pairs(vars) do cmdEnv[k] = v end
+			local tcEnv = toolchainEnv()
+			if tcEnv then
+				for k, v in pairs(tcEnv) do cmdEnv[k] = v end
+			end
+
 			---@param cmd string
 			---@return string
 			local function subst(cmd)
@@ -1007,7 +1014,7 @@ local function openRockspec(dir, rockspecPath)
 				if bin == ldeBin then
 					table.insert(argv, 1, "--lua")
 				end
-				local code, _, stderr = process.exec(bin, argv, { cwd = dir, env = toolchainEnv() })
+				local code, _, stderr = process.exec(bin, argv, { cwd = dir, env = cmdEnv })
 				if code ~= 0 then
 					local msg = (stderr ~= "" and stderr) or ("exited with code " .. code)
 					return nil, msg

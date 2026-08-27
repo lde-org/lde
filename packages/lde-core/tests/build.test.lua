@@ -1944,3 +1944,37 @@ build = {
 	local cfg = pkg:readConfig()
 	test.equal(cfg.bin, "myprog")
 end)
+
+test.it("rockspec: command build exports resolved vars even when the rockspec never references them", function()
+	-- Regression: lyaml's luke build reads CC/CFLAGS/LUA_INCDIR from the
+	-- process environment (LuaRocks' execute() sets the rock variables around
+	-- command builds), but lde's command branch only substituted $(VAR) in the
+	-- command string. A rockspec whose build_command never mentions $(CC) must
+	-- still see the resolved compiler (and the other standard vars) in the
+	-- subprocess environment — otherwise tools like luke fall back to probing
+	-- cc/gcc/clang themselves and fail when the first candidate doesn't
+	-- compile (macOS).
+	local dir = path.join(tmpBase, "command-env-vars-rock")
+	fs.mkdir(dir)
+	-- build_command/install_command reference only $(LUA); every check reads
+	-- the environment. The lde-specific vars (CFLAGS=-fPIC, OBJ_EXTENSION=o,
+	-- a luajit include dir) can't come from the ambient environment, so the
+	-- assertions only pass when lde actually exports them.
+	fs.write(path.join(dir, "cmd-env-vars-1.0-1.rockspec"), [[
+package = "cmd-env-vars"
+version = "1.0-1"
+source = { url = "https://example.com" }
+build = {
+  type = "command",
+  build_command = '$(LUA) -e "assert(os.getenv(\'CC\') ~= nil and os.getenv(\'CC\') ~= \'\', \'CC not exported\'); assert(os.getenv(\'CFLAGS\') == \'-fPIC\', \'CFLAGS not exported\'); assert(os.getenv(\'OBJ_EXTENSION\') == \'o\', \'OBJ_EXTENSION not exported\'); assert(os.getenv(\'LUA_INCDIR\') ~= nil and os.getenv(\'LUA_INCDIR\'):find(\'include$\') ~= nil, \'LUA_INCDIR not exported\')"',
+  install_command = '$(LUA) -e "assert(os.getenv(\'CC\') ~= nil and os.getenv(\'CC\') ~= \'\', \'CC not exported at install\')"',
+}
+]])
+
+	local pkg, err = lde.Package.openRockspec(dir)
+	test.truthy(pkg, err) ---@cast pkg -nil
+
+	local outputDir = path.join(dir, "target", "cmd-env-vars")
+	local ok, berr = pkg:runBuildScript(outputDir)
+	test.truthy(ok, berr)
+end)
