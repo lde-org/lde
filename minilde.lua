@@ -112,9 +112,57 @@ local function pop() return table.remove(args, 1) end
 ---@alias minilde.dep
 --- | { path: string }
 --- | { git: string }
+--- | { version: string, name?: string } # registry: name defaults to the dep key, version resolved via portfile
 
 local tmpBase = os.getenv("TEMP") or os.getenv("TMPDIR") or "/tmp"
 local tmpLDEDir = join(tmpBase, "lde")
+
+local registryUrl = "https://raw.githubusercontent.com/lde-org/registry/master/packages/"
+
+---@type fun(url: string): string?
+local function httpGet(url)
+	local content = readhandle(io.popen('curl -fsSL "' .. url .. '"'))
+	return content == "" and nil or content -- curl failures produce empty stdout
+end
+
+---@param a string
+---@param b string
+---@return boolean
+local function versionGreater(a, b)
+	local pa, pb = {}, {}
+	for part in a:gmatch("%d+") do pa[#pa + 1] = tonumber(part) end
+	for part in b:gmatch("%d+") do pb[#pb + 1] = tonumber(part) end
+	for i = 1, math.max(#pa, #pb) do
+		local x, y = pa[i] or 0, pb[i] or 0
+		if x ~= y then return x > y end
+	end
+	return false
+end
+
+--- Downloads a git repo tarball (branch or commit ref) to tmpLDEDir/git/<name>.
+---@param name string
+---@param url string
+---@param ref string
+---@return string finalDir
+local function fetchGitRepo(name, url, ref)
+	url = url:gsub("%.git$", "")
+
+	local finalDir = join(tmpLDEDir, "git", name)
+	if not exists(finalDir) then
+		local tarballUrl = url .. "/archive/" .. ref .. ".tar.gz"
+		local tarball = join(tmpLDEDir, "tar", name)
+		local curlOk = sh('curl -fsSL "' .. tarballUrl .. '" -o "' .. tarball .. '"')
+		assert(curlOk == 0 or curlOk == true, "failed to download " .. tarballUrl)
+		mkdir(finalDir)
+
+		-- On Windows, bsdtar misparses drive letters (C:) as remote hosts.
+		-- Use pushd to cd into the dest dir so neither -f nor -C see a drive letter path.
+		local tarOk = sh('tar -xzf "' .. tarball .. '" --strip-components=1 -C "' .. finalDir .. '"')
+		assert(tarOk == 0 or tarOk == true, "failed to extract tarball for " .. name .. " — repo may use submodules (not supported in bootstrap mode)")
+	end
+
+	return finalDir
+end
 
 local ffi = require("ffi")
 local setenv ---@type fun(name: string, value: string)
@@ -168,11 +216,7 @@ local function buildPackage(packagePath, targetDir)
 		---@format disable-next
 		do
 			function build:fetch(url)
-				local tmp = join(tmpLDEDir, "fetch-" .. tostring(os.time()))
-				sh('curl -fsSL "' .. url .. '" -o "' .. tmp .. '"')
-				local content = assert(read(tmp), "failed to read fetched file from " .. tmp)
-				sh('rm -f "' .. tmp .. '"')
-				return content
+				return assert(httpGet(url), "failed to fetch " .. url)
 			end
 			function build:write(rel, content) write(join(outputDir, rel), content) end
 			function build:read(rel) return read(join(outputDir, rel)) end
@@ -214,23 +258,30 @@ local function buildPackage(packagePath, targetDir)
 		---@format disable-next
 		if dep.path then
 			buildPackage(join(packagePath, dep.path), targetDir)
-		elseif dep.git then -- downloads to tmpLDEDir/<name> then build to target
-			local finalDir = join(tmpLDEDir, "git", name)
-			if not exists(finalDir) then
-				local tarballUrl = dep.git .. "/archive/master.tar.gz"
-				local tarball = join(tmpLDEDir, "tar", name)
-				local curlOk = sh('curl -fsSL "' .. tarballUrl .. '" -o "' .. tarball .. '"')
-				assert(curlOk == 0 or curlOk == true,
-					"failed to download " .. tarballUrl)
-				mkdir(finalDir)
-				-- On Windows, bsdtar misparses drive letters (C:) as remote hosts.
-				-- Use pushd to cd into the dest dir so neither -f nor -C see a drive letter path.
-				local tarOk = sh('tar -xzf "' .. tarball .. '" --strip-components=1 -C "' .. finalDir .. '"')
-				assert(tarOk == 0 or tarOk == true,
-					"failed to extract tarball for " .. name .. " — repo may use submodules (not supported in bootstrap mode)")
+		elseif dep.git then -- downloads to tmpLDEDir/git/<name> then build to target
+			buildPackage(fetchGitRepo(name, dep.git, "master"), targetDir)
+		elseif dep.version then -- registry: portfile maps the version to a git repo + commit
+			local packageName = dep.name or name
+			local portfileUrl = registryUrl .. packageName .. ".json"
+			local portfile = assert(jsonDecode(assert(httpGet(portfileUrl), "failed to fetch " .. portfileUrl)), "invalid portfile for " .. packageName)
+			local versions = portfile.versions or {}
+
+			---@type string?
+			local commit
+			if dep.version ~= "latest" then
+				commit = versions[dep.version]
+				assert(commit, "version '" .. dep.version .. "' of '" .. packageName .. "' not found in lde registry")
+			else
+				local best
+				for v in pairs(versions) do
+					if not best or versionGreater(v, best) then best = v end
+				end
+				commit = best and versions[best]
+				assert(commit, "no versions available for package '" .. packageName .. "'")
 			end
 
-			buildPackage(finalDir, targetDir)
+			local gitUrl = assert(portfile.git, "portfile for '" .. packageName .. "' has no git URL")
+			buildPackage(fetchGitRepo(name, gitUrl, commit), targetDir)
 		else
 			error("Unknown dependency type: " .. name)
 		end
