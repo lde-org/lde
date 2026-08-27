@@ -653,6 +653,14 @@ local function resolveDependencies(dependencies, ctx)
 	---@type lde.install.Node[]
 	local frontier = addDeps(dependencies, ctx.relativeTo, ctx, graph, order)
 
+	-- destPath -> node for .src.rock downloads backgrounded during the walk.
+	-- Their URLs are known the moment a luarocks node is created (the URL
+	-- cache resolves them without the rockspec), so they start downloading
+	-- while the transitive rockspec fetches are still in flight. Phase 2
+	-- collects them instead of re-prefetching.
+	---@type table<string, lde.install.Node>
+	local backgroundByFile = {}
+
 	while #frontier > 0 do
 		---@type lde.install.Node[]
 		local nextFrontier = {}
@@ -673,6 +681,20 @@ local function resolveDependencies(dependencies, ctx)
 				consume(node)
 				for _, child in ipairs(addDeps(node.deps or {}, node.expandDir or ctx.relativeTo, ctx, graph, order)) do
 					nextFrontier[#nextFrontier + 1] = child
+				end
+			end
+
+			-- Luarocks deps with a known .src.rock: start the content download
+			-- in the background now so it overlaps the rest of the walk. Only
+			-- when the extraction dir isn't cached yet (the walk skips
+			-- re-downloading otherwise). Content-backed git/archive nodes are
+			-- handled by the isExpandAfter branch below.
+			if node.kind == "luarocks" and node.srcUrl and not node.isExpandAfter then
+				local c = content(node)
+				if c and c.kind ~= "clone" and not fs.exists(c.dir --[[@as string]])
+					and not backgroundByFile[c.file --[[@as string]]] then
+					download.background(c.url --[[@as string]], c.file --[[@as string]])
+					backgroundByFile[c.file --[[@as string]]] = node
 				end
 			end
 
@@ -731,7 +753,11 @@ local function resolveDependencies(dependencies, ctx)
 		-- have no cache dir to guard on, so without this they'd clone twice).
 		if not node.isMaterialized and ((c and c.dir and not fs.exists(c.dir)) or (c and c.kind == "clone")) then
 			if c.kind ~= "clone" then
-				download.prefetch(c.url --[[@as string]], c.file --[[@as string]])
+				-- The walk may have already backgrounded this download; never
+				-- enqueue it into the batch twice.
+				if not backgroundByFile[c.file --[[@as string]]] then
+					download.prefetch(c.url --[[@as string]], c.file --[[@as string]])
+				end
 				contentByFile[c.file --[[@as string]]] = node
 			end
 			ctx.downloads += 1
@@ -753,6 +779,13 @@ local function resolveDependencies(dependencies, ctx)
 		ctx.build.addNode(node)
 	end)
 	download.drain()
+
+	-- The walk's background prefetches aren't waited on by drain(); collect
+	-- them (onTransfer materializes each as it lands, so this is a no-op for
+	-- any that finished during the drains above).
+	for file in pairs(backgroundByFile) do
+		download.waitBackground(file)
+	end
 
 	-- Materialize anything the pipeline didn't (git clones have no transfer).
 	for _, node in ipairs(contentNodes) do

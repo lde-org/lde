@@ -4,7 +4,115 @@ local lde = require("lde-core")
 local resolvePackage = require("lde.util.resolve")
 
 local fs = require("fs")
+local path = require("path")
+local json = require("json")
 local rocked = require("rocked")
+
+-- Resolution inputs for `rocks:` lookups. The resolved URL is a pure function
+-- of these two files (the URL cache for unversioned names, the manifest for
+-- versioned ones), so the receipt can vouch for "the resolution is unchanged"
+-- by comparing their mtimes instead of re-resolving.
+local URL_CACHE_PATH = path.join(lde.global.getUserDir(), "luarocks-url-cache-5.1.json")
+local MANIFEST_PATH = path.join(lde.global.getUserDir(), "luarocks-manifest.raw")
+
+-- stat().modifyTime is an int64 cdata; normalize to a Lua number so the
+-- receipt survives json.encode/decode round-trips.
+---@param stat table?
+---@return number
+local function statMtime(stat)
+	return stat and tonumber(stat.modifyTime) or 0
+end
+
+--- Per-tree install receipt for `install rocks:<name>`: a small JSON sidecar
+--- proving that a specific resolved version is already installed and intact.
+--- Written after a successful full install, so later invocations of the same
+--- name/version can skip the open/parse/build/install work entirely. The check
+--- mirrors the install fast path's `.installed` hash plus isInstallIntact's
+--- materialization test, but reads only the receipt + a few stat calls instead
+--- of opening and parsing the package.
+---@param rocksName string
+---@return string
+local function rocksReceiptPath(rocksName)
+	return path.join(lde.global.getDir(), "rocks-installed", rocksName .. ".json")
+end
+
+--- Whether the receipt proves `rocks:<name>` is already installed and intact.
+---@param rocksName string
+---@return boolean
+local function isRocksInstalled(rocksName)
+	local receiptPath = rocksReceiptPath(rocksName)
+	if not fs.exists(receiptPath) then return false end
+
+	-- decodeJson returns (decoded, err) — the value is the first return.
+	local decoded = lde.util.decodeJson(fs.read(receiptPath) or "")
+	if type(decoded) ~= "table" then return false end
+	local receipt = decoded
+	if type(receipt.modulesDir) ~= "string" then return false end
+	if receipt.runtime ~= lde.global.currentVersion then return false end
+	if receipt.targetKey ~= lde.global.getTargetKey() then return false end
+
+	-- Pre-resolution gate: the resolution result is unchanged only while the
+	-- URL cache and manifest files are the ones the install resolved against.
+	-- Both live in the user dir (shared across trees), so this is what makes
+	-- the skip safe without calling resolveLuarocksSource at all.
+	local cacheStat = fs.stat(URL_CACHE_PATH)
+	local manifestStat = fs.stat(MANIFEST_PATH)
+	if not cacheStat or not manifestStat then return false end
+	if receipt.cacheMtime ~= statMtime(cacheStat) then return false end
+	if receipt.manifestMtime ~= statMtime(manifestStat) then return false end
+
+	-- The .installed marker only proves the lockfile/manifest/runtime/target
+	-- didn't change; verify the file still matches what the receipt recorded,
+	-- and that every dependency alias is still materialized (mirrors
+	-- isInstallIntact, which also checks path deps with build.lua — impossible
+	-- for rocks installs, whose deps are rocks/git/archive).
+	if fs.read(path.join(receipt.modulesDir, ".installed")) ~= receipt.installedHash then
+		return false
+	end
+	for _, alias in ipairs(receipt.deps or {}) do
+		if not fs.exists(path.join(receipt.modulesDir, alias)) then return false end
+	end
+	-- The wrapper is the install's user-facing artifact; a deleted wrapper
+	-- must be rewritten, so a receipt without it doesn't count as installed.
+	if not fs.exists(path.join(lde.global.getToolsDir(), receipt.toolName or rocksName)) then
+		return false
+	end
+	return true
+end
+
+--- Writes the install receipt for a successful `install rocks:<name>`.
+---@param pkg lde.Package
+---@param srcUrl string
+---@param rocksName string
+local function writeRocksReceipt(pkg, srcUrl, rocksName)
+	local modulesDir = pkg:getModulesDir()
+	-- commitLockfile writes .installed at the end of installDependencies, so
+	-- it exists here. Missing marker = the install didn't finish; skip.
+	local installedHash = fs.read(path.join(modulesDir, ".installed"))
+	if not installedHash then return end
+
+	local deps = {}
+	for alias in pairs(pkg:readConfig().dependencies or {}) do
+		deps[#deps + 1] = alias
+	end
+
+	local cacheStat = fs.stat(URL_CACHE_PATH)
+	local manifestStat = fs.stat(MANIFEST_PATH)
+
+	local receipt = {
+		srcUrl = srcUrl,
+		runtime = lde.global.currentVersion,
+		targetKey = lde.global.getTargetKey(),
+		cacheMtime = statMtime(cacheStat),
+		manifestMtime = statMtime(manifestStat),
+		modulesDir = modulesDir,
+		installedHash = installedHash,
+		toolName = pkg:getName(),
+		deps = deps,
+	}
+	fs.mkdirAll(path.dirname(rocksReceiptPath(rocksName)))
+	fs.write(rocksReceiptPath(rocksName), json.encode(receipt))
+end
 
 --- Overlapped install for `install rocks:<name>`: the root package's .src.rock
 --- starts downloading in the background while its published rockspec (tiny) is
@@ -15,6 +123,13 @@ local function installRocks(name)
 	local download = require("lde-core.util.download")
 	local rocksName, versionStr = name:match("^rocks:([^@]+)@?(.*)$")
 	versionStr = versionStr ~= "" and versionStr or nil
+
+	-- Fast path: the receipt proves this exact resolution is already
+	-- installed and intact (its URL-cache/manifest mtimes guarantee the
+	-- resolution is unchanged), so skip everything — including the resolve.
+	if isRocksInstalled(rocksName) then
+		return
+	end
 
 	-- Metadata-only resolution (URL cache / cached manifest — no network).
 	local srcUrl, arch, uerr = lde.util.resolveLuarocksSource(rocksName, versionStr)
@@ -42,6 +157,7 @@ local function installRocks(name)
 		if not pkg then lde.error.raise(perr or "Failed to open package") end ---@cast pkg -nil
 		pkg:build()
 		pkg:installDependencies()
+		writeRocksReceipt(pkg, srcUrl, rocksName)
 		lde.global.writeWrapper(pkg:getName(), nil, name)
 		return
 	end
@@ -84,6 +200,7 @@ local function installRocks(name)
 
 	pkg:installDependencies()
 	pkg:build()
+	writeRocksReceipt(pkg, srcUrl, rocksName)
 	lde.global.writeWrapper(pkg:getName(), nil, name)
 
 	download.finish()

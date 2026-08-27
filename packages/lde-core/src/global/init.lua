@@ -775,16 +775,26 @@ function global.writeWrapper(toolName, packageDir, packageName)
 		local winInvocation = packageDir
 			and ('"' .. ldeBin .. '" x --path "' .. packageDir .. '" ' .. packageName .. winTreeFlag .. " --")
 			or ('"' .. ldeBin .. '" x' .. winTreeFlag .. " " .. packageName .. " --offline --")
+		local content = "@echo off\n" .. winInvocation .. " %*\n"
 
-		if not fs.write(wrapperPath, "@echo off\n" .. winInvocation .. " %*\n") then
+		-- Skip the write + chmod when the wrapper is already current: repeated
+		-- `install rocks:` invocations (and the benchmark's warm runs) would
+		-- otherwise pay a subprocess spawn to rewrite an identical file.
+		if fs.exists(wrapperPath) and fs.read(wrapperPath) == content then return end
+
+		if not fs.write(wrapperPath, content) then
 			lde.error.raise("Failed to write wrapper script: " .. wrapperPath)
 		end
 
 		ansi.printf("{green}Installed tool '%s' -> %s", toolName, wrapperPath)
 	else
 		local wrapperPath = path.join(toolsDir, toolName)
+		local content = "#!/bin/sh\nexec " .. invocation .. ' "$@"\n'
 
-		if not fs.write(wrapperPath, "#!/bin/sh\nexec " .. invocation .. ' "$@"\n') then
+		-- Skip the write + chmod when the wrapper is already current (see above).
+		if fs.exists(wrapperPath) and fs.read(wrapperPath) == content then return end
+
+		if not fs.write(wrapperPath, content) then
 			lde.error.raise("Failed to write wrapper script: " .. wrapperPath)
 		end
 
