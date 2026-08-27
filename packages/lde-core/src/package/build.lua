@@ -22,7 +22,7 @@ local alreadyBuilt = {}
 -- the inputs changed. The compile target is part of the stamp: switching
 -- --target must rebuild native dependencies for the new target.
 local STAMP_FILE = ".lde-build-stamp"
-local STAMP_VERSION = 2
+local STAMP_VERSION = 1
 
 ---Build inputs for a package: everything under src/, plus the config and build.lua.
 ---@param package lde.Package

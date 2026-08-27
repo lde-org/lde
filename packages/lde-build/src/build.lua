@@ -84,10 +84,21 @@ end
 ---@param dest string # Relative path at output dir
 function Instance:copy(rel, dest)
 	local full = path.join(self.outDir, rel)
+	local destAbs = path.join(self.outDir, dest)
 
-	local ok, err = fs.copy(full, path.join(self.outDir, dest))
+	-- Build outputs (native .so/.dll files) can be dlopen'd by the running
+	-- process while a rebuild replaces them; copy atomically (temp + rename)
+	-- so a live mapping is never truncated underneath it. Directories keep the
+	-- plain recursive copy.
+	local ok, err
+	if fs.isfile(full) then
+		ok = fs.copyAtomic(full, destAbs)
+	else
+		ok, err = fs.copy(full, destAbs)
+	end
+
 	if not ok then
-		error("failed to copy " .. full .. ": " .. err)
+		error("failed to copy " .. full .. ": " .. (err or "copy failed"))
 	end
 end
 
