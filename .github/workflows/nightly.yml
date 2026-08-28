@@ -226,6 +226,8 @@ jobs:
     needs: build
     runs-on: ubuntu-22.04
     steps:
+      - uses: actions/checkout@v6
+
       - name: Dispatch docker image build
         run: gh workflow run docker.yml -f version=nightly
         env:

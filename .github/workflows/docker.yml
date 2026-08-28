@@ -50,8 +50,10 @@ jobs:
             echo "TAGS=ghcr.io/lde-org/lde:nightly-${{ matrix.flavor }}" >> "$GITHUB_OUTPUT"
           else
             {
-              echo "TAGS=ghcr.io/lde-org/lde:${{ matrix.flavor }}"
+              echo "TAGS<<EOF"
+              echo "ghcr.io/lde-org/lde:${{ matrix.flavor }}"
               echo "ghcr.io/lde-org/lde:${{ inputs.version }}-${{ matrix.flavor }}"
+              echo "EOF"
             } >> "$GITHUB_OUTPUT"
           fi
 
