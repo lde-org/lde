@@ -53,17 +53,27 @@ end
 ---@param pkg lde.Package
 ---@param stack table<string, { pkg: lde.Package, lock: lde.Lockfile.Dependency }>
 ---@param modulesDir string
-local function commitLockfile(pkg, stack, modulesDir)
+---@param isStale boolean? # true when lde.json changed since the old lockfile was written
+local function commitLockfile(pkg, stack, modulesDir, isStale)
 	-- Merge with any existing lockfile: runtime and dev installs each commit
 	-- their own slice of the graph, and neither should drop the other's pins.
 	-- Copy into a fresh table: the json package iterates a decoded table's
 	-- internal key order (maintained via json.addField), so mutating the
 	-- decoded table directly would silently drop added entries on encode.
-	local existing = pkg:readLockfile()
+	--
+	-- A stale lockfile's pins were resolved from different declarations and
+	-- must not survive, or a pin for a dep in the *other* slice (e.g. a dev
+	-- dep during the runtime install) leaks back in once the rewritten
+	-- lockfile carries the new manifest hash — the next slice trusts it and
+	-- keeps the stale version instead of re-resolving. Commit only the fresh
+	-- stack; the other slice re-resolves on its own install.
 	local lockEntries = {}
-	if existing then
-		for alias, entry in pairs(existing:getDependencies()) do
-			lockEntries[alias] = entry
+	if not isStale then
+		local existing = pkg:readLockfile()
+		if existing then
+			for alias, entry in pairs(existing:getDependencies()) do
+				lockEntries[alias] = entry
+			end
 		end
 	end
 	for alias, entry in pairs(stack) do
@@ -571,7 +581,7 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 		end
 	end
 
-	commitLockfile(package, ctx.stack, modulesDir)
+	commitLockfile(package, ctx.stack, modulesDir, isLockfileStale)
 
 	return {
 		checked = checked,

@@ -368,6 +368,93 @@ test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde sync pins the resolved git repo
 	test.truthy(fs.exists(path.join(dir, "target", "sync-reg-pkg", "init.lua")))
 end)
 
+test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde sync re-resolves a dev registry dep whose version is bumped in lde.json", function()
+	-- Regression: `lde sync` runs the runtime install first, which rewrites a
+	-- stale lockfile with the new manifest hash. The old lockfile's pins must
+	-- not survive that rewrite, or the dev install (which runs next) trusts
+	-- the now-"fresh" lockfile and keeps the stale version instead of
+	-- re-resolving the bumped one.
+	local pkgName = "sync-reg-bump"
+	local repoDir = path.join(tmpBase, "sync-reg-bump-src-repo")
+	fs.rmdir(repoDir)
+	fs.mkdir(repoDir)
+	fs.mkdir(path.join(repoDir, "src"))
+
+	---@param version string
+	---@return string commit
+	local function commit(version)
+		fs.write(path.join(repoDir, "src", "init.lua"), 'return "' .. pkgName .. " v" .. version .. '"')
+		fs.write(path.join(repoDir, "lde.json"), json.encode({
+			name = pkgName,
+			version = version,
+			dependencies = {}
+		}))
+		assert(process.exec("git", { "add", "-A" }, { cwd = repoDir }), "git add failed")
+		local code = process.exec(
+			"git", { "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", version },
+			{ cwd = repoDir })
+		assert(code == 0, "git commit failed: " .. tostring(code))
+		return headCommit(repoDir)
+	end
+
+	---@param treeDir string
+	---@param commitV1 string
+	---@param commitV2 string?
+	local function writeRegistry(treeDir, commitV1, commitV2)
+		local registryDir = path.join(treeDir, "registry")
+		local pkgPath = path.join(registryDir, "packages", pkgName .. ".json")
+		fs.mkdirAll(path.dirname(pkgPath))
+		local versions = { ["0.3.1"] = commitV1 }
+		if commitV2 then versions["0.3.2"] = commitV2 end
+		fs.write(pkgPath, json.encode({
+			name = pkgName,
+			description = "offline test package",
+			git = repoDir,
+			branch = "master",
+			versions = versions
+		}))
+	end
+
+	-- The pinned commit is always the repo's HEAD, so the installed content is
+	-- observable through target/ regardless of how the dep is fetched.
+	assert(process.exec("git", { "init", "-q" }, { cwd = repoDir }), "git init failed")
+	local commitV1 = commit("0.3.1")
+
+	local treeDir = path.join(tmpBase, "sync-reg-bump-tree")
+	fs.rmdir(treeDir)
+	fs.mkdir(treeDir)
+	writeRegistry(treeDir, commitV1, nil)
+
+	local dir = makeProject("sync-reg-bump-app", {}, {
+		devDependencies = { [pkgName] = { version = "0.3.1" } }
+	})
+
+	local ok, out = cli({ "--tree", treeDir, "sync" }, dir)
+	test.truthy(ok, "initial sync failed: " .. tostring(out))
+	local lock1Raw = fs.read(path.join(dir, "lde.lock")) ---@cast lock1Raw -nil
+	local lock1 = json.decode(lock1Raw) ---@cast lock1 table<string, any>
+	test.equal(lock1.dependencies[pkgName].commit, commitV1)
+	test.equal(fs.read(path.join(dir, "target", pkgName, "init.lua")), 'return "' .. pkgName .. ' v0.3.1"')
+
+	-- Publish 0.3.2, then bump the dev dep's version in lde.json.
+	local commitV2 = commit("0.3.2")
+	writeRegistry(treeDir, commitV1, commitV2)
+	fs.write(path.join(dir, "lde.json"), json.encode({
+		name = "sync-reg-bump-app",
+		version = "0.1.0",
+		devDependencies = { [pkgName] = { version = "0.3.2" } }
+	}))
+
+	local ok2, out2 = cli({ "--tree", treeDir, "sync" }, dir)
+	test.truthy(ok2, "sync after version bump failed: " .. tostring(out2))
+
+	local lock2Raw = fs.read(path.join(dir, "lde.lock")) ---@cast lock2Raw -nil
+	local lock2 = json.decode(lock2Raw) ---@cast lock2 table<string, any>
+	test.equal(lock2.dependencies[pkgName].commit, commitV2,
+		"lockfile must re-pin the bumped version instead of keeping the stale 0.3.1 pin")
+	test.equal(fs.read(path.join(dir, "target", pkgName, "init.lua")), 'return "' .. pkgName .. ' v0.3.2"')
+end)
+
 test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde sync heals a stale commit-only lock entry for a registry dep", function()
 	local repoDir = makeLocalGitRepo("sync-reg-heal-src", "sync-reg-pkg")
 	local commit = headCommit(repoDir)
