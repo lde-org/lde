@@ -15,7 +15,7 @@
 		"@iconify-json/lucide": "^1.2.122",
 		"@iconify-json/simple-icons": "^1.2.93",
 		"@tailwindcss/vite": "^4.2.1",
-		"@vercel/og": "^1.0.1",
+		"@vercel/og": "1.0.1",
 		"astro": "^7.2.0",
 		"astro-icon": "^1.1.5",
 		"dompurify": "^3.4.13",
