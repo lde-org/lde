@@ -66,6 +66,18 @@ test.it("unknown command suggests a close command", function()
 	test.falsy(plain(out):find("Did you mean", 1, true), "garbage input must not get a suggestion")
 end)
 
+test.it("path-like unknown command reports the missing file", function()
+	-- `lde ./x.lua` on a missing file must say the file is missing, not
+	-- "Unknown command" (which reads like a command typo).
+	expectCleanError({ "./nope.lua" }, "No file at path './nope.lua'", tmpBase)
+	expectCleanError({ "../nope.lua" }, "No file at path '../nope.lua'", tmpBase)
+	expectCleanError({ "/abs/nope.lua" }, "No file at path '/abs/nope.lua'", tmpBase)
+	expectCleanError({ "~/nope.lua" }, "No file at path '~/nope.lua'", tmpBase)
+
+	-- Non-path garbage still reads as a command typo.
+	expectCleanError({ "frobnicate" }, "Unknown command", tmpBase)
+end)
+
 test.it("unknown help target suggests a close command", function()
 	local code, out = run({ "help", "hlep" })
 	test.truthy(code ~= 0, "typo'd help target must exit non-zero")

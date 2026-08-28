@@ -279,6 +279,21 @@ end
 		repl      = "lde.commands.repl"
 	}
 
+	-- `lde ./file.lua` / `lde /abs/path.lua` on a file that doesn't exist must
+	-- report the missing path, not fall through to "Unknown command" (which
+	-- reads like a command typo).
+	---@param name string
+	---@return boolean
+	local function looksLikePath(name)
+		if name:sub(1, 2) == "./" or name:sub(1, 3) == "../" then return true end
+		if name:sub(1, 1) == "/" or name:sub(1, 2) == "~/" then return true end
+		if jit.os == "Windows" then
+			if name:sub(1, 2) == ".\\" or name:sub(1, 3) == "..\\" then return true end
+			if name:sub(1, 1) == "\\" or name:match("^%a:[/\\]") then return true end
+		end
+		return false
+	end
+
 	-- Commands that don't need the global cache dirs initialized
 	local noInitCommands = { help = true, completion = true }
 
@@ -315,6 +330,10 @@ end
 				lde.error.raise("Script '" .. commandName .. "' failed: " .. (serr or "exited with a non-zero exit code"))
 			end
 		else
+			if looksLikePath(commandName) then
+				lde.error.raise("No file at path '" .. commandName .. "'")
+			end
+
 			local hint = suggest.command(commandName, usage.names)
 			lde.error.raise("Unknown command " .. ansi.colorize("yellow", '"' .. tostring(commandName) .. '"'), { hint = hint })
 		end
