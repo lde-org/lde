@@ -152,7 +152,7 @@ jobs:
             -v "${{ github.workspace }}":/workspace \
             alpine:3.20 \
             sh -c '
-              apk add --no-cache gcc musl-dev make cmake ninja curl tar git openssl-dev linux-headers &&
+              apk add --no-cache gcc clang musl-dev make cmake ninja curl tar git openssl-dev linux-headers &&
               case "$(uname -m)" in x86_64) A=x86-64;; aarch64) A=aarch64;; esac &&
               curl -fsSLo /tmp/lj.tar.gz https://github.com/lde-org/luajit/releases/download/latest/luajit-linux-$A-musl.tar.gz &&
               mkdir -p /tmp/lj && tar -xzf /tmp/lj.tar.gz -C /tmp/lj --strip-components=1 &&
