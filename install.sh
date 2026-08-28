@@ -17,6 +17,11 @@ done
 ARCH="$(uname -m)"
 [ "$(uname -o)" = "Android" ] && OS="Android" || OS="$(uname -s)"
 
+MUSL=0
+if [ "$OS" = "Linux" ] && ls /lib/ld-musl-* >/dev/null 2>&1; then
+    MUSL=1
+fi
+
 TRIPLE="$OS-$ARCH"
 
 case "$TRIPLE" in
@@ -27,6 +32,10 @@ case "$TRIPLE" in
     Darwin-arm64)                BIN="lde-macos-aarch64" ;;
     *) echo "Unsupported platform: $TRIPLE"; exit 1 ;;
 esac
+
+if [ "$MUSL" = "1" ]; then
+    BIN="${BIN}-musl"
+fi
 
 if [ "$NIGHTLY" = "1" ]; then
     TAG="nightly"

@@ -4,6 +4,7 @@ local ansi = require("ansi")
 local path = require("path")
 local fs = require("fs")
 local env = require("env")
+local process = require("process")
 local curl = require("curl-sys")
 local Archive = require("archive")
 
@@ -14,16 +15,25 @@ local releasesUrl = "https://api.github.com/repos/lde-org/lde/releases"
 local arch = jit.arch == "arm64" and "aarch64" or "x86-64"
 local isAndroid = env.var("ANDROID_ROOT") ~= nil
 
+-- musl systems (Alpine and other musl distros) ship the musl build under a
+-- -musl artifact name. Detect musl by its dynamic loader rather than ldd:
+-- musl's ldd has no --version, so a ldd-based probe can't tell it from glibc.
+local libc = ""
+if jit.os == "Linux" and not isAndroid then
+	local code = process.exec("sh", { "-c", "ls /lib/ld-musl-* >/dev/null 2>&1" })
+	if code == 0 then libc = "-musl" end
+end
+
 local artifactNames = {
 	Windows = "lde-windows-" .. arch .. ".zip",
-	Linux = isAndroid and "lde-android-" .. arch .. ".zip" or "lde-linux-" .. arch .. ".zip",
+	Linux = isAndroid and "lde-android-" .. arch .. ".zip" or "lde-linux-" .. arch .. libc .. ".zip",
 	OSX = "lde-macos-" .. arch .. ".zip"
 }
 
 -- Name of the binary inside the release archive.
 local innerNames = {
 	Windows = "lde-windows-" .. arch .. ".exe",
-	Linux = isAndroid and "lde-android-" .. arch or "lde-linux-" .. arch,
+	Linux = isAndroid and "lde-android-" .. arch or "lde-linux-" .. arch .. libc,
 	OSX = "lde-macos-" .. arch
 }
 
