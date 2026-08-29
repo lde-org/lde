@@ -205,6 +205,7 @@ end
 ---@field profile      boolean?
 ---@field flamegraph   string?
 ---@field profileJson  string? # path: also write the sampled data as JSON
+---@field jit          boolean? # JIT diagnostics: report trace aborts with reasons and locations
 
 --- Create a fresh isolated guest state with the standard lde runtime setup:
 --- cwd/env handling, package.path/cpath, preloads, injected globals, and arg[].
@@ -306,6 +307,18 @@ local function executeSource(source, chunkName, opts)
 		globals = opts.globals,
 	})
 
+	-- Optional JIT diagnostics (jit.attach hook): live trace-abort warnings
+	-- during the run, plus a summary on exit. Installed after the state exists
+	-- so its bootstrap chunk can load into it.
+	local jitDiagSession, jitdiagReport
+	if opts.jit then
+		local jitdiag = require("lde-core.jitdiag")
+		jitDiagSession = jitdiag.install(state, { cwd = opts.cwd or env.cwd() })
+		if jitDiagSession then
+			jitdiagReport = function(session, cwd) jitdiag.report(session, cwd) end
+		end
+	end
+
 	-- Start profiler if requested
 	local stopProfiler
 	if opts.profile or opts.flamegraph or opts.profileJson then
@@ -349,6 +362,10 @@ local function executeSource(source, chunkName, opts)
 				end
 			end
 		end
+	end
+
+	if jitDiagSession and not lde.isQuiet then
+		jitdiagReport(jitDiagSession, opts.cwd or env.cwd())
 	end
 
 	state:close()

@@ -30,7 +30,8 @@ end
 ---@param name string?
 ---@param scriptArgs string[]
 ---@param mode "hot"|"watch"
-local function runWithWatcher(pkg, pkgErr, name, scriptArgs, mode)
+---@param jitDiag boolean? # install JIT diagnostics (live trace-abort warnings)
+local function runWithWatcher(pkg, pkgErr, name, scriptArgs, mode, jitDiag)
 	if not pkg then
 		if not name or not fs.exists(name) then
 			lde.error.raise(pkgErr or "No script file given")
@@ -53,7 +54,11 @@ local function runWithWatcher(pkg, pkgErr, name, scriptArgs, mode)
 				return errorsnippet.printRunError(env.cwd(), err, entry)
 			end,
 			createState = function()
-				return runtime.createState({ args = args, cwd = env.cwd() })
+				local st, g, cleanup = runtime.createState({ args = args, cwd = env.cwd() })
+				if jitDiag then
+					require("lde-core.jitdiag").install(st, { cwd = env.cwd() })
+				end
+				return st, g, cleanup
 			end,
 		})
 		return
@@ -138,7 +143,11 @@ local function runWithWatcher(pkg, pkgErr, name, scriptArgs, mode)
 			return ok
 		end or nil,
 		createState = function()
-			return pkg:createState({ args = args, cwd = pkg:getDir() })
+			local st, g, cleanup = pkg:createState({ args = args, cwd = pkg:getDir() })
+			if jitDiag then
+				require("lde-core.jitdiag").install(st, { cwd = pkg:getDir() })
+			end
+			return st, g, cleanup
 		end,
 	})
 end
@@ -156,6 +165,9 @@ local function run(args)
 	if not flamegraph and args:flag("flamegraph") then flamegraph = "profile.html" end
 	local profileJson = args:option("json")
 	if not profileJson and args:flag("json") then profileJson = "profile.json" end
+	-- JIT diagnostics (LuaJIT -jv style): report trace aborts — code that
+	-- could not be JIT-compiled — with source locations and reasons.
+	local jitDiag = args:flag("jit")
 
 	if (hot or watch) and (profile or flamegraph or profileJson) then
 		ansi.printf("{red}--profile/--flamegraph/--json cannot be combined with --hot or --watch")
@@ -178,7 +190,7 @@ local function run(args)
 	end
 
 	if hot or watch then
-		runWithWatcher(pkg, pkgErr, name, scriptArgs, hot and "hot" or "watch")
+		runWithWatcher(pkg, pkgErr, name, scriptArgs, hot and "hot" or "watch", jitDiag)
 		return
 	end
 
@@ -188,7 +200,8 @@ local function run(args)
 				args = scriptArgs,
 				cwd = env.cwd(),
 				profile = profile,
-				flamegraph = flamegraph
+				flamegraph = flamegraph,
+				jit = jitDiag,
 			})
 
 			if not ok then
@@ -223,7 +236,7 @@ local function run(args)
 			end
 			return nil
 		end
-		ok, err = pkg:runFile(name, scriptArgs, nil, nil, profile, flamegraph, profileJson)
+		ok, err = pkg:runFile(name, scriptArgs, nil, nil, profile, flamegraph, profileJson, nil, jitDiag)
 		if not ok then
 			raiseRunError(err or "Script exited with a non-zero exit code", pkg:getDir(), nil, remap)
 		end

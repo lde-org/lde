@@ -34,6 +34,7 @@ local commands = {
 			["--profile"] = { desc = "Print a flat call profile on exit" },
 			["--flamegraph"] = { arg = "file", desc = "Also write a flamegraph HTML file (default: profile.html)" },
 			["--json"] = { arg = "file", desc = "Also write the profile data as JSON (default: profile.json)" },
+			["--jit"] = { desc = "JIT diagnostics: report trace aborts (code that could not be JIT-compiled) with source locations and reasons, plus a summary on exit" },
 		},
 	},
 	x = {

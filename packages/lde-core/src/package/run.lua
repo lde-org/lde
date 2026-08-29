@@ -32,7 +32,8 @@ end
 ---@param flamegraph string?
 ---@param preload table<string, function>?
 ---@param profileJson string?
-local function runFileWithLDE(package, scriptPath, args, vars, cwd, profile, flamegraph, preload, profileJson)
+---@param jit boolean? # JIT diagnostics (trace-abort report)
+local function runFileWithLDE(package, scriptPath, args, vars, cwd, profile, flamegraph, preload, profileJson, jit)
 	local luaPath, luaCPath = getLuaPathsForPackage(package)
 
 	return runtime.executeFile(scriptPath, {
@@ -45,6 +46,7 @@ local function runFileWithLDE(package, scriptPath, args, vars, cwd, profile, fla
 		flamegraph = flamegraph,
 		preload = preload,
 		profileJson = profileJson,
+		jit = jit,
 	})
 end
 
@@ -103,9 +105,10 @@ end
 ---@param flamegraph string?
 ---@param profileJson string?
 ---@param preload table<string, function>?
+---@param jit boolean?
 ---@return boolean?
 ---@return string
-local function runFile(package, scriptPath, args, vars, cwd, profile, flamegraph, profileJson, preload)
+local function runFile(package, scriptPath, args, vars, cwd, profile, flamegraph, profileJson, preload, jit)
 	package:build()
 	local config = package:readConfig()
 
@@ -125,7 +128,7 @@ local function runFile(package, scriptPath, args, vars, cwd, profile, flamegraph
 
 	local engine = config.engine or "lde"
 	if engine == "lde" or engine == "lpm" --[[ compat ]] then
-		return runFileWithLDE(package, scriptPath, args, vars, cwd, profile, flamegraph, preload, profileJson)
+		return runFileWithLDE(package, scriptPath, args, vars, cwd, profile, flamegraph, preload, profileJson, jit)
 	end
 	if profile or flamegraph or profileJson then
 		return nil, "Profiling is only supported when engine is 'lde'"
