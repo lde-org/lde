@@ -319,27 +319,34 @@ local function executeSource(source, chunkName, opts)
 	-- Collect profiling results
 	if stopProfiler then
 		local counts, vmstates, stacks, total = stopProfiler()
-		-- Profiling is explicitly requested via --profile/--flamegraph/--json,
-		-- so its report is always printed (independent of --verbose).
-		if opts.profile then
+		-- Artifacts (flamegraph HTML, profile JSON) are always written — the
+		-- caller requested them — but the report and status lines are
+		-- suppressed while quiet (the test runner sets lde.isQuiet so library
+		-- calls under `lde test` don't spam the suite's output).
+		local isQuiet = lde.isQuiet
+		if not isQuiet and opts.profile then
 			printProfileReport(counts, vmstates, total, opts.cwd or env.cwd())
 		end
 		if opts.flamegraph then
 			local title = chunkName and chunkName:match("[^/\\\\]+$")
 			local fgOk, fgErr = lde.flamegraph.write(
 				stacks, total, PROFILER_MS_PER_SAMPLE, opts.flamegraph, title)
-			if fgOk then
-				ansi.printf("{cyan}Flamegraph written to %s", opts.flamegraph)
-			else
-				ansi.printf("{red}Flamegraph error: %s", fgErr or "unknown error")
+			if not isQuiet then
+				if fgOk then
+					ansi.printf("{cyan}Flamegraph written to %s", opts.flamegraph)
+				else
+					ansi.printf("{red}Flamegraph error: %s", fgErr or "unknown error")
+				end
 			end
 		end
 		if opts.profileJson then
 			local jOk, jErr = writeProfileJson(opts.profileJson, counts, vmstates, stacks, total)
-			if jOk then
-				ansi.printf("{cyan}Profile JSON written to %s", opts.profileJson)
-			else
-				ansi.printf("{red}Profile JSON error: %s", jErr or "unknown error")
+			if not isQuiet then
+				if jOk then
+					ansi.printf("{cyan}Profile JSON written to %s", opts.profileJson)
+				else
+					ansi.printf("{red}Profile JSON error: %s", jErr or "unknown error")
+				end
 			end
 		end
 	end

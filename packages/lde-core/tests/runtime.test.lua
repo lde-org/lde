@@ -94,16 +94,18 @@ test.it("profile report prints VM state and hotspot sections", function()
 		for i = 1, 20 do work(1000000) end
 	]])
 
-	local oldIsVerbose, oldWrite = lde.isVerbose, io.write
+	local oldIsVerbose, oldIsQuiet, oldWrite = lde.isVerbose, lde.isQuiet, io.write
 	local buf = {}
 	io.write = function(...)
 		local parts = { ... }
 		for i, p in ipairs(parts) do buf[#buf + 1] = tostring(p) end
 	end
-	lde.isVerbose = true
+	-- The report is suppressed while quiet (the suite runs quiet); flip quiet
+	-- off so the report content can be captured and asserted.
+	lde.isVerbose, lde.isQuiet = true, false
 	local ok = lde.runtime.executeFile(script, { profile = true })
 	io.write = oldWrite
-	lde.isVerbose = oldIsVerbose
+	lde.isVerbose, lde.isQuiet = oldIsVerbose, oldIsQuiet
 
 	test.truthy(ok)
 	local out = table.concat(buf)

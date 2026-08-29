@@ -237,3 +237,55 @@ test.it("executeFile with flamegraph: no crash when script errors", function()
 	test.truthy(err)    -- error message is propagated
 	-- profiler must have been stopped cleanly (no crash, no hang)
 end)
+
+test.it("profiling stays silent while quiet, but still writes artifacts", function()
+	-- The test runner sets lde.isQuiet, so executeFile's profile report and
+	-- status lines must not leak into the suite's output ("Profile: no
+	-- samples collected", "Flamegraph error: ...", ...). The requested
+	-- artifacts must still be written.
+	test.truthy(lde.isQuiet, "this suite must run with lde.isQuiet set")
+
+	local scriptPath = path.join(tmpBase, "silent.lua")
+	local htmlPath   = path.join(tmpBase, "silent_out.html")
+	local jsonPath   = path.join(tmpBase, "silent_out.json")
+	fs.write(scriptPath, [[
+		local function work(n)
+			local s = 0
+			for i = 1, n do s = s + i end
+			return s
+		end
+		for i = 1, 20 do work(1000000) end
+	]])
+
+	-- Capture everything the profiling paths print (printProfileReport uses
+	-- io.write, ansi.printf uses print) while the call runs.
+	local captured = {}
+	local origPrint, origWrite = print, io.write
+	print = function(...)
+		captured[#captured + 1] = table.concat({ ... }, "\t")
+	end
+	io.write = function(...)
+		captured[#captured + 1] = table.concat({ ... }, "")
+	end
+
+	local ok = lde.runtime.executeFile(scriptPath, {
+		profile     = true,
+		flamegraph  = htmlPath,
+		profileJson = jsonPath,
+	})
+	test.truthy(ok, "executeFile with profiling must succeed")
+
+	print, io.write = origPrint, origWrite
+
+	local text = table.concat(captured, "\n")
+	test.falsy(text:find("Profile", 1, true), "profile report must not print while quiet")
+	test.falsy(text:find("Flamegraph", 1, true), "flamegraph status must not print while quiet")
+	test.falsy(text:find("Profile JSON", 1, true), "profile JSON status must not print while quiet")
+	-- Artifacts still written (may be absent on a machine too fast to sample,
+	-- same tolerance as the dedicated flamegraph test).
+	test.truthy(fs.exists(jsonPath), "profile JSON must still be written")
+	if fs.exists(htmlPath) then
+		local html = fs.read(htmlPath) ---@cast html -nil
+		test.truthy(html:find("<!DOCTYPE html>", 1, true))
+	end
+end)
