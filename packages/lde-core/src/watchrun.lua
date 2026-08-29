@@ -49,6 +49,18 @@ local M = {
 	lastReloaded = {},
 }
 
+-- A Teal/Moonscript source compiles to a .lua module under target/, so a
+-- change to src/foo.tl must invalidate the loaded src/foo.lua: key both by
+-- the compiled name.
+---@param key string
+---@return string
+local function canonicalKey(key)
+	if key:sub(1, 4) == "src:" then
+		return (key:gsub("%.tl$", ".lua"):gsub("%.moon$", ".lua"))
+	end
+	return key
+end
+
 -- Map a module's file path to a reload key. A package's own modules live
 -- under target/<name>/ (a copy of src/, or a symlink to it), so they are
 -- keyed by their src/ identity: "src:foo.lua". Everything else (deps,
@@ -58,11 +70,11 @@ local M = {
 local function normKey(p)
 	local t = hot.targetPrefix
 	if t and p:sub(1, #t) == t then
-		return "src:" .. p:sub(#t + 1)
+		return canonicalKey("src:" .. p:sub(#t + 1))
 	end
 	local s = hot.srcPrefix
 	if s and p:sub(1, #s) == s then
-		return "src:" .. p:sub(#s + 1)
+		return canonicalKey("src:" .. p:sub(#s + 1))
 	end
 	return p
 end
@@ -185,6 +197,18 @@ end
 return M
 ]==]
 
+-- Teal/Moonscript sources compile to .lua under target/, so a src/foo.tl
+-- change must match the "src:foo.lua" key the guest recorded. Mirrors the
+-- guest bootstrap's canonicalKey.
+---@param key string
+---@return string
+local function canonicalKey(key)
+	if key:sub(1, 4) == "src:" then
+		return (key:gsub("%.tl$", ".lua"):gsub("%.moon$", ".lua"))
+	end
+	return key
+end
+
 --- Map an absolute file path to a reload key. Mirrors the guest's normKey.
 ---@param p string
 ---@param srcPrefix string?
@@ -192,10 +216,10 @@ return M
 ---@return string
 local function normalizeKey(p, srcPrefix, targetPrefix)
 	if targetPrefix and p:sub(1, #targetPrefix) == targetPrefix then
-		return "src:" .. p:sub(#targetPrefix + 1)
+		return canonicalKey("src:" .. p:sub(#targetPrefix + 1))
 	end
 	if srcPrefix and p:sub(1, #srcPrefix) == srcPrefix then
-		return "src:" .. p:sub(#srcPrefix + 1)
+		return canonicalKey("src:" .. p:sub(#srcPrefix + 1))
 	end
 	return p
 end

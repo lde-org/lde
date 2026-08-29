@@ -111,20 +111,26 @@ local function buildPackage(package, destinationPath)
 	if currentlyBuilding[package] then return false end
 	currentlyBuilding[package] = true
 
-	destinationPath = destinationPath or path.join(package:getModulesDir(), package:getName())
+	-- The build body raises on failure (build script, Teal/Moon compile), and
+	-- the re-entrancy guard must be cleared either way: a leaked guard makes
+	-- every later build silently no-op — pcall reports the returned false as
+	-- success, so --hot reloads kept reading a stale target after one failed
+	-- compile.
+	local ok, hasBuilt, deferred = xpcall(function()
+		destinationPath = destinationPath or path.join(package:getModulesDir(), package:getName())
 
-	local target = path.dirname(destinationPath)
-	if not fs.isdir(target) then fs.mkdir(target) end
+		local target = path.dirname(destinationPath)
+		if not fs.isdir(target) then fs.mkdir(target) end
 
-	---@type lde.install.DeferredBuild?
-	local deferred = nil
-	-- Default to "changed" (build must run): rockspec packages have no
-	-- build.lua, so checkInputs never runs and their buildfn gates on its own
-	-- .lde-built stamp instead.
-	local inputsChanged = true
-	local hasBuilt = false
+		---@type lde.install.DeferredBuild?
+		local deferred = nil
+		-- Default to "changed" (build must run): rockspec packages have no
+		-- build.lua, so checkInputs never runs and their buildfn gates on its own
+		-- .lde-built stamp instead.
+		local inputsChanged = true
+		local hasBuilt = false
 
-	if package:hasBuildScript() then
+		if package:hasBuildScript() then
 		-- If a symlink exists from a previous no-build-script run, remove it
 		-- before the build script tries to write into destinationPath as a dir.
 		if fs.islink(destinationPath) then fs.delete(destinationPath) end
@@ -269,7 +275,13 @@ local function buildPackage(package, destinationPath)
 		end
 	end
 
+		return hasBuilt, deferred
+	end, function(e) return e end)
+
 	currentlyBuilding[package] = nil
+	if not ok then
+		error(hasBuilt, 0)
+	end
 	return hasBuilt, deferred
 end
 

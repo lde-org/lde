@@ -215,3 +215,84 @@ test.it("passes", function() end)
 		test.truthy(waitForCount(countPath, "x", 2, 15000), "test suite did not re-run after the file changed")
 	end)
 end)
+
+-- Teal/Moonscript sources compile to .lua under target/, so a src/*.tl change
+-- must invalidate the compiled module (and a broken compile must not wedge the
+-- hot loop — the next fix must be picked up).
+local TEAL_V1 = [[
+local f = assert(io.open(arg[1], "a"))
+f:write("teal v1\n")
+f:close()
+]]
+local TEAL_V2 = [[
+local f = assert(io.open(arg[1], "a"))
+f:write("teal v2\n")
+f:close()
+]]
+local TEAL_FIXED = [[
+local f = assert(io.open(arg[1], "a"))
+f:write("teal fixed\n")
+f:close()
+]]
+
+test.it("lde run --hot reloads a Teal entry", function()
+	local dir = makePackage("pkg-teal-hot")
+	fs.write(path.join(dir, "src", "init.tl"), TEAL_V1)
+
+	local logFile = path.join(tmpBase, "pkg-teal-hot.log")
+	fs.write(logFile, "")
+
+	withChild({ "run", "--hot", "--", logFile }, dir, function()
+		test.truthy(waitForLog(logFile, "teal v1", 20000), "initial Teal run missing from log")
+
+		fs.write(path.join(dir, "src", "init.tl"), TEAL_V2)
+
+		test.truthy(waitForLog(logFile, "teal v2", 20000), "Teal hot reload did not pick up the change")
+	end)
+end)
+
+test.it("lde run --hot recovers after a Teal syntax error is fixed", function()
+	local dir = makePackage("pkg-teal-err")
+	fs.write(path.join(dir, "src", "init.tl"), TEAL_V1)
+
+	local logFile = path.join(tmpBase, "pkg-teal-err.log")
+	fs.write(logFile, "")
+
+	withChild({ "run", "--hot", "--", logFile }, dir, function()
+		test.truthy(waitForLog(logFile, "teal v1", 20000), "initial Teal run missing from log")
+
+		-- Break the source: the rebuild fails and the hot loop must keep
+		-- watching (not wedge on the failed build).
+		fs.write(path.join(dir, "src", "init.tl"), "local x: number = \n")
+		sleep(800)
+
+		-- Fix it: the next change must rebuild and re-run.
+		fs.write(path.join(dir, "src", "init.tl"), TEAL_FIXED)
+
+		test.truthy(waitForLog(logFile, "teal fixed", 20000), "hot reload did not recover after the syntax error was fixed")
+	end)
+end)
+
+test.it("lde run --hot reloads a Moonscript entry", function()
+	local dir = makePackage("pkg-moon-hot")
+	fs.write(path.join(dir, "src", "init.moon"), [==[
+f = assert(io.open(arg[1], "a"))
+f\write("moon v1\n")
+f\close()
+]==])
+
+	local logFile = path.join(tmpBase, "pkg-moon-hot.log")
+	fs.write(logFile, "")
+
+	withChild({ "run", "--hot", "--", logFile }, dir, function()
+		test.truthy(waitForLog(logFile, "moon v1", 20000), "initial Moonscript run missing from log")
+
+		fs.write(path.join(dir, "src", "init.moon"), [==[
+f = assert(io.open(arg[1], "a"))
+f\write("moon v2\n")
+f\close()
+]==])
+
+		test.truthy(waitForLog(logFile, "moon v2", 20000), "Moonscript hot reload did not pick up the change")
+	end)
+end)
