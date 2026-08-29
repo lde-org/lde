@@ -92,6 +92,32 @@ test.it("run errors name the file, not the truncated source", function()
 	test.falsy(text:find("[string", 1, true), "chunk label must be the file path, not the source text")
 end)
 
+test.it("run error caret sits directly under the failing line", function()
+	-- Runtime error at line 3 of a 5-line file: the caret must point at the
+	-- incident line, not drift to the bottom of the context window (which
+	-- would put it under the last line shown instead).
+	local dir = path.join(tmpBase, "err-caret")
+	fs.mkdir(dir)
+	fs.write(path.join(dir, "boom.lua"), "local x = 2\n\nfoo()\n\nlocal i = 1\n")
+	local code, out = run({ "./boom.lua" }, dir)
+	test.truthy(code ~= 0, "runtime error must exit non-zero")
+	local text = plain(out)
+
+	local incidentIdx, caretIdx
+	local i = 0
+	for line in text:gmatch("[^\n]+") do
+		i = i + 1
+		if line:match("^3 | foo%(%)") then incidentIdx = i end
+		if line:match("^%s*%^%^%^") then caretIdx = i end
+	end
+	test.truthy(incidentIdx ~= nil, "incident line must be shown in the snippet")
+	test.truthy(caretIdx ~= nil, "caret must be shown in the snippet")
+	test.equal(caretIdx, incidentIdx + 1, "caret must sit on the line directly under the incident")
+	-- The context window must continue below the caret, proving the caret was
+	-- inserted after the failing line rather than appended after the window.
+	test.truthy(text:find("5 | local i = 1", 1, true) ~= nil, "trailing context must still be shown")
+end)
+
 test.it("unknown help target suggests a close command", function()
 	local code, out = run({ "help", "hlep" })
 	test.truthy(code ~= 0, "typo'd help target must exit non-zero")
