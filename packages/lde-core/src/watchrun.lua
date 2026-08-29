@@ -361,18 +361,25 @@ local function run(opts)
 		elseif result == "exit" and info and info ~= 0 then
 			ansi.printf("{yellow}Process exited with code %d", info)
 		end
+		-- Non-TTY stdout is block-buffered and the driver never exits, so
+		-- flush after every run or the tail of the output is lost when the
+		-- process is killed (or buried under the next run's output).
+		io.stdout:flush()
 		return result
 	end
 
-	-- Drop cached modules for the pending changes; returns whether the entry
-	-- point should be re-run.
+	-- Drop cached modules for the pending changes. Returns whether the entry
+	-- point should be re-run plus the reloaded module names (hot mode only),
+	-- so the caller can print them after clearing the screen.
+	---@return boolean shouldRun
+	---@return string[] reloadedNames
 	local function processPendingChanges()
 		local changes = pending
 		pending = {}
-		if #changes == 0 then return false end
+		if #changes == 0 then return false, {} end
 
 		if opts.mode == "watch" then
-			return true
+			return true, {}
 		end
 
 		local entryChanged = false
@@ -387,21 +394,20 @@ local function run(opts)
 		end
 
 		local shouldRun = entryChanged or reloaded > 0 or fullReload
+		local names = {}
 		if shouldRun then
 			if fullReload then
 				fullReload = false
 				reloaded = reloaded + (reloadAllFn and reloadAllFn() or 0)
 			end
 			if reloaded > 0 then
-				local names = {}
 				local lst = hotStateTbl and hotStateTbl:get("lastReloaded") ---@cast lst lua.Table
 				if lst then
 					for _i, v in lst:ipairs() do names[#names + 1] = v end
-					ansi.printf("{cyan}Reloaded: {yellow}%s", table.concat(names, ", "))
 				end
 			end
 		end
-		return shouldRun
+		return shouldRun, names
 	end
 
 	if not installState() then return end
@@ -429,8 +435,15 @@ local function run(opts)
 		sleep(30)
 		for _, watcher in ipairs(watchers) do watcher.poll() end
 
-		if processPendingChanges() then
-			if opts.mode == "watch" then
+		local shouldRun, reloadedNames = processPendingChanges()
+		if shouldRun then
+			ansi.clearScreen()
+
+			if opts.mode == "hot" then
+				if #reloadedNames > 0 then
+					ansi.printf("{cyan}Reloaded: {yellow}%s", table.concat(reloadedNames, ", "))
+				end
+			else
 				ansi.printf("{cyan}Change detected, restarting...")
 			end
 

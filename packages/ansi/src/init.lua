@@ -244,6 +244,15 @@ function ansi.clearLine()
 	io.flush()
 end
 
+-- Clear the visible screen and home the cursor, preserving scrollback
+-- (bun-style fresh screen per re-run). TTY-only: the escape bytes would
+-- corrupt redirected output.
+function ansi.clearScreen()
+	if not isTTY then return end
+	io.write(ESC .. "2J" .. ESC .. "H")
+	io.flush()
+end
+
 -- progress: animated spinner with elapsed time.
 -- update(ratio, info) — ratio is 0–1 or nil (indeterminate); info is optional status text.
 -- setLabel(msg) — swap the label shown by the spinner and used by done/fail.
