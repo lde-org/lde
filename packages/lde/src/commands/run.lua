@@ -49,6 +49,9 @@ local function runWithWatcher(pkg, pkgErr, name, scriptArgs, mode)
 			entry = entry,
 			args = args,
 			watchDirs = watchDirs,
+			onError = function(err)
+				return errorsnippet.printRunError(env.cwd(), err, entry)
+			end,
 			createState = function()
 				return runtime.createState({ args = args, cwd = env.cwd() })
 			end,
@@ -105,6 +108,16 @@ local function runWithWatcher(pkg, pkgErr, name, scriptArgs, mode)
 	local srcDir = pkg:getSrcDir()
 	local sep = path.separator
 
+	-- target/<name>/X errors display as src/X, matching plain `lde run`.
+	local remap = function(file)
+		local targetPrefix = pkg:getTargetDir() .. path.separator
+		if file:sub(1, #targetPrefix) == targetPrefix then
+			local mapped = path.join(srcDir, file:sub(#targetPrefix + 1))
+			if fs.exists(mapped) then return mapped end
+		end
+		return nil
+	end
+
 	lde.watchrun.run({
 		mode = mode,
 		entry = entry,
@@ -112,6 +125,9 @@ local function runWithWatcher(pkg, pkgErr, name, scriptArgs, mode)
 		watchDirs = { { dir = srcDir, recursive = true } },
 		srcPrefix = srcDir .. sep,
 		targetPrefix = pkg:getTargetDir() .. sep,
+		onError = function(err)
+			return errorsnippet.printRunError(pkg:getDir(), err, entry, remap)
+		end,
 		-- Rebuild before each hot reload so target/ picks up the change (the
 		-- stamp check makes this a no-op when nothing changed).
 		preReload = mode == "hot" and function()

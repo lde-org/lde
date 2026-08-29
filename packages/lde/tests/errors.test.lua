@@ -78,6 +78,20 @@ test.it("path-like unknown command reports the missing file", function()
 	expectCleanError({ "frobnicate" }, "Unknown command", tmpBase)
 end)
 
+test.it("run errors name the file, not the truncated source", function()
+	-- The entry chunk must be labeled with its path (the "@" convention) so
+	-- syntax errors report "broken.lua:2: ..." instead of
+	-- `[string "local a = 1..."]` (LuaJIT's fallback for a missing chunk name).
+	local dir = path.join(tmpBase, "err-chunkname")
+	fs.mkdir(dir)
+	fs.write(path.join(dir, "broken.lua"), "local a = 1\nlocal b = \n")
+	local code, out = run({ "./broken.lua" }, dir)
+	test.truthy(code ~= 0, "syntax error must exit non-zero")
+	local text = plain(out)
+	test.includes(text, "broken.lua")
+	test.falsy(text:find("[string", 1, true), "chunk label must be the file path, not the source text")
+end)
+
 test.it("unknown help target suggests a close command", function()
 	local code, out = run({ "help", "hlep" })
 	test.truthy(code ~= 0, "typo'd help target must exit non-zero")

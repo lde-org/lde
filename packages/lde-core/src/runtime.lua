@@ -289,9 +289,15 @@ end
 local function executeSource(source, chunkName, opts)
 	opts = opts or {}
 	local args = opts.args or {}
+	-- arg[0] defaults to the chunk label; callers that run a file pre-set it
+	-- to the plain path so the "@"-prefixed chunk name (which LuaJIT needs to
+	-- report path:line errors) doesn't leak into arg[0].
+	if args[0] == nil then
+		args = { [0] = chunkName, unpack(args) }
+	end
 
 	local state, _, cleanup = createState({
-		args = { [0] = chunkName, unpack(args) },
+		args = args,
 		cwd = opts.cwd,
 		env = opts.env,
 		packagePath = opts.packagePath,
@@ -376,15 +382,21 @@ end
 ---@param scriptPath string
 ---@param opts lde.ExecuteOptions?
 local function executeFile(scriptPath, opts)
+	opts = opts or {}
 	-- Resolve relative paths before reading, using opts.cwd if provided,
 	-- so that callers can pass e.g. "./scripts/foo.lua" with a cwd override.
 	local resolvedPath = scriptPath
-	if opts and opts.cwd and not path.isAbsolute(scriptPath) then
+	if opts.cwd and not path.isAbsolute(scriptPath) then
 		resolvedPath = path.join(opts.cwd, scriptPath)
 	end
 	local source, err = readCompiledFile(resolvedPath)
 	if not source then return false, err end
-	return executeSource(source, resolvedPath, opts)
+	-- The "@" chunk label makes LuaJIT report file-backed errors as
+	-- path:line:msg. A bare path would render as [string "<path>"] with the
+	-- truncated source text instead (executeLuaCLI uses the same convention).
+	local args = opts.args or {}
+	opts.args = { [0] = resolvedPath, unpack(args) }
+	return executeSource(source, "@" .. resolvedPath, opts)
 end
 
 ---@param code string

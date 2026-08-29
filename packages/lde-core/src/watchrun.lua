@@ -209,6 +209,7 @@ end
 ---@field srcPrefix string?           # package src dir + path.separator
 ---@field targetPrefix string?        # package target/<name> dir + path.separator
 ---@field preReload fun()?              # runs before each reload (e.g. rebuild); false = skip the re-run
+---@field onError fun(err: string): boolean? # renders a run error Bun-style; return true when printed
 
 --- Run the entry point in a guest state, watching for file changes. In "hot"
 --- mode the state survives reloads and only the changed modules' package.loaded
@@ -330,11 +331,13 @@ local function run(opts)
 	end
 
 	local function runEntry() ---@cast state lua.State
-		local source, chunkName, readErr = runtime.readCompiledFile(opts.entry)
+		local source, readErr = runtime.readCompiledFile(opts.entry)
 		if not source then
 			return "error", readErr
 		end
-		local chunk = state:load(source, chunkName)
+		-- "@" chunk label: LuaJIT reports file-backed errors as path:line.
+		-- A nil label would fall back to the source text (truncated).
+		local chunk = state:load(source, "@" .. opts.entry)
 		running = true
 		local ok, result = chunk:pcall(unpack(opts.args or {}))
 		running = false
@@ -356,7 +359,12 @@ local function run(opts)
 	local function runAndReport()
 		local result, info = runEntry()
 		if result == "error" then
-			ansi.printf("{red}Error: %s", tostring(info))
+			-- The caller can render the error Bun-style (source snippet +
+			-- at path:line) via opts.onError; fall back to a plain line.
+			local rendered = opts.onError and opts.onError(tostring(info))
+			if not rendered then
+				ansi.printf("{red}Error: %s", tostring(info))
+			end
 			fullReload = true
 		elseif result == "exit" and info and info ~= 0 then
 			ansi.printf("{yellow}Process exited with code %d", info)
