@@ -161,18 +161,15 @@ local function parseError(err)
 	return file, tonumber(line), nil, msg
 end
 
---- Resolve the file to read for a failure. The path in the error prefix uses
---- short_src, which LuaJIT truncates to "..." + the tail of the path for long
---- chunk names, so a required module deep under target/ arrives as
---- ".../target/tests/tl-components/page-tilt.lua". The tail keeps the end of
---- the real path, so it is searched under the package dir (stripping leading
---- fragments, since the cut can land mid-component) before falling back to the
---- file the caller knows it was executing.
+--- Build the candidate files for a failure's path: the message file itself
+--- (resolving LuaJIT's truncated short_src tail under pkgDir), the
+--- pkgDir-joined form for relative paths, and the known file as a last
+--- resort.
 ---@param pkgDir string
 ---@param msgFile string
 ---@param knownFile? string
----@return string? actual, string? src
-local function resolveSource(pkgDir, msgFile, knownFile)
+---@return string[]
+local function sourceCandidates(pkgDir, msgFile, knownFile)
 	local candidates = {}
 	msgFile = msgFile:gsub("^@", "")
 
@@ -195,7 +192,22 @@ local function resolveSource(pkgDir, msgFile, knownFile)
 	end
 
 	if knownFile then candidates[#candidates + 1] = knownFile end
-	for _, c in ipairs(candidates) do
+	return candidates
+end
+
+--- Resolve the file to read for a failure. The path in the error prefix uses
+--- short_src, which LuaJIT truncates to "..." + the tail of the path for long
+--- chunk names, so a required module deep under target/ arrives as
+--- ".../target/tests/tl-components/page-tilt.lua". The tail keeps the end of
+--- the real path, so it is searched under the package dir (stripping leading
+--- fragments, since the cut can land mid-component) before falling back to the
+--- file the caller knows it was executing.
+---@param pkgDir string
+---@param msgFile string
+---@param knownFile? string
+---@return string? actual, string? src
+local function resolveSource(pkgDir, msgFile, knownFile)
+	for _, c in ipairs(sourceCandidates(pkgDir, msgFile, knownFile)) do
 		if fs.exists(c) then
 			local src = fs.read(c)
 			if src then
@@ -212,6 +224,20 @@ local function resolveSource(pkgDir, msgFile, knownFile)
 	end
 
 	return nil, nil
+end
+
+--- Resolve the failure's file to a real path on disk (see resolveSource),
+--- without reading it — used to normalize a possibly-truncated path before a
+--- caller remap matches against it.
+---@param pkgDir string
+---@param msgFile string
+---@param knownFile? string
+---@return string? actual
+local function resolveFile(pkgDir, msgFile, knownFile)
+	for _, c in ipairs(sourceCandidates(pkgDir, msgFile, knownFile)) do
+		if fs.exists(c) then return c end
+	end
+	return nil
 end
 
 -- Print the gutter + highlighted code window for a failing line, with a caret
@@ -274,6 +300,16 @@ local function printError(pkgDir, err, knownFile, remap)
 	if not mfile or not mline then
 		return false
 	end
+
+	-- Resolve the error's file to a real path first: LuaJIT truncates long
+	-- chunk names ("..." + tail), so a remap matching target/<name>/X must
+	-- see the full path to map it to src/X.
+	local resolved = resolveFile(pkgDir, mfile, knownFile)
+	if resolved then
+		knownFile = knownFile or mfile
+		mfile = resolved
+	end
+
 	if remap then
 		local mapped = remap(mfile)
 		if mapped then
@@ -337,6 +373,16 @@ local function printRunError(pkgDir, err, knownFile, remap)
 	if not mfile or not mline then
 		return false
 	end
+
+	-- Resolve the error's file to a real path first (see printError): the
+	-- error prefix carries LuaJIT's truncated short_src for long chunk names,
+	-- which would otherwise defeat the target/<name>/X -> src/X remap.
+	local resolved = resolveFile(pkgDir, mfile, knownFile)
+	if resolved then
+		knownFile = knownFile or mfile
+		mfile = resolved
+	end
+
 	if remap then
 		local mapped = remap(mfile)
 		if mapped then

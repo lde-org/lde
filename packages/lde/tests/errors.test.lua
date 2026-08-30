@@ -118,6 +118,28 @@ test.it("run error caret sits directly under the failing line", function()
 	test.truthy(text:find("5 | local i = 1", 1, true) ~= nil, "trailing context must still be shown")
 end)
 
+test.it("run error in a package maps target/<name> back to src/", function()
+	-- The entry runs from target/<name>/init.lua but the error must point at
+	-- the source the user wrote (src/init.lua). The package lives in a long
+	-- path so the chunk name exceeds LuaJIT's short_src buffer and arrives
+	-- truncated ("..." + tail) — the remap must survive the truncation.
+	local dir = path.join(tmpBase, "err-remap-" .. string.rep("x", 48))
+	fs.mkdir(dir)
+	fs.mkdir(path.join(dir, "src"))
+	fs.write(path.join(dir, "src", "init.lua"), "print('hi')\nerror('boom in src')\n")
+	fs.write(path.join(dir, "lde.json"), json.encode({
+		name = "err-remap",
+		version = "0.1.0",
+		dependencies = {}
+	}))
+	local code, out = run({ "run" }, dir)
+	test.truthy(code ~= 0, "runtime error must exit non-zero")
+	local text = plain(out)
+	test.falsy(text:find("target/err%-remap", 1), "snippet must not show the built target/ path")
+	test.includes(text, "src/init.lua", "snippet must point at the source the user wrote")
+	test.falsy(text:find("stack traceback", 1, true), "raw traceback leaked for package run error")
+end)
+
 test.it("unknown help target suggests a close command", function()
 	local code, out = run({ "help", "hlep" })
 	test.truthy(code ~= 0, "typo'd help target must exit non-zero")
