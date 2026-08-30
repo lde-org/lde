@@ -11,7 +11,7 @@ function getPackageName(): string | null {
 const DOC_LINKS = [
 	{
 		label: "How it works",
-		href: "/docs/package-manager/dependencies/registry",
+		href: "/docs/package-manager/features/registry",
 	},
 	{
 		label: "Publishing guide",
@@ -19,7 +19,7 @@ const DOC_LINKS = [
 	},
 	{
 		label: "Custom registries",
-		href: "/docs/package-manager/guides/custom-registry",
+		href: "/docs/general/misc/custom-registry",
 	},
 ];
 

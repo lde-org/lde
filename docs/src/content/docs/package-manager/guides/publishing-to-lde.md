@@ -1,6 +1,6 @@
 ---
 title: Publishing to LDE
-order: 1
+order: 0
 ---
 
 # Publishing to LDE

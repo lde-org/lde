@@ -19,7 +19,7 @@ It'll first ask you what package name you'd want and if you want to write a libr
 
 For now, choose `blank`. Additionally, it will also ask what language you want to use.
 
-Choose `lua` for now, but you can choose and learn about [Teal](/docs/runtime/guides/teal) and [MoonScript](/docs/runtime/guides/moonscript) later.
+Choose `lua` for now, but you can choose and learn about [Teal](/docs/runtime/features/teal) and [MoonScript](/docs/runtime/features/moonscript) later.
 
 ```sh
 lde new myproject && cd myproject
@@ -30,7 +30,7 @@ echo "print('Hello, world!')" > ./src/init.lua
 
 Adding dependencies is as simple as `lde add`.
 
-It supports the [lde registry](/registry), [luarocks](/docs/package-manager/dependencies/luarocks-support/), and direct git dependencies if you want to avoid a registry entirely.
+It supports the [lde registry](/registry), [luarocks](/docs/package-manager/getting-started/luarocks), and direct git dependencies if you want to avoid a registry entirely.
 
 Dependencies are resolved locally to your project for easy access to lua without polluting your PATH, or needing some kind of virtual environment. (But they are cached and reused globally for performance and to save space)
 
@@ -105,4 +105,4 @@ This can be done with `lde compile`, and the output executable will need no depe
 
 ## Next Steps
 
-Head to [Installation](/docs/general/getting-started/installation) to get lde on your machine, or jump straight to the [Quick Start](/docs/package-manager/getting-started/quick-start) if you've already installed it.
+Head to [Installation](/docs/general/getting-started/installation) to get lde on your machine, or jump straight to [Scaffold a New Project](/docs/general/features/new-project) if you've already installed it.

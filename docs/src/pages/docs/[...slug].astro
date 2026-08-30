@@ -29,7 +29,7 @@ function prettify(slug: string) {
 	return slug.split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
 }
 
-const TAB_ORDER = ["general", "package-manager", "runtime", "test-runner", "bundler"];
+const TAB_ORDER = ["general", "runtime", "test-runner", "bundler", "package-manager"];
 
 const TAB_LABELS: Record<string, string> = {
 	"general": "General",
@@ -41,18 +41,22 @@ const TAB_LABELS: Record<string, string> = {
 
 const SECTION_ORDER: Record<string, number> = {
 	"getting-started": 0,
-	"dependencies": 1,
-	"features": 2,
+	"features": 1,
+	"setup": 2,
 	"guides": 3,
-	"utilities": 4,
+	"tutorials": 4,
+	"core-functions": 5,
+	"misc": 6,
 };
 
 const SECTION_ICON: Record<string, string> = {
 	"getting-started": "lucide:rocket",
-	"dependencies": "lucide:package",
 	"features": "lucide:sparkles",
+	"setup": "lucide:settings",
 	"guides": "lucide:book-open",
-	"utilities": "lucide:wrench",
+	"tutorials": "lucide:graduation-cap",
+	"core-functions": "lucide:code",
+	"misc": "lucide:archive",
 };
 
 function buildSidebar(tabId: string): TreeItem[] {

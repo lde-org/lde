@@ -264,7 +264,7 @@ The full method set:
 
 `cc()` uses the same toolchain that Windows gets bundled. On Windows it puts the compiler and its tools on `PATH`, so C modules build without a manual setup. The `LDE_OUTPUT_DIR` variable is still set for compatibility.
 
-See the [build scripts docs](/docs/package-manager/dependencies/build-scripts) for the full API.
+See the [build scripts docs](/docs/package-manager/features/build-scripts) for the full API.
 
 ### Builds that cache
 
