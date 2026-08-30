@@ -5,26 +5,36 @@ order: 0
 
 # Introduction
 
-lde is a package manager, runtime, test runner and bundler for Lua. It ships as a single executable with LuaJIT bundled in for you.
+[lde](https://lde.sh) is a small and fast package manager, runtime, test runner and compiler for lua projects.
 
-The days of fiddling with lua and luarocks setups are over.
+## Why lde?
 
-Provide users a single binary without dependencies of your project with a simple `lde compile`!
+- **It already works with your projects**. Just run `ldx rocks:tl` and `lde add rocks:luasocket`
+- You're on windows and want lua on your system without setting up a full C toolchain.
+- It works with your language. `lde ./foo.tl` and `lde ./foo.moon` just work.
+- You want to ship a single binary to run your code to users without them needing lua.
 
 ## Getting Started
 
-Create a new project with `lde new` (or `lde init` in an existing directory).
-
-It'll first ask you what package name you'd want and if you want to write a library or a `blank` package.
-
-For now, choose `blank`. Additionally, it will also ask what language you want to use.
-
-Choose `lua` for now, but you can choose and learn about [Teal](/docs/runtime/features/teal) and [MoonScript](/docs/runtime/features/moonscript) later.
+Run `lde new` to create a new project.
 
 ```sh
-lde new myproject && cd myproject
-echo "print('Hello, world!')" > ./src/init.lua
+~> lde new
+? Project type
+> blank   A basic hello world app
+  library A module other projects can require()
 ```
+
+Select **blank** for now.
+
+```
+? Language
+> lua  Your typical lua project
+  moonscript  A dynamically typed whitespace based language
+  teal  Typed lua with type checking support
+```
+
+You can use whatever language you want. We'll use **lua**.
 
 ## Adding Dependencies
 
