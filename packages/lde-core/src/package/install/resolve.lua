@@ -37,6 +37,7 @@ end
 ---@field build { addNode: fun(node: lde.install.Node), finish: fun() }
 ---@field progress ansi.InstallProgress? # unified install progress line (compact mode)
 ---@field order lde.install.Node[]?
+---@field failures lde.install.Node[]? # nodes whose download/extract failed
 
 ---@class lde.install.DeferredBuild
 ---@field poll fun(): boolean? # true once the spawned build finished, nil while still running
@@ -76,6 +77,7 @@ end
 ---@field pkg lde.Package?
 ---@field expandDir string? # relativeTo base for the node's children
 ---@field isMaterialized boolean? # content already extracted/cloned this run
+---@field error string? # materialization failed (download/extract); node is skipped
 ---@field _content lde.install.ContentPlan?
 ---@field _fallbackGit lde.install.GitPlan?
 
@@ -302,13 +304,21 @@ local function consume(node)
 	h(node).consume(node)
 end
 
---- Extract the node's downloaded content (after the batch drained).
+--- Extract the node's downloaded content (after the batch drained). A failed
+--- download or extract is recorded on the node instead of raising, so the
+--- rest of the graph keeps downloading/building; failures are reported
+--- together at the end of resolution.
 ---@param node lde.install.Node
 local function materialize(node)
 	local c = content(node)
 	assert(c, "no content plan for '" .. node.alias .. "'")
-	h(node).materialize(node, c)
-	node.isMaterialized = true
+	local ok, err = pcall(h(node).materialize, node, c)
+	if not ok then
+		node.error = tostring(err)
+	else
+		node.isMaterialized = true
+		node.error = nil
+	end
 end
 
 --- Open the node's package (requires content materialized).
@@ -436,7 +446,12 @@ handlers.git = {
 		local res = download.result(c.file --[[@as string]])
 		if res and not res.ok then lde.error.raise("Failed to download " .. c.url .. ": " .. (res.err or "")) end
 		local ok, err = lde.global.extractGitTarball(c.file --[[@as string]], c.dir --[[@as string]])
-		if not ok then lde.error.raise("Failed to extract " .. n.repoName .. ": " .. (err or "")) end
+		if not ok then
+			-- The seeded copy may itself be corrupt; don't let the next run
+			-- re-trust (and re-fail on) it.
+			download.invalidateUserCache(c.file --[[@as string]])
+			lde.error.raise("Failed to extract " .. n.repoName .. ": " .. (err or ""))
+		end
 	end,
 	---@param n lde.install.Node
 	open = function(n)
@@ -481,7 +496,10 @@ handlers.archive = {
 		local res = download.result(c.file --[[@as string]])
 		if res and not res.ok then lde.error.raise("Failed to download archive '" .. c.url .. "': " .. (res.err or "")) end
 		local ok, err = lde.global.extractArchive(c.url --[[@as string]], c.file --[[@as string]], c.dir --[[@as string]])
-		if not ok then lde.error.raise("Failed to extract archive '" .. c.url .. "': " .. (err or "")) end
+		if not ok then
+			download.invalidateUserCache(c.file --[[@as string]])
+			lde.error.raise("Failed to extract archive '" .. c.url .. "': " .. (err or ""))
+		end
 	end,
 	---@param n lde.install.Node
 	open = function(n)
@@ -572,7 +590,15 @@ handlers.luarocks = {
 		local res = download.result(c.file --[[@as string]])
 		if res and not res.ok then lde.error.raise("Failed to download " .. c.url .. ": " .. (res.err or "")) end
 		local ok, err = lde.global.extractArchive(c.url --[[@as string]], c.file --[[@as string]], c.dir --[[@as string]])
-		if not ok then lde.error.raise("Failed to extract '" .. (c.url or c.dir) .. "': " .. (err or "")) end
+		if not ok then
+			download.invalidateUserCache(c.file --[[@as string]])
+			lde.error.raise("Failed to extract '" .. (c.url or c.dir) .. "': " .. (err or ""))
+		end
+		-- Git-fallback content lands in the git cache: mark it complete like
+		-- extractGitTarball does, or the next run treats it as partial.
+		if c.kind == "git" then
+			lde.global.markGitRepoCached(c.dir --[[@as string]])
+		end
 	end,
 	---@param n lde.install.Node
 	consume = function(n)
@@ -648,6 +674,8 @@ local function resolveDependencies(dependencies, ctx)
 	local graph = {} -- alias -> node
 	---@type lde.install.Node[]
 	local order = {} -- nodes in discovery order
+	---@type lde.install.Node[]
+	local failed = {} -- nodes whose download/extract failed (reported at the end)
 
 	-- ── Phase 1: graph walk (metadata-only) ────────────────────────────────
 	---@type lde.install.Node[]
@@ -733,10 +761,18 @@ local function resolveDependencies(dependencies, ctx)
 
 		for _, node in ipairs(contentBatch) do
 			materialize(node)
+			if node.error then
+				-- Failed download/extract: keep resolving the rest of the graph
+				-- (Phase 2 may retry it; remaining failures are reported
+				-- together at the end).
+				if ctx.progress then ctx.progress:finish(node.alias) end
+				goto continue
+			end
 			consume(node)
 			for _, child in ipairs(addDeps(node.deps or {}, node.expandDir or ctx.relativeTo, ctx, graph, order)) do
 				nextFrontier[#nextFrontier + 1] = child
 			end
+			::continue::
 		end
 
 		frontier = nextFrontier
@@ -776,6 +812,10 @@ local function resolveDependencies(dependencies, ctx)
 		local node = contentByFile[destPath]
 		if not node then return end
 		materialize(node)
+		if node.error then
+			if ctx.progress then ctx.progress:finish(node.alias) end
+			return
+		end
 		ctx.build.addNode(node)
 	end)
 	download.drain()
@@ -789,20 +829,36 @@ local function resolveDependencies(dependencies, ctx)
 
 	-- Materialize anything the pipeline didn't (git clones have no transfer).
 	for _, node in ipairs(contentNodes) do
-		if not node.isMaterialized then materialize(node) end
+		if not node.isMaterialized and not node.error then
+			materialize(node)
+			if node.error and ctx.progress then
+				ctx.progress:finish(node.alias)
+			end
+		end
 	end
 
 	-- Queue the remaining nodes (cached/path deps never downloaded) for build.
 	for _, node in ipairs(order) do
-		ctx.build.addNode(node)
+		if not node.error then ctx.build.addNode(node) end
 	end
 
 	-- ── Phase 3: open every package and record the stack ───────────────────
 	-- Idempotent for nodes the pipeline already registered; the conflict
 	-- check in registerNode still runs for every node.
 	for _, node in ipairs(order) do
-		registerNode(node, ctx)
+		if not node.error then registerNode(node, ctx) end
 	end
+
+	-- Nodes that still failed to download/extract (after the pipeline retried
+	-- them) are reported after the build pass drains; the rest of the graph
+	-- was still installed, and each failed node's cache state was cleaned so
+	-- the next run re-fetches it.
+	for _, node in ipairs(order) do
+		if node.error and not node.isMaterialized then
+			failed[#failed + 1] = node
+		end
+	end
+	if #failed > 0 then ctx.failures = failed end
 
 	-- Discovery order is a topological order (parents expand before their
 	-- children), so the build pass can depend on it: build backends like

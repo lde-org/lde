@@ -581,6 +581,19 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 		end
 	end
 
+	-- Report dependencies that failed to download/extract. The rest of the
+	-- graph was still downloaded and built; each failed node's cache state was
+	-- cleaned, so the next sync re-fetches it instead of deadlocking on a
+	-- partial dir. The lockfile is left untouched so failed pins don't stick.
+	if ctx.failures and #ctx.failures > 0 then
+		local parts = {}
+		for _, node in ipairs(ctx.failures) do
+			parts[#parts + 1] = "  - " .. node.alias .. ": " .. node.error
+		end
+		lde.error.raise("Failed to install " .. #ctx.failures .. " dependenc"
+			.. (#ctx.failures == 1 and "y" or "ies") .. ":\n" .. table.concat(parts, "\n"))
+	end
+
 	commitLockfile(package, ctx.stack, modulesDir, isLockfileStale)
 
 	return {

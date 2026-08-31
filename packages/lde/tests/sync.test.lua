@@ -80,6 +80,14 @@ local function makeLocalGitRepo(name, packageName)
 	return repoDir
 end
 
+---@param repoDir string
+---@return string commit
+local function headCommit(repoDir)
+	local code, out = process.exec("git", { "rev-parse", "HEAD" }, { cwd = repoDir })
+	test.equal(code, 0, tostring(out))
+	return ((out or ""):gsub("%s+$", ""))
+end
+
 --
 -- Basic installs
 --
@@ -242,6 +250,62 @@ test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde sync re-clones when the git cac
 	test.truthy(fs.exists(path.join(dir, "target", "syncgit", "init.lua")))
 end)
 
+test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde sync heals a partial git cache dir from an interrupted run", function()
+	local repoDir = makeLocalGitRepo("sync-heal")
+	local treeDir = path.join(tmpBase, "sync-heal-tree")
+	fs.rmdir(treeDir)
+	local dir = makeProject("sync-heal-app", { ["sync-heal"] = { git = repoDir } })
+
+	local ok, out = cli({ "--tree", treeDir, "sync" }, dir)
+	test.truthy(ok, "initial sync failed: " .. tostring(out))
+	test.truthy(fs.exists(path.join(dir, "target", "sync-heal", "init.lua")))
+
+	-- Simulate an interrupted clone: the cache dir exists but holds only part
+	-- of the tree (no completion marker, no package). Wiping target/ too, so
+	-- the .installed fast path can't skip the re-install.
+	local cached = path.join(treeDir, "git", "sync-heal-" .. headCommit(repoDir))
+	test.truthy(fs.isdir(cached), "precondition: cache dir exists after first sync")
+	test.truthy(fs.exists(path.join(cached, ".lde-complete")), "first sync must mark the cache complete")
+	fs.rmdir(cached)
+	fs.mkdir(cached)
+	fs.write(path.join(cached, "README.md"), "partial")
+	fs.rmdir(path.join(dir, "target"))
+
+	local ok2, out2 = cli({ "--tree", treeDir, "sync" }, dir)
+	test.truthy(ok2, "sync with a partial cache dir must heal: " .. tostring(out2))
+	test.falsy(plain(out2 or ""):find("(cached)", 1, true))
+	test.truthy(fs.exists(path.join(dir, "target", "sync-heal", "init.lua")))
+	test.truthy(fs.exists(path.join(cached, ".lde-complete")), "re-cloned cache must be marked complete")
+end)
+
+test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde sync installs healthy deps and reports failed ones together", function()
+	local goodRepo = makeLocalGitRepo("sync-partial-good")
+	local treeDir = path.join(tmpBase, "sync-partial-tree")
+	fs.rmdir(treeDir)
+	local dir = makeProject("sync-partial-app", {
+		["sync-partial-good"] = { git = goodRepo },
+		-- Pinned commit so planGitRepo skips lsRemote and the failure happens
+		-- at clone time (materialization), which is the graceful path.
+		["sync-partial-bad"] = { git = "/nonexistent/repo", commit = "abc123" }
+	})
+
+	local ok, out = cli({ "--tree", treeDir, "sync" }, dir)
+	test.falsy(ok, "sync must fail when a dependency cannot be fetched")
+	local text = plain(out or "")
+	test.includes(text, "sync-partial-bad", "the failing dep must be named in the error")
+	test.truthy(fs.exists(path.join(dir, "target", "sync-partial-good", "init.lua")),
+		"the healthy dep must still be installed")
+
+	-- Removing the bad dep lets the next sync complete.
+	fs.write(path.join(dir, "lde.json"), json.encode({
+		name = "sync-partial-app",
+		version = "0.1.0",
+		dependencies = { ["sync-partial-good"] = { git = goodRepo } }
+	}))
+	local ok2, out2 = cli({ "--tree", treeDir, "sync" }, dir)
+	test.truthy(ok2, "sync after removing the bad dep failed: " .. tostring(out2))
+end)
+
 --
 -- --locked and --production
 --
@@ -324,14 +388,6 @@ local function writeFakeRegistry(treeDir, repoDir, commit, ns, pkgName)
 		branch = "master",
 		versions = { ["1.0.0"] = commit }
 	}))
-end
-
----@param repoDir string
----@return string commit
-local function headCommit(repoDir)
-	local code, out = process.exec("git", { "rev-parse", "HEAD" }, { cwd = repoDir })
-	test.equal(code, 0, tostring(out))
-	return ((out or ""):gsub("%s+$", ""))
 end
 
 test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde sync pins the resolved git repo for a registry dep and reinstalls from it", function()

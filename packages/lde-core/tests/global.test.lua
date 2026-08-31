@@ -10,6 +10,7 @@ local global = lde.global
 local fs = require("fs")
 local env = require("env")
 local path = require("path")
+local json = require("json")
 
 local tmpBase = path.join(env.tmpdir(), "lde-global-tests")
 fs.rmdir(tmpBase)
@@ -113,11 +114,46 @@ test.it("planGitRepo returns no content plan when the repo is already cached", f
 	local repoDir = global.getGitRepoDir("cachedpkg", commit)
 	fs.rmdir(repoDir)
 	fs.mkdirAll(repoDir)
+	-- A cached dir is one that carried a completed materialization (the
+	-- completion marker written by extract/clone).
+	global.markGitRepoCached(repoDir)
 
 	local plan = global.planGitRepo("cachedpkg", "https://github.com/user/repo.git", nil, commit)
 	test.equal(plan.dir, repoDir)
 	test.falsy(plan.tarballUrl, "cached repos must not plan a download")
 	test.falsy(plan.clone)
+end)
+
+test.it("planGitRepo adopts a legacy cached dir that still yields the package", function()
+	local commit = "legacy123"
+	local repoDir = global.getGitRepoDir("legacypkg", commit)
+	fs.rmdir(repoDir)
+	fs.mkdirAll(repoDir)
+	-- A dir materialized before the completion marker existed: no marker, but
+	-- a usable package. It must count as cached (and be adopted with a marker)
+	-- instead of being re-downloaded.
+	fs.write(path.join(repoDir, "lde.json"), json.encode({ name = "legacypkg", version = "0.1.0" }))
+
+	local plan = global.planGitRepo("legacypkg", "https://github.com/user/repo.git", nil, commit)
+	test.equal(plan.dir, repoDir)
+	test.falsy(plan.tarballUrl, "adopted legacy dirs must not plan a download")
+	test.truthy(fs.exists(path.join(repoDir, ".lde-complete")), "legacy dir must be adopted with a marker")
+end)
+
+test.it("planGitRepo heals a partial cache dir from an interrupted run", function()
+	local commit = "partial123"
+	local repoDir = global.getGitRepoDir("partialpkg", commit)
+	fs.rmdir(repoDir)
+	fs.mkdirAll(repoDir)
+	-- A half-extracted tree (no marker, no usable package): the exact state an
+	-- interrupted download/extract leaves behind. planGitRepo must wipe it and
+	-- plan a fresh download, or the walk would trust it and fail with
+	-- "No lde.json with name '<name>' found in: <dir>".
+	fs.write(path.join(repoDir, "README.md"), "partial")
+
+	local plan = global.planGitRepo("partialpkg", "https://github.com/user/repo.git", nil, commit)
+	test.falsy(fs.exists(repoDir), "partial cache dir must be removed")
+	test.truthy(plan.tarballUrl, "a fresh download must be planned")
 end)
 
 --
@@ -129,8 +165,26 @@ test.it("getOrInitGitRepo returns the cached dir without resolving anything", fu
 	local repoDir = global.getGitRepoDir("warmpkg", commit)
 	fs.rmdir(repoDir)
 	fs.mkdirAll(repoDir)
+	global.markGitRepoCached(repoDir)
 
 	local dir, resolved = global.getOrInitGitRepo("warmpkg", "https://example.com/repo.git", nil, commit)
 	test.equal(dir, repoDir)
 	test.equal(resolved, commit, "the pinned commit must be used as-is")
+end)
+
+test.it("getOrInitGitRepo heals a partial cache dir and re-fetches", function()
+	local commit = "warmpartial123"
+	local repoDir = global.getGitRepoDir("warmpartial", commit)
+	fs.rmdir(repoDir)
+	fs.mkdirAll(repoDir)
+	fs.write(path.join(repoDir, "README.md"), "partial")
+
+	-- A local repo is an unrecognized host, so the heal path re-fetches via
+	-- shallowClone; assert it happens by pointing the URL at a git repo that
+	-- does not exist and checking the failure is a clone failure (not the
+	-- "already cached" fast path, which would have returned the partial dir).
+	local ok, err = pcall(function() global.getOrInitGitRepo("warmpartial", "/nonexistent/repo", nil, commit) end)
+	test.falsy(ok, "a partial dir must not be returned as cached")
+	test.falsy(fs.exists(repoDir), "partial cache dir must be removed before re-fetch")
+	test.truthy(tostring(err):find("clone", 1, true) or tostring(err):find("Failed", 1, true))
 end)

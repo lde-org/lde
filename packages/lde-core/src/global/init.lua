@@ -18,6 +18,19 @@ local Archive = util.lazy(|| -> require("archive"))
 local git2 = util.lazy(|| -> require("git2-sys"))
 local sea = util.lazy(|| -> require("sea"))
 
+--- Total-time budget for a single download transfer. curl-sys exposes no
+--- default timeout, so a server that accepts the connection but never
+--- finishes the body (or a half-open connection) would block forever; the
+--- timeout turns that into a per-dependency failure instead of a hang.
+local DOWNLOAD_TIMEOUT = 120 -- seconds
+
+--- Marker file written into a git cache dir once it is fully materialized
+--- (extracted or cloned). Dirs without it are treated as possibly-partial —
+--- an interrupted run leaves a half-extracted tree that looks cached by
+--- existence alone, which made the next sync trust it and then fail with
+--- "No lde.json with name '<name>' found in: <dir>".
+local GIT_CACHE_MARKER = ".lde-complete"
+
 global.getConfig = require("lde-core.global.config")
 global.currentVersion = (function()
 	local ok, v = pcall(require, "lde.version")
@@ -80,17 +93,15 @@ local function downloadTarball(url, commit, hostType, repoDir, label)
 
 	local archiveFile = repoDir .. ".archive"
 
-	local dlOpts
+	local dlOpts = { timeout = DOWNLOAD_TIMEOUT }
 	if bar then
-		dlOpts = {
-			progress = function(dltotal, dlnow)
-				local ratio = dltotal > 0 ? dlnow / dltotal : nil
-				local info = dltotal > 0
-					and (ansi.formatBytes(dlnow) .. " / " .. ansi.formatBytes(dltotal))
-					or ansi.formatBytes(dlnow)
-				bar:update(ratio, info)
-			end
-		}
+		dlOpts.progress = function(dltotal, dlnow)
+			local ratio = dltotal > 0 ? dlnow / dltotal : nil
+			local info = dltotal > 0
+				and (ansi.formatBytes(dlnow) .. " / " .. ansi.formatBytes(dltotal))
+				or ansi.formatBytes(dlnow)
+			bar:update(ratio, info)
+		end
 	end
 
 	local ok, dlErr = curl().download(tarballUrl, archiveFile, dlOpts)
@@ -110,6 +121,7 @@ local function downloadTarball(url, commit, hostType, repoDir, label)
 		lde.error.raise("Failed to extract " .. label .. ": " .. (err2 or ""))
 	end
 
+	global.markGitRepoCached(repoDir)
 	if bar then bar:done("Downloaded " .. label) end
 end
 
@@ -373,6 +385,37 @@ function global.getGitRepoDir(repoName, commit)
 	return path.join(global.getGitCacheDir(), safeName .. "-" .. sanitize(commit))
 end
 
+--- Mark a git cache dir as fully materialized. Existence alone is not proof
+--- of a complete download: a dir created by an interrupted extract or clone
+--- must be re-fetched, not trusted.
+---@param repoDir string
+function global.markGitRepoCached(repoDir)
+	fs.mkdirAll(repoDir)
+	fs.write(path.join(repoDir, GIT_CACHE_MARKER), "")
+end
+
+--- Whether a git cache dir is usable: it exists and either carries the
+--- completion marker (written after a successful extract/clone) or still
+--- yields the named package (legacy dirs materialized before the marker
+--- existed — adopted here so later runs skip the scan). A dir that fails both
+--- checks is a partial leftover from an interrupted run.
+---@param repoDir string
+---@param packageName string
+---@return boolean
+function global.isGitRepoCached(repoDir, packageName)
+	if not fs.exists(repoDir) then return false end
+	local marker = path.join(repoDir, GIT_CACHE_MARKER)
+	if fs.exists(marker) then return true end
+	-- Note: `require("util")` here is packages/util (dedent/hash/lazy), not
+	-- lde-core's util — the named-package scan lives on lde.util.
+	local pkg = lde.util.findNamedPackage(repoDir, packageName)
+	if pkg then
+		fs.write(marker, "")
+		return true
+	end
+	return false
+end
+
 --- Shallow (depth=1) clone without submodules. `branch` may be nil (default
 --- branch) or a branch name. Retries:
 ---  1. If `branch` names a tag instead (rockspec source.tag), libgit2's
@@ -417,6 +460,7 @@ function global.cloneDir(repoName, repoUrl, commit, branch, progress)
 	if not repo then return nil, err end
 	local ok, cerr = repo:checkout(commit)
 	if not ok then return nil, cerr end
+	global.markGitRepoCached(repoDir)
 	return true
 end
 
@@ -472,10 +516,14 @@ function global.getOrInitGitRepo(repoName, repoUrl, branch, commit, isOffline)
 	end ---@cast commit string
 
 	local repoDir = global.getGitRepoDir(repoName, commit)
-	if isOffline and not fs.exists(repoDir) then
+	-- A partial cache dir from an interrupted run must not count as cached.
+	if fs.exists(repoDir) and not global.isGitRepoCached(repoDir, repoName) then
+		fs.rmdir(repoDir)
+	end
+	if isOffline and not global.isGitRepoCached(repoDir, repoName) then
 		lde.error.raise("offline: '" .. repoName .. "' is not cached locally (run once online to cache it)")
 	end
-	if not fs.exists(repoDir) then
+	if not global.isGitRepoCached(repoDir, repoName) then
 		local hostType = isRecognizedGitHost(repoUrl)
 		if hostType then
 			downloadTarball(repoUrl, commit, hostType, repoDir, repoName)
@@ -530,6 +578,12 @@ function global.planGitRepo(repoName, repoUrl, branch, commit)
 	-- (possibly nested, for namespaced names) parent must already exist.
 	local parent = path.dirname(repoDir)
 	if not fs.isdir(parent) then fs.mkdirAll(parent) end
+	-- Heal a partial cache dir from an interrupted run: existence alone must
+	-- not count as "cached", or the walk trusts a half-extracted tree and
+	-- fails with "No lde.json with name '<name>' found in: <dir>".
+	if fs.exists(repoDir) and not global.isGitRepoCached(repoDir, repoName) then
+		fs.rmdir(repoDir)
+	end
 	local plan = { dir = repoDir, commit = commit }
 
 	if not fs.exists(repoDir) then
@@ -546,7 +600,10 @@ function global.planGitRepo(repoName, repoUrl, branch, commit)
 	return plan
 end
 
---- Extract a downloaded git tarball into its repo cache dir.
+--- Extract a downloaded git tarball into its repo cache dir. On success the
+--- dir is marked complete (see GIT_CACHE_MARKER); on failure the partial dir
+--- is removed so a later run re-downloads instead of trusting a
+--- half-extracted tree.
 ---@param archiveFile string
 ---@param repoDir string
 ---@return boolean? ok
@@ -554,6 +611,11 @@ end
 function global.extractGitTarball(archiveFile, repoDir)
 	local ok, err = Archive().new(archiveFile):extract(repoDir, { stripComponents = true })
 	fs.delete(archiveFile)
+	if ok then
+		global.markGitRepoCached(repoDir)
+	else
+		fs.rmdir(repoDir)
+	end
 	return ok, err
 end
 
@@ -583,17 +645,15 @@ function global.getOrInitArchive(url, isOffline)
 
 		local archiveFile = archiveDir .. ".archive"
 
-		local dlOpts
+		local dlOpts = { timeout = DOWNLOAD_TIMEOUT }
 		if bar then
-			dlOpts = {
-				progress = function(dltotal, dlnow)
-					local ratio = dltotal > 0 ? dlnow / dltotal : nil
-					local info = dltotal > 0
-						and (ansi.formatBytes(dlnow) .. " / " .. ansi.formatBytes(dltotal))
-						or ansi.formatBytes(dlnow)
-					bar:update(ratio, info)
-				end
-			}
+			dlOpts.progress = function(dltotal, dlnow)
+				local ratio = dltotal > 0 ? dlnow / dltotal : nil
+				local info = dltotal > 0
+					and (ansi.formatBytes(dlnow) .. " / " .. ansi.formatBytes(dltotal))
+					or ansi.formatBytes(dlnow)
+				bar:update(ratio, info)
+			end
 		end
 
 		local function download()
@@ -647,7 +707,9 @@ function global.getArchiveDir(url)
 	return path.join(global.getTarCacheDir(), sanitize(url))
 end
 
---- Extract a downloaded archive file into its cache directory.
+--- Extract a downloaded archive file into its cache directory. On failure the
+--- partial dir is removed so a later run re-downloads instead of trusting a
+--- half-extracted tree.
 ---@param url string
 ---@param archiveFile string
 ---@param archiveDir string
@@ -668,6 +730,9 @@ function global.extractArchive(url, archiveFile, archiveDir)
 	end
 
 	fs.delete(archiveFile)
+	if not ok then
+		fs.rmdir(archiveDir)
+	end
 	return ok, err2
 end
 
@@ -703,7 +768,11 @@ function global.getOrCloneRepo(repoName, cloneUrl, branch)
 	end ---@cast commit string
 
 	local repoDir = global.getGitRepoDir(repoName, commit)
-	if not fs.exists(repoDir) then
+	-- A partial cache dir from an interrupted run must not count as cached.
+	if fs.exists(repoDir) and not global.isGitRepoCached(repoDir, repoName) then
+		fs.rmdir(repoDir)
+	end
+	if not global.isGitRepoCached(repoDir, repoName) then
 		local hostType = isRecognizedGitHost(cloneUrl)
 		if hostType then
 			downloadTarball(cloneUrl, commit, hostType, repoDir, repoName)
@@ -716,6 +785,7 @@ function global.getOrCloneRepo(repoName, cloneUrl, branch)
 			if not ok then
 				lde.error.raise("Failed to checkout commit: " .. (cerr2 or "unknown error"))
 			end
+			global.markGitRepoCached(repoDir)
 		end
 	end
 	return repoDir, commit

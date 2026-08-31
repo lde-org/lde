@@ -44,7 +44,9 @@ end
 ---@param url string
 ---@return string
 function Instance:fetch(url)
-	local res, err = curl.get(url)
+	-- Total-time budget: a server that accepts the connection but never
+	-- finishes the body would otherwise hang the build forever.
+	local res, err = curl.get(url, { timeout = 120 })
 	if not res then
 		error("failed to fetch " .. url .. ": " .. err)
 	end

@@ -107,8 +107,12 @@ local function resolveTransfer(destPath) ---@cast session -nil
 	if res.ok and res.path and session.archiveCache then
 		local cached = path.join(session.archiveCache, path.basename(res.path))
 		if not fs.exists(cached) then
+			-- Copy to a temp name and rename: an interrupted copy must not
+			-- leave a partial file that later runs trust as a full download.
 			fs.mkdirAll(path.dirname(cached))
-			fs.copy(res.path, cached)
+			local tmp = cached .. ".tmp"
+			fs.copy(res.path, tmp)
+			fs.move(tmp, cached)
 		end
 	end
 end
@@ -146,19 +150,51 @@ function download.onTransfer(fn)
 	if session then session.onTransfer = fn end
 end
 
+--- Total-time budget for each parallel transfer. A server that accepts the
+--- connection but never finishes the body would otherwise block the batch
+--- forever (curl-sys applies no default timeout).
+local DOWNLOAD_TIMEOUT = 120 -- seconds
+
 --- Seed `destPath` from the user-level archive cache when a copy exists
 --- (keyed by destPath basename, which is URL-derived). Returns true when
 --- seeded, so the caller can skip the network transfer entirely.
+---
+--- A file already at `destPath` is only trusted when it is (a) a transfer
+--- registered this session (in flight or already resolved) or (b) backed by a
+--- copy in the user-level archive cache, which is written only after a
+--- successful transfer. A bare leftover from an interrupted run is a partial
+--- download — it is deleted so the caller re-fetches instead of extracting
+--- garbage.
 ---@param destPath string
 ---@return boolean
 local function seedFromCache(destPath) ---@cast session -nil
-	if fs.exists(destPath) then return true end
+	if fs.exists(destPath) then
+		if type(session.pending[destPath]) == "number" then return true end
+		local cached = session.archiveCache and path.join(session.archiveCache, path.basename(destPath))
+		if cached and fs.exists(cached) then
+			-- The leftover may be a partial download from an interrupted run;
+			-- reseed it from the complete user-level copy instead of trusting it.
+			fs.copy(cached, destPath)
+			return true
+		end
+		fs.delete(destPath)
+		return false
+	end
 	if not session.archiveCache then return false end
 	local cached = path.join(session.archiveCache, path.basename(destPath))
 	if not fs.exists(cached) then return false end
 	fs.mkdirAll(path.dirname(destPath))
 	fs.copy(cached, destPath)
 	return true
+end
+
+--- Delete the user-level archive cache copy backing `destPath`. Called after
+--- extraction of seeded content fails: the copy may itself be corrupt, and
+--- must not be re-trusted (and re-failed) on the next run.
+---@param destPath string
+function download.invalidateUserCache(destPath)
+	if not session or not session.archiveCache then return end
+	fs.delete(path.join(session.archiveCache, path.basename(destPath)))
 end
 
 --- Register a URL to be fetched into `destPath` as part of the current batch.
@@ -171,7 +207,7 @@ end
 function download.prefetch(url, destPath)
 	if not session then return "done" end
 	if seedFromCache(destPath) then return "done" end
-	local index = session.batch:add(url, { path = destPath })
+	local index = session.batch:add(url, { path = destPath, timeout = DOWNLOAD_TIMEOUT })
 	session.pending[destPath] = index
 	return "pending"
 end
@@ -185,7 +221,7 @@ end
 function download.background(url, destPath)
 	if not session then return "done" end
 	if seedFromCache(destPath) then return "done" end
-	local index = session.batch:add(url, { path = destPath })
+	local index = session.batch:add(url, { path = destPath, timeout = DOWNLOAD_TIMEOUT })
 	session.pending[destPath] = index
 	session.background[destPath] = true
 	return "pending"
