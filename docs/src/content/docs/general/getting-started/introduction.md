@@ -16,7 +16,7 @@ order: 0
 
 ## Getting Started
 
-Run `lde new` to create a new project.
+Run `lde new` to create a new project. It will 
 
 ```sh
 ~> lde new
@@ -34,26 +34,43 @@ Select **blank** for now.
   teal  Typed lua with type checking support
 ```
 
-You can use whatever language you want. We'll use **lua**.
+You can use whatever language you want. We'll use **lua**, of course.
 
 ## Adding Dependencies
 
-Adding dependencies is as simple as `lde add`.
+Adding dependencies is as simple as `lde add` inside of your project
 
-It supports the [lde registry](/registry), [luarocks](/docs/package-manager/getting-started/luarocks), and direct git dependencies if you want to avoid a registry entirely.
+Dependencies are stored in a global cache for performance and space conservation, but they are symlinked into your local project as to not pollute your PATH.
 
-Dependencies are resolved locally to your project for easy access to lua without polluting your PATH, or needing some kind of virtual environment. (But they are cached and reused globally for performance and to save space)
+You can also add dev dependencies (dependencies only needed for development) using `--dev`
+
+### Git
+
+You can add dependencies directly from git repositories using the `--git` flag, or the shorthands `gh:`, `codeberg:`, etc.
 
 ```sh
-lde add hood --git https://github.com/codebycruz/hood
+lde add hood --git https://github.com/bycruz/hood
+# or use this for short:
+lde add gh:bycruz/hood
+```
+
+### Registry
+
+The [lde registry](/registry) is a centralized place to find and install dependencies, it allows easy discovery of dependencies with proper versioning.
+
+```sh
+lde add process
+```
+
+You can also add [luarocks](/docs/package-manager/getting-started/luarocks) packages this way with the `rocks:` prefix.
+
+```sh
 lde add rocks:luasocket
 ```
 
 ## Running Your Project
 
-We aren't just dealing with a package manager here. You want to be able to run your code..
-
-Running `lde run` will run your project's entrypoint using the embedded LuaJIT engine.
+Running `lde run` will run your project's entrypoint (`./src/init.lua`) using the embedded LuaJIT engine.
 
 ```sh
 lde run
@@ -107,12 +124,13 @@ You can also get [test coverage](/docs/test-runner/getting-started/test-runner/)
 
 Now, we can add dependencies, run and even test our code. But this is all pointless if our code stays on our machine!
 
-How do we give it to our users? What about run it on a server?
+This is why you can [compile into a single executable](/docs/bundler/getting-started/compiling) without any dependencies, not even on lua.
 
-Thankfully, lde can **compile** your code into a single executable, including all of its dependencies.
-
-This can be done with `lde compile`, and the output executable will need no dependencies, not even lua.
+```sh
+lde compile
+```
 
 ## Next Steps
 
-Head to [Installation](/docs/general/getting-started/installation) to get lde on your machine, or jump straight to [Scaffold a New Project](/docs/general/features/new-project) if you've already installed it.
+1. [Download lde](/download) if you haven't already.
+2. Take a look at the list of guides for using lde in your favorite environments!

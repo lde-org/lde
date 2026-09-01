@@ -15,13 +15,15 @@ The way that `build.lua` scripts, and luarocks packages work in lde is by relyin
 
 ### Windows
 
-The good news is, on windows, since it is difficult to set up a C compiler (especially one that behaves with unix based builds), [lde automatically downloads and sets up a clang-based toolchain on first use](/docs/general/misc/windows-mingw). It is ~30mB compressed, so it should not take too long to download.
+It is difficult to set up a C compiler let alone a full GNU environment as is common with lua packages on Windows.
+
+For this reason, lde automatically downloads and sets up a [clang-based toolchain](/docs/general/misc/windows-toolchain) on first use. It is ~30mB compressed, so it should not take too long to download.
 
 ### Linux
 
-For linux, a compiler is not shipped out of the box. You'll want to install `clang` via your favorite package manager:
+A compiler is not shipped out of the box. Install `clang` via your package manager:
 
-```
+```sh
 apt install clang
 dnf install clang
 pacman -S clang
@@ -29,7 +31,7 @@ pacman -S clang
 
 ### MacOS
 
-For MacOS, clang ships with Xcode Command Line Tools. You can install it via `xcode-select --install`.
+Clang ships with Xcode. Install it via `xcode-select --install`
 
 ### Using Another Compiler
 
