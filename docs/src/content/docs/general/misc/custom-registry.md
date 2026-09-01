@@ -1,9 +1,9 @@
 ---
-title: Using a Custom Registry
+title: Custom Registry
 order: 7
 ---
 
-# Using a Custom Registry
+# Custom Registry
 
 By default, lde uses the [official registry](https://github.com/lde-org/registry). You can point lde at a different registry by editing `~/.lde/config.json`.
 
@@ -25,4 +25,5 @@ Fork or clone the [official registry](https://github.com/lde-org/registry) as a 
 
 All `lde add`, `lde update`, and `lde publish` commands will use your configured registry.
 
-> **Note:** In the future, registry scopes will allow you to configure a custom registry at the namespace level, so you won't need to replace the global registry to use private packages alongside public ones.
+> [!NOTE]
+> In the future, registry scopes will allow you to configure a custom registry at the namespace level, so you won't need to replace the global registry to use private packages alongside public ones.

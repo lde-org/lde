@@ -1,13 +1,11 @@
 ---
-title: C Module Support
+title: Native Module Support
 order: 11
 ---
 
-# C Module Support
+# Native Module Support
 
-C modules are supported in LDE projects via build scripts.
-
-The process is simple: compile your C source into a shared library and place it inside your package's output directory (`target/<name>/`). lde adds an entry to your `package.cpath` which resolves shared libraries the same way it resolves Lua files in your `target` directory — so the library is `require`d like any other module in your package.
+Native modules are supported in lde projects via build scripts. You simply use the `lde-build` api to download any sources you need, and compile the output to the target directory.
 
 ## Example
 
@@ -28,35 +26,19 @@ build:cc({
 })
 ```
 
-The exported symbol must match the require name: `require("socket.core")` looks for `luaopen_socket_core`. The example declares only the Lua C API functions it uses, so it compiles without LuaJIT headers on the machine. Larger modules usually `#include "lua.h"` and arrange for the headers themselves — for example by fetching them with `build:fetch` or driving a full build system with `build:sh`.
-
-```c socket.c
-#include <stddef.h>
-
-typedef struct lua_State lua_State;
-typedef int (*lua_CFunction)(lua_State *L);
-
-extern void lua_pushstring(lua_State *L, const char *s);
-
-int luaopen_socket_core(lua_State *L) {
-	lua_pushstring(L, "Hello from C!");
-	return 1;
-}
-```
-
 ```lua src/init.lua
 local socket = require("socket.core")
 print("Here's the output: ", socket)
 -- Here's the output: Hello from C!
 ```
 
-## Support for compiled applications
+## Compiled Applications
 
-This also works for projects compiled with `lde compile` by scanning and saving any shared libraries from `target` into the binary, and extracting them into a temporary directory at runtime.
+This also works for packages compiled with `lde compile`.
 
-They are then resolved via a `package.preload` lookup on require(), same as lua files.
+When compiled, lde scans the `target` directory for any shared libraries and saves them into the binary. They are then extracted into a temporary directory at runtime.
 
-They do not require lua on the user's system on Windows, macOS, or Linux, as the binary created exports the LuaJIT symbols from LDE.
+They do not require lua on the user's system on Windows, macOS, or Linux, as the binary created exports the LuaJIT symbols from lde.
 
 ## Distributing as a Library
 
