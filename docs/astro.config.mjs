@@ -5,6 +5,8 @@ import tailwindcss from "@tailwindcss/vite";
 import preact from "@astrojs/preact";
 import icon from "astro-icon";
 import cloudflare from "@astrojs/cloudflare";
+import { satteri } from "@astrojs/markdown-satteri";
+import { githubAdmonitions } from "./src/lib/githubAdmonitions.ts";
 
 // https://astro.build/config
 export default defineConfig({
@@ -23,6 +25,9 @@ export default defineConfig({
 		plugins: [tailwindcss()],
 	},
 	markdown: {
+		processor: satteri({
+			mdastPlugins: [githubAdmonitions],
+		}),
 		shikiConfig: {
 			theme: "css-variables",
 			transformers: [

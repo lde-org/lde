@@ -270,6 +270,91 @@ html {
 	}
 }
 
+/* GitHub-style callouts (`> [!NOTE]` etc.), emitted by the Sätteri mdast
+   plugin (src/lib/githubAdmonitions.ts) */
+.markdown .callout {
+	--callout-accent: #3b82f6;
+	--callout-bg: rgba(59, 130, 246, 0.04);
+	--callout-title: #1d4ed8;
+	@apply my-4 px-4 py-3 text-sm;
+	border-left: 3px solid var(--callout-accent);
+	background: var(--callout-bg);
+}
+
+.markdown .callout > :first-child {
+	@apply mt-0;
+}
+
+.markdown .callout > :last-child {
+	@apply mb-0;
+}
+
+.markdown .callout p {
+	@apply my-2;
+}
+
+.markdown .callout-title {
+	@apply mb-2 font-bold;
+	font-size: 0.7rem;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--callout-title);
+}
+
+.markdown .callout-tip {
+	--callout-accent: #10b981;
+	--callout-bg: rgba(16, 185, 129, 0.04);
+	--callout-title: #047857;
+}
+
+.markdown .callout-important {
+	--callout-accent: #8b5cf6;
+	--callout-bg: rgba(139, 92, 246, 0.04);
+	--callout-title: #6d28d9;
+}
+
+.markdown .callout-warning {
+	--callout-accent: #f59e0b;
+	--callout-bg: rgba(245, 158, 11, 0.05);
+	--callout-title: #b45309;
+}
+
+.markdown .callout-caution {
+	--callout-accent: #ef4444;
+	--callout-bg: rgba(239, 68, 68, 0.04);
+	--callout-title: #b91c1c;
+}
+
+.dark .markdown .callout-note {
+	--callout-accent: #60a5fa;
+	--callout-bg: rgba(96, 165, 250, 0.08);
+	--callout-title: #93c5fd;
+}
+
+.dark .markdown .callout-tip {
+	--callout-accent: #34d399;
+	--callout-bg: rgba(52, 211, 153, 0.08);
+	--callout-title: #6ee7b7;
+}
+
+.dark .markdown .callout-important {
+	--callout-accent: #a78bfa;
+	--callout-bg: rgba(167, 139, 250, 0.08);
+	--callout-title: #c4b5fd;
+}
+
+.dark .markdown .callout-warning {
+	--callout-accent: #fbbf24;
+	--callout-bg: rgba(251, 191, 36, 0.08);
+	--callout-title: #fcd34d;
+}
+
+.dark .markdown .callout-caution {
+	--callout-accent: #f87171;
+	--callout-bg: rgba(248, 113, 113, 0.08);
+	--callout-title: #fca5a5;
+}
+
 .markdown hr {
 	@apply my-8 border-t border-gray-200;
 
