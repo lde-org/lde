@@ -5,9 +5,7 @@ order: 3
 
 # Tools
 
-LDE has support for running packages as tools, which is useful for command line applications, build tools, and more.
-
-Any package is automatically a 'tool', simply by the nature of packages all having init.lua as their entrypoint.
+A concept of 'tools' exists in lde, wherein a package is simply used as a program. But anything can be a tool as long as it is intended to be run in its `./src/init.lua` file, including luarocks packages.
 
 ## lde x
 
@@ -69,6 +67,10 @@ lde install triangle --git https://github.com/codebycruz/hood
 # Now you can run `triangle` from your terminal!
 triangle
 ```
+
+> [!WARNING]
+> For luarocks packages that register their binaries under a different name, they will still be installed under the name of the package.
+> Example: `lde install foobar` that intends to create a package called `baz` will still be installed under `foobar` by lde.
 
 ## lde uninstall
 
