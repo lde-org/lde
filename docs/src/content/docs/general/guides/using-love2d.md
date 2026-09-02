@@ -15,7 +15,7 @@ Simply add this to your `main.lua`
 package.path = package.path .. ";./target/?.lua;./target/?/init.lua"
 ```
 
-This will make it so love2d resolves modules from the `./target` directory, which is where LDE installs dependencies to. Happy hacking!
+This will make it so love2d resolves modules from the `./target` directory, which is where lde installs dependencies to. Yep. That's it!
 
 ## Using LÖVE in an lde project
 
@@ -27,3 +27,16 @@ require("yourproject")
 ```
 
 This will set up your require paths and call into your `./src/init.lua`, so you can write as if you're just writing a normal lde project, while using love2d!
+
+## Convenience Script
+
+You can add a package script to make a convenient `lde dev` script:
+
+```json
+{
+  "name": "mypackage",
+  "scripts": {
+    "dev": "lde sync && love ."
+  }
+}
+```
