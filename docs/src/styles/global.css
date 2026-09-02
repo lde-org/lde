@@ -229,7 +229,7 @@ html {
 }
 
 .markdown code:not(pre code) {
-	@apply mx-0.5 px-1 py-0.5 rounded items-center bg-gray-100 align-middle;
+	@apply mx-0.5 text-nowrap px-1 py-0.5 rounded items-center bg-gray-100 align-middle;
 	font-size: 0.875em;
 
 	@variant dark {

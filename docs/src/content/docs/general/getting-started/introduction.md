@@ -16,7 +16,14 @@ order: 0
 
 ## Getting Started
 
-Run `lde new` to create a new project. It will 
+Run `lde new` to create a new project. You'll be presented with an interactive tui.
+
+> [!NOTE]
+> Are you using an llm?
+> Simply tell it to read the docs here:
+> ```
+> Read https://lde.sh/llms.txt and set up a new project.
+> ```
 
 ```sh
 ~> lde new
@@ -42,7 +49,8 @@ Adding dependencies is as simple as `lde add` inside of your project
 
 Dependencies are stored in a global cache for performance and space conservation, but they are symlinked into your local project as to not pollute your PATH.
 
-You can also add dev dependencies (dependencies only needed for development) using `--dev`
+> [!TIP]
+> You can add development only dependencies using `lde add --dev`
 
 ### Git
 

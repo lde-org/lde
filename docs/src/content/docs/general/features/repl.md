@@ -16,6 +16,10 @@ The repl command starts an interactive shell. It is the equivalent of simply run
 lde repl
 ```
 
+Here's how it'll look:
+
+![repl](/docs-assets/repl.avif)
+
 ## Features
 
 - Syntax Highlighting

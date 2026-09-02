@@ -24,3 +24,16 @@ This is desirable when you don't care about running the binary and want fast bui
 
 > [!NOTE]
 > You will likely require some additional setup or dependencies on your system such as Windows libraries when targeting that platform.
+
+## Using another compiler
+
+If you have an alternate compiler on your system, you can override the default compiler lde uses (clang) with the `SEA_CC` env var.
+
+```sh
+SEA_CC=clang lde compile
+```
+
+> [!WARNING]
+> You should rarely, if ever, need to use this.
+
+This is used by lde to forcibly compile on windows with the llvm-mingw clang in CI, where the toolchain download is not an option.
