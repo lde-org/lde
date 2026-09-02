@@ -32,13 +32,3 @@ pacman -S clang
 ### MacOS
 
 Clang ships with Xcode. Install it via `xcode-select --install`
-
-### Using Another Compiler
-
-To use a specific compiler (for example, with cross compilation), set the `SEA_CC` environment variable:
-
-```sh
-SEA_CC=clang lde compile
-```
-
-This is only really needed for [cross compiles](/docs/bundler/features/cross-compilation).

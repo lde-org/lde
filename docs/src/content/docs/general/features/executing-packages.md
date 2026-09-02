@@ -3,7 +3,7 @@ title: Executing Packages
 order: 3
 ---
 
-# Tools
+# Tools 🚧
 
 A concept of 'tools' exists in lde, wherein a package is simply used as a program. But anything can be a tool as long as it is intended to be run in its `./src/init.lua` file, including luarocks packages.
 
