@@ -13,6 +13,7 @@ Simply add this to your `main.lua`
 
 ```lua
 package.path = package.path .. ";./target/?.lua;./target/?/init.lua"
+package.cpath = package.cpath .. ";./target/?.so" .. ";./target/?.dll" .. ";./target/?.dylib"
 ```
 
 This will make it so love2d resolves modules from the `./target` directory, which is where lde installs dependencies to. Yep. That's it!
@@ -23,6 +24,7 @@ Since love2d has its entrypoint as `main.lua`, you can do the same as the above,
 
 ```lua
 package.path = package.path .. ";./target/?.lua;./target/?/init.lua"
+package.cpath = package.cpath .. ";./target/?.so" .. ";./target/?.dll" .. ";./target/?.dylib"
 require("yourproject")
 ```
 
