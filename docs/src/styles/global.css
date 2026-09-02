@@ -161,11 +161,11 @@ html {
 }
 
 .markdown h1 {
-	@apply text-4xl font-bold mt-10 mb-4;
+	@apply text-5xl font-bold mt-10 mb-4;
 }
 
 .markdown h2 {
-	@apply text-2xl font-semibold mt-8 mb-3 pb-2 border-b border-gray-200;
+	@apply text-3xl font-semibold mt-8 mb-3 pb-2;
 
 	@variant dark {
 		@apply border-gray-800;
@@ -173,13 +173,13 @@ html {
 }
 
 .markdown h3 {
-	@apply text-xl font-semibold mt-7 mb-2;
+	@apply text-2xl font-semibold mt-7 mb-2;
 }
 
 .markdown h4,
 .markdown h5,
 .markdown h6 {
-	@apply text-lg font-semibold mt-6 mb-2;
+	@apply text-xl font-semibold mt-6 mb-2;
 }
 
 .markdown p {
@@ -229,7 +229,7 @@ html {
 }
 
 .markdown code:not(pre code) {
-	@apply px-1.5 py-0.5 rounded bg-gray-100 align-middle;
+	@apply mx-0.5 px-1 py-0.5 rounded items-center bg-gray-100 align-middle;
 	font-size: 0.875em;
 
 	@variant dark {
@@ -276,7 +276,7 @@ html {
 	--callout-accent: #3b82f6;
 	--callout-bg: rgba(59, 130, 246, 0.04);
 	--callout-title: #1d4ed8;
-	@apply my-4 px-4 py-3 text-sm;
+	@apply my-4 px-4 py-3 text-base;
 	border-left: 3px solid var(--callout-accent);
 	background: var(--callout-bg);
 }
@@ -294,8 +294,7 @@ html {
 }
 
 .markdown .callout-title {
-	@apply mb-2 font-bold;
-	font-size: 0.7rem;
+	@apply mb-2 font-bold text-sm;
 	letter-spacing: 0.08em;
 	text-transform: uppercase;
 	color: var(--callout-title);
@@ -383,16 +382,16 @@ html {
 	}
 }
 
-	.markdown img {
-		@apply rounded-lg my-4;
-	}
+.markdown img {
+	@apply rounded-lg my-4;
+}
 
-	/* README bodies rendered from the registry package pages (via marked).
-	   Docs code blocks reserve top padding for a language label; README
-	   blocks don't have one, so collapse it. */
-	.markdown.readme pre {
-		padding: 0.9rem 1rem;
-	}
+/* README bodies rendered from the registry package pages (via marked).
+   Docs code blocks reserve top padding for a language label; README
+   blocks don't have one, so collapse it. */
+.markdown.readme pre {
+	padding: 0.9rem 1rem;
+}
 
 /* Inline file viewer syntax highlighting (highlight.js). Tokens are colored
    per mode; unlisted tokens inherit the surrounding text color. */
