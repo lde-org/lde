@@ -13,7 +13,7 @@ interface Props {
 const { tabs, activeTab } = Astro.props;
 ---
 
-<div class="flex w-full lg:w-7xl mx-auto px-4 md:px-8 overflow-x-auto -mb-px">
+<div class="flex w-full max-w-7xl mx-auto px-4 md:px-8 overflow-x-auto -mb-px">
 	{tabs.map((tab) => (
 		<a
 			href={tab.firstHref}

@@ -22,12 +22,12 @@ function isActive(href: string) {
 ---
 
 <nav
-	class={`sticky top-0 z-50 bg-white/70 dark:bg-gray-950/0 backdrop-blur-md px-4 md:px-6 flex flex-col items-center justify-start border-b border-black/10 dark:border-white/10${hasTabs ? " min-h-[7rem]" : ""}`}
+	class={`sticky top-0 z-50 bg-white/70 dark:bg-gray-950/0 backdrop-blur-md px-4 lg:px-6 flex flex-col items-center justify-start border-b border-black/10 dark:border-white/10${hasTabs ? " min-h-[7rem]" : ""}`}
 >
 	<div class="flex flex-row items-center h-[4.5rem] w-full max-w-[90em]">
 		<a
 			href="/"
-			class="font-brand font-semibold text-2xl tracking-tight p-2 md:p-4 flex items-center gap-2.5"
+			class="font-brand font-semibold text-2xl tracking-tight p-2 md:p-3 lg:p-4 flex items-center gap-2.5"
 		>
 			<span class="relative inline-flex">
 				<span class="absolute inset-0 rounded-full bg-white/20 blur-xl" aria-hidden="true"></span>
@@ -41,12 +41,12 @@ function isActive(href: string) {
 		</a>
 
 		<!-- Desktop nav links -->
-		<div class="hidden md:flex ml-16 h-full flex-row items-stretch">
+		<div class="hidden md:flex ml-10 lg:ml-16 h-full flex-row items-stretch">
 			{
 				entries.map((entry) => (
 					<a
 						href={entry.href}
-						class={`group relative flex h-full items-center overflow-hidden px-4 font-medium transition-colors duration-200 ${isActive(entry.href) ? "text-white" : "hover:text-white"}`}
+						class={`group relative flex h-full items-center overflow-hidden px-3 lg:px-4 font-medium transition-colors duration-200 ${isActive(entry.href) ? "text-white" : "hover:text-white"}`}
 					>
 						<span
 							class={`absolute inset-0 bg-blue-600 transition-transform duration-200 ease-out ${isActive(entry.href) ? "translate-y-0" : "translate-y-full group-hover:translate-y-0"}`}
@@ -58,7 +58,7 @@ function isActive(href: string) {
 			}
 		</div>
 
-		<div class="ml-auto mr-2 md:mr-4">
+		<div class="ml-auto mr-2 lg:mr-4">
 			<Search client:load />
 		</div>
 
