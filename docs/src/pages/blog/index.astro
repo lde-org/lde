@@ -5,42 +5,73 @@ import Layout from "../../layouts/Layout.astro";
 const posts = (await getCollection("blog")).sort(
     (a, b) => b.data.published.valueOf() - a.data.published.valueOf(),
 );
+
+const tags = ["Release", "Engineering", "Docs"];
 ---
 
 <Layout title="Blog">
-    <div class="w-full max-w-3xl mx-auto px-4 py-12">
+    <div class="w-full max-w-4xl mx-auto px-4 py-12">
         <div class="mb-8">
             <h1 class="text-4xl font-bold">Blog</h1>
         </div>
+
+        <div class="flex flex-wrap gap-2">
+            {
+                tags.map((tag) => (
+                    <a
+                        href={`/blog/tag/${tag.toLowerCase()}`}
+                        class="text-base font-semibold hover:bg-blue-600 hover:text-white transition border border-gray-800 px-2 py-1 text-gray-500 dark:text-gray-400"
+                    >
+                        {tag}
+                    </a>
+                ))
+            }
+        </div>
+
         <ul
-            class="flex flex-col gap-4 divide-y divide-gray-200 dark:divide-gray-800"
+            class="flex flex-col gap-8 divide-y divide-gray-200 dark:divide-gray-800 mt-8"
         >
             {
                 posts.map((post) => (
                     <li>
                         <a
                             href={`/blog/${post.id}`}
-                            class="flex flex-col gap-1 py-4 group"
+                            class="flex flex-row gap-4 mb-4"
                         >
-                            <span class="text-xl font-medium group-hover:text-blue-500 transition-colors">
-                                {post.data.title}
-                            </span>
-                            <span class="text-base text-gray-500 dark:text-gray-400">
-                                {post.data.author} &middot;{" "}
-                                {post.data.published.toLocaleDateString(
-                                    "en-US",
-                                    {
-                                        year: "numeric",
-                                        month: "long",
-                                        day: "numeric",
-                                    },
-                                )}
-                            </span>
-                            {post.data.description && (
-                                <div class="mt-1 text-sm text-gray-500 dark:text-gray-400 leading-relaxed line-clamp-2">
-                                    {post.data.description}
+                            <div class="w-1/4 flex flex-col gap-6">
+                                <div class="h-1/4">
+                                    {post.data.published.toLocaleDateString(
+                                        "en-US",
+                                        {
+                                            year: "numeric",
+                                            month: "short",
+                                            day: "numeric",
+                                        },
+                                    )}
                                 </div>
-                            )}
+
+                                <ul class="flex flex-wrap gap-1 h-3/4">
+                                    {post.data.tags?.map(tag => (
+                                        <li class="text-sm px-2 py-1 h-8 border border-gray-800 text-gray-600 dark:text-gray-500">
+                                            {tag[0].toUpperCase() + tag.slice(1)}
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+
+                            <div class="flex flex-col group gap-1 w-3/4">
+                                <span class="text-xl font-semibold group-hover:text-blue-500 transition-colors">
+                                    {post.data.title}
+                                </span>
+                                <span class="text-base text-gray-600 dark:text-gray-500">
+                                    {post.data.author}
+                                </span>
+                                {post.data.description && (
+                                    <div class="text-base text-gray-500 dark:text-gray-400 leading-relaxed line-clamp-2">
+                                        {post.data.description}
+                                    </div>
+                                )}
+                            </div>
                         </a>
                     </li>
                 ))

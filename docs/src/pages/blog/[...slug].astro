@@ -25,8 +25,8 @@ const tocHeadings = headings.filter((h) => h.depth <= 3);
 				&larr; Blog
 			</a>
 		</div>
-		<h1 class="text-3xl font-bold mb-3">{post.data.title}</h1>
-		<p class="text-sm text-gray-500 dark:text-gray-400 mb-10">
+		<h1 class="text-4xl font-bold mb-3">{post.data.title}</h1>
+		<p class="text-base text-gray-500 dark:text-gray-400 mb-10">
 			{post.data.author} &middot;{" "}
 			{
 				post.data.published.toLocaleDateString("en-US", {
@@ -38,19 +38,18 @@ const tocHeadings = headings.filter((h) => h.depth <= 3);
 		</p>
 		{
 			post.data.published < new Date("2026-03-27") && (
-				<div class="mb-8 rounded-lg border border-yellow-400/40 bg-yellow-50/60 dark:bg-yellow-900/20 px-4 py-3 text-sm text-yellow-800 dark:text-yellow-300">
-					<strong>Note:</strong> This article was written before{" "}
+				<div class="mb-8 border border-yellow-500/40 bg-yellow-50/60 dark:bg-yellow-900/20 px-4 py-3 text-base text-yellow-800 dark:text-yellow-400">
+					<strong>NOTE:</strong> This article was written before{" "}
 					<a
 						href="https://github.com/lde-org/lde/issues/73"
 						class="underline hover:text-yellow-900 dark:hover:text-yellow-200"
 					>
 						the rename from lpm to lde
 					</a>
-					. References to <code>lpm</code> can be read as <code>lde</code>.
 				</div>
 			)
 		}
-		<main class="markdown">
+		<main class="markdown text-lg">
 			<Content />
 		</main>
 	</div>
@@ -58,19 +57,19 @@ const tocHeadings = headings.filter((h) => h.depth <= 3);
 	{
 		tocHeadings.length > 0 && (
 			<aside
-				class="hidden xl:block fixed w-48"
+				class="hidden xl:block fixed w-64"
 				style="top: calc(72px + 5rem); right: max(2rem, calc((100vw - 48rem) / 2 - 16rem));"
 			>
-				<p class="text-xs font-semibold text-black/40 dark:text-white/40 mb-3">
+				<p class="text-sm font-semibold text-black/40 dark:text-white/40 mb-3">
 					On this page
 				</p>
 				<ul class="border-l border-black/10 dark:border-white/10">
 					{tocHeadings.map((h) => (
-						<li class={h.depth === 2 ? "mt-2 first:mt-0" : undefined}>
+						<li class={h.depth === 2 ? "mt-2 first:mt-0 mb-0.5" : undefined}>
 							<a
 								href={`#${h.slug}`}
 								data-toc-slug={h.slug}
-								class={`toc-link block text-sm text-black/40 dark:text-white/40 hover:text-black dark:hover:text-white transition-colors leading-snug border-l border-transparent -ml-px ${h.depth === 3 ? "pl-5 py-0" : "pl-3 py-0.5"}`}
+								class={`toc-link block text-base text-black/40 dark:text-white/40 hover:text-black dark:hover:text-white transition-colors leading-snug border-l border-transparent -ml-px ${h.depth === 3 ? "pl-5 py-0" : "pl-3 py-0.5"}`}
 							>
 								{h.text}
 							</a>

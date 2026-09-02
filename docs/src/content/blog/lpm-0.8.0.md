@@ -3,9 +3,8 @@ title: Release v0.8.0
 author: David Cruz
 published: 2026-03-26
 description: Adds LuaRocks dependency support, flat lockfile for transitive deps, a basic REPL, and more lpm-test utilities.
+tags: ["release"]
 ---
-
-> Upgrade to the latest version with `lpm upgrade`!
 
 ## LuaRocks support
 

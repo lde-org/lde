@@ -3,9 +3,8 @@ title: Release v0.10.0
 author: David Cruz
 published: 2026-08-03
 description: A runtime rewrite built on the Lua C API after months of work, plus lde test --watch, a built-in profiler, LuaJIT v3 syntax, and a much faster startup.
+tags: ["release"]
 ---
-
-> Upgrade to the latest version with `lde upgrade`!
 
 ## The runtime rewrite
 
