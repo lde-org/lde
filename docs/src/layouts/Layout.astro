@@ -14,7 +14,7 @@ interface Props {
 }
 
 const DEFAULT_DESCRIPTION =
-	"Lde is an open-source project providing easy accessibility to a Lua runtime alongside intuitive package management for dependencies.";
+	"An open-source package manager, runtime and test runner providing easy accessibility to lua.";
 
 const {
 	title,
@@ -100,7 +100,7 @@ const ogImage = `${SITE_URL}/og/${ogSlug}.png`;
 		/>
 	</head>
 	<body
-		class="relative overflow-x-clip antialiased bg-white dark:bg-gray-950 text-black dark:text-white flex flex-col min-h-screen lg:min-w-fit"
+		class={`relative overflow-x-clip antialiased bg-white dark:bg-gray-950 text-black dark:text-white flex flex-col min-h-screen${hasTabs ? " has-tabs" : ""}`}
 	>
 		<!-- Ambient page glow (hidden on index which has its own hero fx) -->
 		{!hideGlow && (

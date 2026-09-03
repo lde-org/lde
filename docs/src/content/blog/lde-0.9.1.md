@@ -3,9 +3,8 @@ title: Release v0.9.1
 author: David Cruz
 published: 2026-04-12
 description: New REPL, Android support, native curl/git/archive libraries, git submodule support, test lifecycle hooks, and more.
+tags: ["release"]
 ---
-
-> Upgrade to the latest version with `lde upgrade`!
 
 ## New REPL
 

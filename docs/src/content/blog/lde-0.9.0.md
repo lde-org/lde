@@ -3,9 +3,8 @@ title: Release v0.9.0
 author: David Cruz
 published: 2026-04-06
 description: Windows C compilation out of the box, watch mode, JSON5 config support, lde sync, macOS x86-64, ffi.load shim, and more.
+tags: ["release"]
 ---
-
-> Upgrade to the latest version with `lde upgrade`!
 
 ## Windows C compilation out of the box
 

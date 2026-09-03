@@ -3,9 +3,8 @@ title: Release v0.7.2
 author: David Cruz
 published: 2026-03-24
 description: Adds Windows ARM64 support, --help flag, lpm run for single files, new lpm-test assertions, and fixes for Windows upgrade permissions and UTF-8 output.
+tags: ["release"]
 ---
-
-> Upgrade to the latest version with `lpm upgrade`!
 
 ## Windows ARM64 support
 

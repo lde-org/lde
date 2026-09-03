@@ -1,10 +1,10 @@
 import { useState, useEffect, useMemo } from "preact/hooks";
-import { Marked } from "marked";
 import DOMPurify from "dompurify";
 import { CopyButton } from "./CopyButton";
 import { usePortfile } from "../hooks/usePortfile";
 import { useRegistry } from "../hooks/useRegistry";
 import { highlightCodeBlocks, highlightFile, isViewableFile } from "../lib/highlight";
+import { createReadmeMarked } from "../lib/readmeMarked";
 
 // Fetch with a localStorage cache: returns cached data when fresh, otherwise
 // fetches and stores the result. Used for the README and repo tree fetches so
@@ -201,7 +201,7 @@ function renderReadme(
 	ref: string,
 ): string {
 	const html = highlightCodeBlocks(
-		DOMPurify.sanitize(new Marked({ gfm: true }).parse(src) as string),
+		DOMPurify.sanitize(createReadmeMarked().parse(src) as string),
 	);
 	if (!repo) return html;
 	// This runs after sanitizing, so only safe URLs remain; rewriting a

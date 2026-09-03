@@ -3,9 +3,8 @@ title: Release v0.7.1
 author: David Cruz
 published: 2026-03-15
 description: Adds registry dependency support to lpm install and lpx, a --nightly flag for install scripts, and Aarch64 macOS support.
+tags: ["release"]
 ---
-
-> Upgrade to the latest version with `lpm upgrade`!
 
 ## Registry dependencies in `lpm install` and `lpx`
 

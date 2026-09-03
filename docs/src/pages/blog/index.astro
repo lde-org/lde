@@ -5,46 +5,178 @@ import Layout from "../../layouts/Layout.astro";
 const posts = (await getCollection("blog")).sort(
     (a, b) => b.data.published.valueOf() - a.data.published.valueOf(),
 );
+
+// Site tag categories first, then any additional tags found on posts. Slugs
+// are lowercase; names keep their display casing.
+const canonicalTags = ["Release", "Engineering", "Docs"];
+const seen = new Set<string>(canonicalTags.map((tag) => tag.toLowerCase()));
+const tags = canonicalTags.map((name) => ({ name, slug: name.toLowerCase() }));
+for (const post of posts) {
+    for (const tag of post.data.tags ?? []) {
+        const slug = tag.toLowerCase();
+        if (seen.has(slug)) continue;
+        seen.add(slug);
+        tags.push({ name: tag[0].toUpperCase() + tag.slice(1), slug });
+    }
+}
 ---
 
 <Layout title="Blog">
-    <div class="w-full max-w-3xl mx-auto px-4 py-12">
+    <div class="w-full max-w-4xl mx-auto px-4 py-12">
         <div class="mb-8">
             <h1 class="text-4xl font-bold">Blog</h1>
         </div>
+
+        <div class="flex flex-wrap gap-2">
+            <a
+                href="/blog"
+                data-tag=""
+                class="text-base font-semibold transition border border-gray-800 px-2 py-1 text-gray-500 dark:text-gray-400 hover:bg-blue-600 hover:text-white"
+                >All</a
+            >
+            {
+                tags.map((tag) => (
+                    <a
+                        href={`/blog?tag=${tag.slug}`}
+                        data-tag={tag.slug}
+                        class="text-base font-semibold transition border border-gray-800 px-2 py-1 text-gray-500 dark:text-gray-400 hover:bg-blue-600 hover:text-white"
+                    >
+                        {tag.name}
+                    </a>
+                ))
+            }
+        </div>
+
+        <p
+            id="blog-empty"
+            class="mt-8 text-base text-gray-500 dark:text-gray-400"
+            hidden
+        >
+            No posts.
+        </p>
+
         <ul
-            class="flex flex-col gap-4 divide-y divide-gray-200 dark:divide-gray-800"
+            class="flex flex-col gap-8 divide-y divide-gray-200 dark:divide-gray-800 mt-8"
         >
             {
-                posts.map((post) => (
-                    <li>
-                        <a
-                            href={`/blog/${post.id}`}
-                            class="flex flex-col gap-1 py-4 group"
-                        >
-                            <span class="text-xl font-medium group-hover:text-blue-500 transition-colors">
-                                {post.data.title}
-                            </span>
-                            <span class="text-base text-gray-500 dark:text-gray-400">
-                                {post.data.author} &middot;{" "}
-                                {post.data.published.toLocaleDateString(
-                                    "en-US",
-                                    {
-                                        year: "numeric",
-                                        month: "long",
-                                        day: "numeric",
-                                    },
-                                )}
-                            </span>
-                            {post.data.description && (
-                                <div class="mt-1 text-sm text-gray-500 dark:text-gray-400 leading-relaxed line-clamp-2">
-                                    {post.data.description}
+                posts.map((post) => {
+                    const postTags = (post.data.tags ?? [])
+                        .map((tag) => tag.toLowerCase())
+                        .join(" ");
+                    return (
+                        <li data-tags={postTags}>
+                            <a
+                                href={`/blog/${post.id}`}
+                                class="flex flex-row gap-4 mb-4"
+                            >
+                                <div class="w-1/4 flex flex-col gap-6">
+                                    <div class="h-1/4">
+                                        {post.data.published.toLocaleDateString(
+                                            "en-US",
+                                            {
+                                                year: "numeric",
+                                                month: "short",
+                                                day: "numeric",
+                                            },
+                                        )}
+                                    </div>
+
+                                    <ul class="flex flex-wrap gap-1 h-3/4">
+                                        {post.data.tags?.map((tag) => (
+                                            <li
+                                                class="text-sm px-2 py-1 h-8 border border-gray-800 text-gray-600 dark:text-gray-500"
+                                            >
+                                                {tag[0].toUpperCase() +
+                                                    tag.slice(1)}
+                                            </li>
+                                        ))}
+                                    </ul>
                                 </div>
-                            )}
-                        </a>
-                    </li>
-                ))
+
+                                <div class="flex flex-col group gap-1 w-3/4">
+                                    <span
+                                        class="text-xl font-semibold group-hover:text-blue-500 transition-colors"
+                                    >
+                                        {post.data.title}
+                                    </span>
+                                    <span
+                                        class="text-base text-gray-600 dark:text-gray-500"
+                                    >
+                                        {post.data.author}
+                                    </span>
+                                    {post.data.description && (
+                                        <div
+                                            class="text-base text-gray-500 dark:text-gray-400 leading-relaxed line-clamp-2"
+                                        >
+                                            {post.data.description}
+                                        </div>
+                                    )}
+                                </div>
+                            </a>
+                        </li>
+                    );
+                })
             }
         </ul>
     </div>
+
+    <script>
+        // /blog?tag=<tag> filtering, in the style of deno.com/blog?tag=...
+        const params = new URLSearchParams(location.search);
+        const items = [
+            ...document.querySelectorAll<HTMLLIElement>("[data-tags]"),
+        ];
+        const chips = [
+            ...document.querySelectorAll<HTMLAnchorElement>("[data-tag]"),
+        ];
+        const empty = document.getElementById("blog-empty")!;
+
+        const chipIdle =
+            "text-base font-semibold transition border border-gray-800 px-2 py-1 text-gray-500 dark:text-gray-400 hover:bg-blue-600 hover:text-white";
+        const chipActive =
+            "text-base font-semibold transition border border-blue-600 bg-blue-600 px-2 py-1 text-white";
+
+        function displayName(slug: string): string {
+            const chip = chips.find((c) => c.dataset.tag === slug);
+            if (chip) return chip.textContent!.trim();
+            return slug.length > 0
+                ? slug[0].toUpperCase() + slug.slice(1)
+                : "";
+        }
+
+        function applyFilter() {
+            const tag = (
+                new URLSearchParams(location.search).get("tag") ?? ""
+            ).toLowerCase();
+
+            let shown = 0;
+            for (const item of items) {
+                const has = item.dataset.tags!.split(/\s+/).includes(tag);
+                const visible = tag === "" || has;
+                item.hidden = !visible;
+                if (visible) shown++;
+            }
+
+            empty.hidden = shown > 0;
+            if (shown === 0) {
+                empty.textContent = `No posts tagged “${displayName(tag)}” yet.`;
+            }
+
+            for (const chip of chips) {
+                chip.className = chip.dataset.tag === tag ? chipActive : chipIdle;
+            }
+        }
+
+        chips.forEach((chip) => {
+            chip.addEventListener("click", (event) => {
+                event.preventDefault();
+                const url = new URL(chip.href);
+                history.pushState({}, "", `${url.pathname}${url.search}`);
+                applyFilter();
+            });
+        });
+
+        addEventListener("popstate", applyFilter);
+        applyFilter();
+    </script>
 </Layout>

@@ -161,11 +161,11 @@ html {
 }
 
 .markdown h1 {
-	@apply text-4xl font-bold mt-10 mb-4;
+	@apply text-5xl font-bold mt-10 mb-4;
 }
 
 .markdown h2 {
-	@apply text-2xl font-semibold mt-8 mb-3 pb-2 border-b border-gray-200;
+	@apply text-3xl font-semibold mt-8 mb-3 pb-2;
 
 	@variant dark {
 		@apply border-gray-800;
@@ -173,13 +173,13 @@ html {
 }
 
 .markdown h3 {
-	@apply text-xl font-semibold mt-7 mb-2;
+	@apply text-2xl font-semibold mt-7 mb-2;
 }
 
 .markdown h4,
 .markdown h5,
 .markdown h6 {
-	@apply text-lg font-semibold mt-6 mb-2;
+	@apply text-xl font-semibold mt-6 mb-2;
 }
 
 .markdown p {
@@ -188,14 +188,19 @@ html {
 
 .markdown pre {
 	@apply my-4 text-sm leading-relaxed overflow-x-auto bg-gray-50 border border-gray-200;
-	padding: 2.5rem 1rem 1rem;
+	/* Top padding reserves the slim language/filename strip (line-height 1rem
+	   + 0.5rem padding + border) plus breathing room before the code. */
+	padding: 2.25rem 1rem 0.5rem;
 
 	@variant dark {
 		@apply bg-gray-900/50 border-gray-700/50;
 	}
 }
 
-.markdown pre[data-language]::before {
+/* Code blocks scroll horizontally inside the <pre>, so overlay chrome
+   (language/filename label, copy button) lives on the .codeblock frame that
+   wraps it — anything attached to the scroller itself scrolls away. */
+.markdown .codeblock[data-language]::before {
 	content: attr(data-language);
 	display: block;
 	position: absolute;
@@ -204,37 +209,46 @@ html {
 	right: 0;
 	padding: 0.25rem 1rem;
 	font-size: 0.7rem;
+	/* Own line-height (not inherited): otherwise the label inherits the
+	   surrounding text's line-height and renders shorter inside callouts
+	   (unitless text-base 1.5) than in body copy, leaving a bigger gap
+	   before the code. */
+	line-height: 1rem;
 	font-family: ui-monospace, monospace;
-	text-transform: uppercase;
-	letter-spacing: 0.05em;
 	color: rgba(0,0,0,0.35);
 	border-bottom: 1px solid rgba(0,0,0,0.07);
 	background: rgba(0,0,0,0.02);
 }
 
-.markdown pre[data-filename]::before {
+.markdown .codeblock[data-filename]::before {
 	content: attr(data-filename);
 	text-transform: none;
 	letter-spacing: 0;
 }
 
-.dark .markdown pre[data-language]::before {
+.dark .markdown .codeblock[data-language]::before {
 	color: rgba(255,255,255,0.3);
 	border-bottom-color: rgba(255,255,255,0.06);
 	background: rgba(255,255,255,0.02);
 }
 
-.markdown pre[data-language] {
+.markdown .codeblock {
 	position: relative;
 }
 
 .markdown code:not(pre code) {
-	@apply px-1.5 py-0.5 rounded bg-gray-100 align-middle;
+	@apply text-nowrap px-1 py-0.5 rounded items-center bg-gray-100 align-middle;
 	font-size: 0.875em;
 
 	@variant dark {
 		@apply bg-gray-800;
 	}
+}
+
+/* A code chip that starts a heading must sit flush with the heading text
+   edge — otherwise method/field headings look indented next to plain ones. */
+.markdown :is(h1, h2, h3, h4, h5, h6) > code:first-child {
+	margin-left: 0;
 }
 
 .markdown a {
@@ -270,6 +284,90 @@ html {
 	}
 }
 
+/* GitHub-style callouts (`> [!NOTE]` etc.), emitted by the Sätteri mdast
+   plugin (src/lib/githubAdmonitions.ts) */
+.markdown .callout {
+	--callout-accent: #3b82f6;
+	--callout-bg: rgba(59, 130, 246, 0.04);
+	--callout-title: #1d4ed8;
+	@apply my-4 px-4 py-3 text-base;
+	border-left: 3px solid var(--callout-accent);
+	background: var(--callout-bg);
+}
+
+.markdown .callout > :first-child {
+	@apply mt-0;
+}
+
+.markdown .callout > :last-child {
+	@apply mb-0;
+}
+
+.markdown .callout p {
+	@apply my-2;
+}
+
+.markdown .callout-title {
+	@apply mb-2 font-bold text-sm;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--callout-title);
+}
+
+.markdown .callout-tip {
+	--callout-accent: #10b981;
+	--callout-bg: rgba(16, 185, 129, 0.04);
+	--callout-title: #047857;
+}
+
+.markdown .callout-important {
+	--callout-accent: #8b5cf6;
+	--callout-bg: rgba(139, 92, 246, 0.04);
+	--callout-title: #6d28d9;
+}
+
+.markdown .callout-warning {
+	--callout-accent: #f59e0b;
+	--callout-bg: rgba(245, 158, 11, 0.05);
+	--callout-title: #b45309;
+}
+
+.markdown .callout-caution {
+	--callout-accent: #ef4444;
+	--callout-bg: rgba(239, 68, 68, 0.04);
+	--callout-title: #b91c1c;
+}
+
+.dark .markdown .callout-note {
+	--callout-accent: #60a5fa;
+	--callout-bg: rgba(96, 165, 250, 0.08);
+	--callout-title: #93c5fd;
+}
+
+.dark .markdown .callout-tip {
+	--callout-accent: #34d399;
+	--callout-bg: rgba(52, 211, 153, 0.08);
+	--callout-title: #6ee7b7;
+}
+
+.dark .markdown .callout-important {
+	--callout-accent: #a78bfa;
+	--callout-bg: rgba(167, 139, 250, 0.08);
+	--callout-title: #c4b5fd;
+}
+
+.dark .markdown .callout-warning {
+	--callout-accent: #fbbf24;
+	--callout-bg: rgba(251, 191, 36, 0.08);
+	--callout-title: #fcd34d;
+}
+
+.dark .markdown .callout-caution {
+	--callout-accent: #f87171;
+	--callout-bg: rgba(248, 113, 113, 0.08);
+	--callout-title: #fca5a5;
+}
+
 .markdown hr {
 	@apply my-8 border-t border-gray-200;
 
@@ -279,35 +377,27 @@ html {
 }
 
 .markdown table {
-	@apply w-full my-4 text-sm border-collapse;
+	@apply mx-auto my-4 text-sm border-collapse border-b border-gray-600;
 }
 
 .markdown th {
-	@apply text-left font-semibold px-3 py-2 border-b-2 border-gray-200;
-
-	@variant dark {
-		@apply border-gray-700;
-	}
+	@apply text-left font-bold px-3 py-2 border-b border-gray-700;
 }
 
 .markdown td {
-	@apply px-3 py-2 border-b border-gray-200;
-
-	@variant dark {
-		@apply border-gray-800;
-	}
+	@apply px-3 py-2 pr-20 border-x border-gray-700;
 }
 
-	.markdown img {
-		@apply rounded-lg my-4;
-	}
+.markdown img {
+	@apply rounded-lg my-4;
+}
 
-	/* README bodies rendered from the registry package pages (via marked).
-	   Docs code blocks reserve top padding for a language label; README
-	   blocks don't have one, so collapse it. */
-	.markdown.readme pre {
-		padding: 0.9rem 1rem;
-	}
+/* README bodies rendered from the registry package pages (via marked).
+   Docs code blocks reserve top padding for a language label; README
+   blocks don't have one, so collapse it. */
+.markdown.readme pre {
+	padding: 0.9rem 1rem;
+}
 
 /* Inline file viewer syntax highlighting (highlight.js). Tokens are colored
    per mode; unlisted tokens inherit the surrounding text color. */
@@ -435,4 +525,65 @@ html {
 
 .dark .hljs-subst {
 	color: inherit;
+}
+
+/* --- Content headings as permalinks (see HeadingLinks) ---
+   Clicking a heading copies its #anchor URL and jumps to it; the hover icon
+   at the heading's right edge signals the link, and native fragment
+   navigation clears the sticky navbar. */
+.markdown :is(h2, h3, h4, h5, h6)[id] {
+	position: relative;
+	cursor: pointer;
+	scroll-margin-top: calc(4.5rem + 1px + 0.75rem);
+}
+
+body.has-tabs .markdown :is(h2, h3, h4, h5, h6)[id] {
+	/* Docs pages: navbar row + tabs row + border. */
+	scroll-margin-top: calc(7rem + 1px + 0.75rem);
+}
+
+@media (hover: hover) {
+	.markdown :is(h2, h3, h4, h5, h6)[id]::before {
+		content: "";
+		position: absolute;
+		top: 50%;
+		right: 0.25em;
+		width: 0.85em;
+		height: 0.85em;
+		transform: translateY(-50%);
+		background-color: currentColor;
+		opacity: 0;
+		transition: opacity 150ms ease;
+		-webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71'/><path d='M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71'/></svg>") center / contain no-repeat;
+		mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71'/><path d='M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71'/></svg>") center / contain no-repeat;
+	}
+
+	.markdown :is(h2, h3, h4, h5, h6)[id]:hover::before {
+		opacity: 0.5;
+	}
+}
+
+/* Transient confirmation shown by HeadingLinks after a copy. */
+.heading-copy-toast {
+	position: fixed;
+	left: 50%;
+	bottom: 1.5rem;
+	transform: translate(-50%, 0.4rem);
+	z-index: 60;
+	padding: 0.5rem 0.9rem;
+	border: 1px solid rgba(255, 255, 255, 0.14);
+	border-radius: 0.6rem;
+	background: rgba(13, 18, 32, 0.92);
+	color: rgba(255, 255, 255, 0.85);
+	font-size: 0.85rem;
+	pointer-events: none;
+	opacity: 0;
+	transition:
+		opacity 150ms ease,
+		transform 150ms ease;
+}
+
+.heading-copy-toast.show {
+	opacity: 1;
+	transform: translate(-50%, 0);
 }

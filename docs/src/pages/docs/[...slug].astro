@@ -4,6 +4,8 @@ import { Icon } from "astro-icon/components";
 import Layout from "../../layouts/Layout.astro";
 import SidebarTree from "../../components/SidebarTree.astro";
 import DocsTabs from "../../components/DocsTabs.astro";
+import CopyPageButton from "../../components/CopyPageButton.tsx";
+import HeadingLinks from "../../components/HeadingLinks.astro";
 import type { TreeItem } from "../../components/SidebarTree.astro";
 import { GITHUB_URL } from "../../data/info";
 
@@ -29,30 +31,44 @@ function prettify(slug: string) {
 	return slug.split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
 }
 
-const TAB_ORDER = ["general", "package-manager", "runtime", "test-runner", "bundler"];
+const TAB_ORDER = ["general", "runtime", "test-runner", "bundler", "package-manager", "registry"];
 
 const TAB_LABELS: Record<string, string> = {
 	"general": "General",
 	"package-manager": "Package Manager",
 	"runtime": "Runtime",
 	"test-runner": "Test Runner",
-	"bundler": "Bundler / Compiler",
+	"bundler": "Bundler",
+	"registry": "Registry",
+};
+
+const TAB_ICONS: Record<string, string> = {
+	"general": "lucide:compass",
+	"package-manager": "lucide:box",
+	"runtime": "lucide:terminal",
+	"test-runner": "lucide:flask-conical",
+	"bundler": "lucide:layers",
+	"registry": "lucide:package-search",
 };
 
 const SECTION_ORDER: Record<string, number> = {
 	"getting-started": 0,
-	"dependencies": 1,
-	"features": 2,
+	"features": 1,
+	"setup": 2,
 	"guides": 3,
-	"utilities": 4,
+	"tutorials": 4,
+	"core-functions": 5,
+	"misc": 6,
 };
 
 const SECTION_ICON: Record<string, string> = {
 	"getting-started": "lucide:rocket",
-	"dependencies": "lucide:package",
 	"features": "lucide:sparkles",
+	"setup": "lucide:settings",
 	"guides": "lucide:book-open",
-	"utilities": "lucide:wrench",
+	"tutorials": "lucide:graduation-cap",
+	"core-functions": "lucide:code",
+	"misc": "lucide:archive",
 };
 
 function buildSidebar(tabId: string): TreeItem[] {
@@ -103,6 +119,7 @@ const activeTab = tabOf(entry.id);
 const tabs = TAB_ORDER.map((id) => ({
 	id,
 	label: TAB_LABELS[id] ?? prettify(id),
+	icon: TAB_ICONS[id],
 	firstHref: firstHref(id),
 }));
 
@@ -117,7 +134,7 @@ const sidebarItems = buildSidebar(activeTab);
 >
 	<DocsTabs slot="tabs" tabs={tabs} activeTab={activeTab} />
 
-	<div class="flex w-full lg:w-7xl mx-auto">
+	<div class="flex w-full max-w-7xl mx-auto">
 		{/*
 			Sticky offset must equal the navbar's rendered height
 			(4.5rem main row + 2.5rem tabs + 1px border = calc(7rem + 1px)).
@@ -128,7 +145,13 @@ const sidebarItems = buildSidebar(activeTab);
 			<SidebarTree items={sidebarItems} />
 			<div class="shrink-0 h-8"></div>
 		</div>
-		<main class="flex-1 min-w-0 px-4 pt-2 pb-4 md:px-8 md:pt-3 md:pb-8 markdown lg:max-w-3xl">
+		<main class="flex-1 min-w-0 px-4 pt-2 pb-4 md:px-8 md:pt-3 md:pb-8 text-lg lg:max-w-3xl">
+			<!-- Page header: title lives in the layout (frontmatter), not the
+			     markdown body, so actions can sit beside it. -->
+			<header class="not-prose flex flex-wrap items-center justify-between gap-x-6 gap-y-3 mt-10 mb-6">
+				<h1 class="text-5xl font-bold">{entry.data.title}</h1>
+				<CopyPageButton markdown={entry.body ?? ""} client:load />
+			</header>
 			<!-- Mobile nav -->
 			<details class="lg:hidden not-prose mb-6 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
 				<summary class="flex items-center justify-between px-4 py-3 cursor-pointer text-sm font-medium select-none bg-gray-50 dark:bg-gray-900 list-none [&::-webkit-details-marker]:hidden">
@@ -139,7 +162,10 @@ const sidebarItems = buildSidebar(activeTab);
 					<SidebarTree items={sidebarItems} />
 				</div>
 			</details>
-			<Content />
+			<div class="markdown">
+				<Content />
+			</div>
+			<HeadingLinks />
 			<div class="mt-12 pt-6 border-t border-black/10 dark:border-white/10 not-prose flex items-center justify-between flex-wrap gap-4">
 				<a
 					href={`${GITHUB_URL}/edit/master/docs/src/content/docs/${entry.id}.md`}

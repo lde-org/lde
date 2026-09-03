@@ -15,19 +15,19 @@ const latestRelease = posts.find((p) => p.data.title.toLowerCase().startsWith("r
 
 const comparison = [
 	{ feature: "Written in", href: "/docs/general/getting-started/introduction", subtitle: "Performant fine-tuned LuaJIT", values: ["Lua", "Teal", "Rust"] },
-	{ feature: "Luarocks compatibility", href: "/docs/package-manager/dependencies/luarocks-support", subtitle: "Intends to provide full compatibility", values: ["wip", "y", "wip"] },
-	{ feature: "Built-in test runner", href: "/docs/test-runner/getting-started/test-runner", subtitle: "Includes coverage reporting", values: ["y:lde-test", "n", "y:busted"] },
+	{ feature: "Luarocks compatibility", href: "/docs/package-manager/getting-started/luarocks", subtitle: "Intends to provide full compatibility", values: ["wip", "y", "wip"] },
+	{ feature: "Built-in test runner", href: "/docs/test-runner/getting-started/introduction", subtitle: "Includes coverage reporting", values: ["y:lde-test", "n", "y:busted"] },
 	{ feature: "Ships with LuaJIT", href: "/docs/runtime/getting-started/runtime", subtitle: "No need to install lua on your system", values: ["y", "n", "n"] },
-	{ feature: "Comes with a compiler suite", href: "/docs/bundler/guides/compiling", subtitle: "Windows can compile rocks effortlessly", values: ["y", "n", "n"] },
-	{ feature: "Compile to executable", href: "/docs/bundler/guides/compiling", subtitle: "Compile <1mB programs that run anywhere", values: ["y", "n", "n"] },
-	{ feature: "Git deps", href: "/docs/package-manager/dependencies/dependencies", subtitle: "Also supports monorepos", values: ["y", "n", "y"] },
-	{ feature: "Monorepo support", href: "/docs/package-manager/guides/monorepos", subtitle: "Run commands across workspaces with proper package typings", values: ["y", "n", "y"] },
-	{ feature: "Custom Registry", href: "/docs/package-manager/guides/custom-registry", subtitle: "A modern, fast registry", values: ["y", "y", "n"] },
-	{ feature: "Lua build scripts", href: "/docs/package-manager/dependencies/build-scripts", subtitle: "Supports custom build scripts", values: ["a:build.lua", "rockspec", "rockspec"] },
-	{ feature: "Teal support", href: "/docs/runtime/guides/teal", subtitle: "First class support without configuration", values: ["y", "n", "n"] },
-	{ feature: "MoonScript support", href: "/docs/runtime/guides/moonscript", subtitle: "First class support without configuration", values: ["y", "n", "n"] },
-	{ feature: "Interactive REPL", href: "/docs/runtime/guides/repl", subtitle: "Works with project dependencies", values: ["y", "n", "n"] },
-	{ feature: "Hot reloading", href: "/docs/runtime/guides/hot-reload", subtitle: "Reload changed modules without restarting the process", values: ["y", "n", "n"] },
+	{ feature: "Comes with a compiler suite", href: "/docs/bundler/getting-started/introduction", subtitle: "Windows can compile rocks effortlessly", values: ["y", "n", "n"] },
+	{ feature: "Compile to executable", href: "/docs/bundler/getting-started/introduction", subtitle: "Compile <1mB programs that run anywhere", values: ["y", "n", "n"] },
+	{ feature: "Git deps", href: "/docs/package-manager/getting-started/introduction", subtitle: "Also supports monorepos", values: ["y", "n", "y"] },
+	{ feature: "Monorepo support", href: "/docs/general/misc/monorepos", subtitle: "Run commands across workspaces with proper package typings", values: ["y", "n", "y"] },
+	{ feature: "Custom Registry", href: "/docs/general/misc/custom-registry", subtitle: "A modern, fast registry", values: ["y", "y", "n"] },
+	{ feature: "Lua build scripts", href: "/docs/package-manager/features/build-scripts", subtitle: "Supports custom build scripts", values: ["a:build.lua", "rockspec", "rockspec"] },
+	{ feature: "Teal support", href: "/docs/runtime/getting-started/teal", subtitle: "First class support without configuration", values: ["y", "n", "n"] },
+	{ feature: "MoonScript support", href: "/docs/runtime/getting-started/moonscript", subtitle: "First class support without configuration", values: ["y", "n", "n"] },
+	{ feature: "Interactive REPL", href: "/docs/general/features/repl", subtitle: "Works with project dependencies", values: ["y", "n", "n"] },
+	{ feature: "Hot reloading", href: "/docs/runtime/features/hot-reload", subtitle: "Reload changed modules without restarting the process", values: ["y", "n", "n"] },
 ];
 
 const features = [
@@ -39,21 +39,21 @@ const features = [
 		cmd: "lde ./file.lua",
 	},
 	{
-		href: "/docs/package-manager/getting-started/quick-start",
+		href: "/docs/package-manager/getting-started/introduction",
 		icon: `<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>`,
 		title: "Package Manager",
 		desc: "Download packages from lde or luarocks, build on any platform.<br/>Yes, even Windows.",
 		cmd: "lde add <package>",
 	},
 	{
-		href: "/docs/test-runner/getting-started/test-runner",
+		href: "/docs/test-runner/getting-started/introduction",
 		icon: `<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline>`,
 		title: "Test Runner",
 		desc: "A fast, minimal test runner with coverage, profiling, and monorepo support.",
 		cmd: "lde test",
 	},
 	{
-		href: "/docs/bundler/getting-started/single-file-apps",
+		href: "/docs/bundler/getting-started/introduction",
 		icon: `<path d="M12 2L2 7l10 5 10-5-10-5z"></path><path d="M2 17l10 5 10-5"></path><path d="M2 12l10 5 10-5"></path>`,
 		title: "Bundler & Compiler",
 		desc: "Compile to &lt;1mB binaries and run on any machine.<br/>It's that easy.",
@@ -127,16 +127,16 @@ const features = [
 			<!-- Left: text + install -->
 			<div class="flex flex-col items-center lg:items-start text-center lg:text-left max-w-2xl w-full">
 
-				<!-- Badge -->
-				{latestRelease && (
-					<a
-						href={`/blog/${latestRelease.id}`}
-						class="mb-6 inline-flex items-center gap-2 px-3 py-1.5 border border-blue-600/30 bg-blue-500/10 text-white text-sm font-medium hover:bg-blue-500/20 transition-colors"
-					>
-						{latestRelease.data.title} is out
-						<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 text-blue-300 animate-bounce-x"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
-					</a>
-				)}
+			<!-- Badge -->
+			{latestRelease && (
+				<a
+					href={`/blog/${latestRelease.id}`}
+					class="mb-6 inline-flex items-center gap-2 px-3 py-1.5 border border-blue-600/30 bg-blue-500/10 text-white text-sm font-medium hover:bg-blue-500/20 transition-colors"
+				>
+					{latestRelease.data.title} is out
+					<Icon name="lucide:arrow-right" class="shrink-0 text-blue-300" size={14} />
+				</a>
+			)}
 
 				<h1 class="text-5xl md:text-6xl xl:text-7xl font-extrabold tracking-tight leading-[1.05] text-white">
 					Lua Done{" "}
@@ -146,7 +146,7 @@ const features = [
 				</h1>
 
 				<p class="mt-6 text-xl text-white/70 leading-snug max-w-lg">
-					A cross platform <a href="/docs/package-manager/getting-started/quick-start" class="text-blue-500 dark:text-blue-400 underline underline-offset-2 decoration-blue-500/40 dark:decoration-blue-400/40 hover:text-blue-400 dark:hover:text-blue-300 transition-colors">package manager</a>, <a href="/docs/runtime/getting-started/runtime" class="text-blue-500 dark:text-blue-400 underline underline-offset-2 decoration-blue-500/40 dark:decoration-blue-400/40 hover:text-blue-400 dark:hover:text-blue-300 transition-colors">runtime</a>, test runner and <a href="/docs/bundler/getting-started/single-file-apps" class="text-blue-500 dark:text-blue-400 underline underline-offset-2 decoration-blue-500/40 dark:decoration-blue-400/40 hover:text-blue-400 dark:hover:text-blue-300 transition-colors">compiler</a> to turn your lua into &lt;<span class="text-white font-medium">1mB</span> executables.
+					A cross platform <a href="/docs/package-manager/getting-started/introduction" class="text-blue-500 dark:text-blue-400 underline underline-offset-2 decoration-blue-500/40 dark:decoration-blue-400/40 hover:text-blue-400 dark:hover:text-blue-300 transition-colors">package manager</a>, <a href="/docs/runtime/getting-started/runtime" class="text-blue-500 dark:text-blue-400 underline underline-offset-2 decoration-blue-500/40 dark:decoration-blue-400/40 hover:text-blue-400 dark:hover:text-blue-300 transition-colors">runtime</a>, test runner and <a href="/docs/bundler/getting-started/introduction" class="text-blue-500 dark:text-blue-400 underline underline-offset-2 decoration-blue-500/40 dark:decoration-blue-400/40 hover:text-blue-400 dark:hover:text-blue-300 transition-colors">compiler</a> to turn your lua into &lt;<span class="text-white font-medium">1mB</span> executables.
 				</p>
 
 				<div class="mt-8 w-full">
@@ -292,7 +292,7 @@ const features = [
 			<div class="grid grid-cols-1 md:grid-cols-3 gap-5">
 				<!-- Test Runner -->
 				<a
-					href="/docs/test-runner/getting-started/test-runner"
+					href="/docs/test-runner/getting-started/introduction"
 					class="glow-card group relative border border-black/8 dark:border-white/8 bg-black/[0.02] dark:bg-white/[0.02] p-8 flex flex-col gap-6 overflow-hidden hover:border-blue-600/40 hover:bg-blue-500/[0.04] transition-all duration-300"
 				>
 					<div class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-blue-500/70 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
@@ -341,7 +341,7 @@ const features = [
 
 				<!-- Profiler -->
 				<a
-					href="/docs/runtime/guides/profiling"
+					href="/docs/runtime/features/profiling"
 					class="glow-card group relative border border-black/8 dark:border-white/8 bg-black/[0.02] dark:bg-white/[0.02] p-8 flex flex-col gap-6 overflow-hidden hover:border-blue-600/40 hover:bg-blue-500/[0.04] transition-all duration-300"
 				>
 					<div class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-blue-500/70 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
@@ -418,11 +418,11 @@ const features = [
 					</ul>
 				</a>
 
-				<!-- Interactive REPL -->
-				<a
-					href="/docs/runtime/guides/repl"
-					class="glow-card group relative border border-black/8 dark:border-white/8 bg-black/[0.02] dark:bg-white/[0.02] p-8 flex flex-col gap-6 overflow-hidden hover:border-blue-600/40 hover:bg-blue-500/[0.04] transition-all duration-300"
-				>
+			<!-- Interactive REPL -->
+			<a
+				href="/docs/general/features/repl"
+				class="glow-card group relative border border-black/8 dark:border-white/8 bg-black/[0.02] dark:bg-white/[0.02] p-8 flex flex-col gap-6 overflow-hidden hover:border-blue-600/40 hover:bg-blue-500/[0.04] transition-all duration-300"
+			>
 					<div class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-blue-500/70 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
 					<div class="glow-spot pointer-events-none absolute size-44 -translate-x-1/2 -translate-y-1/2 rounded-full bg-blue-600/10 dark:bg-blue-600/15 blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
 

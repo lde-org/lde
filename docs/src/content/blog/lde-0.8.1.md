@@ -3,9 +3,8 @@ title: Release v0.8.1
 author: David Cruz
 published: 2026-03-27
 description: lpm is now lde. New domain, repository and name while remaining backwards compatible. Expanded LuaRocks support.
+tags: ["release"]
 ---
-
-> Upgrade to the latest version with `lde upgrade`!
 
 ## lpm is now lde
 

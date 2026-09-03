@@ -3,9 +3,8 @@ title: Release v0.10.0
 author: David Cruz
 published: 2026-08-03
 description: A runtime rewrite built on the Lua C API after months of work, plus lde test --watch, a built-in profiler, LuaJIT v3 syntax, and a much faster startup.
+tags: ["release"]
 ---
-
-> Upgrade to the latest version with `lde upgrade`!
 
 ## The runtime rewrite
 
@@ -264,7 +263,7 @@ The full method set:
 
 `cc()` uses the same toolchain that Windows gets bundled. On Windows it puts the compiler and its tools on `PATH`, so C modules build without a manual setup. The `LDE_OUTPUT_DIR` variable is still set for compatibility.
 
-See the [build scripts docs](/docs/package-manager/dependencies/build-scripts) for the full API.
+See the [build scripts docs](/docs/package-manager/features/build-scripts) for the full API.
 
 ### Builds that cache
 

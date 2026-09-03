@@ -156,7 +156,7 @@ export default function Search() {
 		<>
 			<button
 				onClick={() => setOpen(true)}
-				class="flex items-center gap-2 sm:w-48 md:w-64 px-3.5 py-2 border border-black/20 dark:border-white/20 bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 transition text-sm text-black/70 dark:text-white/60 cursor-pointer"
+				class="flex items-center gap-2 sm:w-48 lg:w-64 px-3.5 py-2 border border-black/20 dark:border-white/20 bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 transition text-sm text-black/70 dark:text-white/60 cursor-pointer"
 			>
 				<svg xmlns="http://www.w3.org/2000/svg" class="size-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
 					<circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
