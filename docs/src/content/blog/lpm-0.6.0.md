@@ -27,7 +27,7 @@ test.it('should handle tables', function()
 end)
 ```
 
-You can read more about it on its dedicated docs page: [Test Runner](/docs/test-runner/getting-started/test-runner).
+You can read more about it on its dedicated docs page: [Test Runner](/docs/test-runner/getting-started/introduction).
 
 ## `lpm_modules` renamed to `target`
 

@@ -3,10 +3,11 @@ import { getCollection } from "astro:content";
 
 // Redirect to the General > Getting Started > Introduction page (the entry
 // point of the docs). Sorting by order alone is ambiguous now that every
-// section starts at order 0, so anchor on the general tab explicitly.
+// section starts at order 0, so anchor on the general tab's getting-started
+// section explicitly.
 const entries = await getCollection("docs");
 const first = entries
-	.filter((e) => e.id.startsWith("general/"))
+	.filter((e) => e.id.startsWith("general/getting-started"))
 	.sort((a, b) => a.data.order - b.data.order)[0];
 
 return Astro.redirect(`/docs/${first.id}`);

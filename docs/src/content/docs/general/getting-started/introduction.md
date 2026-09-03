@@ -124,13 +124,13 @@ end)
 
 Simply write this file, and then run `lde test` to see the results.
 
-You can also get [test coverage](/docs/test-runner/getting-started/test-runner/) to ensure you're testing your full codebase with `lde test --coverage`.
+You can also get [test coverage](/docs/test-runner/getting-started/introduction/) to ensure you're testing your full codebase with `lde test --coverage`.
 
 ## Compile Your Code
 
 Now, we can add dependencies, run and even test our code. But this is all pointless if our code stays on our machine!
 
-This is why you can [compile into a single executable](/docs/bundler/getting-started/compiling) without any dependencies, not even on lua.
+This is why you can [compile into a single executable](/docs/bundler/getting-started/introduction) without any dependencies, not even on lua.
 
 ```sh
 lde compile

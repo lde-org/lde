@@ -7,7 +7,7 @@ When working on a project, sometimes you want to see your changes apply instantl
 
 ![watch](/blog-assets/0.9.0/watch.gif)
 
-You can use `lde --watch` to re-run your package automatically whenever any file in your source directory changes.
+You can use `lde run --watch` to re-run your package automatically whenever any file in your source directory changes.
 
 ## Usage
 
@@ -28,5 +28,5 @@ lde run --watch -- script args here
 This also works with running files, of course:
 
 ```sh
-lde --watch myscript.lua
+lde run --watch myscript.lua
 ```

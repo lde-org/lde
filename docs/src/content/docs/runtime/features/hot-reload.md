@@ -7,7 +7,7 @@ The concept of hot reloading is popular for rapid development where you want you
 
 You don't want your entire website to reload whenever you edit your helper function.
 
-This is why lde ships hot reloading via `lde --hot`, which watches your src tree, and patches in only changed files.
+This is why lde ships hot reloading via `lde run --hot`, which watches your src tree, and patches in only changed files.
 
 > [!WARNING]
 > Obviously, if you change the init.lua file, it will trigger a full reload.

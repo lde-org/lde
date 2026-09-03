@@ -104,8 +104,8 @@ lde sync --production  # skip dev dependencies
 
 You can use `lde sync --production` to install only production dependencies, skipping dev dependencies.
 
-This flag is also present for `lde run`:
+The same flag exists on `lde install` for when you want to install the project's dependencies without dev dependencies:
 
 ```sh
-lde run --production
+lde install --production
 ```
