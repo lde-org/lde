@@ -3,9 +3,16 @@ title: Moonscript Support
 order: 1
 ---
 
-# Moonscript Support
+# MoonScript Support
 
-Moonscript support ships built-in to lde. Any `.moon` files in your `src` dir will automatically be compiled ahead of time to lua into your `target` directory.
+[MoonScript](https://moonscript.org/) is a dynamic whitespace based language that compiles to lua.
+
+Support for MoonScript ships built-in to lde.
+
+> [!TIP]
+> No configuration is needed to use MoonScript with lde.
+
+You can simply write `.moon` files and they will be compiled ahead of time when running, testing, or bundling.
 
 ## Quickstart
 
@@ -14,8 +21,6 @@ Moonscript support ships built-in to lde. Any `.moon` files in your `src` dir wi
 ```sh
 lde new --language moonscript ./hello-moon
 ```
-
-The scaffold writes `src/init.moon` as the entry point; no other configuration is needed as `.moon` files compile to Lua automatically.
 
 2. Replace `src/init.moon` with:
 

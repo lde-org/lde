@@ -205,8 +205,6 @@ html {
 	padding: 0.25rem 1rem;
 	font-size: 0.7rem;
 	font-family: ui-monospace, monospace;
-	text-transform: uppercase;
-	letter-spacing: 0.05em;
 	color: rgba(0,0,0,0.35);
 	border-bottom: 1px solid rgba(0,0,0,0.07);
 	background: rgba(0,0,0,0.02);

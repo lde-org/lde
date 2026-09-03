@@ -5,7 +5,16 @@ order: 0
 
 # Teal Support
 
-Teal support ships built-in to lde. Any `.tl` files in your `src` dir will automatically be compiled ahead of time to lua into your `target` directory.
+[Teal](https://teal-language.org/) is a statically typed dialect of lua by the creator of LuaRocks.
+
+It is intended to become the TypeScript of Lua, and ships its compiler via luarocks.
+
+Teal support ships built-in to lde.
+
+> [!TIP]
+> No configuration is needed to use Teal with lde.
+
+Any `.tl` files in your `src` dir will automatically be compiled ahead of time to lua into your `target` directory.
 
 ## Quickstart
 
@@ -23,7 +32,7 @@ The scaffold writes `src/init.tl` as the entry point, adds a `check` script to `
 local greet = require("hello-teal.greet")
 
 local count: integer = 41
-print(greet("world") .. " — " .. tostring(count + 1))
+print(greet("world"), count + 1)
 ```
 
 3. Make `src/greet.tl`:
@@ -41,41 +50,39 @@ return greet
 The output is:
 
 ```
-hello, world — 42
+hello, world    42
 ```
 
 The file `src/init.tl` is the entry point. This is the same as `src/init.lua` for packages that use Lua.
 
+> [!WARNING]
+> Note that teal support is implemented as simply stripping the types and running your code. No type validation is run on `lde run`.
+
 ## Type checking with `tl check`
 
-Every Teal package — including dependencies — keeps its `.tl` sources in `target/` next to the compiled `.lua` files. That lets the Teal compiler's own checker resolve `require(...)` against your dependencies with full type info:
+Since no type checking is performed on run, to check your code, you can run the `tl` compiler using `ldx`.
 
 ```sh
-tl check -I target src/init.tl
+ldx rocks:tl check -I target src/init.tl
 ```
 
-Or add the directory to your `tlconfig.lua`:
+This works because lde preserves the `.tl` sources in your `target/` alongside the compiled `.lua` files.
 
-```lua
-return {
-	include_dir = { "target" },
-}
-```
-
-Wire it up as a project script so `lde check` runs the checker — lde builds the package first, so `target/` is always up to date:
+We can add this as a [package script](/docs/general/features/package-scripts) for easy use as `lde check`:
 
 ```jsonc
 {
 	"scripts": {
-		"check": "tl check -I target src/init.tl src/greet.tl"
+		"check": "ldx rocks:tl check -I target src/init.tl src/greet.tl"
 	}
 }
 ```
+
+Then you can simply run a type check as so:
 
 ```sh
 lde check
 ```
 
-List every `.tl` file in `src/` you want checked (add new ones as you create them), and make sure the `tl` CLI is on your `PATH`. The script is just a shell command executed from the package root, so `lde run check` works too.
-
-The checker looks up `require("mylib.foo")` as `target/mylib/foo.tl` (or `.d.tl`), so your own modules and every dependency's modules type-check from `target/`. Only the compiled `.lua` files ever end up in `lde bundle` / `lde compile` output — the preserved `.tl` sources are never bundled.
+> [!TIP]
+> Only the compiled .lua files are stored in `lde bundle` / `lde compile` outputs, so they won't waste space in your bundle.

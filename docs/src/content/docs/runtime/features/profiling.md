@@ -5,20 +5,23 @@ order: 2
 
 # Profiling
 
-`lde run --profile` samples your program and prints a flat call profile when it exits:
+A profiler is shipped by lde, using LuaJIT's highly [performant sampling profiler](https://luajit.org/ext_profiler.html) that can be used in production environments due to its minimal overhead.
+
+> [!WARNING]
+> Profiling is not supported with `--hot` or `--watch`.
 
 ```sh
 lde run --profile
 ```
 
-The profiler runs inside the isolated runtime and samples only your program. Install, build, and module resolution never appear in the report, and lde's own execution adds no samples of its own.
-
 The report shows two things:
 
 - A **VM state breakdown**: JIT compiled, interpreted, C code, GC, and JIT compiler time.
+  - This is useful to try and minimize the amount of time spent in interpreted code and in GC.
 - A **hotspot table** with the top 20 functions by sample count.
+  - Helpful to figure out which functions are taking up the most time.
 
-The VM state bars show whether the JIT compiled your hot loops, whether C code dominates, or whether the GC is the bottleneck. The hotspot table names the functions.
+![VM State Breakdown](/blog-assets/0.10.0/profile.gif)
 
 ## Flamegraphs
 
@@ -28,34 +31,17 @@ The VM state bars show whether the JIT compiled your hot loops, whether C code d
 lde run --flamegraph
 ```
 
-The file is `profile.html`. It is self-contained — open it in any browser, hover over a frame to see its share, and click a frame to zoom. Use `--flamegraph=out.html` to write elsewhere.
+This generates a self contained `profile.html` file. You can open it in any browser, hover over frames, click to expand.
+
+![Flamegraph](/blog-assets/0.10.0/flamegraph.gif)
+
+> [!TIP]
+> You can write to a custom file path using `--flamegraph=out.html`.
 
 ## JSON output
 
-`lde run --json` writes the raw sampled data as JSON for tooling and CI:
+`lde run --profile --json` writes the raw sampled data as JSON. This is useful for historical metrics, or feeding into tooling like llms for analysis.
 
 ```sh
-lde run --json profile.json
+lde run --profile --json profile.json
 ```
-
-Like `--flamegraph`, a bare `--json` defaults to `profile.json`; combine with `--profile` to also print the text report. The file follows `schemas/lde.profile.schema.json` and contains the sample total, the VM state breakdown, the hotspot table, and the folded call stacks — the same data the flamegraph is built from, so tools can render their own views or compare runs without parsing the HTML.
-
-## Profiling scripts
-
-The profiler works for loose scripts too:
-
-```sh
-lde ./bench.lua --profile
-```
-
-## Profiling the test suite
-
-To profile the full test suite from a monorepo root:
-
-```sh
-lde run --profile --flamegraph -- -C packages/foo test
-```
-
-## Limitations
-
-`--profile`, `--flamegraph`, and `--json` are not supported with `--hot` or `--watch`.

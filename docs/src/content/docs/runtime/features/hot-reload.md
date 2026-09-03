@@ -5,7 +5,14 @@ order: 5
 
 # Hot Reloading
 
-`lde run --hot` watches your project's source files and reloads changed modules when you save without restarting the process. Globals, open handles, and everything your modules do once at load time survive the reload.
+The concept of hot reloading is popular for rapid development where you want your code to update as you change it, while preserving things like open file handles, web servers, etc.
+
+You don't want your entire website to reload whenever you edit your helper function.
+
+This is why lde ships hot reloading via `lde --hot`, which watches your src tree, and patches in only changed files.
+
+> [!WARNING]
+> Obviously, if you change the init.lua file, it will trigger a full reload.
 
 ## Quickstart
 
@@ -36,7 +43,7 @@ end
 lde run --hot
 ```
 
-5. Change the greeting in `src/greet.lua` and save. lde drops the cached module, prints `Reloaded: hello-hot.greet`, and re-runs the entry point — the same process, the same state.
+5. Change the greeting in `src/greet.lua` and save.
 
 ## --hot vs --watch
 
@@ -44,7 +51,7 @@ lde run --hot
 
 | | `--hot` | `--watch` |
 |---|---|---|
-| State | Same state, only changed modules are replaced | Fresh state each run (`_G`, `package.loaded`, globals) |
+| State | Same state, only changed modules are replaced | Fully re-runs the main entrypoint |
 | Reload | `package.loaded` entries dropped, entry re-runs | Entire guest state recreated |
 | Best for | Long-running apps that keep connections, caches, or loaded C modules | Anything that wants a guaranteed clean restart |
 
@@ -62,5 +69,3 @@ The current directory is watched and `require()` caches are patched the same way
 
 - **JIT is disabled while watching.** Hooks only fire on interpreted code, so the watched session runs slower than plain `lde run`.
 - **Blocking C calls can't be interrupted.** A module stuck in `io.read()`, `socket:receive()`, or similar won't notice a change until the call returns.
-- **`--profile` / `--flamegraph` are not supported** with `--hot` or `--watch`.
-- **Shell scripts** (`scripts` in `lde.json`) only work with `--watch`, not `--hot` — there's no module state to patch.
