@@ -43,15 +43,15 @@ lde run --hot
 
 5. Change the greeting in `src/greet.lua` and save.
 
-## --hot vs --watch
+## `--hot` vs `--watch`
 
-`lde run --watch` re-runs the entry point on file changes too, but it tears down the guest state and creates a fresh one every time. `--hot` keeps the state and only replaces the changed modules.
+The difference between these two is simple.
 
-| | `--hot` | `--watch` |
-|---|---|---|
-| State | Same state, only changed modules are replaced | Fully re-runs the main entrypoint |
-| Reload | `package.loaded` entries dropped, entry re-runs | Entire guest state recreated |
-| Best for | Long-running apps that keep connections, caches, or loaded C modules | Anything that wants a guaranteed clean restart |
+`--watch` re-runs your main entrypoint on *any* file changing, even a single helper file.
+`--hot` only replaces the changed modules.
+
+> [!NOTE]
+> For example, if you're running a web server, the result of `require("that.module")` changes, but your program won't re-run.
 
 ## Outside a package
 

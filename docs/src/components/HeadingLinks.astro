@@ -1,0 +1,55 @@
+<script>
+	// Content headings double as permalinks: clicking one copies the page URL
+	// with its #anchor ("link to it") and jumps to that URL.
+	const headings = document.querySelectorAll<HTMLElement>(
+		".markdown :is(h2, h3, h4, h5, h6)[id]",
+	);
+	if (headings.length > 0) {
+		let toast: HTMLDivElement | null = null;
+		let toastTimer: number | undefined;
+
+		const showToast = () => {
+			if (!toast) {
+				toast = document.createElement("div");
+				toast.className = "heading-copy-toast";
+				toast.setAttribute("role", "status");
+				document.body.appendChild(toast);
+			}
+			toast.textContent = "Link copied";
+			toast.classList.remove("show");
+			void toast.offsetWidth; // restart the transition
+			toast.classList.add("show");
+			window.clearTimeout(toastTimer);
+			toastTimer = window.setTimeout(() => {
+				toast?.classList.remove("show");
+			}, 1600);
+		};
+
+		for (const heading of headings) {
+			heading.addEventListener("click", (event) => {
+				// Leave modified clicks and nested links alone.
+				if (
+					event.metaKey ||
+					event.ctrlKey ||
+					event.shiftKey ||
+					event.altKey ||
+					(event.target as Element).closest("a")
+				) {
+					return;
+				}
+				// Don't hijack text selections that start on the heading.
+				if (!window.getSelection()?.isCollapsed) return;
+				const { id } = heading;
+				if (!id) return;
+
+				// "Go to" the heading: update the fragment and scroll to it.
+				history.replaceState(null, "", `#${id}`);
+				heading.scrollIntoView({ behavior: "smooth", block: "start" });
+
+				// And copy the URL that links to it.
+				const url = new URL(window.location.href);
+				navigator.clipboard.writeText(url.href).then(showToast).catch(() => {});
+			});
+		}
+	}
+</script>

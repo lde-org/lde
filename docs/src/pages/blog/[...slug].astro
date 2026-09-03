@@ -2,6 +2,7 @@
 import { getCollection, render } from "astro:content";
 import { Icon } from "astro-icon/components";
 import Layout from "../../layouts/Layout.astro";
+import HeadingLinks from "../../components/HeadingLinks.astro";
 
 export async function getStaticPaths() {
 	const posts = await getCollection("blog");
@@ -59,7 +60,7 @@ const tocHeadings = headings.filter((h) => h.depth <= 3);
 					<Content />
 				</div>
 			</main>
-
+			<HeadingLinks />
 			{
 				tocHeadings.length > 0 && (
 					<aside class="sticky top-[calc(72px+2rem)] mt-8 hidden w-64 shrink-0 xl:block">

@@ -521,3 +521,64 @@ html {
 .dark .hljs-subst {
 	color: inherit;
 }
+
+/* --- Content headings as permalinks (see HeadingLinks) ---
+   Clicking a heading copies its #anchor URL and jumps to it; the hover icon
+   at the heading's right edge signals the link, and native fragment
+   navigation clears the sticky navbar. */
+.markdown :is(h2, h3, h4, h5, h6)[id] {
+	position: relative;
+	cursor: pointer;
+	scroll-margin-top: calc(4.5rem + 1px + 0.75rem);
+}
+
+body.has-tabs .markdown :is(h2, h3, h4, h5, h6)[id] {
+	/* Docs pages: navbar row + tabs row + border. */
+	scroll-margin-top: calc(7rem + 1px + 0.75rem);
+}
+
+@media (hover: hover) {
+	.markdown :is(h2, h3, h4, h5, h6)[id]::before {
+		content: "";
+		position: absolute;
+		top: 50%;
+		right: 0.25em;
+		width: 0.85em;
+		height: 0.85em;
+		transform: translateY(-50%);
+		background-color: currentColor;
+		opacity: 0;
+		transition: opacity 150ms ease;
+		-webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71'/><path d='M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71'/></svg>") center / contain no-repeat;
+		mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71'/><path d='M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71'/></svg>") center / contain no-repeat;
+	}
+
+	.markdown :is(h2, h3, h4, h5, h6)[id]:hover::before {
+		opacity: 0.5;
+	}
+}
+
+/* Transient confirmation shown by HeadingLinks after a copy. */
+.heading-copy-toast {
+	position: fixed;
+	left: 50%;
+	bottom: 1.5rem;
+	transform: translate(-50%, 0.4rem);
+	z-index: 60;
+	padding: 0.5rem 0.9rem;
+	border: 1px solid rgba(255, 255, 255, 0.14);
+	border-radius: 0.6rem;
+	background: rgba(13, 18, 32, 0.92);
+	color: rgba(255, 255, 255, 0.85);
+	font-size: 0.85rem;
+	pointer-events: none;
+	opacity: 0;
+	transition:
+		opacity 150ms ease,
+		transform 150ms ease;
+}
+
+.heading-copy-toast.show {
+	opacity: 1;
+	transform: translate(-50%, 0);
+}

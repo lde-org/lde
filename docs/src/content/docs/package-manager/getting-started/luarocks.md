@@ -1,11 +1,11 @@
 ---
-title: Using a LuaRocks Package
+title: LuaRocks
 order: 1
 ---
 
-LDE supports rockspecs and the [luarocks package registry](https://luarocks.org/) backwards compatibly.
+[LuaRocks](https://luarocks.org) is supported out of the box by lde and 100% backwards compatibility is intended.
 
-## Installing a luarocks dependency
+## Installing a luarocks package
 
 Simply prepend `rocks:` to add a luarocks dependency the same way you would an lde dependency!
 
