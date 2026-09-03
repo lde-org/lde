@@ -207,6 +207,7 @@ html {
 	right: 0;
 	padding: 0.25rem 1rem;
 	font-size: 0.7rem;
+	line-height: 1.75rem;
 	font-family: ui-monospace, monospace;
 	color: rgba(0,0,0,0.35);
 	border-bottom: 1px solid rgba(0,0,0,0.07);

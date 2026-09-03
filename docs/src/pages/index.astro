@@ -127,16 +127,16 @@ const features = [
 			<!-- Left: text + install -->
 			<div class="flex flex-col items-center lg:items-start text-center lg:text-left max-w-2xl w-full">
 
-				<!-- Badge -->
-				{latestRelease && (
-					<a
-						href={`/blog/${latestRelease.id}`}
-						class="mb-6 inline-flex items-center gap-2 px-3 py-1.5 border border-blue-600/30 bg-blue-500/10 text-white text-sm font-medium hover:bg-blue-500/20 transition-colors"
-					>
-						{latestRelease.data.title} is out
-						<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 text-blue-300 animate-bounce-x"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
-					</a>
-				)}
+			<!-- Badge -->
+			{latestRelease && (
+				<a
+					href={`/blog/${latestRelease.id}`}
+					class="mb-6 inline-flex items-center gap-2 px-3 py-1.5 border border-blue-600/30 bg-blue-500/10 text-white text-sm font-medium hover:bg-blue-500/20 transition-colors"
+				>
+					{latestRelease.data.title} is out
+					<Icon name="lucide:arrow-right" class="shrink-0 text-blue-300" size={14} />
+				</a>
+			)}
 
 				<h1 class="text-5xl md:text-6xl xl:text-7xl font-extrabold tracking-tight leading-[1.05] text-white">
 					Lua Done{" "}
