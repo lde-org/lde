@@ -3,8 +3,6 @@ title: Shell Completion
 order: 1
 ---
 
-# Shell Completion
-
 lde ships tab-completions for bash, zsh, and fish
 
 ## Enable completions

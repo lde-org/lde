@@ -3,8 +3,6 @@ title: Optional Dependencies
 order: 2
 ---
 
-# Optional Dependencies & Features 🚧
-
 lde supports optional dependencies that are only installed when a specific feature flag is enabled. This is useful for platform-specific dependencies or add-ons that not every user of your package needs.
 
 ## Marking a dependency as optional

@@ -3,8 +3,6 @@ title: Monorepos
 order: 8
 ---
 
-# Monorepos
-
 lde is built for monorepos - a single repository that holds many packages. The lde repository itself is a monorepo.
 
 `lde.json` can live anywhere in the tree and sibling packages depend on each other through path dependencies.

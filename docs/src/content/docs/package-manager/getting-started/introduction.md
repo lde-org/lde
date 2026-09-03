@@ -3,8 +3,6 @@ title: Introduction
 order: 0
 ---
 
-# Package Manager
-
 The central feature of lde is the package manager. It allows you to add dependencies to your project and installs them to a folder local to your project which lua's require() can resolve to.
 
 ## Adding a dependency

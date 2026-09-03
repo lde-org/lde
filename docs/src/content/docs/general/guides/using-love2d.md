@@ -3,8 +3,6 @@ title: Using LÖVE
 order: 0
 ---
 
-# Using LÖVE
-
 Love2d requires dependencies slightly differently than traditional lua by default, which makes it harder to integrate with projects like luarocks. But it is quite easy to use with lde!
 
 ## Using lde from a LÖVE project

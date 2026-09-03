@@ -3,8 +3,6 @@ title: Using OpenResty
 order: 1
 ---
 
-# Using OpenResty
-
 All that is needed to support lde's managed dependencies is to add the `target/` directory of your lde project to `lua_package_path` in `nginx.conf` (the equivalent of setting package.path in lua)
 
 ```nginx

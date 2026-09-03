@@ -3,8 +3,6 @@ title: Registry
 order: 1
 ---
 
-# Registry 🚧
-
 LDE has its own custom package registry. This means you can get packages via `lde add <name>` and publish them with `lde publish`.
 
 It is hosted purely on GitHub, so no files or binaries are hosted, it just acts as a bridge to hosted git repositories, with version pinning that abides to semver.

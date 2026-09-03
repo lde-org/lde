@@ -3,8 +3,6 @@ title: Native Modules
 order: 11
 ---
 
-# Native Modules
-
 Native modules are supported in lde projects via build scripts. You simply use the `lde-build` api to download any sources you need, and compile the output to the target directory.
 
 ## Example

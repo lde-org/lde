@@ -3,8 +3,6 @@ title: Requirements
 order: 3
 ---
 
-# Requirements
-
 By default, `lde` tries to work out of the box for the majority of users. This is why it ships built-in git, curl, and archive support.
 
 This, however, is different for compilation, via `lde compile`.

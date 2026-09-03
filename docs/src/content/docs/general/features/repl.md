@@ -3,8 +3,6 @@ title: REPL
 order: 0
 ---
 
-# REPL
-
 The repl command starts an interactive shell. It is the equivalent of simply running `lua`, but with nice modern features.
 
 > [!TIP]

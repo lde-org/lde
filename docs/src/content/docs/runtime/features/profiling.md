@@ -3,8 +3,6 @@ title: Profiling
 order: 2
 ---
 
-# Profiling
-
 A profiler is shipped by lde, using LuaJIT's highly [performant sampling profiler](https://luajit.org/ext_profiler.html) that can be used in production environments due to its minimal overhead.
 
 > [!WARNING]

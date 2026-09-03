@@ -3,8 +3,6 @@ title: Porting From LuaRocks
 order: 9
 ---
 
-# Porting to lde
-
 > [!NOTE]
 > LuaRocks packages are supported out of the box. You do not have to change your code to use lde. This guide is if you really want to take full advantage of lde.
 

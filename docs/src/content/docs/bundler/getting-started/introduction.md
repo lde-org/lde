@@ -3,8 +3,6 @@ title: Introduction
 order: 0
 ---
 
-# Bundler
-
 You can compile your lua program into single files using lde.
 
 ## Lua files

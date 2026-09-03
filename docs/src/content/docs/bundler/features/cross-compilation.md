@@ -3,8 +3,6 @@ title: Cross Compilation
 order: 4
 ---
 
-# Cross Compilation
-
 You can cross compile your lde package to other platforms by specifying the `--target` flag when running `lde compile`.
 
 This is desirable when you don't care about running the binary and want fast builds for continuous deployment release builds.

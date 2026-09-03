@@ -3,8 +3,6 @@ title: JIT Debugging
 order: 3
 ---
 
-# JIT Debugging
-
 A common pattern for developers using LuaJIT is to maximize the amount of lua code that can be JIT compiled for performance.
 
 The [profiler](/docs/runtime/features/profiling) is a good starting point, but it isn't super specific due to its minimal overhead.

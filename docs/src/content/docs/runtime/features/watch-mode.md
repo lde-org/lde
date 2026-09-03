@@ -3,8 +3,6 @@ title: Watch Mode
 order: 4
 ---
 
-# Watch Mode
-
 ![watch](/blog-assets/0.9.0/watch.gif)
 
 `lde run --watch` re-runs your project automatically whenever a file in `src/` changes.

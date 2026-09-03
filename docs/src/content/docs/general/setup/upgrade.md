@@ -3,8 +3,6 @@ title: Upgrading lde
 order: 0
 ---
 
-# Upgrading lde
-
 To upgrade lde, simply run the following command:
 
 ```bash

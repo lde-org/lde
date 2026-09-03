@@ -3,8 +3,6 @@ title: Why Lua?
 order: 6
 ---
 
-# Why Lua?
-
 1. Lua is incredibly simple. It has been chosen for this reason by platforms like Roblox and educational environments for decades, for this reason.
 2. LuaJIT is incredibly fast. Large companies bet on it in the background for its performance and use it in production at Cloudflare and other AAA companies.
 

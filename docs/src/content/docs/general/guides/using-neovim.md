@@ -3,8 +3,6 @@ title: Using Neovim
 order: 2
 ---
 
-# Using Neovim
-
 Neovim by default only resolves modules from the `lua/` directories on its `runtimepath`. All that is needed to support lde is to point it at a `target/` directory.
 
 ## Making your Neovim config an lde package

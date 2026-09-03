@@ -3,8 +3,6 @@ title: Moonscript Support
 order: 1
 ---
 
-# MoonScript Support
-
 [MoonScript](https://moonscript.org/) is a dynamic whitespace based language that compiles to lua.
 
 Support for MoonScript ships built-in to lde.

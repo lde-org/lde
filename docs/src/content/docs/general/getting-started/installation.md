@@ -3,8 +3,6 @@ title: Installation
 order: 1
 ---
 
-# Installation
-
 Install lde using the command for your platform.
 
 ## Linux & macOS

@@ -3,8 +3,6 @@ title: Using a LuaRocks Package
 order: 1
 ---
 
-# LuaRocks Compatibility
-
 LDE supports rockspecs and the [luarocks package registry](https://luarocks.org/) backwards compatibly.
 
 ## Installing a luarocks dependency

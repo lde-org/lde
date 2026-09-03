@@ -3,8 +3,6 @@ title: Teal Support
 order: 0
 ---
 
-# Teal Support
-
 [Teal](https://teal-language.org/) is a statically typed dialect of lua by the creator of LuaRocks.
 
 It is intended to become the TypeScript of Lua, and ships its compiler via luarocks.

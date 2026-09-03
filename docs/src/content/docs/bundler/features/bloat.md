@@ -3,8 +3,6 @@ title: Analyzing Bloat
 order: 3
 ---
 
-# Analyzing Bloat
-
 One of the most annoying experiences for a user is seeing a program be larger than feels warranted. Ie, 300mB "hello world" programs due to electron.
 
 Hence, tooling for developers to identify what is making your programs larger is essential.

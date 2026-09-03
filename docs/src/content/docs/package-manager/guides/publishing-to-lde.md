@@ -3,8 +3,6 @@ title: Publishing to LDE
 order: 0
 ---
 
-# Publishing to LDE
-
 ## How does the registry work?
 
 The LDE registry is hosted on a GitHub repository for everyone to access and send

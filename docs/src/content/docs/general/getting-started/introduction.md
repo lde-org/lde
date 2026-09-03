@@ -3,8 +3,6 @@ title: Introduction
 order: 0
 ---
 
-# Introduction
-
 [lde](https://lde.sh) is a small and fast package manager, runtime, test runner and compiler for lua projects.
 
 ## Why lde?

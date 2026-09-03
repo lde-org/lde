@@ -3,8 +3,6 @@ title: Runtime
 order: 0
 ---
 
-# Runtime
-
 ## What is a runtime?
 
 When we use a programming language, 99% of the time you are using a runtime which provides standard functionality for you.

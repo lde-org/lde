@@ -3,8 +3,6 @@ title: Package Scripts
 order: 1
 ---
 
-# Package Scripts
-
 The lde.json file supports a "scripts" field that allows you to define custom scripts to run.
 
 This is useful for:

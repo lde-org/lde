@@ -3,8 +3,6 @@ title: Hot Reloading
 order: 5
 ---
 
-# Hot Reloading
-
 The concept of hot reloading is popular for rapid development where you want your code to update as you change it, while preserving things like open file handles, web servers, etc.
 
 You don't want your entire website to reload whenever you edit your helper function.

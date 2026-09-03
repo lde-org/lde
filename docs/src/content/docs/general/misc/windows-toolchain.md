@@ -3,8 +3,6 @@ title: Windows Toolchain
 order: 4
 ---
 
-# Windows Toolchain
-
 On Windows, compiling programs with `lde compile` and installing C-based LuaRocks packages (like `luasocket`) requires a C compiler. lde handles this for you automatically.
 
 ## Automatic clang setup

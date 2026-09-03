@@ -3,8 +3,6 @@ title: Custom Registry
 order: 7
 ---
 
-# Custom Registry
-
 By default, lde uses the [official registry](https://github.com/lde-org/registry). You can point lde at a different registry by editing `~/.lde/config.json`.
 
 ## Configuration
