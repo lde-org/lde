@@ -230,12 +230,18 @@ html {
 }
 
 .markdown code:not(pre code) {
-	@apply mx-0.5 text-nowrap px-1 py-0.5 rounded items-center bg-gray-100 align-middle;
+	@apply text-nowrap px-1 py-0.5 rounded items-center bg-gray-100 align-middle;
 	font-size: 0.875em;
 
 	@variant dark {
 		@apply bg-gray-800;
 	}
+}
+
+/* A code chip that starts a heading must sit flush with the heading text
+   edge — otherwise method/field headings look indented next to plain ones. */
+.markdown :is(h1, h2, h3, h4, h5, h6) > code:first-child {
+	margin-left: 0;
 }
 
 .markdown a {
