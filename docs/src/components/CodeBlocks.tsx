@@ -26,7 +26,9 @@ export default function CodeBlocks() {
 
 			const container = document.createElement("div");
 			container.className = "absolute right-2";
-			container.style.top = "calc(1.75rem + 1rem)";
+			// Sits just below the label strip (label height 1.5rem) and above
+			// the first code line, which starts at pre padding-top 2.25rem.
+			container.style.top = "calc(1.5rem + 0.5rem)";
 			block.appendChild(container);
 
 			render(<CopyButton getText={getText} />, container);
