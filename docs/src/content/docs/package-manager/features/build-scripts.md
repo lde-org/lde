@@ -3,7 +3,7 @@ title: Build Scripts
 order: 0
 ---
 
-# Build Scripts
+# Build Scripts 🚧
 
 Projects may contain a build script at the root, named `build.lua`. When a build script is present, lde runs it instead of symlinking `src/`. Build scripts are for building native dependencies, preprocessing code from one language to another, or generating files. ([Teal to Lua](/docs/runtime/features/teal) does not need a build script.)
 

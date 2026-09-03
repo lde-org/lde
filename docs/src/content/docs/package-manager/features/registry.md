@@ -3,7 +3,7 @@ title: Registry
 order: 1
 ---
 
-# Registry
+# Registry 🚧
 
 LDE has its own custom package registry. This means you can get packages via `lde add <name>` and publish them with `lde publish`.
 

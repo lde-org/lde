@@ -29,14 +29,24 @@ function prettify(slug: string) {
 	return slug.split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
 }
 
-const TAB_ORDER = ["general", "runtime", "test-runner", "bundler", "package-manager"];
+const TAB_ORDER = ["general", "runtime", "test-runner", "bundler", "package-manager", "registry"];
 
 const TAB_LABELS: Record<string, string> = {
 	"general": "General",
 	"package-manager": "Package Manager",
 	"runtime": "Runtime",
 	"test-runner": "Test Runner",
-	"bundler": "Bundler / Compiler",
+	"bundler": "Bundler",
+	"registry": "Registry",
+};
+
+const TAB_ICONS: Record<string, string> = {
+	"general": "lucide:compass",
+	"package-manager": "lucide:box",
+	"runtime": "lucide:terminal",
+	"test-runner": "lucide:flask-conical",
+	"bundler": "lucide:layers",
+	"registry": "lucide:package-search",
 };
 
 const SECTION_ORDER: Record<string, number> = {
@@ -107,6 +117,7 @@ const activeTab = tabOf(entry.id);
 const tabs = TAB_ORDER.map((id) => ({
 	id,
 	label: TAB_LABELS[id] ?? prettify(id),
+	icon: TAB_ICONS[id],
 	firstHref: firstHref(id),
 }));
 

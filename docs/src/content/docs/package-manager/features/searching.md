@@ -3,7 +3,7 @@ title: Searching for Packages
 order: 5
 ---
 
-# Searching for Packages
+# Searching for Packages 🚧
 
 `lde search` finds packages by name and description across the [lde registry](https://github.com/lde-org/registry) and [luarocks](https://luarocks.org/).
 

@@ -1,8 +1,11 @@
 ---
+import { Icon } from "astro-icon/components";
+
 export interface DocsTab {
 	label: string;
 	id: string;
 	firstHref: string;
+	icon?: string;
 }
 
 interface Props {
@@ -18,12 +21,13 @@ const { tabs, activeTab } = Astro.props;
 		<a
 			href={tab.firstHref}
 			class:list={[
-				"shrink-0 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors",
+				"shrink-0 inline-flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors",
 				tab.id === activeTab
 					? "border-blue-600 text-blue-600 dark:text-blue-400"
 					: "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100",
 			]}
 		>
+			{tab.icon && <Icon name={tab.icon} class="size-4 shrink-0" />}
 			{tab.label}
 		</a>
 	))}
