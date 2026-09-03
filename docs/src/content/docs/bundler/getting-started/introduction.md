@@ -1,5 +1,5 @@
 ---
-title: Introduction
+title: Bundler
 order: 0
 ---
 
