@@ -8,7 +8,9 @@ The repl command starts an interactive shell. It is the equivalent of simply run
 > [!TIP]
 > You can use it inside of a project to test dependencies interactively. Just require the dependency you want to test!
 
-## To start the REPL
+## Usage
+
+Simply run the repl command as so:
 
 ```sh
 lde repl

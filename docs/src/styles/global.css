@@ -188,14 +188,17 @@ html {
 
 .markdown pre {
 	@apply my-4 text-sm leading-relaxed overflow-x-auto bg-gray-50 border border-gray-200;
-	padding: 2.5rem 1rem 1rem;
+	padding: 3rem 1rem 0.5rem;
 
 	@variant dark {
 		@apply bg-gray-900/50 border-gray-700/50;
 	}
 }
 
-.markdown pre[data-language]::before {
+/* Code blocks scroll horizontally inside the <pre>, so overlay chrome
+   (language/filename label, copy button) lives on the .codeblock frame that
+   wraps it — anything attached to the scroller itself scrolls away. */
+.markdown .codeblock[data-language]::before {
 	content: attr(data-language);
 	display: block;
 	position: absolute;
@@ -210,19 +213,19 @@ html {
 	background: rgba(0,0,0,0.02);
 }
 
-.markdown pre[data-filename]::before {
+.markdown .codeblock[data-filename]::before {
 	content: attr(data-filename);
 	text-transform: none;
 	letter-spacing: 0;
 }
 
-.dark .markdown pre[data-language]::before {
+.dark .markdown .codeblock[data-language]::before {
 	color: rgba(255,255,255,0.3);
 	border-bottom-color: rgba(255,255,255,0.06);
 	background: rgba(255,255,255,0.02);
 }
 
-.markdown pre[data-language] {
+.markdown .codeblock {
 	position: relative;
 }
 
