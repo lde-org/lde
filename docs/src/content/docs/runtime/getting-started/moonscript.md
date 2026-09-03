@@ -1,5 +1,5 @@
 ---
-title: Moonscript Support
+title: MoonScript
 order: 1
 ---
 

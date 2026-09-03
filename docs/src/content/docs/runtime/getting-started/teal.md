@@ -1,5 +1,5 @@
 ---
-title: Teal Support
+title: Teal
 order: 0
 ---
 
