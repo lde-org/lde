@@ -397,7 +397,10 @@ local function test(args)
 			ansi.printf("{gray}%s", pkg:getName())
 			print()
 			local reporter = makeReporter(pkg:getDir())
+			-- Run package relative to its own dir so you get identical behavior as if you ran the individual package's tests.
+			env.chdir(pkg:getDir())
 			local results = pkg:runTests(reporter, filters, { coverage = coverage })
+			env.chdir(cwd)
 			if results.error then
 				ansi.printf("  {red}%s", results.error)
 				hadFailures = true

@@ -141,6 +141,43 @@ test.it("lde test skips packages with no tests/ directory", function()
 	fs.rmdir(tmpDir)
 end)
 
+test.it("lde test monorepo mode runs each package from its own cwd", function()
+	local tmpDir = path.join(env.tmpdir(), "lde-test-monorepo-cwd")
+	fs.rmdir(tmpDir)
+	fs.mkdir(tmpDir)
+
+	-- Two packages whose tests read a cwd-relative fixture. The fixture only
+	-- exists inside the package dir, so the read succeeds only when the
+	-- package runs from its own directory (the cwd `lde test -C <pkg>` uses),
+	-- never from the monorepo root.
+	local testSource = [[
+		local test = require("lde-test")
+		test.it("reads a cwd-relative fixture", function()
+			local f = assert(io.open("fixtures/marker.txt"))
+			local content = f:read("*a")
+			f:close()
+			test.includes(content, "marker")
+		end)
+	]]
+	for _, name in ipairs({ "pkg-one", "pkg-two" }) do
+		local pkg = path.join(tmpDir, name)
+		fs.mkdirAll(path.join(pkg, "src"))
+		fs.mkdirAll(path.join(pkg, "tests"))
+		fs.mkdir(path.join(pkg, "fixtures"))
+		fs.write(path.join(pkg, "src", "init.lua"), 'return "' .. name .. '"')
+		fs.write(path.join(pkg, "lde.json"), json.encode({ name = name, version = "0.1.0" }))
+		fs.write(path.join(pkg, "fixtures", "marker.txt"), "marker from " .. name .. "\n")
+		fs.write(path.join(pkg, "tests", "cwd.test.lua"), testSource)
+	end
+
+	local ok, out = ldecli({ "test" }, tmpDir)
+	test.truthy(ok, "monorepo lde test must run packages from their own cwd: " .. tostring(out))
+	test.includes(out or "", "pkg-one")
+	test.includes(out or "", "pkg-two")
+
+	fs.rmdir(tmpDir)
+end)
+
 test.it("lde test silences install/build output", function()
 	local tmpDir = path.join(env.tmpdir(), "lde-test-quiet-output")
 	fs.rmdir(tmpDir)

@@ -495,12 +495,17 @@ local function runTests(package, reporter, filters, opts)
 	local testFiles = fs.scan(testsDir, "**" .. path.separator .. "*.test.lua")
 
 	if filters and #filters > 0 then
+		-- Normalize into a fresh list — runTests must never mutate the
+		-- caller's table: monorepo `lde test` runs every package with the
+		-- same filters, each resolved against that package's own tests/ dir.
+		local globs = {}
 		-- Test files execute as compiled Lua; map any .tl/.moon filter (e.g.
 		-- `lde test -- tests/foo.test.tl`) onto the compiled .lua name.
-		for i, filter in ipairs(filters) do
-			filters[i] = filter:gsub("%.tl$", ".lua"):gsub("%.moon$", ".lua")
+		for _, filter in ipairs(filters) do
+			globs[#globs + 1] = filter:gsub("%.tl$", ".lua"):gsub("%.moon$", ".lua")
 		end
-		for i, filter in ipairs(filters) do
+
+		for i, filter in ipairs(globs) do
 			local first = filter:sub(1, 1)
 			-- A filter is treated as a project-relative path when it is
 			-- explicitly rooted ("./", "/", "C:\") or when it points at a real
@@ -510,13 +515,13 @@ local function runTests(package, reporter, filters, opts)
 			if first == "." or first == "/" or (ffi.os == "Windows" and filter:match("^%a:\\")) or fs.exists(resolved) then
 				local rel = path.relative(testDir, resolved)
 				if rel and not rel:match("^%.%.") then
-					filters[i] = rel == "." and "*" or rel
+					globs[i] = rel == "." and "*" or rel
 				end
 			end
 		end
 		local filtered = {}
 		for _, relPath in ipairs(testFiles) do
-			for _, glob in ipairs(filters) do
+			for _, glob in ipairs(globs) do
 				if string.find(relPath, fs.globToPattern(glob)) then
 					filtered[#filtered + 1] = relPath
 					break

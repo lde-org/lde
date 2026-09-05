@@ -1222,12 +1222,16 @@ test.it("runTests with absolute path filter runs only that file", function()
 	fs.write(path.join(testsDir, "ohno.test.lua"), filterTestFile)
 
 	local absPath = path.join(testsDir, "ohyes.test.lua")
+	local filters = { absPath }
 	local pkg = assert(lde.Package.open(dir))
-	local results = pkg:runTests(nil, { absPath })
+	local results = pkg:runTests(nil, filters)
 
 	test.equal(results.failures, 0)
 	test.equal(#results.files, 1)
 	test.equal(results.files[1].file, "ohyes.test.lua")
+	-- runTests must not rewrite the caller's filter list in place: monorepo
+	-- `lde test` runs every package with the same filters.
+	test.equal(filters[1], absPath)
 end)
 
 test.it("runTests with path-like filter containing glob resolves and matches", function()
