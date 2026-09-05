@@ -405,28 +405,33 @@ local function initPackage(dir, opts)
 		end
 	end
 
-	local luarcPath = path.join(dir, ".luarc.json")
-	if not fs.exists(luarcPath) then
-		writeText(luarcPath, util.dedent([[
-			{
-				"$schema": "https://raw.githubusercontent.com/sumneko/vscode-lua/master/setting/schema.json",
-				"diagnostics": {
-					"disable": [
-						"duplicate-doc-field",
-						"duplicate-index",
-						"duplicate-set-field",
-						"duplicate-doc-alias"
-					]
-				},
-				"runtime": {
-					"version": "LuaJIT",
-					"path": ["./target/?.lua", "./target/?/init.lua"]
-				},
-				"workspace": {
-					"library": ["target"]
+	-- .luarc.json configures lua-language-server, which only understands Lua
+	-- sources — skip it for Teal and Moonscript projects. Never touch an
+	-- existing file.
+	if language == "lua" then
+		local luarcPath = path.join(dir, ".luarc.json")
+		if not fs.exists(luarcPath) then
+			writeText(luarcPath, util.dedent([[
+				{
+					"$schema": "https://raw.githubusercontent.com/sumneko/vscode-lua/master/setting/schema.json",
+					"diagnostics": {
+						"disable": [
+							"duplicate-doc-field",
+							"duplicate-index",
+							"duplicate-set-field",
+							"duplicate-doc-alias"
+						]
+					},
+					"runtime": {
+						"version": "LuaJIT",
+						"path": ["./target/?.lua", "./target/?/init.lua"]
+					},
+					"workspace": {
+						"library": ["target"]
+					}
 				}
-			}
-		]]))
+			]]))
+		end
 	end
 
 	if hasGit() and not isInsideGitRepo(dir) then

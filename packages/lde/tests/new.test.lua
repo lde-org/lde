@@ -46,6 +46,7 @@ test.it("lde new defaults to a blank Lua project", function()
 	local config = readConfig(dir)
 	test.falsy(config.scripts)
 	test.falsy(fs.exists(path.join(dir, "tlconfig.lua")))
+	test.truthy(fs.isfile(path.join(dir, ".luarc.json")), "Lua projects get a .luarc.json")
 end)
 
 test.it("lde new --type library generates a module entry point", function()
@@ -81,6 +82,7 @@ test.it("lde new --language teal writes .tl entry, check script, and tlconfig.lu
 	end
 
 	test.truthy(fs.isfile(path.join(dir, "tlconfig.lua")))
+	test.falsy(fs.exists(path.join(dir, ".luarc.json")))
 end)
 
 test.it("lde new --language moonscript writes a .moon entry point", function()
@@ -97,6 +99,7 @@ test.it("lde new --language moonscript writes a .moon entry point", function()
 	local config = readConfig(dir)
 	test.falsy(config.scripts)
 	test.falsy(fs.exists(path.join(dir, "tlconfig.lua")))
+	test.falsy(fs.exists(path.join(dir, ".luarc.json")))
 end)
 
 test.it("lde new combines --type library with --language teal", function()

@@ -170,6 +170,7 @@ test.it("Package.init teal projects write a .tl entry point, check script, and t
 	test.truthy(fs.isfile(path.join(dir, "tlconfig.lua")))
 	local tlconfig = fs.read(path.join(dir, "tlconfig.lua")) ---@cast tlconfig -nil
 	test.includes(tlconfig, "include_dir")
+	test.falsy(fs.exists(path.join(dir, ".luarc.json")))
 end)
 
 --
@@ -304,6 +305,7 @@ test.it("Package.init moonscript projects write a .moon entry point and no extra
 	local config = pkg:readConfig()
 	test.falsy(config.scripts)
 	test.falsy(fs.exists(path.join(dir, "tlconfig.lua")))
+	test.falsy(fs.exists(path.join(dir, ".luarc.json")))
 end)
 
 test.it("Package.init combines type and language for library modules", function()
