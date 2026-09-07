@@ -329,34 +329,42 @@ function global.getScriptShell()
 	return "sh", "-c", false
 end
 
-function global.getRegistryDir()
-	return global.registry:getDir()
+-- The registry client is built on first use, not at module load: wiring it
+-- up requires lde-registry, lde-core.util (which pulls in rocked/luarocks)
+-- and the config file read, all of which a command that never touches the
+-- registry (run, -e, install of already-pinned deps, …) would pay for on
+-- every startup. Tests construct their own lde.Registry instances with
+-- injected fakes instead.
+---@return lde.Registry
+local function getRegistry()
+	if not global.registry then
+		global.registry = require("lde-registry").new({
+			dirFn = function() return path.join(global.getDir(), "registry") end,
+			url = global.getConfig().registry,
+			fs = fs --[[@as lde.RegistryFs]],
+			path = path --[[@as lde.RegistryPath]],
+			semver = semver --[[@as lde.RegistrySemver]],
+			git = git2,
+			decodeJson = require("lde-core.util").decodeJson,
+			raise = lde.error.raise,
+		})
+	end
+	return global.registry
 end
 
--- The registry client, wired with the production dependencies. Tests can
--- construct their own lde.Registry instances with injected fakes instead.
-global.registry = require("lde-registry").new({
-	dirFn = function() return path.join(global.getDir(), "registry") end,
-	url = require("lde-core.global.config")().registry,
-	fs = fs --[[@as lde.RegistryFs]],
-	path = path --[[@as lde.RegistryPath]],
-	semver = semver --[[@as lde.RegistrySemver]],
-	git = git2,
-	-- lde-core.util loads after this module; require it here so the singleton
-	-- construction doesn't depend on lde-core's init order.
-	decodeJson = require("lde-core.util").decodeJson,
-	raise = lde.error.raise,
-})
+function global.getRegistryDir()
+	return getRegistry():getDir()
+end
 
 function global.syncRegistry()
-	global.registry:sync()
+	getRegistry():sync()
 end
 
 ---@param name string
 ---@return lde.Portfile?
 ---@return string? err
 function global.lookupRegistryPackage(name)
-	return global.registry:lookup(name)
+	return getRegistry():lookup(name)
 end
 
 ---@param portfile lde.Portfile
@@ -364,13 +372,13 @@ end
 ---@return string version
 ---@return string commit
 function global.resolveRegistryVersion(portfile, version)
-	return global.registry:resolveVersion(portfile, version)
+	return getRegistry():resolveVersion(portfile, version)
 end
 
 ---@param name string
 ---@return string? err
 function global.validatePackageName(name)
-	return global.registry:validateName(name)
+	return getRegistry():validateName(name)
 end
 
 --- Builds the cache directory name for a git repo: <name>-<commit>.

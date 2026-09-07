@@ -33,14 +33,14 @@ local treeOverride = args:option("tree")
 
 -- Applies -C/--tree. Kept separate so the --version path below can apply
 -- them too, while the plain `lde --version` never pays for ansi/env/fs/path
--- or lde-core.
+-- or lde-core. Modules load only when an override actually needs them — a
+-- plain `lde -e "…"` in a project-less cwd never touches ansi/fs/path here.
 local function applyOverrides()
-	local ansi = require("ansi")
-	local env = require("env")
-	local fs = require("fs")
-	local path = require("path")
-
 	if cwdOverride then
+		local ansi = require("ansi")
+		local env = require("env")
+		local fs = require("fs")
+		local path = require("path")
 		local cwd = env.cwd()
 		local requestedCwd
 		if not cwd then
@@ -65,15 +65,11 @@ local function applyOverrides()
 			ansi.printf("{red}error{gray}:{reset} Failed to change directory: %s", requestedCwd)
 			os.exit(1)
 		end
-	end
-
-	if treeOverride then
+	elseif treeOverride then
 		local lde = require("lde-core")
 		lde.global.setDir(treeOverride)
 		lde.global.init()
 	end
-
-	return ansi, env, fs, path
 end
 
 -- Fast paths that avoid loading lde-core (whose module graph pulls in
@@ -131,7 +127,7 @@ end
 -- fast paths above (--version/--help/__complete/--lua) stay outside so plain
 -- queries never pay for lde-core.
 	local ok, boundaryErr = xpcall(function()
-	local ansi, env, fs = applyOverrides()
+	applyOverrides()
 
 	-- `--help` before a command shows that command's help; alone it shows the
 	-- main help. Runs through the boundary so `lde --help <unknown>` renders
@@ -160,9 +156,51 @@ end
 		end
 	end
 
+	-- True when the cwd contains a package manifest (lpm.json/lde.json) or a
+	-- standalone *.rockspec, mirroring Package.open's discovery rules. The
+	-- io.open probes cost nothing (no fs module); the readdir scan only runs
+	-- for the rare manifest-less dirs that still hold a rockspec.
+	---@return boolean
+	local function cwdHasPackageManifest()
+		local f = io.open("lpm.json", "rb")
+		if f then f:close() return true end
+		f = io.open("lde.json", "rb")
+		if f then f:close() return true end
+		local fs = require("fs")
+		local iter = fs.readdir(".")
+		if iter then
+			for entry in iter do
+				if entry.type == "file" and entry.name:match("%.rockspec$") then
+					return true
+				end
+			end
+		end
+		return false
+	end
+
+	-- Outside a package, `-e` needs none of the core library — no Package,
+	-- no install machinery, no global dirs — so take a runtime-only fast path
+	-- (the bun-comparable "run code with no project" case) before lde-core's
+	-- module graph loads. Inside a package the normal path below runs, which
+	-- builds/installs deps and evaluates in project context.
+	if evalCode and not luaCliArgs and not cwdHasPackageManifest() then
+		local env = require("env")
+		if not env.cwd() then
+			require("lde-core.error").raise("Current working directory no longer exists (it may have been deleted); use an absolute path with -C or cd to an existing directory")
+		end
+		local eok, result = require("lde-core.runtime").executeString(evalCode)
+		if not eok then
+			require("lde-core.error").raise(tostring(result))
+		elseif result ~= nil then
+			print(tostring(result))
+		end
+		return
+	end
+
 	-- Everything below needs the full core library. Keep the fast commands
-	-- above (bare `lde`, `lde help`, `--setup`) free of lde-core so startup
-	-- stays ~1ms; the boundary's crash renderer requires it lazily instead.
+	-- above (bare `lde`, `lde help`, `--setup`, project-less `-e`) free of
+	-- lde-core so startup stays ~1ms; the boundary's crash renderer requires
+	-- it lazily instead.
 	local lde = require("lde-core")
 	-- Build/install output is compact by default (one bun-style progress line
 	-- plus a summary; build.lua stdout is captured and only dumped on failure).
@@ -176,7 +214,7 @@ end
 	-- it (relative FS ops then act on the orphaned directory, so commands
 	-- don't fail on their own). Every command below operates relative to
 	-- cwd — fail cleanly instead of crashing on path.resolve(nil, ...).
-	if not env.cwd() then
+	if not require("env").cwd() then
 		lde.error.raise("Current working directory no longer exists (it may have been deleted); use an absolute path with -C or cd to an existing directory")
 	end
 
@@ -246,7 +284,7 @@ end
 	end
 
 	if luaCliArgs then
-		local lok, lerr = lde.runtime.executeLuaCLI(luaCliArgs, { cwd = env.cwd() })
+		local lok, lerr = lde.runtime.executeLuaCLI(luaCliArgs, { cwd = require("env").cwd() })
 		if not lok then
 			lde.error.raise(lerr)
 		end
@@ -304,7 +342,7 @@ end
 	local commandFile = commandFiles[commandName]
 	if commandFile then
 		require(commandFile)(args)
-	elseif fs.exists(commandName) then
+	elseif require("fs").exists(commandName) then
 		-- TODO: Replace this hacky behavior
 		---@cast args { raw: string[] }
 		table.insert(args.raw, 1, commandName) ---@cast args clap.Args
@@ -335,7 +373,7 @@ end
 			end
 
 			local hint = suggest.command(commandName, usage.names)
-			lde.error.raise("Unknown command " .. ansi.colorize("yellow", '"' .. tostring(commandName) .. '"'), { hint = hint })
+			lde.error.raise("Unknown command " .. require("ansi").colorize("yellow", '"' .. tostring(commandName) .. '"'), { hint = hint })
 		end
 	end
 end, function(e)

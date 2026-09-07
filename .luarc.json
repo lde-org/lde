@@ -26,7 +26,10 @@
 		"path": [
 			"./target/?.lua",
 			"./target/?/init.lua"
-		]
+		],
+		"special": {
+			"lazyRequire": "require"
+		}
 	},
 	"workspace": {
 		"library": [

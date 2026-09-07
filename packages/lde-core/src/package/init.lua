@@ -6,7 +6,6 @@ local global = require("lde-core.global")
 
 local fs = require("fs")
 local env = require("env")
-local json = require("json")
 local path = require("path")
 local process = require("process")
 
@@ -221,12 +220,9 @@ function Package.openLDE(dir)
 	}, Package), nil
 end
 
-local rockspecModule = require("lde-core.package.rockspec")
-Package.openRockspec = rockspecModule.open
--- Exposed for unit tests: pure native-module helpers (no toolchain needed).
-Package.nativeGccArgs = rockspecModule.nativeGccArgs
-Package.normalizeNativeModule = rockspecModule.normalizeNativeModule
-Package.resolveExternalDeps = rockspecModule.resolveExternalDeps
+-- openRockspec + native-module helpers load the rockspec module lazily (it
+-- pulls in `sea`/`rocked` at load, which a plain lde.json package never
+-- needs) — see the lazyRequire assignments at the bottom of this file.
 
 ---@param dir string?
 ---@param rockspec string? # Path to rockspec, forwarded to openRockspec if no lde.json
@@ -301,8 +297,6 @@ function Package:readLockfile()
 	return Lockfile.open(self:getLockfilePath())
 end
 
-Package.init = require("lde-core.package.initialize")
-
 function Package:__tostring()
 	return "Package(" .. self.dir .. ")"
 end
@@ -374,8 +368,6 @@ function Package:getName()
 	return self:readConfig().name
 end
 
-Package.build = require("lde-core.package.build").build
-
 ---@param dir string
 ---@param info lde.Package.Config.Dependency
 ---@param relativeTo string?
@@ -392,27 +384,14 @@ function Package:getDependencyPath(dir, info, relativeTo)
 	end
 end
 
-Package.installDependencies = require("lde-core.package.install")
-
 ---@param opts { summary: boolean?, isLocked: boolean?, rootExtract: fun()? }?
 function Package:installDevDependencies(opts)
 	return self:installDependencies(self:getDevDependencies(), nil, nil, opts)
 end
 
-Package.updateDependencies = require("lde-core.package.update")
-
 function Package:updateDevDependencies()
 	return self:updateDependencies(self:getDevDependencies())
 end
-
-Package.bundle = require("lde-core.package.bundle")
-Package.compile = require("lde-core.package.compile")
-Package.bloat = require("lde-core.package.bloat")
-local run = require("lde-core.package.run")
-Package.runFile = run.runFile
-Package.runString = run.runString
-Package.createState = run.createState
-Package.runTests = require("lde-core.package.test")
 
 --- Quote a single argument for the shell that will run the script so it is
 --- received verbatim: POSIX sh single quotes, cmd.exe double quotes.
@@ -465,5 +444,58 @@ function Package:runScript(name, isCapture, args)
 	if stderr and stderr ~= "" then return nil, stderr end
 	return nil, "Script exited with " .. (code and ("exit code " .. tostring(code)) or "an unknown error")
 end
+
+-- Heavy command implementations load on first use instead of at package
+-- load. Their module bodies pull in their own graphs (sea, rocked, luarocks,
+-- lua-sys, …), so requiring them eagerly made every lde invocation — even a
+-- bare `lde -e` that never installs or compiles — pay ~1ms for modules it
+-- never touches.
+--
+-- lazyRequire is statically treated as `require` by the language server
+-- (runtime.special in the repo's .luarc.json), so the map below keeps each
+-- member's exact type — `Package.compile` is `compilePackage`, not `any`.
+-- Two export shapes are supported, mirroring how the modules are written:
+--   * whole-module function:  `Package.compile = lazyRequire("…compile")`
+--   * a member of a table module: `Package.build = lazyRequire("…build").build`
+-- The returned proxy is never stored bare: assigning it (whole-module form)
+-- keeps a callable — `__call` resolves the module on first call. Reading
+-- `.member` off it (member form) goes through `__index`, which returns a
+-- thunk that resolves the module on that member's first call, so the
+-- assignment itself loads nothing. Instance (`pkg:build()`) and static
+-- (`Package.init(dir)`) call sites behave exactly as before.
+---@param moduleName string
+---@return any # statically the module's return type (runtime.special)
+local function lazyRequire(moduleName)
+	local real ---@type any
+	return setmetatable({}, {
+		__call = function(_, ...)
+			if real == nil then real = require(moduleName) end
+			if type(real) == "function" then return real(...) end
+			return real
+		end,
+		__index = function(_, key)
+			return function(...)
+				if real == nil then real = require(moduleName) end
+				return real[key](...)
+			end
+		end,
+	})
+end
+
+Package.init                = lazyRequire("lde-core.package.initialize")
+Package.build               = lazyRequire("lde-core.package.build").build
+Package.installDependencies = lazyRequire("lde-core.package.install")
+Package.updateDependencies  = lazyRequire("lde-core.package.update")
+Package.bundle              = lazyRequire("lde-core.package.bundle")
+Package.compile             = lazyRequire("lde-core.package.compile")
+Package.bloat               = lazyRequire("lde-core.package.bloat")
+Package.runFile             = lazyRequire("lde-core.package.run").runFile
+Package.runString           = lazyRequire("lde-core.package.run").runString
+Package.createState         = lazyRequire("lde-core.package.run").createState
+Package.runTests            = lazyRequire("lde-core.package.test")
+Package.openRockspec        = lazyRequire("lde-core.package.rockspec").open
+Package.nativeGccArgs       = lazyRequire("lde-core.package.rockspec").nativeGccArgs
+Package.normalizeNativeModule = lazyRequire("lde-core.package.rockspec").normalizeNativeModule
+Package.resolveExternalDeps = lazyRequire("lde-core.package.rockspec").resolveExternalDeps
 
 return Package
