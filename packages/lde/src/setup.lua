@@ -45,9 +45,20 @@ local function updatePath(ldeDir, toolsDir)
 		end
 		ansi.printf("{yellow}Restart your terminal for the change to take effect.")
 	else
-		-- Unix: patch the first shell rc file that already mentions .lde, or
-		-- the first that exists among the standard candidates.
+		-- Unix: patch the first shell rc file that already mentions the lde
+		-- home, or the first that exists among the standard candidates.
 		local home = os.getenv("HOME") or ""
+		local ldeHome = os.getenv("LDE_HOME")
+		-- When LDE_HOME is set, tools live there rather than under ~/.lde, so
+		-- the PATH entry references $LDE_HOME (dynamic, like $HOME below) and
+		-- rc detection keys on the LDE_HOME marker — repeated setups must not
+		-- append duplicate lines.
+		local hasLdeHome = ldeHome ~= nil and ldeHome ~= ""
+		local homeRef = hasLdeHome and "$LDE_HOME" or "$HOME/.lde"
+		local marker = hasLdeHome and "LDE_HOME" or ".lde"
+		-- gsub takes a pattern: the dot in ".lde" must be escaped there.
+		local patternMarker = hasLdeHome and "LDE_HOME" or "%.lde"
+		local pathLine = 'export PATH="' .. homeRef .. ':' .. homeRef .. '/tools:$PATH"'
 
 		local defaultRc = jit.os == "OSX" and (home .. "/.zshrc") or (home .. "/.profile")
 
@@ -59,19 +70,17 @@ local function updatePath(ldeDir, toolsDir)
 			home .. "/.profile"
 		}
 
-		local pathLine = 'export PATH="$HOME/.lde:$HOME/.lde/tools:$PATH"'
-
 		-- Find a file that already has an lde PATH entry and needs updating,
 		-- or the first rc file that exists (to append to).
 		local target = nil
 		for _, rc in ipairs(rcFiles) do
 			if fs.exists(rc) then
 				local content = fs.read(rc) or ""
-				if content:find("%.lde", 1, true) then
+				if content:find(marker, 1, true) then
 					-- Already has some lde entry, check if tools is missing
-					if not content:find("%.lde/tools", 1, true) then
+					if not content:find(marker .. "/tools", 1, true) then
 						-- Replace the existing lde PATH line with the full one
-						local updated = content:gsub('export PATH="[^"]*%.lde[^"]*"', pathLine)
+						local updated = content:gsub('export PATH="[^"]*' .. patternMarker .. '[^"]*"', pathLine)
 						if updated == content then
 							-- Line format didn't match the pattern; just append
 							updated = content .. "\n" .. pathLine .. "\n"
@@ -116,6 +125,8 @@ local function setup()
 	local toolsDir = lde.global.getToolsDir()
 
 	updatePath(ldeDir, toolsDir)
+	-- A fresh LDE_HOME (or ~/.lde) may not exist yet; ldx is written into it.
+	fs.mkdirAll(ldeDir)
 	installBinaries(ldeDir)
 end
 

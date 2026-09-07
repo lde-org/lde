@@ -133,15 +133,22 @@ function global.setDir(dir)
 	dirOverride = dir
 end
 
+--- The lde dir in use: the --tree override when one was passed, otherwise the
+--- user dir (see getUserDir). Defaulting to getUserDir keeps every cache and
+--- tool under one home while --tree still redirects the whole tree elsewhere.
 function global.getDir()
 	if dirOverride then return dirOverride end
-	return path.join(os.getenv("HOME") or os.getenv("USERPROFILE"), ".lde")
+	return global.getUserDir()
 end
 
---- The user-level lde directory, independent of any --tree override. Global
---- registry metadata (the luarocks manifest, the resolved-URL cache) lives
---- here so per-tree installs share it instead of re-downloading per tree.
+--- The user-level lde directory, independent of any --tree override. Set via
+--- the LDE_HOME env var when present (its value is the lde dir itself),
+--- otherwise ~/.lde. Global registry metadata (the luarocks manifest, the
+--- resolved-URL cache) lives here so per-tree installs share it instead of
+--- re-downloading per tree.
 function global.getUserDir()
+	local ldeHome = os.getenv("LDE_HOME")
+	if ldeHome and ldeHome ~= "" then return ldeHome end
 	return path.join(os.getenv("HOME") or os.getenv("USERPROFILE"), ".lde")
 end
 
@@ -992,10 +999,9 @@ function global.ensureMingw(opts)
 end
 
 function global.init()
-	local dir = global.getDir()
-	if not fs.exists(dir) then
-		fs.mkdir(dir)
-	end
+	-- mkdirAll: LDE_HOME (or a --tree) may point at a not-yet-existing path
+	-- whose parents also need creating, not just the final dir.
+	fs.mkdirAll(global.getDir())
 
 	local gitCacheDir = global.getGitCacheDir()
 	if not fs.exists(gitCacheDir) then

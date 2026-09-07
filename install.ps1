@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 
-$repo    = "lde-org/lde"
-$dir     = "$env:USERPROFILE\.lde"
+$repo = "lde-org/lde"
+$dir = if ($env:LDE_HOME) { $env:LDE_HOME } else { Join-Path $env:USERPROFILE ".lde" }
 $bin     = Join-Path $dir "lde.exe"
 $nightly = $args -contains "--nightly"
 $versionIndex = [array]::IndexOf($args, "--version")

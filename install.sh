@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-DIR="$HOME/.lde"
+DIR="${LDE_HOME:-$HOME/.lde}"
 REPO="lde-org/lde"
 NIGHTLY=0
 VERSION=""

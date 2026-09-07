@@ -188,3 +188,49 @@ test.it("getOrInitGitRepo heals a partial cache dir and re-fetches", function()
 	test.falsy(fs.exists(repoDir), "partial cache dir must be removed before re-fetch")
 	test.truthy(tostring(err):find("clone", 1, true) or tostring(err):find("Failed", 1, true))
 end)
+
+--
+-- Dir resolution: --tree override vs LDE_HOME vs ~/.lde
+--
+
+local savedLdeHome = env.var("LDE_HOME")
+
+test.afterEach(function()
+	env.set("LDE_HOME", savedLdeHome)
+	global.setDir(nil)
+end)
+
+test.it("getUserDir defaults to ~/.lde without LDE_HOME", function()
+	env.set("LDE_HOME", nil)
+	local home = env.var("HOME") or env.var("USERPROFILE")
+	test.truthy(home, "tests need HOME or USERPROFILE set")
+	test.equal(global.getUserDir(), path.join(home, ".lde"))
+	test.equal(global.getDir(), path.join(home, ".lde"), "getDir must default to the user dir")
+end)
+
+test.it("LDE_HOME replaces ~/.lde for the user dir and the default tree dir", function()
+	local custom = path.join(env.tmpdir(), "lde-dir-custom")
+	env.set("LDE_HOME", custom)
+
+	test.equal(global.getUserDir(), custom, "getUserDir must return LDE_HOME")
+	test.equal(global.getDir(), custom, "getDir must build off getUserDir")
+	test.equal(global.getGitCacheDir(), path.join(custom, "git"))
+	test.equal(global.getToolsDir(), path.join(custom, "tools"))
+end)
+
+test.it("an empty LDE_HOME is ignored", function()
+	env.set("LDE_HOME", "")
+	local home = env.var("HOME") or env.var("USERPROFILE")
+	test.equal(global.getUserDir(), path.join(home, ".lde"))
+end)
+
+test.it("--tree wins over LDE_HOME for getDir but not getUserDir", function()
+	local custom = path.join(env.tmpdir(), "lde-dir-custom")
+	local tree = path.join(env.tmpdir(), "lde-dir-tree")
+	env.set("LDE_HOME", custom)
+	global.setDir(tree)
+
+	test.equal(global.getDir(), tree, "--tree must override the user dir")
+	test.equal(global.getUserDir(), custom, "getUserDir must ignore --tree")
+	test.equal(global.getGitCacheDir(), path.join(tree, "git"), "caches must follow --tree")
+end)

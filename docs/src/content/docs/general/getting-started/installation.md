@@ -24,6 +24,10 @@ If you for whatever reason want to install it manually:
 2. Run `lde --setup` on the binary
 3. Ideally place it in `~/.lde/lde` but this is not required. It will still work and support self upgrades
 
+> [!TIP]
+> By default, lde keeps everything in `~/.lde`. To override this, set the `LDE_HOME` environment variable to a different directory.
+> This works both at runtime and at install time (first setup)
+
 ## Verify
 
 After installing, verify lde is available:

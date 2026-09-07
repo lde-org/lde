@@ -59,11 +59,22 @@
 local Registry = {}
 Registry.__index = Registry
 
---- Default registry checkout dir: ~/.lde/registry.
+--- The user-level lde dir: LDE_HOME when set, else ~/.lde. Mirrors
+--- lde-core.global.getUserDir() so a Registry built without an injected
+--- dirFn (production always injects one) lands in the same tree.
+---@return string
+local function userLdeDir()
+	local path = require("path")
+	local ldeHome = os.getenv("LDE_HOME")
+	if ldeHome and ldeHome ~= "" then return ldeHome end
+	return path.join(os.getenv("HOME") or os.getenv("USERPROFILE"), ".lde")
+end
+
+--- Default registry checkout dir: <user lde dir>/registry.
 ---@return string
 local function defaultDir()
 	local path = require("path")
-	return path.join(os.getenv("HOME") or os.getenv("USERPROFILE"), ".lde", "registry")
+	return path.join(userLdeDir(), "registry")
 end
 
 --- Safe JSON decode: returns nil + message instead of raising on malformed

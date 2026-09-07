@@ -1,7 +1,7 @@
 {
 	"$schema": "http://json-schema.org/draft-07/schema#",
 	"title": "lde global config",
-	"description": "Global configuration for lde, stored at ~/.lde/config.json",
+	"description": "Global configuration for lde, stored at config.json in the lde home directory (LDE_HOME, or ~/.lde by default)",
 	"type": "object",
 	"additionalProperties": false,
 	"properties": {
