@@ -257,7 +257,7 @@ test.skipIf(jit.os == "Windows" or env.var("CI") ~= nil)(
 		fs.mkdir(dir)
 		lde.Package.init(dir)
 		test.truthy(fs.isfile(path.join(dir, "CLAUDE.md")), "CLAUDE.md should be written for claude users")
-		test.truthy(fs.read(path.join(dir, "CLAUDE.md")):find("package manager and toolkit for Lua", 1, true))
+		test.truthy(fs.read(path.join(dir, "CLAUDE.md")):find("https://lde.sh/llms.txt", 1, true))
 	end)
 
 	env.set("PATH", oldPath)
@@ -285,6 +285,7 @@ test.skipIf(jit.os == "Windows" or env.var("CI") ~= nil)(
 		lde.Package.init(dir)
 		test.truthy(fs.isfile(path.join(dir, "AGENTS.md")), "AGENTS.md should be preferred over CLAUDE.md")
 		test.falsy(fs.exists(path.join(dir, "CLAUDE.md")), "CLAUDE.md must not be written when an AGENTS.md agent is present")
+		test.truthy(fs.read(path.join(dir, "AGENTS.md")):find("https://lde.sh/llms.txt", 1, true))
 	end)
 
 	env.set("PATH", oldPath)
