@@ -368,7 +368,7 @@ local function initPackage(dir, opts)
 	}
 	if language == "teal" then
 		configLines[#configLines + 1] = '\t"scripts": {'
-		configLines[#configLines + 1] = '\t\t"check": "tl check -I target src/init.tl"'
+		configLines[#configLines + 1] = '\t\t"check": "ldx rocks:tl check -I target src/init.tl"'
 		configLines[#configLines + 1] = '\t},'
 	end
 	configLines[#configLines + 1] = '\t"dependencies": {}'

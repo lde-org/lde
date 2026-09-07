@@ -77,7 +77,7 @@ test.it("lde new --language teal writes .tl entry, check script, and tlconfig.lu
 	local check = config.scripts and config.scripts.check
 	test.truthy(check)
 	if check then
-		test.includes(check, "tl check -I target")
+		test.includes(check, "ldx rocks:tl check -I target")
 		test.includes(check, "src/init.tl")
 	end
 

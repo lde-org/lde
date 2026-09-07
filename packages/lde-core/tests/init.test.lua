@@ -164,7 +164,7 @@ test.it("Package.init teal projects write a .tl entry point, check script, and t
 	local check = config.scripts and config.scripts.check
 	test.truthy(check)
 	if check then
-		test.includes(check, "tl check -I target")
+		test.includes(check, "ldx rocks:tl check -I target")
 	end
 
 	test.truthy(fs.isfile(path.join(dir, "tlconfig.lua")))
