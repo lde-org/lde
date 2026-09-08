@@ -168,9 +168,17 @@ test.it("openEnclosingRepo finds the repository enclosing a nested package dir",
 	local created = assert(git2.init(repoDir))
 	created:free()
 
+	local direct = assert(git2.open(repoDir))
+	local expectedWorkdir = direct:workdir()
+	direct:free()
+	test.truthy(expectedWorkdir) ---@cast expectedWorkdir -nil
+
 	local repo, err = global.openEnclosingRepo(nested)
 	test.truthy(repo, err) ---@cast repo -nil
-	test.equal(repo:workdir(), repoDir .. path.separator, "must open the enclosing repo, not the nested dir")
+	local workdir = repo:workdir()
+	test.truthy(workdir) ---@cast workdir -nil
+	test.equal(workdir, expectedWorkdir, "must open the enclosing repo, not the nested dir")
+	test.falsy(workdir:find("packages", 1, true), "the nested package dir must not be the workdir")
 	repo:free()
 end)
 
