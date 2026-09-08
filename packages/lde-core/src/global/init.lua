@@ -770,6 +770,17 @@ function global.repoNameFromUrl(url)
 	return url:match("([^/]+)%.git$") or url:match("([^/]+)$")
 end
 
+--- Opens the git repository enclosing `dir`, walking up its parent directories.
+--- git2.open needs the repository or workdir path itself, so a package that
+--- lives in a subdirectory of its repository (monorepo) would fail there.
+---@param dir string
+---@return git2.Repo?, string?
+function global.openEnclosingRepo(dir)
+	local repoPath, err = git2().discover(dir)
+	if not repoPath then return nil, err end
+	return git2().open(repoPath)
+end
+
 --- Clones or retrieves a cached git repo directory. Always resolves to the latest commit.
 ---@param repoName string
 ---@param cloneUrl string

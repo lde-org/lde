@@ -1,6 +1,5 @@
 local ansi = require("ansi")
 local curl = require("curl-sys")
-local git2 = require("git2-sys")
 local json = require("json")
 local process = require("process")
 
@@ -96,9 +95,9 @@ local function publish(args)
 		lde.error.raise("Cannot publish: " .. nameErr)
 	end
 
-	local repo, repoErr = git2.open(pkgDir)
+	local repo, repoErr = lde.global.openEnclosingRepo(pkgDir)
 	if not repo then
-		lde.error.raise("Could not open git repository: " .. (repoErr or "unknown error"))
+		lde.error.raise("Could not find a git repository for this package: " .. (repoErr or "unknown error"))
 	end ---@cast repo -nil
 
 	local gitUrl, urlErr = repo:remoteUrl("origin")

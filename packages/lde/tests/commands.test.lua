@@ -168,6 +168,29 @@ test.it("lde x --path finds a named subpackage inside a monorepo dir", function(
 	test.truthy(ok, "lde x subpackage lookup failed: " .. tostring(out))
 end)
 
+test.it("lde x runs a registry package that lives in a monorepo subdirectory", function()
+	-- Offline fake tree: <tree>/registry holds the portfile and <tree>/git the
+	-- cached checkout. The package is nested, so opening the repo root would
+	-- find no lde.json — the resolver must look it up by name.
+	local treeDir = path.join(tmpBase, "x-nested-tree")
+	local name = "x-nested"
+	local commit = "abc123"
+	local pkgDir = path.join(treeDir, "git", name .. "-" .. commit, "packages", name)
+	fs.mkdirAll(path.join(pkgDir, "src"))
+	fs.write(path.join(pkgDir, "lde.json"), json.encode({ name = name, version = "0.1.0" }))
+	fs.write(path.join(pkgDir, "src", "init.lua"), 'print("nested-ran")')
+	fs.mkdirAll(path.join(treeDir, "registry", "packages"))
+	fs.write(path.join(treeDir, "registry", "packages", name .. ".json"), json.encode({
+		name = name,
+		git = "https://example.com/monorepo.git",
+		versions = { ["0.1.0"] = commit }
+	}))
+
+	local ok, out = cli({ "--tree", treeDir, "x", name, "--offline" }, tmpBase)
+	test.truthy(ok, "lde x on a nested registry package failed: " .. tostring(out))
+	test.includes(out or "", "nested-ran")
+end)
+
 test.it("lde x without a name prints usage", function()
 	local ok, out = cli({ "x" })
 	test.truthy(ok)

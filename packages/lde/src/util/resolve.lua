@@ -111,7 +111,8 @@ local function resolvePackage(args, parsed)
 		else
 			repoDir = lde.global.getOrInitGitRepo(packageName, portfile.git, portfile.branch, commit)
 		end
-		return lde.Package.open(repoDir)
+
+		return lde.util.findNamedPackage(repoDir, packageName)
 	end
 end
 

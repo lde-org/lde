@@ -9,6 +9,7 @@ local global = lde.global
 
 local fs = require("fs")
 local env = require("env")
+local git2 = require("git2-sys")
 local path = require("path")
 local json = require("json")
 
@@ -154,6 +155,23 @@ test.it("planGitRepo heals a partial cache dir from an interrupted run", functio
 	local plan = global.planGitRepo("partialpkg", "https://github.com/user/repo.git", nil, commit)
 	test.falsy(fs.exists(repoDir), "partial cache dir must be removed")
 	test.truthy(plan.tarballUrl, "a fresh download must be planned")
+end)
+
+--
+-- openEnclosingRepo (no network)
+--
+
+test.it("openEnclosingRepo finds the repository enclosing a nested package dir", function()
+	local repoDir = path.join(tmpBase, "enclosing-repo")
+	local nested = path.join(repoDir, "packages", "pkg")
+	fs.mkdirAll(nested)
+	local created = assert(git2.init(repoDir))
+	created:free()
+
+	local repo, err = global.openEnclosingRepo(nested)
+	test.truthy(repo, err) ---@cast repo -nil
+	test.equal(repo:workdir(), repoDir .. path.separator, "must open the enclosing repo, not the nested dir")
+	repo:free()
 end)
 
 --
