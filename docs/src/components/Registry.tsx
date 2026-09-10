@@ -38,7 +38,7 @@ function byLastUpdated(a: Package, b: Package) {
 function CompactCard({ pkg }: { pkg: Package }) {
 	return (
 		<a
-			href={`/registry/${pkg.name}/`}
+			href={`/registry/${pkg.name}`}
 			class="group flex items-center justify-between gap-3 px-4 py-3 bg-black/[0.02] dark:bg-white/[0.02] hover:bg-black/[0.04] dark:hover:bg-white/[0.04] transition"
 		>
 			<div class="min-w-0">
@@ -244,7 +244,7 @@ export default function Registry() {
 			e.preventDefault();
 			setActiveIdx((i) => Math.max(i - 1, 0));
 		} else if (e.key === "Enter" && filtered[activeIdx]) {
-			window.location.href = `/registry/${filtered[activeIdx].name}/`;
+			window.location.href = `/registry/${filtered[activeIdx].name}`;
 		} else if (e.key === "Escape") {
 			setQuery("");
 		}
@@ -287,7 +287,7 @@ export default function Registry() {
 								{filtered.map((pkg, i) => (
 									<li key={pkg.name}>
 										<a
-											href={`/registry/${pkg.name}/`}
+											href={`/registry/${pkg.name}`}
 											onMouseEnter={() => setActiveIdx(i)}
 											class={`flex flex-col gap-0.5 px-4 py-2.5 transition ${
 												i === activeIdx
@@ -322,7 +322,7 @@ export default function Registry() {
 			{/* Publish CTA + namespace request */}
 			<div class="flex flex-wrap items-center justify-center gap-4 mb-24">
 				<a
-					href="/registry/publish/"
+					href="/registry/publish"
 					class="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium bg-blue-600 text-white hover:bg-blue-500 transition"
 				>
 					<svg
@@ -341,7 +341,7 @@ export default function Registry() {
 					Publish a package
 				</a>
 				<a
-					href="/registry/claim/"
+					href="/registry/claim"
 					class="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium border border-blue-600/40 text-blue-600 dark:text-blue-400 hover:bg-blue-600/10 hover:border-blue-600/60 transition"
 				>
 					<svg

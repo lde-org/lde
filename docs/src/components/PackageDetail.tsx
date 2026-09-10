@@ -1110,7 +1110,7 @@ export default function PackageDetail({ name: nameProp }: { name: string }) {
 								{deps.map(([depName, version]) => (
 									<a
 										key={depName}
-										href={`/registry/${depName}/`}
+										href={`/registry/${depName}`}
 										class="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-mono border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 hover:border-blue-600/40 hover:text-blue-500 transition-colors"
 									>
 										{depName}

@@ -5,5 +5,8 @@
   "compatibility_flags": ["nodejs_compat"],
   "assets": {
     "directory": "./dist",
+    // Serve blog/index.html at /blog and redirect /blog/ to /blog, so every
+    // page has one canonical, slash-free URL.
+    "html_handling": "drop-trailing-slash",
   },
 }

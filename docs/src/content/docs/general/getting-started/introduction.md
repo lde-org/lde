@@ -124,7 +124,7 @@ end)
 
 Simply write this file, and then run `lde test` to see the results.
 
-You can also get [test coverage](/docs/test-runner/getting-started/introduction/) to ensure you're testing your full codebase with `lde test --coverage`.
+You can also get [test coverage](/docs/test-runner/getting-started/introduction) to ensure you're testing your full codebase with `lde test --coverage`.
 
 ## Compile Your Code
 

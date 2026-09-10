@@ -21,13 +21,13 @@ export async function GET(_context: APIContext) {
 	const index = [
 		...docs.map((doc) => ({
 			title: doc.data.title,
-			url: `/docs/${doc.id}/`,
+			url: `/docs/${doc.id}`,
 			type: "doc",
 			body: stripMarkdown(doc.body ?? ""),
 		})),
 		...posts.map((post) => ({
 			title: post.data.title,
-			url: `/blog/${post.id}/`,
+			url: `/blog/${post.id}`,
 			type: "blog",
 			body: stripMarkdown(post.body ?? ""),
 		})),

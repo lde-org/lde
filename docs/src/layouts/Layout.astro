@@ -26,6 +26,9 @@ const {
 const pageTitle = title ? `${title} - lde` : "lde";
 const ogSlug = Astro.url.pathname.replace(/^\/|\/$/g, "") || "index";
 const ogImage = `${SITE_URL}/og/${ogSlug}.png`;
+// The canonical URL of this page: pages build as directories, but the served
+// URL has no trailing slash (see trailingSlash in astro.config.mjs).
+const canonicalUrl = SITE_URL + Astro.url.pathname.replace(/(.)\/$/, "$1");
 ---
 
 <html lang="en" class="dark overflow-y-scroll">
@@ -84,7 +87,7 @@ const ogImage = `${SITE_URL}/og/${ogSlug}.png`;
 		<meta property="og:title" content={pageTitle} />
 		<meta property="og:description" content={description} />
 		<meta property="og:image" content={ogImage} />
-		<meta property="og:url" content={SITE_URL + Astro.url.pathname} />
+		<meta property="og:url" content={canonicalUrl} />
 
 		<!-- Twitter Card -->
 		<meta name="twitter:card" content="summary_large_image" />

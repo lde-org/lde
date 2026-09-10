@@ -45,7 +45,7 @@ export default function RegistryPage({ name }: { name?: string }) {
 		return (
 			<div class="px-4 md:px-6 py-12 max-w-5xl mx-auto w-full">
 				<a
-					href="/registry/"
+					href="/registry"
 					class="inline-flex items-center gap-1.5 text-sm text-black/50 dark:text-white/50 hover:text-blue-500 transition-colors mb-8"
 				>
 					<svg

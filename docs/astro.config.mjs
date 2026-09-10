@@ -12,6 +12,11 @@ import { githubAdmonitions } from "./src/lib/githubAdmonitions.ts";
 export default defineConfig({
 	site: "https://lde.sh",
 	output: "static",
+	// URLs are canonical without a trailing slash. Paired with the Cloudflare
+	// asset handler's "drop-trailing-slash" (wrangler.jsonc), which serves
+	// blog/index.html at /blog; build.format stays "directory" so Astro.url
+	// pathnames keep their folder shape, which the layout and sidebar rely on.
+	trailingSlash: "never",
 	server: {
 		allowedHosts: process.env.NODE_ENV !== "production" ? true : undefined,
 	},
