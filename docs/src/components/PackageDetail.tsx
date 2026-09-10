@@ -5,34 +5,42 @@ import { usePortfile } from "../hooks/usePortfile";
 import { useRegistry } from "../hooks/useRegistry";
 import { highlightCodeBlocks, highlightFile, isViewableFile } from "../lib/highlight";
 import { createReadmeMarked } from "../lib/readmeMarked";
+import { joinRepoPath, resolvePackageDir } from "../lib/packageRoot";
+
+// localStorage cache entries, stamped with the time they were written. Used for
+// the README, manifest, and repo tree fetches so repeat visits don't re-hit the
+// network (or host API rate limits).
+function readCache<T>(key: string, ttlMs: number): T | null {
+	try {
+		const raw = localStorage.getItem(key);
+		if (raw) {
+			const { data, ts } = JSON.parse(raw);
+			if (Date.now() - ts <= ttlMs) return data as T;
+		}
+	} catch {}
+	return null;
+}
+
+function writeCache(key: string, data: unknown) {
+	try {
+		localStorage.setItem(key, JSON.stringify({ data, ts: Date.now() }));
+	} catch {}
+}
 
 // Fetch with a localStorage cache: returns cached data when fresh, otherwise
-// fetches and stores the result. Used for the README and repo tree fetches so
-// repeat visits don't re-hit the network (or host API rate limits).
+// fetches and stores the result.
 function cachedFetch<T>(
 	key: string,
 	url: string,
 	ttlMs: number,
 	parse: (r: Response) => Promise<T | null>,
 ): Promise<T | null> {
-	try {
-		const raw = localStorage.getItem(key);
-		if (raw) {
-			const { data, ts } = JSON.parse(raw);
-			if (Date.now() - ts <= ttlMs) return Promise.resolve(data as T);
-		}
-	} catch {}
+	const cached = readCache<T>(key, ttlMs);
+	if (cached !== null) return Promise.resolve(cached);
 	return fetch(url)
 		.then((r) => (r.ok ? parse(r) : Promise.resolve(null)))
 		.then((data) => {
-			if (data != null) {
-				try {
-					localStorage.setItem(
-						key,
-						JSON.stringify({ data, ts: Date.now() }),
-					);
-				} catch {}
-			}
+			if (data != null) writeCache(key, data);
 			return data;
 		});
 }
@@ -149,17 +157,21 @@ function repoWebUrl(
 }
 
 // Resolve a README.md URL for a supported host, pinned to the given ref
-// (commit SHA, branch, or HEAD).
-function repoReadmeUrl(repo: Repo, ref: string): string {
-	return repoFileUrl(repo, ref, "README.md");
+// (commit SHA, branch, or HEAD) and to the package's directory inside the repo
+// ("" when the package sits at the repo root).
+function repoReadmeUrl(repo: Repo, ref: string, dir: string): string {
+	return repoFileUrl(repo, ref, joinRepoPath(dir, "README.md"));
 }
 
-// Rewrite a relative README image path to its raw host URL at the pinned
-// ref. Absolute URLs, anchors, and data: URIs are left untouched.
+// Rewrite a relative README image path to its raw host URL at the pinned ref.
+// Absolute URLs, anchors, and data: URIs are left untouched. A path starting
+// with "/" is relative to the repo root, since that is how the hosts read it;
+// anything else is relative to the directory the README lives in.
 function resolveAssetUrl(
 	href: string,
 	repo: Repo | null,
 	ref: string,
+	dir: string,
 ): string {
 	if (
 		!repo ||
@@ -168,8 +180,9 @@ function resolveAssetUrl(
 		href.startsWith("#")
 	)
 		return href;
-	const clean = href.replace(/^\.\//, "").replace(/^\/+/, "");
-	return repoFileUrl(repo, ref, clean);
+	const fromRoot = href.startsWith("/");
+	const clean = href.replace(/^\/+/, "");
+	return repoFileUrl(repo, ref, fromRoot ? clean : joinRepoPath(dir, clean));
 }
 
 // Rewrite a relative README link to its host blob URL at the pinned ref.
@@ -177,6 +190,7 @@ function resolveLinkUrl(
 	href: string,
 	repo: Repo | null,
 	ref: string,
+	dir: string,
 ): string {
 	if (
 		!repo ||
@@ -187,18 +201,23 @@ function resolveLinkUrl(
 		href.startsWith("#")
 	)
 		return href;
-	const clean = href.replace(/^\.\//, "").replace(/^\/+/, "");
-	return repoWebUrl(repo, ref, clean, "blob");
+	const fromRoot = href.startsWith("/");
+	const clean = href.replace(/^\/+/, "");
+	return fromRoot
+		? repoWebUrl(repo, ref, clean, "blob")
+		: repoWebUrl(repo, ref, joinRepoPath(dir, clean), "blob");
 }
 
 // Render a README with marked (GFM), sanitize the result, highlight code
 // blocks (declared language when known, auto-detected otherwise), then
 // resolve relative image and link URLs against the package's host URLs at the
-// pinned ref so they work outside the repo page.
+// pinned ref so they work outside the repo page. `dir` is the directory the
+// README was read from, which relative URLs are resolved against.
 function renderReadme(
 	src: string,
 	repo: Repo | null,
 	ref: string,
+	dir: string,
 ): string {
 	const html = highlightCodeBlocks(
 		DOMPurify.sanitize(createReadmeMarked().parse(src) as string),
@@ -210,12 +229,12 @@ function renderReadme(
 		.replace(
 			/(<img\b[^>]*\bsrc=["'])([^"']+)(["'])/g,
 			(_m, pre, val, post) =>
-				pre + resolveAssetUrl(val, repo, ref) + post,
+				pre + resolveAssetUrl(val, repo, ref, dir) + post,
 		)
 		.replace(
 			/(<a\b[^>]*\bhref=["'])([^"']+)(["'])/g,
 			(_m, pre, val, post) =>
-				pre + resolveLinkUrl(val, repo, ref) + post,
+				pre + resolveLinkUrl(val, repo, ref, dir) + post,
 		);
 }
 
@@ -401,9 +420,17 @@ export default function PackageDetail({ name: nameProp }: { name: string }) {
 	const loading =
 		name === "_fallback" || portfileLoading || (registryLoading && !pkg);
 
-	const [readme, setReadme] = useState<string | null>(null);
+	// Rendered README source plus the directory it was read from, which its
+	// relative links resolve against.
+	const [readme, setReadme] = useState<{ text: string; dir: string } | null>(
+		null,
+	);
 	const [readmeLoading, setReadmeLoading] = useState(false);
 	const [tab, setTab] = useState<Tab>("overview");
+
+	// The package's directory inside its repo ("" for the repo root), null
+	// while it is still being resolved.
+	const [pkgDir, setPkgDir] = useState<string | null>(null);
 
 	const [tree, setTree] = useState<GitTreeNode[] | null>(null);
 	const [treeLoading, setTreeLoading] = useState(false);
@@ -430,28 +457,92 @@ export default function PackageDetail({ name: nameProp }: { name: string }) {
 	const latestCommit = portfile?.versions?.[latest ?? ""] ?? null;
 	const repo = parseGitUrl(git);
 	const treeRef = latestCommit ?? portfile?.branch ?? "HEAD";
-	const readmeUrl = repo ? repoReadmeUrl(repo, latestCommit ?? "HEAD") : null;
 
-	// Try to resolve a README.md from the package's repo at the pinned commit
-	// of the latest version (falling back to the default branch). Cached
-	// locally — the content is immutable per commit, so it's held for a day.
+	// Content at a pinned commit never changes, so it can be cached for a day;
+	// a branch or HEAD can move, so those are only held briefly.
+	const refTtl = SHA_RE.test(treeRef)
+		? 24 * 60 * 60 * 1000
+		: TREE_TTL;
+
+	// Resolve where the package lives inside its repo. Monorepos keep the
+	// manifest in a subdirectory, and the README sits next to it — so this
+	// decides which README is the package's own. Cached per repo+ref+name,
+	// since it only changes when the commit or the package name does.
+	useEffect(() => {
+		setPkgDir(null);
+		if (!repo) return;
+		let cancelled = false;
+
+		const key = `lde-pkgdir:${repo.host}/${repo.owner}/${repo.repo}/${treeRef}/${name}`;
+		const cached = readCache<string>(key, refTtl);
+		if (cached !== null) {
+			setPkgDir(cached);
+			return;
+		}
+
+		const manifestUrl = (path: string) => repoFileUrl(repo, treeRef, path);
+		resolvePackageDir({
+			packageName: name,
+			readManifest: (path) =>
+				cachedFetch<string | null>(
+					`lde-manifest:${manifestUrl(path)}`,
+					manifestUrl(path),
+					refTtl,
+					(r) => r.text(),
+				),
+			readTree: () => fetchFileTree(repo, treeRef),
+		})
+			.then((dir) => {
+				if (cancelled) return;
+				writeCache(key, dir);
+				setPkgDir(dir);
+			})
+			// A host API failure leaves the repo root as the only guess.
+			.catch(() => {
+				if (!cancelled) setPkgDir("");
+			});
+
+		return () => {
+			cancelled = true;
+		};
+	}, [repo?.host, repo?.owner, repo?.repo, treeRef, name]);
+
+	// Try to resolve a README.md from the package's directory at the pinned
+	// commit of the latest version (falling back to the default branch). A
+	// package without one of its own still gets the repo's front page, which is
+	// what this page showed for every package before. Cached locally — the
+	// content is immutable per commit, so it's held for a day.
 	useEffect(() => {
 		setReadme(null);
 		setReadmeLoading(false);
-		if (!readmeUrl) return;
+		if (!repo || pkgDir === null) return;
 		setReadmeLoading(true);
-		cachedFetch<string | null>(
-			`lde-readme:${readmeUrl}`,
-			readmeUrl,
-			24 * 60 * 60 * 1000,
-			(r) => r.text(),
-		)
-			.then((text) => {
-				setReadme(text);
+
+		const candidates = [
+			[repoReadmeUrl(repo, treeRef, pkgDir), pkgDir] as const,
+			...(pkgDir === ""
+				? []
+				: [[repoReadmeUrl(repo, treeRef, ""), ""] as const]),
+		];
+
+		(async () => {
+			for (const [url, dir] of candidates) {
+				const text = await cachedFetch<string | null>(
+					`lde-readme:${url}`,
+					url,
+					24 * 60 * 60 * 1000,
+					(r) => r.text(),
+				);
+				if (text != null) return { text, dir };
+			}
+			return null;
+		})()
+			.then((found) => {
+				setReadme(found);
 				setReadmeLoading(false);
 			})
 			.catch(() => setReadmeLoading(false));
-	}, [readmeUrl]);
+	}, [repo?.host, repo?.owner, repo?.repo, treeRef, pkgDir]);
 
 	// Fetch the full file tree of the latest commit from the host's tree API.
 	// Only fetched once the Files tab is opened, and cached locally for 15
@@ -515,7 +606,7 @@ export default function PackageDetail({ name: nameProp }: { name: string }) {
 	// Rendered README HTML — memoized so marked only re-parses when the
 	// source or the pinned ref changes.
 	const readmeHtml = useMemo(
-		() => (readme ? renderReadme(readme, repo, treeRef) : null),
+		() => (readme ? renderReadme(readme.text, repo, treeRef, readme.dir) : null),
 		[readme, repo?.host, repo?.owner, repo?.repo, treeRef],
 	);
 
@@ -731,17 +822,15 @@ export default function PackageDetail({ name: nameProp }: { name: string }) {
 					{/* Overview */}
 					{tab === "overview" && (
 						<div class="pt-6">
-							{readmeUrl && (readme || readmeLoading) ? (
-								readmeLoading ? (
-									<div class="h-32 animate-pulse bg-black/5 dark:bg-white/5" />
-								) : (
-									<div class="border border-black/10 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.02] px-6 py-5">
-										<div
-											class="markdown readme"
-											dangerouslySetInnerHTML={{ __html: readmeHtml ?? "" }}
-										/>
-									</div>
-								)
+							{repo && (pkgDir === null || readmeLoading) ? (
+								<div class="h-32 animate-pulse bg-black/5 dark:bg-white/5" />
+							) : readme ? (
+								<div class="border border-black/10 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.02] px-6 py-5">
+									<div
+										class="markdown readme"
+										dangerouslySetInnerHTML={{ __html: readmeHtml ?? "" }}
+									/>
+								</div>
 							) : (
 								<p class="text-sm text-black/40 dark:text-white/40">
 									No README found for this package.
