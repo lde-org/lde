@@ -38,7 +38,7 @@ export async function GET(_context: APIContext) {
 	];
 
 	for (const doc of docs) {
-		lines.push(`${doc.data.title}: ${SITE_URL}/docs/${doc.id}/`);
+		lines.push(`- [${doc.data.title}](${SITE_URL}/docs/${doc.id}.md)`);
 	}
 
 	lines.push(``);
@@ -46,10 +46,9 @@ export async function GET(_context: APIContext) {
 	lines.push(``);
 
 	for (const post of blog) {
-		lines.push(`---`);
-		lines.push(`## ${post.data.title}`);
-		lines.push(`URL: ${SITE_URL}/blog/${post.id}/`);
-		lines.push(`Published: ${post.data.published}`);
+		lines.push(
+			`- [${post.data.title}](${SITE_URL}/blog/${post.id}.md): Published ${post.data.published.toISOString().slice(0, 10)}`,
+		);
 	}
 
 	return new Response(lines.join("\n"), {
