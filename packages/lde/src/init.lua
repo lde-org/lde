@@ -237,7 +237,7 @@ end
 		-- path is deterministic (buildLog.pathFor), so parent and worker agree
 		-- on it without passing it over the wire.
 		local capture = (not lde.isVerbose) and buildLog.newCapture() or nil
-		local ok = pcall(function()
+		local ok, msg = pcall(function()
 			if not pkgDir or not outDir then
 				error("__build-pkg: missing package dir or output dir", 0)
 			end
@@ -258,7 +258,13 @@ end
 			if not bok then error(berr or "build failed", 0) end
 		end)
 		if not ok then
-			if capture and outDir then capture:write(outDir) end
+			-- Capture the error itself: a build script that fails before any
+			-- subprocess output (a failing build:move, say) would otherwise
+			-- leave the worker's log empty and the parent with nothing to show.
+			if capture then
+				capture:append("__build-pkg: " .. lde.error.message(msg) .. "\n")
+				if outDir then capture:write(outDir) end
+			end
 			os.exit(1)
 		end
 		return

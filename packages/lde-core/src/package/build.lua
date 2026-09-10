@@ -144,6 +144,8 @@ local function buildPackage(package, destinationPath)
 		end
 
 		if inputsChanged then
+			if fs.isdir(destinationPath) then fs.rmdir(destinationPath) end
+
 			-- Key the in-process cache by target too: a cross compile after a
 			-- native build in the same process must not skip the rebuild.
 			local buildKey = destinationPath .. "\n" .. lde.global.getTargetKey()
