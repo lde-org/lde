@@ -100,6 +100,26 @@ if build:exists("config.h") then
 end
 ```
 
+### `Build:scan(rel: string, glob?: string) -> string[]`
+
+Lists every file under `rel`, recursively. The paths come back relative to the output directory, so each one can be handed straight back to `Build:read`:
+
+```lua
+for _, file in ipairs(build:scan("assets")) do
+	build:write(file .. ".lua", "return [==[" .. build:read(file) .. "]==]")
+end
+```
+
+`glob` optionally filters the paths relative to `rel` (`**` by default). `*` and `?` match within a single path segment and `**` matches across segments
+
+```lua
+build:scan("icons", "**/*.qoi") -- every icon, at any depth
+build:scan("icons", "*.qoi")    -- only the icons in icons/ itself
+```
+
+> [!NOTE]
+> Scanning a directory that does not exist returns an empty list.
+
 ### `Build:sh(cmd: string)`
 
 Runs `cmd` as a shell command with `cmd.exe` on Windows and `/bin/sh` otherwise.

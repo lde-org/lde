@@ -131,6 +131,57 @@ function Instance:exists(rel)
 	return fs.exists(full)
 end
 
+--- List the files under `rel`, recursively.
+---
+--- Paths come back relative to the output dir, so every result can be handed
+--- straight back to read/write/exists. `glob` narrows the list to the paths
+--- relative to `rel` ("**" by default): `*` and `?` stop at a separator, `**`
+--- crosses them, and a leading "**/" also matches the scanned directory
+--- itself. A `rel` that does not exist lists as empty — build scripts
+--- routinely iterate over optional asset directories.
+---@param rel string # Relative path at output dir
+---@param glob? string # Glob filter, matched against paths relative to rel
+---@return string[] # matching paths relative to the output dir, unsorted
+function Instance:scan(rel, glob)
+	local root = path.normalize(rel)
+	local full = path.join(self.outDir, root)
+	if not fs.isdir(full) then
+		return {}
+	end
+
+	-- fs.scan globs the absolute entry path with the platform separator, which
+	-- leaves "**/*.qoi" unusable on Windows; the filtering happens here
+	-- instead, against the entry's path relative to `rel` with separators
+	-- normalized to "/". A leading "**/" gets a second pattern for the same
+	-- directory: fs.globToPattern wants the separator there, so "**/*.qoi"
+	-- alone would silently skip the .qoi files sitting directly in `rel`.
+	local pattern, rootPattern
+	if glob then
+		pattern = fs.globToPattern(glob)
+		if glob:sub(1, 3) == "**/" then
+			rootPattern = fs.globToPattern(glob:sub(4))
+		end
+	end
+
+	-- fs.scan returns its paths relative to the scanned dir; re-rooting them on
+	-- the output dir is a prefix, since that is the base every other method
+	-- here reads and writes against.
+	local prefix = root == "." and "" or root .. path.separator
+	local files = {}
+
+	for _, child in ipairs(fs.scan(full, "**")) do
+		local normalized = child:gsub("\\", "/")
+		local isMatch = not pattern or normalized:find(pattern) ~= nil
+			or (rootPattern ~= nil and normalized:find(rootPattern) ~= nil)
+
+		if isMatch then
+			files[#files + 1] = prefix .. child
+		end
+	end
+
+	return files
+end
+
 ---@param cmd string
 function Instance:sh(cmd)
 	-- Run relative to the output dir so `build:sh("echo x > out.txt")` lands
@@ -211,7 +262,7 @@ end
 -- this chunk wires them into the table, forwarding calls. `cc` receives its
 -- argument table already unpacked — only primitives cross host↔guest.
 local GUEST_SOURCE = [==[
-	local outDir, gccBin, target, fetch, write, read, extract, copy, delete, move, exists, sh, cc = ...
+	local outDir, gccBin, target, fetch, write, read, extract, copy, delete, move, exists, scan, sh, cc = ...
 	local build = {
 		outDir  = outDir,
 		gccBin  = gccBin,
@@ -224,6 +275,15 @@ local GUEST_SOURCE = [==[
 		delete  = function(self, rel)        delete(rel)               end,
 		move    = function(self, rel, dest)  move(rel, dest)           end,
 		exists  = function(self, rel)        return exists(rel)        end,
+		scan    = function(self, rel, glob)
+			-- Only primitives cross the host boundary, so the host joins the
+			-- list and the guest splits it back apart.
+			local files = {}
+			for file in scan(rel, glob):gmatch("[^\n]+") do
+				files[#files + 1] = file
+			end
+			return files
+		end,
 		sh      = function(self, cmd)        sh(cmd)                   end,
 		cc      = function(self, args)       return cc(unpack(args))   end,
 	}
@@ -235,7 +295,8 @@ local GUEST_SOURCE = [==[
 ---
 --- The instance methods are registered as host callbacks and passed into the
 --- guest as varargs; the guest chunk assembles them into the `lde-build`
---- table via package.preload. No globals cross the boundary.
+--- table via package.preload. No globals cross the boundary, and only
+--- primitives come back: scan() ships its list newline-joined.
 ---@param state     lua.State
 ---@param outputDir string
 ---@param gccBin?   string # path to gcc binary; defaults to "gcc"
@@ -254,6 +315,7 @@ function Instance.setup(state, outputDir, gccBin, target, targetFlag, captureLog
 		function(rel)          inst:delete(rel)           end,
 		function(rel, dest)    inst:move(rel, dest)       end,
 		function(rel)          return inst:exists(rel)    end,
+		function(rel, glob)    return table.concat(inst:scan(rel, glob), "\n") end,
 		function(cmd)          inst:sh(cmd)               end,
 		function(...)          return inst:cc({ ... })    end
 	)

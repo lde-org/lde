@@ -36,7 +36,9 @@ local function makePackageWithSrc(name, srcFiles, config)
 	fs.mkdir(path.join(dir, "target"))
 
 	for filename, content in pairs(srcFiles) do
-		fs.write(path.join(srcDir, filename), content)
+		local filePath = path.join(srcDir, filename)
+		fs.mkdirAll(path.dirname(filePath))
+		fs.write(filePath, content)
 	end
 
 	return dir
@@ -1850,6 +1852,65 @@ assert(shellContent:match("hello"), "sh/read mismatch: " .. shellContent)
 	-- Verify end result
 	test.equal(fs.read(path.join(outputDir, "hello.txt")), "world")
 	test.truthy(fs.read(path.join(outputDir, "shell.txt")):match("hello"))
+end)
+
+test.it("build script lde-build scan lists files recursively and filters by glob", function()
+	local dir = makePackageWithSrc("ldebuild-scan", {
+		["init.lua"] = "return true",
+		["assets/README.md"] = "readme",
+		["assets/font.qoi"] = "font",
+		["assets/icons/a.qoi"] = "a",
+		["assets/icons/deep/b.qoi"] = "b",
+	})
+
+	-- Paths are compared with "/" so the expectations hold on Windows too; the
+	-- results come back relative to the output dir and are read back verbatim.
+	fs.write(path.join(dir, "build.lua"), [[
+local build = require("lde-build")
+
+local function normalize(list)
+	local out = {}
+	for i, file in ipairs(list) do out[i] = file:gsub("\\", "/") end
+	table.sort(out)
+	return out
+end
+
+local all = normalize(build:scan("assets"))
+local qoi = normalize(build:scan("assets", "**/*.qoi"))
+local topLevel = normalize(build:scan("assets", "*.qoi"))
+
+-- Scanning the output dir itself keeps paths relative to it: no "./" prefix,
+-- and the same file a scoped scan reports under the same outDir-relative name.
+local root = normalize(build:scan("."))
+local inRoot = {}
+for _, file in ipairs(root) do
+	inRoot[file] = true
+	assert(file:sub(1, 2) ~= "./", "scan(\".\") must not prefix paths: " .. file)
+end
+assert(inRoot["init.lua"], "scan(\".\") must list init.lua")
+assert(inRoot["assets/font.qoi"], "scan(\".\") must list nested files")
+
+build:write("scan.txt", table.concat({
+	"all=" .. table.concat(all, ","),
+	"qoi=" .. table.concat(qoi, ","),
+	"top=" .. table.concat(topLevel, ","),
+	"missing=" .. #build:scan("nope"),
+	"roundtrip=" .. build:read(all[1]),
+}, "\n"))
+]])
+
+	local pkg = assert(lde.Package.open(dir))
+	local outputDir = path.join(dir, "target", pkg:getName())
+	local ok, err = pkg:runBuildScript(outputDir)
+	test.truthy(ok, err)
+
+	test.equal(fs.read(path.join(outputDir, "scan.txt")), table.concat({
+		"all=assets/README.md,assets/font.qoi,assets/icons/a.qoi,assets/icons/deep/b.qoi",
+		"qoi=assets/font.qoi,assets/icons/a.qoi,assets/icons/deep/b.qoi",
+		"top=assets/font.qoi",
+		"missing=0",
+		"roundtrip=readme",
+	}, "\n"))
 end)
 
 test.it("build failure writes captured output to a temp log and reports its path", function()

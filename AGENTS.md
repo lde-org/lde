@@ -101,6 +101,7 @@ build:copy(rel, dest)       -- copy outDir/rel to outDir/dest
 build:move(rel, dest)       -- move outDir/rel to outDir/dest
 build:delete(rel)           -- delete outDir/rel
 build:exists(rel)           -- returns bool
+build:scan(rel, glob?)      -- list files under outDir/rel, recursive (outDir-relative paths)
 build:sh(cmd)               -- run shell command (asserts exit 0)
 ```
 
