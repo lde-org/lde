@@ -143,14 +143,18 @@ log("run " .. util .. " runs=" .. _G.runs)
 		-- Different size, so the rebuild stamp's mtime/size fast path can't mask it.
 		fs.write(path.join(dir, "src", "utilmod.lua"), 'return "version-2"')
 
-		test.truthy(waitForLog(logFile, "accepted pkg-hot-accept.utilmod\n", 15000),
-			"the accept callback did not get the changed module's require path")
+		-- No trailing newline in the needle: the app writes the log in text mode
+		-- (CRLF on Windows) and fs.read returns the raw bytes. The reload is
+		-- asserted first, so a failure says whether the patch or the reporting
+		-- broke.
 		test.truthy(waitForLog(logFile, "run version-2 runs=2", 15000), "hot reload did not re-run the entry")
+		test.truthy(waitForLog(logFile, "accepted pkg-hot-accept.utilmod", 15000),
+			"the accept callback did not get the changed module's require path")
 
 		-- One notification per reload: the entry re-registers on every run, so
 		-- its previous registration must not fire a second time.
 		local content = fs.read(logFile) or ""
-		local _, count = content:gsub("accepted pkg%-hot%-accept%.utilmod\n", "")
+		local _, count = content:gsub("accepted pkg%-hot%-accept%.utilmod\r?\n", "")
 		test.equal(count, 1, "the accept callback must fire once per reload")
 	end)
 end)
