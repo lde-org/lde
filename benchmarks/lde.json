@@ -4,6 +4,6 @@
 	"dependencies": {
 		"process": { "version": "0.1.1" },
 		"ansi": { "path": "../packages/ansi" },
-		"fs": { "version": "0.1.0" }
+		"fs": { "version": "0.2.0" }
 	}
 }
