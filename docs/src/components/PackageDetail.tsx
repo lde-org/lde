@@ -463,7 +463,10 @@ export default function PackageDetail({ name: nameProp }: { name: string }) {
 	const git = portfile?.git ?? pkg?.git ?? "";
 	const latest =
 		pkg?.latest ?? (portfile ? computeLatest(portfile.versions) : null);
+	// Both dates come from the registry's metadata: when the package first
+	// landed, and when a new version was last added.
 	const lastUpdated = pkg?.lastUpdated ?? null;
+	const firstPublished = pkg?.firstPublished ?? null;
 	const license = portfile?.license ?? null;
 	const deps = portfile?.dependencies
 		? Object.entries(portfile.dependencies)
@@ -1023,7 +1026,10 @@ export default function PackageDetail({ name: nameProp }: { name: string }) {
 					</div>
 
 					{/* Metadata */}
-					{(authors.length > 0 || license || lastUpdated) && (
+					{(authors.length > 0 ||
+						license ||
+						lastUpdated ||
+						firstPublished) && (
 						<div class="flex flex-col gap-3">
 							{authors.length > 0 && (
 								<div class="flex flex-col gap-1">
@@ -1066,11 +1072,30 @@ export default function PackageDetail({ name: nameProp }: { name: string }) {
 									<h2 class="text-sm font-semibold text-black/40 dark:text-white/40">
 										Updated
 									</h2>
-									<p class="text-sm">
+									<p
+										class="text-sm"
+										title={lastUpdated}
+									>
+										{pkg?.approximate ? "~" : ""}
 										{formatDate(lastUpdated)}
 									</p>
 								</div>
 							)}
+							{firstPublished &&
+								firstPublished !== lastUpdated && (
+									<div class="flex flex-col gap-1">
+										<h2 class="text-sm font-semibold text-black/40 dark:text-white/40">
+											First published
+										</h2>
+										<p
+											class="text-sm"
+											title={firstPublished}
+										>
+											{pkg?.approximate ? "~" : ""}
+											{formatDate(firstPublished)}
+										</p>
+									</div>
+								)}
 						</div>
 					)}
 

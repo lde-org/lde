@@ -1,25 +1,37 @@
 import { useState, useEffect } from "preact/hooks";
 
+/** One entry of the registry index (`dist/index.json`). */
 export interface RegistryPackage {
 	name: string;
 	description: string | null;
 	authors: string[];
 	latest: string | null;
 	git: string;
+	/** When a new version was last added to this package. */
 	lastUpdated: string | null;
+	/** When this package was first published to the registry. */
+	firstPublished: string | null;
+	/**
+	 * True when the dates were reconstructed from registry history rather than
+	 * recorded as packages were published, so they are estimates.
+	 */
+	approximate?: boolean;
 }
 
 const REGISTRY_URL =
 	"https://raw.githubusercontent.com/lde-org/registry/refs/heads/dist/index.json";
 
 const CACHE_KEY = "lde-registry-index";
+// Bump when the index shape changes so browsers don't serve an old payload.
+const CACHE_VERSION = 2;
 const CACHE_TTL = 5 * 60 * 1000;
 
 function loadCached(): RegistryPackage[] | null {
 	try {
 		const raw = localStorage.getItem(CACHE_KEY);
 		if (!raw) return null;
-		const { data, ts } = JSON.parse(raw);
+		const { data, ts, version } = JSON.parse(raw);
+		if (version !== CACHE_VERSION) return null;
 		if (Date.now() - ts > CACHE_TTL) return null;
 		return data;
 	} catch {
@@ -31,21 +43,32 @@ function saveCache(data: RegistryPackage[]) {
 	try {
 		localStorage.setItem(
 			CACHE_KEY,
-			JSON.stringify({ data, ts: Date.now() }),
+			JSON.stringify({ data, ts: Date.now(), version: CACHE_VERSION }),
 		);
 	} catch {}
 }
 
-function sortByDate(packages: RegistryPackage[]): RegistryPackage[] {
+/** Milliseconds since epoch for a date, or 0 when it is missing/unparseable. */
+export function timeOf(date: string | null | undefined): number {
+	if (!date) return 0;
+	const time = new Date(date).getTime();
+	return Number.isNaN(time) ? 0 : time;
+}
+
+function byName(a: RegistryPackage, b: RegistryPackage) {
+	return a.name.localeCompare(b.name);
+}
+
+/** Newest first. Packages without a date sort last, alphabetically. */
+export function sortByDate(
+	packages: RegistryPackage[],
+	field: "lastUpdated" | "firstPublished",
+): RegistryPackage[] {
 	return [...packages].sort((a, b) => {
-		if (!a.lastUpdated && !b.lastUpdated)
-			return a.name.localeCompare(b.name);
-		if (!a.lastUpdated) return 1;
-		if (!b.lastUpdated) return -1;
-		return (
-			new Date(b.lastUpdated).getTime() -
-			new Date(a.lastUpdated).getTime()
-		);
+		const ta = timeOf(a[field]);
+		const tb = timeOf(b[field]);
+		if (tb !== ta) return tb - ta;
+		return byName(a, b);
 	});
 }
 
@@ -69,7 +92,9 @@ export function useRegistry() {
 				return r.json();
 			})
 			.then((data: RegistryPackage[]) => {
-				const sorted = sortByDate(data);
+				// The index is already sorted newest-first; this keeps the list
+				// correct even if a client gets an older payload.
+				const sorted = sortByDate(data, "lastUpdated");
 				saveCache(sorted);
 				setPackages(sorted);
 				setLoading(false);

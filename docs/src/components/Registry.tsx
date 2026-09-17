@@ -5,15 +5,13 @@ import {
 	useRef,
 	useCallback,
 } from "preact/hooks";
+import {
+	sortByDate,
+	timeOf,
+	type RegistryPackage,
+} from "../hooks/useRegistry";
 
-interface Package {
-	name: string;
-	description: string | null;
-	authors: string[];
-	latest: string | null;
-	git: string;
-	lastUpdated: string | null;
-}
+interface Package extends RegistryPackage {}
 
 const REGISTRY_URL =
 	"https://raw.githubusercontent.com/lde-org/registry/refs/heads/dist/index.json";
@@ -29,20 +27,42 @@ function byName(a: Package, b: Package) {
 }
 
 function byLastUpdated(a: Package, b: Package) {
-	const ta = a.lastUpdated ? new Date(a.lastUpdated).getTime() : 0;
-	const tb = b.lastUpdated ? new Date(b.lastUpdated).getTime() : 0;
-	if (tb !== ta) return tb - ta;
-	return byName(a, b);
+	return timeOf(b.lastUpdated) - timeOf(a.lastUpdated) || byName(a, b);
 }
 
-function CompactCard({ pkg }: { pkg: Package }) {
+// Short relative age ("3d", "5mo", "2y") for a registry date.
+function formatAge(iso: string): string {
+	const days = Math.floor((Date.now() - timeOf(iso)) / 86_400_000);
+	if (days <= 0) return "today";
+	if (days < 7) return `${days}d`;
+	if (days < 31) return `${Math.floor(days / 7)}w`;
+	if (days < 365) return `${Math.floor(days / 30)}mo`;
+	return `${Math.floor(days / 365)}y`;
+}
+
+function CompactCard({ pkg, date }: { pkg: Package; date?: string | null }) {
 	return (
 		<a
 			href={`/registry/${pkg.name}`}
 			class="group flex items-center justify-between gap-3 px-4 py-3 bg-black/[0.02] dark:bg-white/[0.02] hover:bg-black/[0.04] dark:hover:bg-white/[0.04] transition"
 		>
 			<div class="min-w-0">
-				<span class="block font-semibold text-sm truncate">{pkg.name}</span>
+				<span class="flex items-baseline gap-1.5">
+					<span class="font-semibold text-sm truncate">{pkg.name}</span>
+					{date && (
+						<span
+							class="text-[10px] text-black/35 dark:text-white/35 shrink-0"
+							title={
+								pkg.approximate
+									? "Date estimated from registry history"
+									: undefined
+							}
+						>
+							{pkg.approximate ? "~" : ""}
+							{formatAge(date)}
+						</span>
+					)}
+				</span>
 				{pkg.description && (
 					<span class="block text-xs text-black/50 dark:text-white/50 truncate mt-0.5">
 						{pkg.description}
@@ -103,10 +123,13 @@ function Column({
 	title,
 	packages,
 	loading = false,
+	date,
 }: {
 	title: string;
 	packages: Package[];
 	loading?: boolean;
+	/** Which date to show on each row. */
+	date?: (pkg: Package) => string | null;
 }) {
 	// Always reserve COLUMN_SLOTS rows so columns stay balanced even when a
 	// section has fewer packages (or none at all) yet.
@@ -127,7 +150,11 @@ function Column({
 					loading ? (
 						<SkeletonRow key={`skeleton-${i}`} />
 					) : pkg ? (
-						<CompactCard key={pkg.name} pkg={pkg} />
+						<CompactCard
+							key={pkg.name}
+							pkg={pkg}
+							date={date ? date(pkg) : null}
+						/>
 					) : (
 						<div
 							key={`empty-${i}`}
@@ -223,9 +250,12 @@ export default function Registry() {
 		[packages],
 	);
 
-	// The registry index doesn't expose an "added" date yet, so "New" falls
-	// back to most recently updated as the closest signal available.
-	const newest = latestUpdated;
+	// "New" is genuinely newest-first by first publish: the dates come from the
+	// registry's metadata, not from commit times.
+	const newest = useMemo(
+		() => sortByDate(packages, "firstPublished"),
+		[packages],
+	);
 
 	// Reset the highlighted result when the query changes.
 	useEffect(() => setActiveIdx(0), [query]);
@@ -388,8 +418,13 @@ export default function Registry() {
 					<Column
 						title="Latest Updated"
 						packages={latestUpdated.slice(0, COLUMN_SLOTS)}
+						date={(pkg) => pkg.lastUpdated}
 					/>
-					<Column title="New" packages={newest.slice(0, COLUMN_SLOTS)} />
+					<Column
+						title="New"
+						packages={newest.slice(0, COLUMN_SLOTS)}
+						date={(pkg) => pkg.firstPublished}
+					/>
 				</div>
 			)}
 		</div>
