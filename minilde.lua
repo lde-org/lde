@@ -332,7 +332,7 @@ local function buildPackage(packagePath, targetDir, alias)
 		if dep.path then
 			buildPackage(join(packagePath, dep.path), targetDir, name)
 		elseif dep.git then -- downloads to tmpLDEDir/git/<name> then build to target
-			buildPackage(fetchGitRepo(name, dep.git, "master"), targetDir, name)
+			buildPackage(fetchGitRepo(name, dep.git, dep.commit or dep.branch or "master"), targetDir, name)
 		elseif dep.version then -- registry: portfile maps the version to a git repo + commit
 			local packageName = dep.name or name
 			local portfileUrl = registryUrl .. packageName .. ".json"

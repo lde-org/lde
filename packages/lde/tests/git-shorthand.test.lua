@@ -26,8 +26,8 @@ test.it("the plain owner/repo form has no sub-package", function()
 end)
 
 test.it("the @ form expands to the repo URL and returns the sub-package", function()
-	local url, sub = gitShorthand.expand("gh:triangle@codebycruz/hood")
-	test.equal(url, "https://github.com/codebycruz/hood")
+	local url, sub = gitShorthand.expand("gh:triangle@bycruz/hood")
+	test.equal(url, "https://github.com/bycruz/hood")
 	test.equal(sub, "triangle")
 
 	local url2, sub2 = gitShorthand.expand("gitlab:fmt@foo/bar")

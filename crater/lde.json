@@ -2,9 +2,9 @@
 	"name": "crater",
 	"version": "0.1.0",
 	"dependencies": {
-		"process": { "git": "https://github.com/lde-org/process" },
-		"fs": { "git": "https://github.com/lde-org/fs" },
-		"path": { "git": "https://github.com/lde-org/path" },
+		"process": { "version": "0.1.1" },
+		"fs": { "version": "0.1.0" },
+		"path": { "version": "0.1.0" },
 		"ansi": { "path": "../packages/ansi" }
 	}
 }

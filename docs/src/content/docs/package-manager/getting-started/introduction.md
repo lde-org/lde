@@ -52,17 +52,17 @@ Some shorthands are provided for common git hosts:
 Here's some example usage:
 
 ```sh
-lde add gh:codebycruz/hood
-lde add gitlab:codebycruz/hood
-lde add codeberg:codebycruz/hood
+lde add gh:bycruz/hood
+lde add gitlab:bycruz/hood
+lde add codeberg:bycruz/hood
 ```
 
 These also support the monorepo form via this syntax:
 
 ```sh
-lde add gh:name@codebycruz/hood
-lde add gitlab:name@codebycruz/hood
-lde add codeberg:name@codebycruz/hood
+lde add gh:name@bycruz/hood
+lde add gitlab:name@bycruz/hood
+lde add codeberg:name@bycruz/hood
 ```
 
 ### Dev Dependencies

@@ -2,13 +2,13 @@
 	"name": "rocked",
 	"version": "0.1.0",
 	"dependencies": {
-		"fs": { "git": "https://github.com/lde-org/fs" },
-		"path": { "git": "https://github.com/lde-org/path" },
-		"process": { "git": "https://github.com/lde-org/process" },
-		"env": { "git": "https://github.com/lde-org/env" },
-		"lua-sys": { "git": "https://github.com/lde-org/lua-sys" }
+		"fs": { "version": "0.1.0" },
+		"path": { "version": "0.1.0" },
+		"process": { "version": "0.1.1" },
+		"env": { "version": "0.1.0" },
+		"lua-sys": { "version": "0.1.0" }
 	},
 	"devDependencies": {
-		"curl-sys": { "git": "https://github.com/lde-org/curl-sys" }
+		"curl-sys": { "version": "0.1.1" }
 	}
 }

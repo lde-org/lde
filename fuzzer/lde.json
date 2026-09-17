@@ -2,11 +2,11 @@
 	"name": "fuzzer",
 	"version": "0.1.0",
 	"dependencies": {
-		"process": { "git": "https://github.com/lde-org/process" },
-		"fs": { "git": "https://github.com/lde-org/fs" },
-		"path": { "git": "https://github.com/lde-org/path" },
-		"env": { "git": "https://github.com/lde-org/env" },
-		"json": { "git": "https://github.com/lde-org/json" },
+		"process": { "version": "0.1.1" },
+		"fs": { "version": "0.1.0" },
+		"path": { "version": "0.1.0" },
+		"env": { "version": "0.1.0" },
+		"json": { "git": "https://github.com/lde-org/json", "commit": "3d170b54416dc432669e35040e454167c75b9b2c" },
 		"ansi": { "path": "../packages/ansi" }
 	}
 }

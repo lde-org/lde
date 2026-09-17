@@ -11,7 +11,7 @@ local lde = require("lde-core")
 local ldecli = require("tests.lib.ldecli")
 
 test.it("should not ignore --git in ldx", function()
-	local cloneUrl = "https://github.com/codebycruz/hood"
+	local cloneUrl = "https://github.com/bycruz/hood"
 
 	-- Resolve the real commit so the cache key matches what getOrCloneRepo expects.
 	local commit = assert(git2.lsRemote(cloneUrl, "HEAD")) ---@cast commit string
@@ -36,7 +36,7 @@ test.it("should not ignore --git in ldx", function()
 end)
 
 test.it("ldx gh:owner/repo resolves the shorthand to a git repo", function()
-	local cloneUrl = "https://github.com/codebycruz/hood"
+	local cloneUrl = "https://github.com/bycruz/hood"
 
 	-- Resolve the real commit so the cache key matches what getOrCloneRepo expects.
 	local commit = assert(git2.lsRemote(cloneUrl, "HEAD")) ---@cast commit string
@@ -54,19 +54,19 @@ test.it("ldx gh:owner/repo resolves the shorthand to a git repo", function()
 	fs.write(path.join(repoDir, "src", "init.lua"), 'print("from shorthand hood")')
 
 	-- The repo root package runs, exactly as `ldx --git <url>` would.
-	local ok, out = ldecli({ "x", "gh:codebycruz/hood" })
+	local ok, out = ldecli({ "x", "gh:bycruz/hood" })
 	test.truthy(ok, "ldx gh:... failed: " .. tostring(out)) ---@cast out -nil
 	test.includes(out, "from shorthand hood")
 
 	-- An extra positional is a sub-package name, like --git's [package-name].
-	local _, out2 = ldecli({ "x", "gh:codebycruz/hood", "triangle" }) ---@cast out2 -nil
+	local _, out2 = ldecli({ "x", "gh:bycruz/hood", "triangle" }) ---@cast out2 -nil
 	test.includes(out2, "No package named 'triangle'")
 
 	fs.rmdir(repoDir)
 end)
 
 test.it("ldx gh:<pkg>@owner/repo runs the sub-package of a monorepo", function()
-	local cloneUrl = "https://github.com/codebycruz/hood"
+	local cloneUrl = "https://github.com/bycruz/hood"
 
 	-- Resolve the real commit so the cache key matches what getOrCloneRepo expects.
 	local commit = assert(git2.lsRemote(cloneUrl, "HEAD")) ---@cast commit string
@@ -92,7 +92,7 @@ test.it("ldx gh:<pkg>@owner/repo runs the sub-package of a monorepo", function()
 	}))
 	fs.write(path.join(repoDir, "triangle", "src", "init.lua"), 'print("from triangle subpackage")')
 
-	local ok, out = ldecli({ "x", "gh:triangle@codebycruz/hood" })
+	local ok, out = ldecli({ "x", "gh:triangle@bycruz/hood" })
 	test.truthy(ok, "ldx gh:<pkg>@... failed: " .. tostring(out)) ---@cast out -nil
 	test.includes(out, "from triangle subpackage")
 

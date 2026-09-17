@@ -10,13 +10,13 @@ A concept of 'tools' exists in lde, wherein a package is simply used as a progra
 You can run any package from git or a local path.
 
 ```bash
-lde x triangle --git https://github.com/codebycruz/hood
+lde x triangle --git https://github.com/bycruz/hood
 ```
 
 For short, lde registers a `ldx` alias for `lde x`, so you can also run:
 
 ```bash
-ldx triangle --git https://github.com/codebycruz/hood
+ldx triangle --git https://github.com/bycruz/hood
 ```
 
 This clones the hood repository, resolves the triangle package, and then instantly runs the package. You can do this with --path dependencies as well.

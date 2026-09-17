@@ -8,4 +8,4 @@ In the future this may change as lde becomes more stable.
 
 ## Reporting a Vulnerability
 
-To report a vulnerability, you can email me directly at david@codebycruz.com. Alternatively, reach out on Discord.
+To report a vulnerability, you can email me directly at david@bycruz.dev. Alternatively, reach out on Discord.

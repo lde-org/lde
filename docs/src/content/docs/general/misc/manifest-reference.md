@@ -86,12 +86,12 @@ VS Code, Zed, and most other JSON tooling also honor a `$schema` key directly in
 		"dev": "lde run ./src/dev.lua"
 	},
 	"dependencies": {
-		"hood": { "git": "https://github.com/codebycruz/hood" },
+		"hood": { "git": "https://github.com/bycruz/hood" },
 		"ansi": { "path": "../ansi" },
 		"json": { "version": "1.0.0" },
 		"luafilesystem": { "luarocks": "luafilesystem" },
 		"tools": { "archive": "https://example.com/tools.tar.gz" },
-		"winapi": { "git": "https://github.com/codebycruz/winapi", "optional": true }
+		"winapi": { "git": "https://github.com/bycruz/winapi", "optional": true }
 	},
 	"devDependencies": {
 		"test-utils": { "path": "../test-utils" }

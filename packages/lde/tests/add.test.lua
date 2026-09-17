@@ -62,40 +62,40 @@ end)
 
 test.it("lde add gh:owner/repo stores an expanded git dependency", function()
 	local dir = makeProject("add-shorthand-test")
-	local ok, out = ldecli({ "add", "gh:codebycruz/hood" }, dir)
+	local ok, out = ldecli({ "add", "gh:bycruz/hood" }, dir)
 	test.truthy(ok, "lde add gh:... failed: " .. tostring(out)) ---@cast out -nil
 
 	local raw = fs.read(path.join(dir, "lde.json")) ---@cast raw -nil
 	local config = json.decode(raw) ---@cast config table<string, any>
 	local dep = config.dependencies["hood"]
 	test.truthy(dep, "shorthand should be stored under the repo basename 'hood'")
-	test.equal(dep.git, "https://github.com/codebycruz/hood")
+	test.equal(dep.git, "https://github.com/bycruz/hood")
 
 	-- The commit is auto-pinned at add time, exactly like `lde add --git`.
 	local lockRaw = fs.read(path.join(dir, "lde.lock")) ---@cast lockRaw -nil
 	local lock = json.decode(lockRaw) ---@cast lock table<string, any>
 	local entry = lock.dependencies["hood"]
 	test.truthy(entry, "git shorthand must create a lockfile entry")
-	test.equal(entry.git, "https://github.com/codebycruz/hood")
+	test.equal(entry.git, "https://github.com/bycruz/hood")
 	test.truthy(entry.commit)
 end)
 
 test.it("lde add gh:<pkg>@owner/repo stores a git dep keyed by the sub-package", function()
 	local dir = makeProject("add-shorthand-mono-test")
-	local ok, out = ldecli({ "add", "gh:triangle@codebycruz/hood" }, dir)
+	local ok, out = ldecli({ "add", "gh:triangle@bycruz/hood" }, dir)
 	test.truthy(ok, "lde add gh:<pkg>@... failed: " .. tostring(out)) ---@cast out -nil
 
 	local raw = fs.read(path.join(dir, "lde.json")) ---@cast raw -nil
 	local config = json.decode(raw) ---@cast config table<string, any>
 	local dep = config.dependencies["triangle"]
 	test.truthy(dep, "shorthand should be stored under the sub-package name 'triangle'")
-	test.equal(dep.git, "https://github.com/codebycruz/hood")
+	test.equal(dep.git, "https://github.com/bycruz/hood")
 
 	local lockRaw = fs.read(path.join(dir, "lde.lock")) ---@cast lockRaw -nil
 	local lock = json.decode(lockRaw) ---@cast lock table<string, any>
 	local entry = lock.dependencies["triangle"]
 	test.truthy(entry, "git shorthand must create a lockfile entry")
-	test.equal(entry.git, "https://github.com/codebycruz/hood")
+	test.equal(entry.git, "https://github.com/bycruz/hood")
 	test.truthy(entry.commit)
 end)
 
