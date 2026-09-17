@@ -36,7 +36,10 @@ local HOOK_INTERVAL = 10000
 --   1. wraps the Lua file searcher to record which source file backs each module,
 --   2. wraps require() to record module → module dependency edges,
 --   3. wraps os.exit() so it aborts the run instead of the whole process,
---   4. returns reload() / reloadAll() / checkKey() on the module table.
+--   4. exposes package.hot (--hot only) so modules can register accept()
+--      callbacks that fire when a module is reloaded,
+--   5. returns reload() / reloadAll() / checkKey() / beginEntry() /
+--      flushAccepts() on the module table.
 local BOOTSTRAP = [==[
 -- The config table (prefixes, entry key, abs() helper, exit marker) is passed
 -- as the first vararg by the driver — same convention as lua-sys chunks.
@@ -47,7 +50,21 @@ local M = {
 	moduleFile  = {}, -- modname -> normalized source key
 	dependents  = {}, -- modname -> { [dependent] = true }
 	lastReloaded = {},
+	accepts     = {}, -- owner -> { fn, ... } (see acceptOwner)
+
+	-- Notifications queued by reload()/reloadAll() and fired by flushAccepts()
+	-- once the driver has cleared the screen and rebuilt (see flushAccepts).
+	-- The sets de-duplicate: one cycle can invalidate several batches, and a
+	-- callback or a module name can appear in more than one of them.
+	pendingCallbacks   = {},
+	pendingNames       = {},
+	pendingCallbackSet = {},
+	pendingNameSet     = {},
 }
+
+-- Owner slot for callbacks registered by the entry point: the entry chunk is
+-- never loaded through require(), so it has no module name to be keyed by.
+local ENTRY_OWNER = "@entry"
 
 -- A Teal/Moonscript source compiles to a .lua module under target/, so a
 -- change to src/foo.tl must invalidate the loaded src/foo.lua: key both by
@@ -129,6 +146,52 @@ os.exit = function(code)
 	error(hot.exitMarker .. tostring(code or 0), 0)
 end
 
+-- The owner of an accept() registration: the module whose source file contains
+-- the call, or the entry point when the file backs no required module. Read
+-- from the caller's debug source rather than the load stack, so a callback
+-- registered from a function that runs long after load is still attributed to
+-- the module it was defined in.
+---@param level integer
+---@return string
+local function acceptOwner(level)
+	local info = debug.getinfo(level, "S")
+	local src = info and info.source
+	if src and src:sub(1, 1) == "@" then
+		local key = normKey(hot.abs(src:sub(2)))
+		if key ~= hot.entryKey then
+			local names = M.fileModules[key]
+			if names then
+				for name in pairs(names) do return name end
+			end
+		end
+	end
+	return ENTRY_OWNER
+end
+
+-- Register fn to be called with the require() path of every module that gets
+-- reloaded. A registration belongs to the module that made the call: it is
+-- dropped with that module and re-made when the module reloads, so callbacks
+-- held by stale module instances cannot pile up across reloads.
+---@param fn fun(name: string)
+local function accept(fn)
+	if type(fn) ~= "function" then
+		error("package.hot.accept expects a function, got " .. type(fn), 2)
+	end
+	local owner = acceptOwner(2)
+	local list = M.accepts[owner]
+	if not list then
+		list = {}
+		M.accepts[owner] = list
+	end
+	list[#list + 1] = fn
+end
+
+-- Only --hot exposes package.hot: --watch recreates the state on every change,
+-- so there is no live module to accept a reload.
+if hot.mode == "hot" then
+	package.hot = { accept = accept }
+end
+
 ---@param names table<string, boolean>
 ---@param out table<string, boolean>
 local function collect(names, out)
@@ -154,6 +217,59 @@ local function drop(name)
 		M.moduleFile[name] = nil
 	end
 	M.dependents[name] = nil
+	M.accepts[name] = nil
+end
+
+-- Every registered callback, flattened. Snapshotting before the drops lets a
+-- module that is itself reloaded hear about it: its own registration is still
+-- in the snapshot even though drop() removes it right after.
+---@return function[]
+local function snapshotAccepts()
+	local out = {}
+	for _owner, list in pairs(M.accepts) do
+		for i = 1, #list do out[#out + 1] = list[i] end
+	end
+	return out
+end
+
+-- Hold a reload's callbacks and module names until the driver is ready to
+-- deliver them. Firing here would be wrong twice over: the driver clears the
+-- screen right after the invalidation (wiping anything a callback printed),
+-- and a build.lua package has not rebuilt target/ yet (so a callback that
+-- requires the changed module would cache stale code).
+---@param callbacks function[]
+---@param names string[]
+local function queue(callbacks, names)
+	for i = 1, #callbacks do
+		local fn = callbacks[i]
+		if not M.pendingCallbackSet[fn] then
+			M.pendingCallbackSet[fn] = true
+			M.pendingCallbacks[#M.pendingCallbacks + 1] = fn
+		end
+	end
+	for i = 1, #names do
+		local name = names[i]
+		if not M.pendingNameSet[name] then
+			M.pendingNameSet[name] = true
+			M.pendingNames[#M.pendingNames + 1] = name
+		end
+	end
+end
+
+-- A failed callback must not take down the reload (or the driver, which calls
+-- this outside any pcall).
+---@param callbacks function[]
+---@param names string[]
+local function notify(callbacks, names)
+	for i = 1, #names do
+		local name = names[i]
+		for j = 1, #callbacks do
+			local ok, err = pcall(callbacks[j], name)
+			if not ok then
+				io.stderr:write("[lde --hot] package.hot.accept callback failed for '", name, "': ", tostring(err), "\n")
+			end
+		end
+	end
 end
 
 -- Invalidate the modules backed by a changed source file, plus everything
@@ -166,12 +282,12 @@ function M.reload(changedKey)
 	local out = {}
 	collect(names, out)
 	local list = {}
-	for name in pairs(out) do
-		list[#list + 1] = name
-		drop(name)
-	end
+	for name in pairs(out) do list[#list + 1] = name end
 	table.sort(list)
+	local callbacks = snapshotAccepts()
+	for i = 1, #list do drop(list[i]) end
 	M.lastReloaded = list
+	queue(callbacks, list)
 	return #list
 end
 
@@ -180,10 +296,37 @@ end
 function M.reloadAll()
 	local list = {}
 	for name in pairs(M.moduleFile) do list[#list + 1] = name end
-	for i, name in ipairs(list) do drop(name) end
 	table.sort(list)
+	local callbacks = snapshotAccepts()
+	for i, name in ipairs(list) do drop(name) end
 	M.lastReloaded = list
+	queue(callbacks, list)
 	return #list
+end
+
+-- Deliver the notifications queued by reload()/reloadAll(). The driver calls
+-- this once per reload cycle, after the screen is cleared and target/ is
+-- rebuilt but before the entry point re-runs, so a callback both prints
+-- visibly and require()s the fresh module.
+--
+-- isApplied is false when the cycle's rebuild failed: nothing was actually
+-- reloaded, so the queue is drained instead of fired.
+---@param isApplied boolean
+function M.flushAccepts(isApplied)
+	local callbacks, names = M.pendingCallbacks, M.pendingNames
+	if #names == 0 then return 0 end
+	M.pendingCallbacks, M.pendingNames = {}, {}
+	M.pendingCallbackSet, M.pendingNameSet = {}, {}
+	if not isApplied then return 0 end
+	notify(callbacks, names)
+	return #names
+end
+
+-- Called by the driver before each entry run: the entry re-registers its
+-- accept callbacks on every run, so its slot is reset first to keep the list
+-- from stacking up duplicates.
+function M.beginEntry()
+	M.accepts[ENTRY_OWNER] = nil
 end
 
 -- True when a changed file maps to a tracked module or the entry point.
@@ -242,7 +385,7 @@ end
 ---@param opts lde.WatchOptions
 local function run(opts)
 	local state, cleanup ---@type lua.State?, fun()?
-	local hotStateTbl, reloadFn, reloadAllFn, checkKeyFn ---@type lua.Table?, function?, function?, function?
+	local hotStateTbl, reloadFn, reloadAllFn, checkKeyFn, beginEntryFn, flushAcceptsFn ---@type lua.Table?, function?, function?, function?, function?, function?
 
 	local entryKey = normalizeKey(opts.entry, opts.srcPrefix, opts.targetPrefix)
 
@@ -312,6 +455,7 @@ local function run(opts)
 		local boot = state:load(BOOTSTRAP, "@lde-watchrun")
 		local ok, hotState = boot:pcall({
 			abs = function(p) return path.resolve(env.cwd(), p) end,
+			mode = opts.mode,
 			srcPrefix = opts.srcPrefix,
 			targetPrefix = opts.targetPrefix,
 			entryKey = entryKey,
@@ -336,6 +480,12 @@ local function run(opts)
 
 		local ckf = hotState:get("checkKey") ---@cast ckf function
 		checkKeyFn = ckf
+
+		local bef = hotState:get("beginEntry") ---@cast bef function
+		beginEntryFn = bef
+
+		local faf = hotState:get("flushAccepts") ---@cast faf function
+		flushAcceptsFn = faf
 
 		-- Disables the guest JIT for the whole session (hooks only fire on
 		-- interpreted code) — the price of being able to interrupt the app.
@@ -362,6 +512,9 @@ local function run(opts)
 		-- "@" chunk label: LuaJIT reports file-backed errors as path:line.
 		-- A nil label would fall back to the source text (truncated).
 		local chunk = state:load(source, "@" .. opts.entry)
+		-- Resets the entry's package.hot.accept registrations: this run
+		-- re-registers them, and the previous run's closures are stale.
+		if beginEntryFn then beginEntryFn() end
 		running = true
 		local ok, result = chunk:pcall(unpack(opts.args or {}))
 		running = false
@@ -481,13 +634,19 @@ local function run(opts)
 
 			local buildOk = opts.preReload == nil or opts.preReload()
 			if not buildOk then
-				-- Keep the previous state; the next change retries.
+				-- Keep the previous state; the next change retries. The queued
+				-- package.hot.accept notifications describe a reload that never
+				-- happened, so they are dropped with it.
+				if flushAcceptsFn then flushAcceptsFn(false) end
 				result = nil
 			else
 				if opts.mode == "watch" then
 					disposeState()
 					if not installState() then return end
 				end
+				-- After clearScreen() (so callback output survives) and after
+				-- the rebuild, but before the entry re-runs.
+				if flushAcceptsFn then flushAcceptsFn(true) end
 				result = runAndReport()
 			end
 		else

@@ -63,6 +63,25 @@ lde ./test.lua --hot
 
 The current directory is watched and `require()` caches are patched the same way.
 
+## `package.hot`
+
+This table is added to the `package` library only under `--hot` runs.
+
+It can be used to register callbacks that run and are passed the module path whenever a file is hotreloaded.
+
+```lua
+if package.hot then
+	package.hot.accept(|m| -> print("module reloaded", m))
+end
+```
+
+The `m` here is the module's `require()` path.
+
+It runs *before* your entrypoint runs, but *after* lde rebuilds your package (build.lua runs, if exists)
+
+> [!TIP]
+> This is useful for maintaining handles to things across re-runs like file handles, sockets, for web servers.
+
 ## Limitations
 
 - **JIT is disabled while watching.** Hooks only fire on interpreted code, so the watched session runs slower than plain `lde run`.

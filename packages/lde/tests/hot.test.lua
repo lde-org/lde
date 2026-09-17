@@ -113,6 +113,48 @@ test.it("lde run --hot reloads changed modules in-place", function()
 	end)
 end)
 
+test.it("lde run --hot reports reloads to package.hot.accept", function()
+	local dir = makePackage("pkg-hot-accept")
+	fs.write(path.join(dir, "src", "utilmod.lua"), 'return "v1"')
+	fs.write(path.join(dir, "src", "init.lua"), [[
+local util = require("pkg-hot-accept.utilmod")
+_G.runs = (_G.runs or 0) + 1
+
+local function log(line)
+	local f = assert(io.open(arg[1], "a"))
+	f:write(line .. "\n")
+	f:close()
+end
+
+if package.hot then
+	package.hot.accept(|m| -> log("accepted " .. m))
+end
+
+log("run " .. util .. " runs=" .. _G.runs)
+]])
+
+	local logFile = path.join(tmpBase, "pkg-hot-accept.log")
+	fs.write(logFile, "")
+
+	withChild({ "run", "--hot", "--", logFile }, dir, function()
+		test.truthy(waitForLog(logFile, "run v1 runs=1", 15000), "initial run missing from log")
+		test.falsy(fs.read(logFile):find("accepted", 1, true), "nothing must be accepted before a change")
+
+		-- Different size, so the rebuild stamp's mtime/size fast path can't mask it.
+		fs.write(path.join(dir, "src", "utilmod.lua"), 'return "version-2"')
+
+		test.truthy(waitForLog(logFile, "accepted pkg-hot-accept.utilmod\n", 15000),
+			"the accept callback did not get the changed module's require path")
+		test.truthy(waitForLog(logFile, "run version-2 runs=2", 15000), "hot reload did not re-run the entry")
+
+		-- One notification per reload: the entry re-registers on every run, so
+		-- its previous registration must not fire a second time.
+		local content = fs.read(logFile) or ""
+		local _, count = content:gsub("accepted pkg%-hot%-accept%.utilmod\n", "")
+		test.equal(count, 1, "the accept callback must fire once per reload")
+	end)
+end)
+
 test.it("lde <script> --hot works outside a package", function()
 	local dir = path.join(tmpBase, "bare-hot")
 	fs.mkdir(dir)

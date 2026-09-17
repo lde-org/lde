@@ -29,7 +29,7 @@ local commands = {
 		description = "Run the project's entry point (src/init.lua or bin), a named script from lde.json, or a Lua file.",
 		arguments = "<script>  Entry point, script name, or path to a Lua file. Args after -- are passed to the script.",
 		options = {
-			["--hot"] = { desc = "Hot-reload: patch require() caches and re-run in the same state" },
+			["--hot"] = { desc = "Hot-reload: patch require() caches and re-run in the same state (exposes package.hot)" },
 			["--watch"] = { desc = "Re-run on file changes (fresh state each run)" },
 			["--profile"] = { desc = "Print a flat call profile on exit" },
 			["--flamegraph"] = { arg = "file", desc = "Also write a flamegraph HTML file (default: profile.html)" },
