@@ -140,6 +140,65 @@ test.it("run error in a package maps target/<name> back to src/", function()
 	test.falsy(text:find("stack traceback", 1, true), "raw traceback leaked for package run error")
 end)
 
+test.it("syntax errors render a snippet instead of the loader frame", function()
+	-- A parse error is raised by the lua-sys loader, so it arrives as
+	-- `[string "lua-sys"]:459: <file>:<line>: msg` rather than the bare position
+	-- a runtime error carries. The loader frame must be stripped so the file
+	-- resolves, exactly like a runtime error.
+	local dir = path.join(tmpBase, "err-syntax")
+	fs.mkdir(dir)
+	fs.mkdir(path.join(dir, "src"))
+	fs.write(path.join(dir, "src", "init.lua"), "local a = 1\nlocal b = \n")
+	fs.write(path.join(dir, "lde.json"), json.encode({
+		name = "err-syntax",
+		version = "0.1.0",
+		dependencies = {}
+	}))
+	local code, out = run({ "run" }, dir)
+	test.truthy(code ~= 0, "syntax error must exit non-zero")
+	local text = plain(out)
+	test.falsy(text:find("[string", 1, true), "loader frame must not leak into the error")
+	test.falsy(
+		text:find(path.join("target", "err%-syntax"), 1),
+		"syntax error must not show the built target/ path"
+	)
+	test.includes(text, path.join("src", "init.lua"), "must point at the source the user wrote")
+	test.includes(text, "unexpected symbol near '<eof>'")
+
+	-- The snippet: the failing line, plus a caret line ('<eof>' errors point at
+	-- the end of the last line rather than the first token).
+	test.truthy(text:find("2 | local b = ", 1, true) ~= nil, "snippet must show the failing line")
+	local caretLine = false
+	for line in text:gmatch("[^\n]+") do
+		if line:match("^%s*%^+%s*$") then caretLine = true end
+	end
+	test.truthy(caretLine, "snippet must show a caret line")
+	test.falsy(text:find("stack traceback", 1, true), "raw traceback leaked for a syntax error")
+end)
+
+test.it("syntax error in a required module names that module's source", function()
+	-- A broken require() surfaces through LuaJIT's module searcher as
+	-- "error loading module 'x' from file '/p/x.lua':\n\t/p/x.lua:3: msg". That
+	-- wrapper must be stripped too, and the built file remapped to src/.
+	local dir = path.join(tmpBase, "err-syntax-module")
+	fs.mkdir(dir)
+	fs.mkdir(path.join(dir, "src"))
+	fs.write(path.join(dir, "src", "init.lua"), 'require("err-syntax-module.broken")\n')
+	fs.write(path.join(dir, "src", "broken.lua"), "local a = 1\nlocal b = \n")
+	fs.write(path.join(dir, "lde.json"), json.encode({
+		name = "err-syntax-module",
+		version = "0.1.0",
+		dependencies = {}
+	}))
+	local code, out = run({ "run" }, dir)
+	test.truthy(code ~= 0, "syntax error in a required module must exit non-zero")
+	local text = plain(out)
+	test.falsy(text:find("[string", 1, true), "loader frame must not leak into the error")
+	test.falsy(text:find("error loading module", 1, true), "module searcher wrapper must be stripped")
+	test.includes(text, path.join("src", "broken.lua"), "must name the broken module's source")
+	test.includes(text, "unexpected symbol near '<eof>'")
+end)
+
 test.it("unknown help target suggests a close command", function()
 	local code, out = run({ "help", "hlep" })
 	test.truthy(code ~= 0, "typo'd help target must exit non-zero")

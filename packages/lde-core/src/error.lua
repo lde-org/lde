@@ -75,7 +75,17 @@ end
 ---@param msg string
 ---@return string
 local function stripLoaderFrame(msg)
-	return (msg:gsub("^%[string \"[^\"]*\"%]:%d+: %[", "%[", 1))
+	local chunked = msg:gsub("^%[string \"[^\"]*\"%]:%d+: %[", "%[", 1)
+	if chunked ~= msg then return chunked end
+
+	-- The nested frame can also be a real file loaded with an "@" chunk name,
+	-- which arrives as `[string "lua-sys"]:459: /p/init.lua:3: msg`. Require a
+	-- space-free location so a single-frame error that merely mentions one
+	-- (e.g. "bad argument #1 to 'x' (number:2: expected)") is left intact.
+	local rest = msg:match("^%[string \"[^\"]*\"%]:%d+: (.+)$")
+	if rest and rest:match("^%S+:%d+: ") then return rest end
+
+	return msg
 end
 
 --- Renders the boundary's catch and exits. Known errors print one clean line

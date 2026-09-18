@@ -110,6 +110,40 @@ local function makeRelative(packageDir, msg)
 	return (string.gsub(msg, prefix, ""))
 end
 
+--- Whether `s` starts with a `<file>:<line>: ` source position. A path with
+--- spaces only counts when it carries a separator, so a loader frame followed by
+--- a message like "bad argument #1 to 'x' (number:2: expected)" is not mistaken
+--- for one.
+---@param s string
+---@return boolean
+local function isLocationStart(s)
+	if s:match("^%S+:%d+: ") then return true end
+	return s:match("^%S*[/\\].-:%d+: ") ~= nil
+end
+
+--- Strip wrappers that prefix the real source position so the renderer can find
+--- the file on disk. Two shapes occur, both from loading through lua-sys:
+---
+---   [string "lua-sys"]:459: /p/init.lua:3: unexpected symbol near '<eof>'
+---   error loading module 'x' from file '/p/x.lua':
+---       /p/x.lua:3: unexpected symbol near '<eof>'
+---
+--- A loader frame whose innermost source is an eval chunk (`[string "-e"]`) is
+--- left alone: that frame *is* the position.
+---@param msg string
+---@return string
+local function stripNestedFrames(msg)
+	-- Chunk-loader frames nest innermost-last.
+	while true do
+		local rest = msg:match("^%[string \"[^\"]*\"%]:%d+: (.+)$")
+		if not rest or not isLocationStart(rest) then break end
+		msg = rest
+	end
+
+	-- Module searcher wrapper: the real position is on the following line.
+	return (msg:gsub("^error loading module .-\n%s*", "", 1))
+end
+
 ---@param err string
 ---@return string? file # chunk name (brackets stripped for file paths)
 ---@return integer? line
@@ -144,6 +178,10 @@ local function parseError(err)
 		-- unwrapped text below instead of the wrapper-prefixed original.
 		err = compileErr
 	end
+
+	-- Loading through lua-sys wraps the real position in loader/searcher frames;
+	-- strip them so the file below resolves to something on disk.
+	err = stripNestedFrames(err)
 
 	local file, line, msg = err:match("^(.*):(%d+): (.*)$")
 	if not file then return nil, nil, nil, err end
@@ -357,7 +395,7 @@ end
 ---   error: attempt to index local 'x' (a nil value)
 ---       at /abs/src/init.lua:2:8
 ---
----   lde v0.10.0-nightly+... (Linux x64)
+---   lde v0.11.0
 ---
 --- The source is left-aligned (no indent), the position has a column, and the
 --- "at <file>:<line>:<col>" line plus the footer leave room for a full stack
