@@ -306,6 +306,13 @@ end
 --- fill the gaps. The lock entry can't replace the config entry wholesale — a
 --- registry dep's version is only in lde.json, so makeNode would lose the
 --- source type and fail to classify it.
+---
+--- The one exception is a commit spelled out in lde.json: that is the user's
+--- explicit pin, so it outranks the commit a lockfile records. A lockfile left
+--- behind by an older lde can pin a different commit (see
+--- Package:updateDependencies and install/resolve.applyLock); without this the
+--- manifest would be silently bypassed, since every consumer — install, update,
+--- tree, outdated — reads dependencies through here.
 ---@param depInfo lde.Package.Config.Dependency
 ---@param lockedEntry lde.Lockfile.Dependency
 ---@return lde.Package.Config.Dependency
@@ -314,6 +321,9 @@ local function mergeLockedEntry(depInfo, lockedEntry)
 	for k, v in pairs(depInfo) do merged[k] = v end
 	for k, v in pairs(lockedEntry) do
 		if v ~= nil then merged[k] = v end
+	end
+	if depInfo.commit and merged.commit ~= depInfo.commit then
+		merged.commit = depInfo.commit
 	end
 	return merged
 end

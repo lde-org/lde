@@ -8,6 +8,19 @@ local util = require("lde-core.util")
 
 local git2 = require("util").lazy(function() return require("git2-sys") end)
 
+--- The entry exactly as lde.json declares it. getDependencies()/getDevDependencies()
+--- overlay the lockfile's pin on top of the manifest, so the merged view they
+--- return cannot tell a commit the user pinned from one resolution recorded.
+---@param package lde.Package
+---@param name string
+---@return lde.Package.Config.Dependency?
+local function declaredDependency(package, name)
+	local config = package:readConfig()
+	local depInfo = config.dependencies and config.dependencies[name]
+	if depInfo then return depInfo end
+	return config.devDependencies and config.devDependencies[name]
+end
+
 --- Checks a git dependency for newer commits via ls-remote and pins any
 --- newer commit in the lockfile.
 ---@param package lde.Package
@@ -16,6 +29,16 @@ local git2 = require("util").lazy(function() return require("git2-sys") end)
 ---@return boolean updated
 ---@return string message
 local function updateGitDependency(package, name, depInfo)
+	-- A commit spelled out in lde.json is a deliberate pin, never a resolution
+	-- artifact: update moves dependencies that follow a ref (a branch, or the
+	-- repo's default HEAD) and leaves pinned ones alone, or the lockfile would
+	-- silently install a commit the manifest doesn't declare. Re-adding the
+	-- dependency is how a pin moves.
+	local declared = declaredDependency(package, name)
+	if declared and declared.commit then
+		return false, "pinned in lde.json (" .. declared.commit:sub(1, 7) .. ")"
+	end
+
 	local ref = depInfo.branch and ("refs/heads/" .. depInfo.branch) or "HEAD"
 	local latestCommit, err = git2().lsRemote(depInfo.git, ref)
 	if not latestCommit then
@@ -27,8 +50,10 @@ local function updateGitDependency(package, name, depInfo)
 	end
 
 	-- Pin the new commit in the lockfile so the next install uses it.
-	-- (Registry/luarocks updates write to lde.json instead; git commits only
-	-- live in the lockfile, which is what getDependencies() reports from.)
+	-- (Registry/luarocks updates write to lde.json instead; a git dep that
+	-- follows a ref has nothing in lde.json to write: the ref is the manifest
+	-- and the commit it currently points at only lives in the lockfile, which
+	-- is what getDependencies() reports from.)
 	local lockfile = package:readLockfile()
 	if lockfile then
 		local isLocked = lockfile:getDependency(name)

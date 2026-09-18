@@ -271,6 +271,32 @@ test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde update reports no changes when 
 	test.includes(plain(out or ""), "no changes")
 end)
 
+test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde update leaves a git dep pinned by commit in lde.json alone", function()
+	local repoDir = makeLocalGitRepo("pinned-dep")
+	local pinned = gitHead(repoDir)
+	local dir = makeProject("pinned-app", { ["pinned-dep"] = { git = repoDir, commit = pinned } })
+
+	local ok, out = cli({ "sync" }, dir)
+	test.truthy(ok, "initial sync failed: " .. tostring(out))
+
+	-- Even though the upstream moved, an explicit commit in lde.json is a pin:
+	-- update must not bump the lockfile past it.
+	commitMore(repoDir, "src/v2.lua", 'return "v2"')
+
+	ok, out = cli({ "update" }, dir)
+	test.truthy(ok, "lde update failed: " .. tostring(out))
+	test.includes(plain(out or ""), "no changes")
+
+	local lockRaw = fs.read(path.join(dir, "lde.lock")) ---@cast lockRaw -nil
+	local lock = json.decode(lockRaw) ---@cast lock table<string, any>
+	test.equal(lock.dependencies["pinned-dep"].commit, pinned, "a lde.json commit pin must not move")
+
+	ok, out = cli({ "sync" }, dir)
+	test.truthy(ok, "sync after update failed: " .. tostring(out))
+	test.falsy(fs.exists(path.join(dir, "target", "pinned-dep", "v2.lua")),
+		"the pinned commit must stay installed")
+end)
+
 test.it("lde update errors for an unknown dependency name", function()
 	local dir = makeProject("update-unknown")
 	local ok, out = cli({ "update", "nope" }, dir)

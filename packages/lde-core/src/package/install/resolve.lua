@@ -151,6 +151,13 @@ end
 local function applyLock(ctx, alias, depInfo)
 	if ctx.rootLockfile then
 		local isLocked = ctx.rootLockfile:getDependency(alias)
+		-- A commit spelled out in lde.json is the user's explicit pin, so a
+		-- lockfile entry recording a different one must not win: the manifest
+		-- stays the source of truth (a stale lock only comes from a lockfile
+		-- written by an older lde, or hand-edited) and this install re-pins it.
+		if isLocked and depInfo.commit and isLocked.commit ~= depInfo.commit then
+			isLocked = nil
+		end
 		if isLocked then
 			isLocked = withConfigFlags(isLocked, depInfo)
 			-- Lock entries written before registry deps recorded their git URL

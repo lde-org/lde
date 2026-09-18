@@ -55,6 +55,27 @@ local function makeLocalGitRepo(name)
 	return repoDir
 end
 
+--- The commit a repo's HEAD points at, trailing newline trimmed.
+---@param repoDir string
+---@return string
+local function gitHead(repoDir)
+	local _, stdout = process.exec("git", { "rev-parse", "HEAD" }, { cwd = repoDir })
+	return ((stdout or ""):gsub("%s+$", ""))
+end
+
+--- Append a file + commit to a local repo (moving its HEAD forward).
+---@param repoDir string
+---@param file string
+---@param content string
+local function commitMore(repoDir, file, content)
+	fs.write(path.join(repoDir, file), content)
+	process.exec("git", { "add", "-A" }, { cwd = repoDir })
+	local code = process.exec(
+		"git", { "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "more" },
+		{ cwd = repoDir })
+	assert(code == 0, "second commit failed: " .. tostring(code))
+end
+
 test.it("updateDependencies skips path dependencies", function()
 	local dir = makeApp("update-skip", {
 		mylib = { path = "../mylib" }
@@ -108,4 +129,56 @@ test.skipIf(env.var("ANDROID_ROOT") ~= nil)("updateDependencies re-pins a git de
 	pkg:installDependencies()
 	test.truthy(fs.exists(path.join(dir, "target", "update-move", "extra.lua")),
 		"updated commit must be installed")
+end)
+
+test.skipIf(env.var("ANDROID_ROOT") ~= nil)("updateDependencies leaves a git dep pinned by commit in lde.json alone", function()
+	local repoDir = makeLocalGitRepo("update-pinned")
+	local pinned = gitHead(repoDir)
+	local dir = makeApp("update-pinned-app", {
+		["update-pinned"] = { git = repoDir, commit = pinned }
+	})
+	local pkg = assert(lde.Package.open(dir))
+	pkg:installDependencies()
+
+	-- The upstream moves: an explicit commit in lde.json is a pin, so update
+	-- must not move the lockfile past it.
+	commitMore(repoDir, "src/v2.lua", 'return "v2"')
+
+	local results = pkg:updateDependencies()
+	test.equal(results["update-pinned"].updated, false)
+	test.includes(results["update-pinned"].message, "pinned")
+	test.equal(pkg:readLockfile():getDependency("update-pinned").commit, pinned,
+		"a lde.json commit pin must survive update")
+
+	-- And the next install still materializes the pinned commit.
+	pkg:installDependencies()
+	test.falsy(fs.exists(path.join(dir, "target", "update-pinned", "v2.lua")),
+		"a pinned commit must not be replaced by the new HEAD")
+	test.equal(pkg:readLockfile():getDependency("update-pinned").commit, pinned)
+end)
+
+test.skipIf(env.var("ANDROID_ROOT") ~= nil)("install re-pins a git dep whose lockfile records a different commit", function()
+	local repoDir = makeLocalGitRepo("update-heal")
+	local pinned = gitHead(repoDir)
+	local dir = makeApp("update-heal-app", {
+		["update-heal"] = { git = repoDir, commit = pinned }
+	})
+	local pkg = assert(lde.Package.open(dir))
+	pkg:installDependencies()
+
+	-- A lockfile left behind by an older lde (or an older lde update): it pins
+	-- a newer commit than lde.json declares.
+	commitMore(repoDir, "src/v2.lua", 'return "v2"')
+	local moved = gitHead(repoDir)
+	local lockfile = assert(pkg:readLockfile())
+	lockfile:getDependency("update-heal").commit = moved
+	lockfile:save()
+
+	-- The manifest is the source of truth: install must go back to the pinned
+	-- commit and re-pin the lockfile, never materialize the stray one.
+	pkg:installDependencies()
+	test.equal(pkg:readLockfile():getDependency("update-heal").commit, pinned,
+		"the lockfile must be re-pinned to the lde.json commit")
+	test.falsy(fs.exists(path.join(dir, "target", "update-heal", "v2.lua")),
+		"the stray commit must not be installed")
 end)

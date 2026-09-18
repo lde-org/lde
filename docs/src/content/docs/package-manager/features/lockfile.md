@@ -15,6 +15,10 @@ This file is generated upon installs and stores all information needed by lde to
 2. The commit hash of a git dependency
 3. The resolved git url of a registry dependency
 
+
+> [!WARNING]
+> Explicit pins in `lde.json`, ie `commit` for git deps, win over the lockfile.
+
 ### Updating
 
 You can update the lockfile by running an `lde sync`.
