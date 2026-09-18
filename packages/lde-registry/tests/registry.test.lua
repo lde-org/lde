@@ -146,6 +146,45 @@ test.it("resolveVersion raises for an unknown version", function()
 	end, "Version '9.9.9' of 'foo' not found in lde registry")
 end)
 
+test.it("resolveVersion resolves a partial version to the newest match", function()
+	local registry = newRegistry()
+	local portfile = {
+		name = "foo",
+		git = "https://x/y.git",
+		versions = { ["0.1.0"] = "a", ["0.1.3"] = "b", ["0.2.0"] = "c" },
+	}
+	local version, commit = registry:resolveVersion(portfile, "0.1")
+	test.equal(version, "0.1.3", "0.1 must not float into 0.2")
+	test.equal(commit, "b")
+end)
+
+test.it("resolveVersion resolves ranges", function()
+	local registry = newRegistry()
+	local portfile = {
+		name = "foo",
+		git = "https://x/y.git",
+		versions = { ["0.1.0"] = "a", ["0.1.3"] = "b", ["0.2.0"] = "c", ["1.0.0"] = "d" },
+	}
+	test.equal(registry:resolveVersion(portfile, "^0.1.0"), "0.1.3")
+	test.equal(registry:resolveVersion(portfile, ">=0.1 <0.2"), "0.1.3")
+	test.equal(registry:resolveVersion(portfile, "^0.1 || ^0.2"), "0.2.0")
+end)
+
+test.it("resolveVersion keeps a pinned version exact", function()
+	local registry = newRegistry()
+	local portfile = { name = "foo", git = "https://x/y.git", versions = { ["0.1.0"] = "a" } }
+	test.errors(function()
+		registry:resolveVersion(portfile, "0.1.1")
+	end, "Version '0.1.1' of 'foo' not found in lde registry")
+end)
+
+test.it("resolveVersion raises when no version satisfies a range", function()
+	local registry = newRegistry()
+	test.errors(function()
+		registry:resolveVersion({ name = "foo", git = "https://x/y.git", versions = { ["0.1.0"] = "a" } }, "0.5")
+	end, "No version of 'foo' satisfies: 0.5")
+end)
+
 test.it("resolveVersion raises when a portfile has no versions", function()
 	local registry = newRegistry()
 	test.errors(function()

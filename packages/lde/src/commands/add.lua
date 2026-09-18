@@ -2,6 +2,7 @@ local json = require("json")
 local ansi = require("ansi")
 local fs = require("fs")
 local path = require("path")
+local semver = require("semver")
 
 local lde = require("lde-core")
 local gitShorthand = require("lde.util.gitShorthand")
@@ -170,11 +171,21 @@ local function add(args)
 			lde.error.raise(err, { hint = lde.util.suggestPackage(name, false) })
 		end ---@cast portfile -nil
 
-		-- resolveRegistryVersion treats "latest" as "newest", so @latest pins
-		-- the concrete latest version here.
+		-- resolveRegistryVersion treats "latest" as "newest", so a bare name
+		-- and @latest both resolve to the newest release here.
 		local resolvedVersion = lde.global.resolveRegistryVersion(portfile, registryVersion)
-		dep = { version = resolvedVersion }
-		ansi.printf("{green}%s %s: %s{reset} ({cyan}version: %s{reset})", verb, isDevelopment and "dev dependency" or "dependency", name, resolvedVersion)
+
+		-- A single version is saved as a caret range, so later installs move to
+		-- newer compatible releases instead of freezing on the version that
+		-- happened to be newest at add time. A range the user wrote out ("0.1",
+		-- ">=0.2") is kept exactly as written.
+		local storedVersion = "^" .. resolvedVersion
+		if registryVersion and registryVersion ~= "latest" and not semver.isExact(registryVersion) then
+			storedVersion = registryVersion
+		end
+
+		dep = { version = storedVersion }
+		ansi.printf("{green}%s %s: %s{reset} ({cyan}version: %s{reset})", verb, isDevelopment and "dev dependency" or "dependency", name, storedVersion)
 	end
 
 	if depType then

@@ -88,7 +88,7 @@ VS Code, Zed, and most other JSON tooling also honor a `$schema` key directly in
 	"dependencies": {
 		"hood": { "git": "https://github.com/bycruz/hood" },
 		"ansi": { "path": "../ansi" },
-		"json": { "version": "1.0.0" },
+		"json": { "version": "^1.0.0" },
 		"luafilesystem": { "luarocks": "luafilesystem" },
 		"tools": { "archive": "https://example.com/tools.tar.gz" },
 		"winapi": { "git": "https://github.com/bycruz/winapi", "optional": true }
@@ -253,12 +253,37 @@ A git repository URL. `lde add <name> --git <url>` resolves the ref up front and
 ```json
 {
 	"dependencies": {
-		"json": { "version": "1.0.0" }
+		"json": { "version": "^1.0.0" }
 	}
 }
 ```
 
-A package from the [lde registry](/docs/registry/getting-started/introduction), keyed by version. The version may be an exact version or a range; `lde add <name>@<version>` resolves it up front and writes the concrete version here, and installs resolve the newest matching version.
+A package from the [lde registry](/docs/registry/getting-started/introduction), keyed by version. `lde add <name>` resolves the newest release up front and saves it as a caret range, so later installs can move to newer compatible releases; `lde add <name>@1.2.0` saves `^1.2.0` the same way, and a range you spell out yourself is saved exactly as written.
+
+The version may be a range, in which case installs resolve it to the newest version the range allows:
+
+```json
+{
+	"dependencies": {
+		"json": { "version": "1.0" },
+		"fs": { "version": "^0.2.0" },
+		"path": { "version": ">=0.1.0 <0.2.0" }
+	}
+}
+```
+
+| Form | Meaning |
+|------|---------|
+| `1.2.3` | exactly `1.2.3` — a missing version is an error, never a nearby release |
+| `1.2`, `1`, `1.2.x` | the whole prefix: `1.2.0 <= v < 1.3.0`, `1.0.0 <= v < 2.0.0` |
+| `^1.2.3` | `>=1.2.3 <2.0.0`; the leftmost non-zero part is fixed, so `^0.2.3` is `>=0.2.3 <0.3.0` |
+| `~1.2.3` | `>=1.2.3 <1.3.0` (patch-only changes); `~>` is accepted as an alias |
+| `>=1.2`, `>1.2`, `<2`, `<=2` | comparison bounds; a partial version bounds its whole prefix |
+| `>=1.2 <2`, `>=1.2, <2` | space- or comma-joined bounds, all of which must hold |
+| `^1.2 \|\| ^2` | either range may match |
+| `latest`, `*` | any version |
+
+Since the lockfile pins the commit a range resolved to, bump within the range with `lde update`, which re-resolves it (the range in `lde.json` is left as written).
 
 #### `luarocks` dependencies
 

@@ -48,13 +48,18 @@ local function outdated(_args)
 				goto continue
 			end
 
-			local latest = depInfo.version ---@type string
-			for v in pairs(portfile.versions) do
+			-- A range ("0.1") resolves to the newest version it allows, so that
+			-- is what the dependency currently installs; an exact pin resolves
+			-- to itself.
+			local current = semver.maxSatisfying(portfile.versions, depInfo.version)
+			if not current then current = depInfo.version end ---@cast current -nil
+			local latest = current
+			for v in pairs(portfile.versions or {}) do
 				if semver.compare(v, latest) > 0 then latest = v end
 			end
 
-			if latest ~= depInfo.version then
-				ansi.printf("{yellow}%s{reset}  {gray}%s{reset} → {green}%s", name, depInfo.version, latest)
+			if latest ~= current then
+				ansi.printf("{yellow}%s{reset}  {gray}%s{reset} → {green}%s", name, current, latest)
 				found = true
 			end
 		end

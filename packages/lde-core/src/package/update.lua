@@ -45,7 +45,8 @@ local function updateGitDependency(package, name, depInfo)
 	return true, msg
 end
 
---- Updates a registry dependency to the latest compatible version (same major).
+--- Updates a registry dependency to the latest compatible version (same major),
+--- or, for a range constraint, to the newest version the range allows.
 --- Writes the new version back to lde.json if updated.
 ---@param package lde.Package
 ---@param name string
@@ -61,9 +62,32 @@ local function updateRegistryDependency(package, name, depInfo)
 		return false, "registry error: " .. err
 	end
 
+	local versions = portfile.versions or {}
+
+	-- A range ("0.1", "^0.1.2") floats: every install resolves the newest
+	-- version it allows, so updating means re-resolving rather than rewriting
+	-- lde.json. The lockfile is what pins the range, so dropping its entry for
+	-- this dependency lets the next install float to the newest match.
+	if not semver.isExact(depInfo.version) then
+		local resolved = semver.maxSatisfying(versions, depInfo.version)
+		if not resolved then
+			return false, "no version satisfies " .. depInfo.version
+		end ---@cast resolved -nil
+
+		local lockfile = package:readLockfile()
+		local isLocked = lockfile and lockfile:getDependency(name)
+		if lockfile and isLocked and isLocked.commit ~= versions[resolved] then
+			local deps = lockfile:getDependencies()
+			deps[name] = nil
+			lockfile:save()
+			return true, depInfo.version .. " -> " .. resolved
+		end
+		return false, "already up to date (" .. resolved .. ")"
+	end
+
 	-- Find the latest compatible version (same major, higher minor/patch)
 	local best = depInfo.version
-	for v in pairs(portfile.versions) do
+	for v in pairs(versions) do
 		if semver.isCompatibleUpdate(best, v) then
 			best = v
 		end

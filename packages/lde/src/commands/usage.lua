@@ -132,7 +132,7 @@ local commands = {
 			["--path"] = { arg = "dir", desc = "Add a local path dependency" },
 			["--branch"] = { arg = "branch", desc = "With --git: use a specific branch" },
 			["--commit"] = { arg = "sha", desc = "With --git: pin a specific commit" },
-			["--version"] = { arg = "version", desc = "Pin a registry dependency version" },
+			["--version"] = { arg = "version", desc = "Registry dependency version or range (defaults to newest, saved as ^<version>)" },
 		},
 	},
 	remove = {

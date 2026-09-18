@@ -83,6 +83,36 @@ local function commitMore(repoDir, file, content)
 	assert(code == 0, "second commit failed: " .. tostring(code))
 end
 
+--- The commit a local repo's HEAD points at (rev-parse, with its trailing
+--- newline trimmed).
+---@param repoDir string
+---@return string
+local function gitHead(repoDir)
+	local _, stdout = process.exec("git", { "rev-parse", "HEAD" }, { cwd = repoDir })
+	return ((stdout or ""):gsub("%s+$", ""))
+end
+
+--- Builds a registry checkout whose `ranged-dep` package maps versions to real
+--- commits of a local repo, so a ranged registry dependency is fully offline.
+---@return string treeDir
+---@return string repoDir
+local function makeRangedRegistry()
+	local repoDir = makeLocalGitRepo("ranged-dep")
+
+	local treeDir = path.join(tmpBase, "ranged-tree")
+	fs.rmdir(treeDir)
+	fs.mkdir(treeDir)
+	fs.mkdirAll(path.join(treeDir, "registry", "packages"))
+	fs.write(path.join(treeDir, "registry", "packages", "ranged-dep.json"), json.encode({
+		name = "ranged-dep",
+		description = "offline test package",
+		git = repoDir,
+		branch = "master",
+		versions = { ["0.1.0"] = gitHead(repoDir) }
+	}))
+	return treeDir, repoDir
+end
+
 --
 -- lde tree
 --
@@ -246,6 +276,48 @@ test.it("lde update errors for an unknown dependency name", function()
 	local ok, out = cli({ "update", "nope" }, dir)
 	test.falsy(ok)
 	test.includes(plain(out or ""), "Unknown dependency")
+end)
+
+test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde update re-resolves a ranged registry dep to the newest match", function()
+	local treeDir, repoDir = makeRangedRegistry()
+	local dir = makeProject("ranged-app", { ["ranged-dep"] = { version = "0.1" } })
+
+	-- Only 0.1.0 is published: "0.1" resolves to it.
+	local ok, out = cli({ "--tree", treeDir, "sync" }, dir)
+	test.truthy(ok, "sync failed: " .. tostring(out))
+	local lock1Raw = fs.read(path.join(dir, "lde.lock")) ---@cast lock1Raw -nil
+	local lock1 = json.decode(lock1Raw) ---@cast lock1 table<string, any>
+	local commit1 = lock1.dependencies["ranged-dep"].commit
+	test.truthy(commit1)
+
+	-- A newer 0.1.x is published. The installed pin is frozen by the lockfile,
+	-- so the range only moves once update re-resolves it.
+	commitMore(repoDir, "src/v2.lua", 'return "v2"')
+	local sha2 = gitHead(repoDir)
+	fs.write(path.join(treeDir, "registry", "packages", "ranged-dep.json"), json.encode({
+		name = "ranged-dep",
+		description = "offline test package",
+		git = repoDir,
+		branch = "master",
+		versions = { ["0.1.0"] = commit1, ["0.1.1"] = sha2 }
+	}))
+
+	ok, out = cli({ "--tree", treeDir, "update", "ranged-dep" }, dir)
+	test.truthy(ok, "update failed: " .. tostring(out))
+	local text = plain(out or "")
+	test.includes(text, "ranged-dep")
+	test.includes(text, "0.1 -> 0.1.1")
+
+	-- The range itself is not rewritten, and the next install materializes the
+	-- newly resolved version.
+	local raw = fs.read(path.join(dir, "lde.json")) ---@cast raw -nil
+	local config = json.decode(raw) ---@cast config table<string, any>
+	test.equal(config.dependencies["ranged-dep"].version, "0.1")
+
+	ok, out = cli({ "--tree", treeDir, "sync" }, dir)
+	test.truthy(ok, "sync after update failed: " .. tostring(out))
+	test.truthy(fs.exists(path.join(dir, "target", "ranged-dep", "v2.lua")),
+		"the newest matching version must be installed")
 end)
 
 --

@@ -25,9 +25,11 @@ This will automatically add a field to your `lde.json`'s `dependencies` field.
 
 ```json
 "dependencies": {
-	"<name>": { "version": "0.9.1" }
+	"<name>": { "version": "^0.9.1" }
 }
 ```
+
+The newest release is resolved at add time and saved as a caret range, so the dependency follows newer compatible releases (minor and patch bumps) instead of freezing on that one version. Pass an explicit version (`lde add <name>@0.9.1`, saved as `^0.9.1`) or write a range of your own (`0.9`, `>=1.2 <2`) to decide how far it may float.
 
 By default, this will look for packages in the [lde registry](/registry).
 

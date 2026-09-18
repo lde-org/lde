@@ -50,7 +50,7 @@ lde run                                         # runs the package entry point (
   "dependencies": {
     "json":    { "path": "../json" },                         // local path
     "hood":    { "git": "https://...", "commit": "abc123" }, // git (commit auto-pinned)
-    "semver":  { "version": "1.0.0" },                       // registry
+    "semver":  { "version": "^1.0.0" },                      // registry (range: "1.2", "^1.2.3", ">=1.2 <2")
     "mylib":   { "luarocks": "luafilesystem" },              // luarocks
     "winapi":  { "git": "...", "optional": true }            // optional
   },

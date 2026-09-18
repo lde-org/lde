@@ -88,7 +88,7 @@
 						"properties": {
 							"version": {
 								"type": "string",
-								"description": "Registry package version to install"
+								"description": "Registry package version or range to install, e.g. '^1.2.3', '1.2' or '>=1.2 <2'"
 							},
 							"package": {
 								"type": "string",

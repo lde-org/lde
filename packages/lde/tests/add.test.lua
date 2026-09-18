@@ -247,7 +247,7 @@ test.it("lde add --dev <name> resolves a registry dep into devDependencies", fun
 	test.truthy(config.devDependencies, "devDependencies should exist")
 	local dep = config.devDependencies["add-dev-reg"]
 	test.truthy(dep, "add-dev-reg should be in devDependencies")
-	test.equal(dep.version, "2.0.0", "latest registry version should be resolved")
+	test.equal(dep.version, "^2.0.0", "a bare add floats from the newest version")
 	test.falsy(config.dependencies and config.dependencies["add-dev-reg"], "add-dev-reg should not be in dependencies")
 	test.includes(out, "dev dependency")
 end)
@@ -372,8 +372,9 @@ test.it("lde add <name>@latest pins the newest version", function()
 	local config = json.decode(raw) ---@cast config table<string, any>
 	local dep = config.dependencies["add-latest"]
 	test.truthy(dep, "add-latest should be in dependencies")
-	-- @latest must resolve to the concrete newest version, not a "latest" marker.
-	test.equal(dep.version, "2.0.0")
+	-- @latest resolves to the newest version at add time, saved as a caret
+	-- range so the dependency keeps moving from there.
+	test.equal(dep.version, "^2.0.0")
 end)
 
 --
@@ -482,5 +483,52 @@ test.it("lde add name@version re-pins an existing registry dep", function()
 
 	local raw = fs.read(path.join(dir, "lde.json")) ---@cast raw -nil
 	local config = json.decode(raw) ---@cast config table<string, any>
-	test.equal(config.dependencies["repin-reg"].version, "1.0.0")
+	test.equal(config.dependencies["repin-reg"].version, "^1.0.0")
+end)
+
+test.it("lde add keeps a written range as-is and saves an exact version as a caret", function()
+	local repoDir = path.join(tmpBase, "partial-reg-repo")
+	fs.rmdir(repoDir)
+	fs.mkdir(repoDir)
+	fs.mkdir(path.join(repoDir, "src"))
+	fs.write(path.join(repoDir, "src", "init.lua"), 'return "partial-reg"')
+	fs.write(path.join(repoDir, "lde.json"), json.encode({
+		name = "partial-reg",
+		version = "0.1.0",
+		dependencies = {}
+	}))
+
+	local treeDir = path.join(tmpBase, "partial-reg-tree")
+	fs.rmdir(treeDir)
+	fs.mkdir(treeDir)
+	fs.mkdirAll(path.join(treeDir, "registry", "packages"))
+	fs.write(path.join(treeDir, "registry", "packages", "partial-reg.json"), json.encode({
+		name = "partial-reg",
+		description = "offline test package",
+		git = repoDir,
+		branch = "master",
+		versions = { ["1.0.0"] = "1111111", ["1.2.0"] = "2222222", ["2.0.0"] = "3333333" }
+	}))
+
+	local dir = makeProject("partial-reg-test")
+	-- "1" is the whole 1.x prefix: the newest 1.x resolves, and a range the
+	-- user wrote is saved exactly as written.
+	local ok, out = ldecli({ "--tree", treeDir, "add", "partial-reg@1" }, dir)
+	test.truthy(ok, "partial version add failed: " .. tostring(out)) ---@cast out -nil
+
+	local raw = fs.read(path.join(dir, "lde.json")) ---@cast raw -nil
+	local config = json.decode(raw) ---@cast config table<string, any>
+	test.equal(config.dependencies["partial-reg"].version, "1")
+
+	-- An exact version is saved as a caret range, like a bare add.
+	ok, out = ldecli({ "--tree", treeDir, "add", "partial-reg@1.2.0" }, dir)
+	test.truthy(ok, "exact version add failed: " .. tostring(out)) ---@cast out -nil
+	raw = fs.read(path.join(dir, "lde.json")) ---@cast raw -nil
+	config = json.decode(raw) ---@cast config table<string, any>
+	test.equal(config.dependencies["partial-reg"].version, "^1.2.0")
+
+	-- A version that only looks exact stays exact, range or not.
+	ok, out = ldecli({ "--tree", treeDir, "add", "partial-reg@1.2.1" }, dir)
+	test.falsy(ok, "a missing exact version must fail")
+	test.includes(out or "", "not found")
 end)

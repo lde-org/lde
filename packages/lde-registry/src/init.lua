@@ -31,6 +31,8 @@
 
 ---@class lde.RegistrySemver
 ---@field compare fun(a: string, b: string): number
+---@field isExact fun(constraint: string): boolean
+---@field maxSatisfying fun(versions: table<string, any>?, constraint: string): string?
 
 ---@class lde.RegistryGit
 ---@field clone fun(url: string, dir: string): any?, string?
@@ -232,7 +234,10 @@ function Registry:lookup(name)
 	return portfile, nil
 end
 
---- Resolves a version string (or nil for latest) to a commit hash.
+--- Resolves a version string (or nil for latest) to a commit hash. The string
+--- is either an exact version, which must exist, or a range — "0.1" (a
+--- prefix), "^0.1.2", ">=0.1 <0.2" — which resolves to the newest version it
+--- allows.
 ---@param portfile lde.Portfile
 ---@param version string? # nil or "latest" means the newest version
 ---@return string version
@@ -246,10 +251,18 @@ function Registry:resolveVersion(portfile, version)
 
 	if version then
 		local commit = versions[version]
-		if not commit then
-			self.raise("Version '" .. version .. "' of '" .. portfile.name .. "' not found in lde registry")
+		if commit then return version, commit end
+
+		-- Not an exact published version: it may still be a range. A pin that
+		-- merely looks exact never resolves to a different version, so only
+		-- ranges are allowed to pick a nearby release.
+		if not self.semver.isExact(version) then
+			local best = self.semver.maxSatisfying(versions, version)
+			if best then return best, versions[best] end
+			self.raise("No version of '" .. portfile.name .. "' satisfies: " .. version)
 		end
-		return version, commit
+
+		self.raise("Version '" .. version .. "' of '" .. portfile.name .. "' not found in lde registry")
 	end
 
 	-- Find highest semver
