@@ -1,5 +1,6 @@
 import { useState, useEffect } from "preact/hooks";
 import { GITHUB_RELEASES_URL } from "../data/info";
+import { highlightFile } from "../lib/highlight";
 
 const TerminalIcon = () => (
 	<svg
@@ -28,6 +29,22 @@ const PackageIcon = () => (
 		class="size-4"
 	>
 		<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+	</svg>
+);
+const DockerIcon = () => (
+	<svg
+		xmlns="http://www.w3.org/2000/svg"
+		viewBox="0 0 24 24"
+		fill="none"
+		stroke="currentColor"
+		stroke-width="2"
+		stroke-linecap="round"
+		stroke-linejoin="round"
+		class="size-4"
+	>
+		<path d="M3 7l9-4 9 4-9 4-9-4z" />
+		<path d="M3 12l9 4 9-4" />
+		<path d="M3 17l9 4 9-4" />
 	</svg>
 );
 const CopyIcon = () => (
@@ -259,6 +276,17 @@ export default function DownloadPanel() {
 	const p = platforms.find((p) => p.id === platform)!;
 	const ms = methods[platform] ?? [];
 
+	// Nightly builds get their own tags (nightly-slim) instead of a flag, so the
+	// docker snippet follows the same toggle as the install commands above.
+	const dockerImage = nightly ? "nightly-slim" : "slim";
+	const dockerSnippet = [
+		`docker pull ghcr.io/lde-org/lde:${dockerImage}`,
+		`docker run --rm ghcr.io/lde-org/lde:${dockerImage} # or alpine, debian`,
+	].join("\n");
+	// The shell grammar, tokenised with the same highlight.js setup the file
+	// viewer uses; null means highlighting failed, so render the plain text.
+	const dockerHtml = highlightFile(dockerSnippet, "docker.sh");
+
 	function applyNightly(cmd: string) {
 		if (!nightly) return cmd;
 		if (cmd === "luarocks install lde") return cmd;
@@ -352,6 +380,23 @@ export default function DownloadPanel() {
 						);
 					})}
 				</div>
+
+				{/* Docker — skipped on Termux, which has no Docker runtime */}
+				{platform !== "android" && (
+					<div class="p-6 flex flex-col gap-3 border-t border-black/8 dark:border-white/8">
+						<div class="flex items-center gap-2 text-sm font-semibold">
+							<DockerIcon />
+							Docker
+						</div>
+						<div class="flex items-start gap-2 px-4 py-3 bg-black/5 dark:bg-white/5 border border-black/8 dark:border-white/8 font-mono text-sm min-w-0">
+							<code
+								class="hljs flex-1 min-w-0 whitespace-pre text-gray-800 dark:text-white"
+								dangerouslySetInnerHTML={{ __html: dockerHtml ?? dockerSnippet }}
+							/>
+							<CopyButton text={dockerSnippet} />
+						</div>
+					</div>
+				)}
 
 				{/* Footer */}
 				<div class="px-6 py-4 border-t border-black/8 dark:border-white/8 flex flex-wrap items-center justify-between gap-2 text-xs text-black/35 dark:text-white/30">
