@@ -6,7 +6,7 @@
 		"path": { "version": "0.1.0" },
 		"process": { "version": "0.1.1" },
 		"env": { "version": "0.1.0" },
-		"lua-sys": { "version": "0.1.0" }
+		"lua-sys": { "version": "0.1.1" }
 	},
 	"devDependencies": {
 		"curl-sys": { "version": "0.1.1" }
