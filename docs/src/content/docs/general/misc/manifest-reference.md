@@ -274,7 +274,7 @@ The version may be a range, in which case installs resolve it to the newest vers
 
 | Form | Meaning |
 |------|---------|
-| `1.2.3` | exactly `1.2.3` — a missing version is an error, never a nearby release |
+| `1.2.3` | exactly `1.2.3` |
 | `1.2`, `1`, `1.2.x` | the whole prefix: `1.2.0 <= v < 1.3.0`, `1.0.0 <= v < 2.0.0` |
 | `^1.2.3` | `>=1.2.3 <2.0.0`; the leftmost non-zero part is fixed, so `^0.2.3` is `>=0.2.3 <0.3.0` |
 | `~1.2.3` | `>=1.2.3 <1.3.0` (patch-only changes); `~>` is accepted as an alias |

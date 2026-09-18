@@ -2,10 +2,10 @@
 	"name": "lde-build",
 	"version": "0.1.0",
 	"dependencies": {
-		"curl-sys": { "version": "0.1.1" },
-		"fs": { "version": "0.2.0" },
-		"path": { "version": "0.1.0" },
-		"archive": { "version": "0.1.0" },
-		"process": { "version": "0.1.1" }
+		"curl-sys": { "version": "^0.1.1" },
+		"fs": { "version": "^0.2.0" },
+		"path": { "version": "^0.1.0" },
+		"archive": { "version": "^0.1.0" },
+		"process": { "version": "^0.1.1" }
 	}
 }

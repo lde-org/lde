@@ -92,19 +92,22 @@ local function gitHead(repoDir)
 	return ((stdout or ""):gsub("%s+$", ""))
 end
 
---- Builds a registry checkout whose `ranged-dep` package maps versions to real
+--- Builds a registry checkout whose `<name>` package maps versions to real
 --- commits of a local repo, so a ranged registry dependency is fully offline.
+--- The name is a parameter because two tests share this fixture: reusing one
+--- repo/tree path would make commit shas and the git cache collide across them.
+---@param name string
 ---@return string treeDir
 ---@return string repoDir
-local function makeRangedRegistry()
-	local repoDir = makeLocalGitRepo("ranged-dep")
+local function makeRangedRegistry(name)
+	local repoDir = makeLocalGitRepo(name)
 
-	local treeDir = path.join(tmpBase, "ranged-tree")
+	local treeDir = path.join(tmpBase, name .. "-tree")
 	fs.rmdir(treeDir)
 	fs.mkdir(treeDir)
 	fs.mkdirAll(path.join(treeDir, "registry", "packages"))
-	fs.write(path.join(treeDir, "registry", "packages", "ranged-dep.json"), json.encode({
-		name = "ranged-dep",
+	fs.write(path.join(treeDir, "registry", "packages", name .. ".json"), json.encode({
+		name = name,
 		description = "offline test package",
 		git = repoDir,
 		branch = "master",
@@ -304,8 +307,51 @@ test.it("lde update errors for an unknown dependency name", function()
 	test.includes(plain(out or ""), "Unknown dependency")
 end)
 
+test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde update floats a caret dep to the newest patch, never past a minor", function()
+	local treeDir, repoDir = makeRangedRegistry("caret-dep")
+	-- ^0.1.0 is the 0.1 line: patch releases float, 0.x minors are breaking.
+	local dir = makeProject("caret-app", { ["caret-dep"] = { version = "^0.1.0" } })
+
+	local ok, out = cli({ "--tree", treeDir, "sync" }, dir)
+	test.truthy(ok, "sync failed: " .. tostring(out))
+	local lock1Raw = fs.read(path.join(dir, "lde.lock")) ---@cast lock1Raw -nil
+	local lock1 = json.decode(lock1Raw) ---@cast lock1 table<string, any>
+	local commit1 = lock1.dependencies["caret-dep"].commit
+	test.truthy(commit1)
+
+	-- A patch and a minor are published; only the patch is in range.
+	commitMore(repoDir, "src/v2.lua", 'return "v2"')
+	local sha2 = gitHead(repoDir)
+	commitMore(repoDir, "src/v3.lua", 'return "v3"')
+	local sha3 = gitHead(repoDir)
+	fs.write(path.join(treeDir, "registry", "packages", "caret-dep.json"), json.encode({
+		name = "caret-dep",
+		description = "offline test package",
+		git = repoDir,
+		branch = "master",
+		versions = { ["0.1.0"] = commit1, ["0.1.1"] = sha2, ["0.2.0"] = sha3 }
+	}))
+
+	ok, out = cli({ "--tree", treeDir, "update", "caret-dep" }, dir)
+	test.truthy(ok, "update failed: " .. tostring(out))
+	test.includes(plain(out or ""), "^0.1.0 -> 0.1.1")
+
+	ok, out = cli({ "--tree", treeDir, "sync" }, dir)
+	test.truthy(ok, "sync after update failed: " .. tostring(out))
+
+	local lock2Raw = fs.read(path.join(dir, "lde.lock")) ---@cast lock2Raw -nil
+	local lock2 = json.decode(lock2Raw) ---@cast lock2 table<string, any>
+	test.equal(lock2.dependencies["caret-dep"].commit, sha2, "the patch release must be pinned")
+
+	-- The install fetched the 0.1.1 commit, never the 0.2.0 one.
+	local cache = path.join(treeDir, "git")
+	test.truthy(fs.exists(path.join(cache, "caret-dep-" .. sha2)), "0.1.1 must be materialized")
+	test.falsy(fs.exists(path.join(cache, "caret-dep-" .. sha3)),
+		"a caret range on a 0.x package must not cross the minor")
+end)
+
 test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde update re-resolves a ranged registry dep to the newest match", function()
-	local treeDir, repoDir = makeRangedRegistry()
+	local treeDir, repoDir = makeRangedRegistry("ranged-dep")
 	local dir = makeProject("ranged-app", { ["ranged-dep"] = { version = "0.1" } })
 
 	-- Only 0.1.0 is published: "0.1" resolves to it.

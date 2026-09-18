@@ -50,7 +50,7 @@ lde run                                         # runs the package entry point (
   "dependencies": {
     "json":    { "path": "../json" },                         // local path
     "hood":    { "git": "https://...", "commit": "abc123" }, // git (commit auto-pinned)
-    "semver":  { "version": "^1.0.0" },                      // registry (range: "1.2", "^1.2.3", ">=1.2 <2")
+    "semver":  { "version": "^0.1.0" },                      // registry (range; ^0.x.y floats patches only)
     "mylib":   { "luarocks": "luafilesystem" },              // luarocks
     "winapi":  { "git": "...", "optional": true }            // optional
   },
@@ -135,7 +135,7 @@ with diagnostics (the recipe exits non-zero if any package reports problems).
 
 ## minilde.lua
 
-`minilde.lua` is a minimal bootstrap script for platforms that don't yet have an `lde` binary — used only when creating a new platform build from scratch. It requires only `luajit`, `curl`, and `tar`, and implements just enough of lde to resolve deps and run the package entry point.
+`minilde.lua` is a minimal bootstrap script for platforms that don't yet have an `lde` binary — used only when creating a new platform build from scratch. It requires only `luajit`, `curl`, and `tar`, and implements just enough of lde to resolve deps and run the package entry point — including the version constraints lde writes (`^0.1.0`, `0.1`, `>=1.2 <2`), which it resolves to the newest matching release.
 
 ```sh
 luajit minilde.lua run [-- extra-args]   # build and run the package (passes args after --)
