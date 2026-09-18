@@ -243,7 +243,9 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Install luarocks
-        run: sudo apt-get update && sudo apt-get install -y luarocks jq
+        run: |
+          sudo apt-get update && sudo apt-get install -y luarocks jq
+          luarocks --local install dkjson
 
       - name: Generate nightly rockspec
         id: rockspec
