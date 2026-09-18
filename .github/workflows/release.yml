@@ -202,3 +202,39 @@ jobs:
         run: gh workflow run docker.yml -f version="${{ github.event.release.tag_name }}"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  luarocks:
+    needs: build
+    if: "!github.event.release.prerelease"
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install luarocks
+        run: sudo apt-get update && sudo apt-get install -y luarocks
+
+      - name: Generate rockspec
+        id: rockspec
+        run: |
+          version="${{ github.event.release.tag_name }}"
+          version="${version#v}"
+          case "$version" in
+            [0-9]*.[0-9]*.[0-9]*) ;;
+            *) echo "::error::release tag '${{ github.event.release.tag_name }}' is not a semantic version"; exit 1 ;;
+          esac
+          sed "s/@VERSION@/$version/g" luarocks/lde.rockspec.template > "lde-$version-1.rockspec"
+          echo "file=lde-$version-1.rockspec" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Validate rockspec
+        run: luarocks lint "${{ steps.rockspec.outputs.file }}"
+
+      - name: Publish to luarocks.org
+        env:
+          LUAROCKS_API_KEY: ${{ secrets.LUAROCKS_API_KEY }}
+        run: |
+          if [ -z "$LUAROCKS_API_KEY" ]; then
+            echo "::error::LUAROCKS_API_KEY is not set (luarocks.org → Settings → API keys)"
+            exit 1
+          fi
+          luarocks upload --api-key="$LUAROCKS_API_KEY" "${{ steps.rockspec.outputs.file }}"

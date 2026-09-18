@@ -235,3 +235,37 @@ jobs:
         run: gh workflow run docker.yml -f version=nightly
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  luarocks:
+    needs: build
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install luarocks
+        run: sudo apt-get update && sudo apt-get install -y luarocks jq
+
+      - name: Generate nightly rockspec
+        id: rockspec
+        run: |
+          latest="$(curl -fsSL https://api.github.com/repos/lde-org/lde/releases/latest | jq -r .tag_name)"
+          latest="${latest#v}"
+          IFS=. read -r major minor patch <<< "$latest"
+          next="$major.$minor.$((patch + 1))"
+          sed "s/@NEXT_VERSION@/$next/g" luarocks/lde-nightly.rockspec.template > "lde-$next-0.rockspec"
+          echo "file=lde-$next-0.rockspec" >> "$GITHUB_OUTPUT"
+          echo "Publishing lde $next-0 (newest release: $latest)"
+
+      - name: Validate rockspec
+        run: luarocks lint "${{ steps.rockspec.outputs.file }}"
+
+      - name: Publish to luarocks.org
+        env:
+          LUAROCKS_API_KEY: ${{ secrets.LUAROCKS_API_KEY }}
+        run: |
+          if [ -z "$LUAROCKS_API_KEY" ]; then
+            echo "::error::LUAROCKS_API_KEY is not set (luarocks.org → Settings → API keys)"
+            exit 1
+          fi
+          # Same version every night: --force replaces the previous nightly.
+          luarocks upload --force --api-key="$LUAROCKS_API_KEY" "${{ steps.rockspec.outputs.file }}"

@@ -1,0 +1,24 @@
+local ldeVersion = "@VERSION@"
+
+package = "lde"
+version = ldeVersion .. "-1"
+
+source = {
+	url = "https://github.com/lde-org/lde/archive/refs/tags/v" .. ldeVersion .. ".tar.gz",
+	dir = "lde-" .. ldeVersion,
+}
+
+description = {
+	summary = "A package manager, test runner and runtime for Lua, written in Lua.",
+	homepage = "https://lde.sh",
+	license = "MIT",
+}
+
+dependencies = {
+	"lua >= 5.1",
+}
+
+build = {
+	type = "command",
+	install_command = "lua luarocks/install.lua --version " .. ldeVersion,
+}
