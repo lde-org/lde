@@ -1,7 +1,7 @@
 # lde on glibc (Debian): x86-64 / aarch64 builds.
 #
 #   docker build -f docker/glibc.Dockerfile \
-#     --build-arg LDE_VERSION=v0.10.0 --platform linux/amd64 .
+#     --build-arg LDE_VERSION=v0.11.0 --platform linux/amd64 .
 #
 # ARG BASE picks the Debian flavor: debian:bookworm (default) or
 # debian:bookworm-slim for the "slim" image.

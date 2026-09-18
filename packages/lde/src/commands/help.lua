@@ -5,7 +5,7 @@ local usage = require("lde.commands.usage")
 local suggest = require("lde.util.suggest")
 
 local ok, currentVersion = pcall(require, "lde.version")
-currentVersion = ok and currentVersion or "0.10.0"
+currentVersion = ok and currentVersion or "0.11.0"
 
 -- lde-core is only needed to raise the unknown-command error; load it lazily
 -- so the fast help paths (bare `lde`, `lde --help`) never pay for it.

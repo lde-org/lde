@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "lde release tag to package (e.g. v0.10.0)"
+        description: "lde release tag to package (e.g. v0.11.0)"
         required: true
 
 permissions:
@@ -41,7 +41,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Idiomatic <version>-<flavor> tags (nightly-alpine, v0.10.0-debian);
+      # Idiomatic <version>-<flavor> tags (nightly-alpine, v0.11.0-debian);
       # the bare {flavor} tag tracks the latest stable release.
       - name: Compute tags
         id: tags

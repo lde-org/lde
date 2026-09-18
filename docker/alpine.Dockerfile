@@ -1,7 +1,7 @@
 # lde on musl (Alpine): x86-64 / aarch64 builds.
 #
 #   docker build -f docker/alpine.Dockerfile \
-#     --build-arg LDE_VERSION=v0.10.0 --platform linux/amd64 .
+#     --build-arg LDE_VERSION=v0.11.0 --platform linux/amd64 .
 FROM alpine:3.20 AS downloader
 # Build args are referenced as plain ${VAR}: a RUN is handed to /bin/sh as-is,
 # so "$" belongs to the shell. A compose-style "$$" escape is left untouched and
