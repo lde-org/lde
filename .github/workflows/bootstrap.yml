@@ -173,7 +173,7 @@ jobs:
           release: "14.5"
           arch: ${{ matrix.vm_arch }}
           sync: rsync
-          prepare: pkg install -y curl cmake ninja gcc
+          prepare: pkg install -y curl cmake ninja gcc git
           run: |
             export PATH="$PWD/luajit-dist:$PATH"
             luajit minilde.lua -C packages/lde run -- compile --outfile ${{ matrix.outfile }}
