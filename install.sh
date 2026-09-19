@@ -15,7 +15,11 @@ while [ $# -gt 0 ]; do
 done
 
 ARCH="$(uname -m)"
-[ "$(uname -o)" = "Android" ] && OS="Android" || OS="$(uname -s)"
+OS="$(uname -s)"
+
+if [ "$(uname -o 2>/dev/null)" = "Android" ]; then
+    OS="Android"
+fi
 
 MUSL=0
 if [ "$OS" = "Linux" ] && ls /lib/ld-musl-* >/dev/null 2>&1; then
@@ -30,6 +34,8 @@ case "$TRIPLE" in
     Android-aarch64)             BIN="lde-android-aarch64" ;;
     Darwin-x86_64)               BIN="lde-macos-x86-64" ;;
     Darwin-arm64)                BIN="lde-macos-aarch64" ;;
+    FreeBSD-amd64|FreeBSD-x86_64)   BIN="lde-freebsd-x86-64" ;;
+    FreeBSD-arm64|FreeBSD-aarch64)  BIN="lde-freebsd-aarch64" ;;
     *) echo "Unsupported platform: $TRIPLE"; exit 1 ;;
 esac
 

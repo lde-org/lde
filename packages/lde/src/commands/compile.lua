@@ -60,7 +60,10 @@ local function compile(args)
 	-- Windows targets get .exe, whether native (host Windows) or cross. A
 	-- host-matching target has the host platform, so either way the target's
 	-- platform is the one the binary runs on.
-	local hostPlatform = jit.os == "Windows" and "windows" or jit.os == "OSX" and "macos" or "linux"
+	local hostPlatform = jit.os == "Windows" and "windows"
+		or jit.os == "OSX" and "macos"
+		or jit.os == "BSD" and "freebsd"
+		or "linux"
 	local platform
 	if target then
 		platform = target.platform

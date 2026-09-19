@@ -27,14 +27,16 @@ end
 local artifactNames = {
 	Windows = "lde-windows-" .. arch .. ".zip",
 	Linux = isAndroid and "lde-android-" .. arch .. ".zip" or "lde-linux-" .. arch .. libc .. ".zip",
-	OSX = "lde-macos-" .. arch .. ".zip"
+	OSX = "lde-macos-" .. arch .. ".zip",
+	BSD = "lde-freebsd-" .. arch .. ".zip"
 }
 
 -- Name of the binary inside the release archive.
 local innerNames = {
 	Windows = "lde-windows-" .. arch .. ".exe",
 	Linux = isAndroid and "lde-android-" .. arch or "lde-linux-" .. arch .. libc,
-	OSX = "lde-macos-" .. arch
+	OSX = "lde-macos-" .. arch,
+	BSD = "lde-freebsd-" .. arch
 }
 
 ---@param args clap.Args

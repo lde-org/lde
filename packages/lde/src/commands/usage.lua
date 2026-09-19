@@ -165,7 +165,7 @@ local commands = {
 		description = "Compile the current project into a single executable.",
 		options = {
 			["--outfile"] = { arg = "path", desc = "Output path (defaults to ./<project-name>)" },
-			["--target"] = { arg = "target", desc = "Cross-compile for a release target (linux-x86-64, linux-aarch64, windows-x86-64, windows-aarch64, macos-x86-64, macos-aarch64, android-aarch64); defaults to the host" },
+			["--target"] = { arg = "target", desc = "Cross-compile for a release target (linux-x86-64, linux-aarch64, windows-x86-64, windows-aarch64, macos-x86-64, macos-aarch64, freebsd-x86-64, freebsd-aarch64, android-aarch64); defaults to the host" },
 			["--timings"] = { desc = "Write a build timings HTML report to target/timings.html" },
 			["--json"] = { desc = "With --timings: write the report as JSON (target/timings.json) instead of HTML" },
 		},
@@ -236,7 +236,7 @@ local valueFlags = { "-C", "--cwd", "--tree", "--path", "--git", "--branch", "--
 -- of this module) so completion stays fast.
 ---@type table<string, string[]>
 local flagValues = {
-	["--target"] = { "linux-x86-64", "linux-aarch64", "windows-x86-64", "windows-aarch64", "macos-x86-64", "macos-aarch64", "android-aarch64" },
+	["--target"] = { "linux-x86-64", "linux-aarch64", "windows-x86-64", "windows-aarch64", "macos-x86-64", "macos-aarch64", "freebsd-x86-64", "freebsd-aarch64", "android-aarch64" },
 }
 
 -- Canonical command names in display order.

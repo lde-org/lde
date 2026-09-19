@@ -19,6 +19,7 @@ local function getPlatformArch()
 	local platform = jit.os == "Linux" and "linux"
 		or jit.os == "Windows" and "windows"
 		or jit.os == "OSX" and "macos"
+		or jit.os == "BSD" and "freebsd"
 		or error("Unsupported platform: " .. jit.os)
 
 	local arch = jit.arch == "x64" and "x86-64"
@@ -29,13 +30,14 @@ local function getPlatformArch()
 end
 
 --- Parse arch and libc from a compiler's -dumpmachine output.
---- Returns nil for both if the platform doesn't use a libc triplet component (OSX, Windows).
+--- Returns nil for both if the platform doesn't use a libc triplet component
+--- (OSX, FreeBSD).
 --- On Linux, derives arch from the triplet so cross-compilers (e.g. Android NDK) work correctly.
 ---@param compiler string
 ---@return string|nil arch  -- e.g. "x86-64" or "aarch64"
 ---@return "musl" | "gnu" | "android" | nil libc
 local function getTargetFromCompiler(compiler)
-	if jit.os == "OSX" then return nil, nil end
+	if jit.os == "OSX" or jit.os == "BSD" then return nil, nil end
 	if jit.os == "Windows" then return nil, "gnu" end
 
 	---@type string?
@@ -80,9 +82,9 @@ end
 
 ---@class sea.Target
 ---@field name string # release target name, e.g. "linux-x86-64"
----@field platform string # "linux" | "windows" | "macos" — also the LuaJIT dist platform
+---@field platform string # "linux" | "windows" | "macos" | "freebsd" — also the LuaJIT dist platform
 ---@field arch string # "x86-64" | "aarch64"
----@field libc? string # "gnu" | "musl" | "android"; nil on macos (no libc component in the dist name)
+---@field libc? string # "gnu" | "musl" | "android"; nil on macos/freebsd (no libc component in the dist name)
 ---@field triple string # clang -target used for cross compilation
 
 -- The targets lde ships in GitHub releases (see .github/workflows/release.yml).
@@ -96,6 +98,8 @@ sea.targets = {
 	["windows-aarch64"] = { name = "windows-aarch64", platform = "windows", arch = "aarch64", libc = "gnu",     triple = "aarch64-w64-windows-gnu" },
 	["macos-x86-64"]    = { name = "macos-x86-64",    platform = "macos",   arch = "x86-64",                  triple = "x86_64-apple-darwin" },
 	["macos-aarch64"]   = { name = "macos-aarch64",   platform = "macos",   arch = "aarch64",                 triple = "aarch64-apple-darwin" },
+	["freebsd-x86-64"]  = { name = "freebsd-x86-64",  platform = "freebsd", arch = "x86-64",                  triple = "x86_64-unknown-freebsd" },
+	["freebsd-aarch64"] = { name = "freebsd-aarch64", platform = "freebsd", arch = "aarch64",                 triple = "aarch64-unknown-freebsd" },
 	["android-aarch64"] = { name = "android-aarch64", platform = "linux",   arch = "aarch64", libc = "android", triple = "aarch64-linux-android" },
 }
 
@@ -195,6 +199,7 @@ function sea.getTriple(target, compiler)
 	local tripleArch = arch == "aarch64" and "aarch64" or "x86_64"
 	return (platform == "windows" and (tripleArch .. "-w64-windows-gnu"))
 		or (platform == "macos" and (tripleArch .. "-apple-darwin"))
+		or (platform == "freebsd" and (tripleArch .. "-unknown-freebsd"))
 		or (tripleArch .. "-linux-gnu")
 end
 
@@ -334,7 +339,7 @@ function sea.compile(main, source, sharedLibs, compiler, targetName)
 	-- The platform this binary runs on: the target's when cross-compiling,
 	-- the host's otherwise. Drives lib naming, the ffi shim, and link flags.
 	local platform = target and target.platform
-		or (jit.os == "Windows" and "windows" or jit.os == "OSX" and "macos" or "linux")
+		or (jit.os == "Windows" and "windows" or jit.os == "OSX" and "macos" or jit.os == "BSD" and "freebsd" or "linux")
 	local libExt = platform == "windows" and "dll" or "so"
 
 	for _, lib in ipairs(sharedLibs) do
@@ -750,6 +755,9 @@ int main(int argc, char** argv) {
 		args[#args + 1] = "-lm"
 		args[#args + 1] = "-ldl"
 		args[#args + 1] = "-Wl,--export-dynamic" -- expose lua symbols for lua dependencies
+	elseif platform == "freebsd" then
+		args[#args + 1] = "-lm" -- freebsd's dlopen is in libc
+		args[#args + 1] = "-Wl,--export-dynamic" -- expose lua symbols for lua dependencies
 	elseif platform == "macos" then
 		args[#args + 1] = "-Wl,-export_dynamic" -- expose lua symbols for lua dependencies
 	elseif platform == "windows" then
@@ -772,10 +780,17 @@ int main(int argc, char** argv) {
 		if target
 			and (err:find("cannot find %-lgcc", 1)
 				or err:find("unable to find library %-lgcc", 1)) then
-			err = err
-				.. "\n[sea] the target's C runtime is missing: clang is linking libgcc (-lgcc), but no libgcc for '"
-				.. target.triple .. "' was found. Install the target's gcc runtime (e.g. on Fedora: dnf install mingw64-gcc),"
-				.. " or use a clang with compiler-rt builtins for the target (e.g. llvm-mingw)."
+			if target.platform == "freebsd" then
+				err = err
+					.. "\n[sea] cross-compiling to FreeBSD needs a FreeBSD sysroot (the target's base system, "
+					.. "e.g. installed from base.txz): set SEA_CC to a clang wrapper that passes "
+					.. "--sysroot=<sysroot> for '" .. target.triple .. "'."
+			else
+				err = err
+					.. "\n[sea] the target's C runtime is missing: clang is linking libgcc (-lgcc), but no libgcc for '"
+					.. target.triple .. "' was found. Install the target's gcc runtime (e.g. on Fedora: dnf install mingw64-gcc),"
+					.. " or use a clang with compiler-rt builtins for the target (e.g. llvm-mingw)."
+			end
 		end
 		error("Compilation failed: " .. err)
 	end

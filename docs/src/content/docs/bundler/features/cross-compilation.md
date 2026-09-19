@@ -18,6 +18,8 @@ This is desirable when you don't care about running the binary and want fast bui
 - `windows-aarch64`
 - `macos-x86-64`
 - `macos-aarch64`
+- `freebsd-x86-64`
+- `freebsd-aarch64`
 - `android-aarch64`
 
 > [!NOTE]

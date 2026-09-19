@@ -242,8 +242,14 @@ test.it("compile: sea targets match the LuaJIT dist release assets", function()
 		["windows-aarch64"] = "libluajit-windows-aarch64-gnu",
 		["macos-x86-64"]    = "libluajit-macos-x86-64",
 		["macos-aarch64"]   = "libluajit-macos-aarch64",
+		["freebsd-x86-64"]  = "libluajit-freebsd-x86-64",
+		["freebsd-aarch64"] = "libluajit-freebsd-aarch64",
 		["android-aarch64"] = "libluajit-linux-aarch64-android",
 	}
+
+	for name in pairs(sea.targets) do
+		test.truthy(expectedDists[name] ~= nil, "no expected LuaJIT dist for target " .. name)
+	end
 
 	local cacheDir = path.join(env.tmpdir(), "luajit-cache")
 	local created = {}
