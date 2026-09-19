@@ -640,7 +640,9 @@ local function openRockspec(dir, rockspecPath)
 			-- system Lua headers (e.g. 5.4) and link against APIs LuaJIT
 			-- doesn't export (lua_rawgetp).
 			CPPFLAGS    = makePath("-I" .. path.join(luajitPath, "include")),
-			LIBFLAG     = "-shared",
+			-- macOS needs the undefined Lua symbols resolved at load time; the
+			-- command backend below uses the same OSX-aware value.
+			LIBFLAG     = jit.os == "OSX" and "-bundle -undefined dynamic_lookup" or "-shared",
 			INST_LIBDIR = makePath(modulesDir),
 			INST_LUADIR = makePath(modulesDir),
 			LUADIR      = makePath(modulesDir),
@@ -665,13 +667,24 @@ local function openRockspec(dir, rockspecPath)
 					" Install make (e.g. build-essential on Debian/Ubuntu, Xcode Command Line Tools on macOS)."
 			end
 
-			local makeEnv = toolchainEnv()
+			-- LuaRocks puts only the variables a rockspec explicitly asks for on
+			-- make's command line (its build/install variables, plus an automatic
+			-- CC). The standard rock variables serve to expand $(VAR)
+			-- placeholders, but they also help Makefiles that never mention them,
+			-- so they are exported through the environment instead: make imports
+			-- environment variables as make variables, yet any assignment in the
+			-- Makefile still wins. Forcing them on the command line silently
+			-- suppressed Makefile assignments, including `+=` — which is what
+			-- broke lgi on macOS, where GOBJECT_INTROSPECTION_LIBDIR is only ever
+			-- defined by a darwin-only `CFLAGS += ...`.
+			---@type table<string, string>
+			local makeEnv = toolchainEnv() or {}
+			for k, v in pairs(stdVars) do makeEnv[k] = v end
 
 			---@param extraVars table<string, string>?
 			---@return string[]
 			local function buildVarList(extraVars)
 				local args = {}
-				for k, v in pairs(stdVars) do args[#args + 1] = k .. "=" .. v end
 				for k, v in pairs(extraVars or {}) do
 					args[#args + 1] = k .. "=" .. subst(v)
 				end
@@ -690,7 +703,14 @@ local function openRockspec(dir, rockspecPath)
 				return nil, "make failed: " .. msg
 			end
 
-			local installArgs = buildVarList(spec.build.install_variables)
+			-- LuaRocks feeds build.variables to both passes and layers
+			-- install_variables on top for the install pass. Rocks like lgi rely
+			-- on it: their Makefile's install target reads LUA_LIBDIR and
+			-- LUA_SHAREDIR, which the rockspec defines only in build.variables.
+			local installVars = {}
+			for k, v in pairs(spec.build.variables or {}) do installVars[k] = v end
+			for k, v in pairs(spec.build.install_variables or {}) do installVars[k] = v end
+			local installArgs = buildVarList(installVars)
 			installArgs[#installArgs + 1] = installTarget
 
 			code, _, stderr = process.exec(makeBin, installArgs, { cwd = dir, env = makeEnv })

@@ -2010,6 +2010,91 @@ build = {
 	test.equal(cfg.bin, "myprog")
 end)
 
+test.it("rockspec: make build.variables also reach the install pass", function()
+	-- Regression: LuaRocks merges build.variables into install_variables, so a
+	-- Makefile install target reading a variable declared only in
+	-- build.variables still gets it. lgi is the motivating rock: its rockspec
+	-- declares LUA_LIBDIR/LUA_SHAREDIR in variables only, and without the merge
+	-- `make install` falls back to the Makefile defaults — the shared Lua files
+	-- land in target/share/lua/5.1/ and the C module is written into the LuaJIT
+	-- prefix instead of the package's module dir, so require("lgi") never finds
+	-- it even though the build reports success.
+	local dir = path.join(tmpBase, "make-install-vars-rock")
+	fs.mkdir(dir)
+	fs.write(path.join(dir, "Makefile"), [[
+build:
+	@true
+
+install:
+	mkdir -p $(MY_LIBDIR)
+	echo "$(MY_INCDIR)" > $(MY_LIBDIR)/install-vars.txt
+]])
+	fs.write(path.join(dir, "make-install-vars-1.0-1.rockspec"), [[
+package = "make-install-vars"
+version = "1.0-1"
+source = { url = "https://example.com" }
+build = {
+  type = "make",
+  variables = { MY_INCDIR = "$(LUA_INCDIR)" },
+  install_variables = { MY_LIBDIR = "$(LUADIR)" },
+}
+]])
+
+	local pkg, err = lde.Package.openRockspec(dir)
+	test.truthy(pkg, err) ---@cast pkg -nil
+
+	local outputDir = path.join(dir, "target", "make-install-vars")
+	local ok, berr = pkg:runBuildScript(outputDir)
+	test.truthy(ok, berr)
+
+	-- MY_INCDIR comes from build.variables, MY_LIBDIR from install_variables:
+	-- the install pass must see both.
+	local content = fs.read(path.join(dir, "target", "install-vars.txt")) or ""
+	test.includes(content, "include", "install pass must see build.variables")
+end)
+
+test.it("rockspec: standard make variables do not suppress Makefile assignments", function()
+	-- Regression: lde forced every standard rock variable onto make's command
+	-- line. A command-line assignment suppresses the Makefile's own assignments,
+	-- `+=` included, so lgi's darwin-only
+	-- `CFLAGS += -DGOBJECT_INTROSPECTION_LIBDIR=...` was silently dropped and
+	-- core.c failed to compile. LuaRocks passes these variables only when a
+	-- rockspec asks for them; lde exports them through the environment instead,
+	-- so Makefiles that never mention them still resolve them while the Makefile
+	-- keeps the last word.
+	local dir = path.join(tmpBase, "make-env-vars-rock")
+	fs.mkdir(dir)
+	fs.write(path.join(dir, "Makefile"), [[
+CFLAGS += -DFROM_MAKEFILE
+
+build:
+	@echo "incdir=$(LUA_INCDIR)" > env-vars.txt
+	@echo "cflags=$(CFLAGS)" >> env-vars.txt
+
+install:
+	@true
+]])
+	fs.write(path.join(dir, "make-env-vars-1.0-1.rockspec"), [[
+package = "make-env-vars"
+version = "1.0-1"
+source = { url = "https://example.com" }
+build = { type = "make" }
+]])
+
+	local pkg, err = lde.Package.openRockspec(dir)
+	test.truthy(pkg, err) ---@cast pkg -nil
+
+	local outputDir = path.join(dir, "target", "make-env-vars")
+	local ok, berr = pkg:runBuildScript(outputDir)
+	test.truthy(ok, berr)
+
+	local out = fs.read(path.join(dir, "env-vars.txt")) or ""
+	-- The standard variable still reaches make (as an environment default)...
+	test.includes(out, "include", "LUA_INCDIR must still resolve for the Makefile")
+	-- ...and the Makefile's own `CFLAGS +=` still applies on top of lde's value.
+	test.includes(out, "cflags=-fPIC -DFROM_MAKEFILE", "Makefile CFLAGS += must not be suppressed")
+end)
+
 test.it("rockspec: command build exports resolved vars even when the rockspec never references them", function()
 	-- Regression: lyaml's luke build reads CC/CFLAGS/LUA_INCDIR from the
 	-- process environment (LuaRocks' execute() sets the rock variables around
