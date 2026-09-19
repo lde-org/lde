@@ -59,17 +59,13 @@ local function mklink(src, dest)
 	sh("ln -sf '" .. src .. "' '" .. dest .. "'")
 end
 
----@type fun(handle: file*?): string?
-local function readhandle(handle)
+---@type fun(path: string): string?
+local function read(path)
+	local handle = io.open(path, "rb")
 	if not handle then return end
 	local content = handle:read("*a")
 	handle:close()
 	return content
-end
-
----@type fun(path: string): string?
-local function read(path)
-	return readhandle(io.open(path, "rb"))
 end
 
 ---@type fun(path: string, content: string)
@@ -122,8 +118,8 @@ local function pop() return table.remove(args, 1) end
 
 ---@alias minilde.dep
 --- | { path: string }
---- | { git: string }
---- | { version: string, name?: string } # registry: name defaults to the dep key, version resolved via portfile
+--- | { git: string, commit?: string, branch?: string }
+--- | { version: string, name?: string } # registry: name defaults to the dep key, version is a semver constraint
 
 local tmpBase = os.getenv("TEMP") or os.getenv("TMPDIR") or "/tmp"
 local tmpLDEDir = join(tmpBase, "lde")
@@ -141,18 +137,139 @@ local function httpGet(url)
 	return content ~= "" and content or nil
 end
 
+-- Version constraints, mirroring lde's semver package: "1.2.3" (exact),
+-- "1.2"/"1.2.x" (prefix range), "^1.2.3", "~1.2", ">=1.2 <2", "^1 || ^2",
+-- "latest". Prerelease and build suffixes never take part in a comparison.
+
+---@param v string
+---@return integer, integer, integer, integer? # major, minor, patch, parts (3 exact, fewer = prefix, nil malformed)
+local function parseVersion(v)
+	v = v:match("^([^%-%+]+)") or v -- drop -prerelease / +build
+	v = v:gsub("%.[xX*]$", "") -- "1.2.x" -> "1.2"
+	if v == "" or v == "*" or v == "x" or v == "X" then return 0, 0, 0, 0 end
+
+	local major, minor, patch = v:match("^(%d+)%.(%d+)%.(%d+)$")
+	if major then return tonumber(major) or 0, tonumber(minor) or 0, tonumber(patch) or 0, 3 end
+	major, minor = v:match("^(%d+)%.(%d+)$")
+	if major then return tonumber(major) or 0, tonumber(minor) or 0, 0, 2 end
+	major = v:match("^(%d+)$")
+	if major then return tonumber(major) or 0, 0, 0, 1 end
+	return 0, 0, 0, nil
+end
+
+---@param a integer[]
+---@param b integer[]
+---@return integer # negative when a is older than b
+local function compareTuple(a, b)
+	for i = 1, 3 do
+		if a[i] ~= b[i] then return a[i] - b[i] end
+	end
+	return 0
+end
+
 ---@param a string
 ---@param b string
----@return boolean
-local function versionGreater(a, b)
-	local pa, pb = {}, {}
-	for part in a:gmatch("%d+") do pa[#pa + 1] = tonumber(part) end
-	for part in b:gmatch("%d+") do pb[#pb + 1] = tonumber(part) end
-	for i = 1, math.max(#pa, #pb) do
-		local x, y = pa[i] or 0, pb[i] or 0
-		if x ~= y then return x > y end
+---@return integer # negative when a is older than b
+local function compareVersions(a, b)
+	return compareTuple({ parseVersion(a) }, { parseVersion(b) })
+end
+
+--- Expands one comparator into the range it allows.
+---@param op string # "", "=", ">", ">=", "<", "<=", "^", "~", "~>"
+---@param spec string
+---@return boolean, integer[]?, boolean?, integer[]?, boolean? # isUnderstood, lower, lowerInc, upper, upperInc
+local function expand(op, spec)
+	local major, minor, patch, parts = parseVersion(spec)
+	if not parts then return false end
+	if parts == 0 then return true end -- wildcard: no bounds at all
+
+	local lower = { major, minor, patch }
+	local isExactVersion = parts == 3
+	-- The version that opens the next prefix ("0.1" -> "0.2.0"): a prefix
+	-- names every version in it, an exact version only itself.
+	local prefix = parts == 1 and { major + 1, 0, 0 } or (parts == 2 and { major, minor + 1, 0 } or lower)
+
+	if op == ">=" then return true, lower, true end
+	if op == ">" then
+		-- ">1.2" excludes the whole 1.2 prefix, so it starts at 1.3.0.
+		if isExactVersion then return true, lower, false end
+		return true, prefix, true
+	end
+	if op == "<" then return true, nil, nil, lower, false end
+	if op == "<=" then
+		if isExactVersion then return true, nil, nil, lower, true end
+		return true, nil, nil, prefix, false
+	end
+	if op == "^" then
+		-- Caret keeps the leftmost non-zero part: "^1.2.3" allows all of 1.x,
+		-- while "^0.2.3" is restricted to 0.2.x.
+		local upper
+		if major > 0 then upper = { major + 1, 0, 0 }
+		elseif parts == 1 then upper = { 1, 0, 0 }
+		elseif parts == 2 or minor > 0 then upper = { 0, minor + 1, 0 }
+		else upper = { 0, 0, patch + 1 } end
+		return true, lower, true, upper, false
+	end
+	if op == "~" or op == "~>" then
+		-- Tilde allows patch-only changes, or the whole major without a minor.
+		local upper = parts == 1 and { major + 1, 0, 0 } or { major, minor + 1, 0 }
+		return true, lower, true, upper, false
+	end
+	if op == "" or op == "=" then
+		if isExactVersion then return true, lower, true, lower, true end
+		return true, lower, true, prefix, false
 	end
 	return false
+end
+
+--- True when `version` satisfies `constraint`. A malformed constraint
+--- satisfies nothing, so a typo can never resolve to a surprise version.
+---@param version string
+---@param constraint string
+---@return boolean
+local function satisfies(version, constraint)
+	if constraint == "" or constraint == "latest" then return true end -- unbounded
+	local candidate = { parseVersion(version) }
+	for alternative in constraint:gmatch("[^|]+") do
+		-- Comparators are separated by spaces and/or commas, and ">= 1.2"
+		-- writes the operator apart from its version: glue those back.
+		alternative = alternative:gsub(",", " "):gsub("([<>=~^]+)%s+", "%1")
+		local isMatch = true
+		for token in alternative:gmatch("%S+") do
+			local op, spec = token:match("^([<>=~^]*)(.*)$")
+			local isUnderstood, lower, lowerInc, upper, upperInc = expand(op, spec)
+			if not isUnderstood then return false end
+			-- 1 and -1 stand in for an unbounded side, which accepts anything.
+			local lowCmp = lower and compareTuple(candidate, lower) or 1
+			local upCmp = upper and compareTuple(candidate, upper) or -1
+			if lowCmp < 0 or (lowCmp == 0 and not lowerInc) or upCmp > 0 or (upCmp == 0 and not upperInc) then
+				isMatch = false
+				break
+			end
+		end
+		if isMatch then return true end
+	end
+	return false
+end
+
+--- Resolves a registry dependency's version field to a commit, mirroring lde's
+--- Registry:resolveVersion: an exact version must be published as-is, while a
+--- range ("^0.1.0", "0.1", ">=1.2 <2", "latest") picks the newest version it
+--- allows.
+---@param versions table<string, string>
+---@param constraint string
+---@return string? version
+---@return string? commit
+local function resolveVersion(versions, constraint)
+	if versions[constraint] then return constraint, versions[constraint] end
+	-- Pins that merely look exact (semver.isExact) never resolve to a nearby release.
+	if constraint:find("^%d+%.%d+%.%d+") then return nil end
+
+	local best
+	for v in pairs(versions) do
+		if satisfies(v, constraint) and (not best or compareVersions(v, best) > 0) then best = v end
+	end
+	return best, best and versions[best]
 end
 
 --- Downloads a git repo tarball (branch or commit ref) to tmpLDEDir/git/<name>.
@@ -191,7 +308,7 @@ if isWindows then
 	ffi.cdef [[int _putenv_s(const char *name, const char *value);]]
 	setenv = function(name, value) ffi.C._putenv_s(name, value) end
 	ffi.cdef [[int _chdir(const char *dirname);]]
-	chdir = function(dir) ffi.C._chdir(dir) end
+	chdir = function(dir) return ffi.C._chdir(dir) end
 	ffi.cdef [[int _getcwd(char *buffer, size_t size);]]
 	getcwd = function()
 		local buffer = ffi.new("char[?]", 1024)
@@ -202,7 +319,7 @@ else
 	ffi.cdef [[int setenv(const char *name, const char *value, int overwrite);]]
 	setenv = function(name, value) ffi.C.setenv(name, value, 1) end
 	ffi.cdef [[int chdir(const char *path);]]
-	chdir = function(dir) ffi.C.chdir(dir) end
+	chdir = function(dir) return ffi.C.chdir(dir) end
 	ffi.cdef [[char *getcwd(char *buf, size_t size);]]
 	getcwd = function()
 		local buffer = ffi.new("char[?]", 1024)
@@ -251,8 +368,6 @@ local function runBuildScript(packagePath, outputDir)
 	-- reaches the cmake-based sys packages.
 	local seaCC = os.getenv("SEA_CC")
 	if seaCC and seaCC ~= "" then setenv("CC", seaCC) end
-
-	---@alias minilde.build { outDir: string, target: string }
 
 	---@class minilde.build
 	local build = {}
@@ -308,7 +423,7 @@ end
 
 ---@param packagePath string
 ---@param targetDir string
----@param alias string # install name in targetDir: the require key for deps, the package name for the root
+---@param alias? string # install name in targetDir: the require key for deps, the package name for the root
 local function buildPackage(packagePath, targetDir, alias)
 	local config = jsonDecode(assert(read(join(packagePath, "lde.json")) or read(join(packagePath, "lpm.json")),
 		"No lde.json at " .. packagePath)) --[[@as { name: string, dependencies: { [string]: minilde.dep } }]]
@@ -325,7 +440,7 @@ local function buildPackage(packagePath, targetDir, alias)
 		mklink(join(packagePath, "src"), join(targetDir, alias))
 	end
 
-	if not config.dependencies then return end
+	if not config.dependencies then return config end
 
 	for name, dep in pairs(config.dependencies) do
 		---@format disable-next
@@ -333,25 +448,12 @@ local function buildPackage(packagePath, targetDir, alias)
 			buildPackage(join(packagePath, dep.path), targetDir, name)
 		elseif dep.git then -- downloads to tmpLDEDir/git/<name> then build to target
 			buildPackage(fetchGitRepo(name, dep.git, dep.commit or dep.branch or "master"), targetDir, name)
-		elseif dep.version then -- registry: portfile maps the version to a git repo + commit
+		elseif dep.version then -- registry: portfile maps each version to a git repo + commit
 			local packageName = dep.name or name
 			local portfileUrl = registryUrl .. packageName .. ".json"
 			local portfile = assert(jsonDecode(assert(httpGet(portfileUrl), "failed to fetch " .. portfileUrl)), "invalid portfile for " .. packageName)
-			local versions = portfile.versions or {}
-
-			---@type string?
-			local commit
-			if dep.version ~= "latest" then
-				commit = versions[dep.version]
-				assert(commit, "version '" .. dep.version .. "' of '" .. packageName .. "' not found in lde registry")
-			else
-				local best
-				for v in pairs(versions) do
-					if not best or versionGreater(v, best) then best = v end
-				end
-				commit = best and versions[best]
-				assert(commit, "no versions available for package '" .. packageName .. "'")
-			end
+			local _, commit = resolveVersion(portfile.versions or {}, dep.version)
+			assert(commit, "no version of '" .. packageName .. "' satisfies: " .. dep.version)
 
 			local gitUrl = assert(portfile.git, "portfile for '" .. packageName .. "' has no git URL")
 			buildPackage(fetchGitRepo(name, gitUrl, commit), targetDir, name)
@@ -361,15 +463,6 @@ local function buildPackage(packagePath, targetDir, alias)
 	end
 
 	return config
-end
-
-local function build()
-	mkdir(tmpLDEDir)
-	mkdir(join(tmpLDEDir, "tar"))
-	mkdir(join(tmpLDEDir, "git"))
-
-	local cwd = getcwd()
-	return buildPackage(cwd, join(cwd, "target"))
 end
 
 if #args == 0 then
@@ -384,8 +477,6 @@ end
 if args[1] == "-C" then
 	table.remove(args, 1)
 	local dir = assert(table.remove(args, 1), "minilde: -C requires a directory argument")
-	pcall(ffi.cdef, isWindows and "int _chdir(const char *path);" or "int chdir(const char *path);")
-	local chdir = isWindows and ffi.C._chdir or ffi.C.chdir
 	assert(chdir(dir) == 0, "minilde: -C: cannot chdir to '" .. dir .. "'")
 end
 
@@ -412,7 +503,10 @@ if command == "__build-pkg" then
 end
 
 if command == "run" then
-	local config = assert(build())
+	local cwd = getcwd()
+	mkdir(join(tmpLDEDir, "tar")) -- -p also creates tmpLDEDir
+	mkdir(join(tmpLDEDir, "git"))
+	local config = assert(buildPackage(cwd, join(cwd, "target")))
 
 	-- lde-core spawns its build worker with env.execPath(); during bootstrap
 	-- that is the luajit binary, which can't take a script argument. Point it
@@ -420,7 +514,6 @@ if command == "run" then
 	local launcher = ensureLauncher()
 	if launcher then setenv("LDE_BIN", launcher) end
 
-	local cwd = getcwd()
 	write(join(cwd, "target", ".skip"), "") -- tell lde to skip building
 
 	package.path = join(cwd, "target", "?.lua") .. ";" ..
