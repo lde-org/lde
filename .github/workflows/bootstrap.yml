@@ -53,6 +53,18 @@ jobs:
             # Bionic build of LuaJIT; runs inside the termux container below.
             luajit_tarball: luajit-linux-aarch64-android.tar.gz
             android: true
+          - os: ubuntu-24.04
+            outfile: lde-freebsd-x86-64
+            zipfile: lde-freebsd-x86-64.zip
+            luajit_tarball: luajit-freebsd-x86-64.tar.gz
+            freebsd: true
+            vm_arch: x86_64
+          - os: ubuntu-24.04
+            outfile: lde-freebsd-aarch64
+            zipfile: lde-freebsd-aarch64.zip
+            luajit_tarball: luajit-freebsd-aarch64.tar.gz
+            freebsd: true
+            vm_arch: aarch64
 
     runs-on: ${{ matrix.os }}
 
@@ -101,12 +113,12 @@ jobs:
           rm luajit.tar.gz
 
       - name: Add LuaJIT to PATH
-        if: "!matrix.musl"
+        if: "!matrix.musl && !matrix.freebsd"
         shell: bash
         run: echo "$GITHUB_WORKSPACE/luajit-dist" >> "$GITHUB_PATH"
 
       - name: Build lde
-        if: "!matrix.android && !matrix.musl"
+        if: "!matrix.android && !matrix.musl && !matrix.freebsd"
         shell: bash
         run: |
           luajit minilde.lua -C packages/lde run -- compile --outfile ${{ matrix.outfile }}
@@ -158,6 +170,19 @@ jobs:
             -v ${{ github.workspace }}:/workspace \
             termux-android:latest \
             bash -c "export PATH=/workspace/luajit-dist:\$PATH && luajit /workspace/minilde.lua -C /workspace/packages/lde run -- compile --outfile ${{ matrix.outfile }}"
+
+      - name: Build lde (FreeBSD)
+        if: matrix.freebsd
+        uses: vmactions/freebsd-vm@v1
+        timeout-minutes: 180
+        with:
+          release: "14.5"
+          arch: ${{ matrix.vm_arch }}
+          sync: rsync
+          prepare: pkg install -y curl cmake ninja gcc
+          run: |
+            export PATH="$PWD/luajit-dist:$PATH"
+            luajit minilde.lua -C packages/lde run -- compile --outfile ${{ matrix.outfile }}
 
       - name: Package binary
         if: runner.os != 'Windows'
