@@ -59,12 +59,6 @@ jobs:
             luajit_tarball: luajit-freebsd-x86-64.tar.gz
             freebsd: true
             vm_arch: x86_64
-          - os: ubuntu-24.04
-            outfile: lde-freebsd-aarch64
-            zipfile: lde-freebsd-aarch64.zip
-            luajit_tarball: luajit-freebsd-aarch64.tar.gz
-            freebsd: true
-            vm_arch: aarch64
 
     runs-on: ${{ matrix.os }}
 

@@ -46,6 +46,11 @@ jobs:
             outfile: lde-android-aarch64
             zipfile: lde-android-aarch64.zip
             android: true
+          - os: ubuntu-24.04
+            outfile: lde-freebsd-x86-64
+            zipfile: lde-freebsd-x86-64.zip
+            freebsd: true
+            vm_arch: x86_64
 
     runs-on: ${{ matrix.os }}
 
@@ -101,36 +106,34 @@ jobs:
         shell: pwsh
         run: echo "SEA_CC=aarch64-w64-mingw32-clang" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      # Every job installs the nightly, musl included — `libc` picks the musl
-      # build. For musl, `platform` is also set so the action skips its --setup
-      # step: a musl binary cannot run on the glibc runner it is installed on.
-      # The Alpine container below is where it runs.
       - uses: lde-org/setup-lde@master
         with:
           version: nightly
           libc: ${{ matrix.musl && 'musl' || '' }}
-          platform: ${{ matrix.android && 'Android' || (matrix.musl && 'Linux' || '') }}
+          platform: ${{ matrix.android && 'Android' || matrix.freebsd && 'FreeBSD' || matrix.musl && 'Linux' || '' }}
+          arch: ${{ matrix.freebsd && matrix.vm_arch || '' }}
+          dir: ${{ matrix.freebsd && github.workspace || '' }}
 
       - name: Cache curl-sys build
         uses: actions/cache@v5
         with:
           path: packages/*/target/curl-sys
-          key: curl-sys-${{ matrix.os }}-${{ runner.arch }}${{ matrix.android && '-android' || '' }}${{ matrix.musl && '-musl' || '' }}
+          key: curl-sys-${{ matrix.os }}-${{ runner.arch }}${{ matrix.android && '-android' || '' }}${{ matrix.musl && '-musl' || '' }}${{ matrix.freebsd && format('-freebsd-{0}', matrix.vm_arch) || '' }}
 
       - name: Cache deflate-sys build
         uses: actions/cache@v5
         with:
           path: packages/*/target/deflate-sys
-          key: deflate-sys-${{ matrix.os }}-${{ runner.arch }}${{ matrix.android && '-android' || '' }}${{ matrix.musl && '-musl' || '' }}
+          key: deflate-sys-${{ matrix.os }}-${{ runner.arch }}${{ matrix.android && '-android' || '' }}${{ matrix.musl && '-musl' || '' }}${{ matrix.freebsd && format('-freebsd-{0}', matrix.vm_arch) || '' }}
 
       - name: Cache git2-sys build
         uses: actions/cache@v5
         with:
           path: packages/*/target/git2-sys
-          key: git2-sys-${{ matrix.os }}-${{ runner.arch }}${{ matrix.android && '-android' || '' }}${{ matrix.musl && '-musl' || '' }}
+          key: git2-sys-${{ matrix.os }}-${{ runner.arch }}${{ matrix.android && '-android' || '' }}${{ matrix.musl && '-musl' || '' }}${{ matrix.freebsd && format('-freebsd-{0}', matrix.vm_arch) || '' }}
 
       - name: Build lde
-        if: "!matrix.android && !matrix.musl"
+        if: "!matrix.android && !matrix.musl && !matrix.freebsd"
         run: |
           lde -C ./packages/lde compile --outfile ${{ matrix.outfile }}
 
@@ -171,6 +174,20 @@ jobs:
             -w /workspace \
             termux-android:latest \
             bash -c "/workspace/lde --setup && /workspace/lde -C /workspace/packages/lde run -- compile --outfile /workspace/packages/lde/${{ matrix.outfile }}"
+
+      - name: Build lde (FreeBSD)
+        if: matrix.freebsd
+        uses: vmactions/freebsd-vm@v1
+        timeout-minutes: 180
+        with:
+          release: "14.5"
+          arch: ${{ matrix.vm_arch }}
+          sync: rsync
+          prepare: pkg install -y curl cmake ninja gcc
+          run: |
+            export LDE_RELEASE=1
+            chmod +x lde
+            ./lde -C packages/lde compile --outfile ${{ matrix.outfile }}
 
       - name: Package binary
         if: runner.os != 'Windows'
