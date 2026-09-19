@@ -66,7 +66,14 @@ do
 
 		pcall(ffi.cdef, "typedef struct { long tv_sec; long tv_nsec; } timespec;")
 		pcall(ffi.cdef, "int clock_gettime(int clk_id, timespec *tp);")
-		local CLOCK_MONOTONIC = ffi.os == "OSX" and 6 or 1
+		-- Clock ids are per-OS, and getting one wrong here is silent: FreeBSD's
+		-- id 1 is CLOCK_VIRTUAL (process CPU time), which every sleep and I/O
+		-- wait leaves untouched, so elapsed times would read ~0 while the id
+		-- check below still passes. Linux's CLOCK_MONOTONIC is 1, Darwin's 6,
+		-- FreeBSD's (and DragonFly's) 4. LuaJIT reports every BSD as "BSD".
+		local CLOCK_MONOTONIC = ffi.os == "OSX" and 6
+			or ffi.os == "BSD" and 4
+			or 1
 		local clockOk = pcall(function()
 			local t = ffi.new("timespec")
 			-- Verify the clock id actually works (returns 0), not just that the

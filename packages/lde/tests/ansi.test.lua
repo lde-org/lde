@@ -136,3 +136,24 @@ test.it("ansi.isQuiet silences progress output entirely", function()
 	io.write = oldWrite
 	test.equal(table.concat(buf), "", "no progress output may reach the terminal in quiet mode")
 end)
+
+-- Regression: ansi.now() must be a wall clock. A CPU-time source (which is what
+-- FreeBSD's clock id 1 = CLOCK_VIRTUAL silently is) never advances across a
+-- sleep, so elapsed times read ~0 and the build timings report collapses.
+test.it("now() advances during a sleep (wall clock, not CPU time)", function()
+	local ansi = require("ansi")
+	local ffi = require("ffi")
+	local sleepMs
+	if jit.os == "Windows" then
+		pcall(ffi.cdef, "void Sleep(unsigned long dwMilliseconds);")
+		sleepMs = function(ms) ffi.C.Sleep(ms) end
+	else
+		pcall(ffi.cdef, "int usleep(unsigned int usec);")
+		sleepMs = function(ms) ffi.C.usleep(ms * 1000) end
+	end
+
+	local start = ansi.now()
+	sleepMs(5)
+	local elapsed = ansi.now() - start
+	test.truthy(elapsed >= 0.004, "expected ~5ms of wall time, got " .. tostring(elapsed) .. "s")
+end)
