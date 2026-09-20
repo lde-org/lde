@@ -58,7 +58,7 @@ end
 local function fakeDistCache(targetName)
 	local target = assert(sea.getTarget(targetName))
 	local distName = table.concat({ "libluajit", target.platform, target.arch, target.libc }, "-")
-	local distDir = path.join(env.tmpdir(), "luajit-cache", distName)
+	local distDir = path.join(sea.getLuajitCacheDir(), distName)
 	if fs.exists(path.join(distDir, "include", "lua.h")) then
 		return nil
 	end
@@ -66,6 +66,45 @@ local function fakeDistCache(targetName)
 	fs.write(path.join(distDir, "include", "lua.h"), "")
 	return distDir
 end
+
+--- Run `fn` with LDE_HOME pointed at a throwaway home under tmpBase, so the
+--- fake dists seeded by tests land in a temp cache. The real cache lives in the
+--- user lde dir (~/.lde/luajit) and is what actual compiles use: a faked
+--- include/lua.h must never shadow a real dist there, and a fake left behind by
+--- a failed run would outlive the test. Restores LDE_HOME and removes the fake
+--- home afterwards either way.
+---@param name string # unique per call: each fake home gets its own dir
+---@param fn fun()
+local function withFakeLdeHome(name, fn)
+	local home = path.join(tmpBase, "lde-home-" .. name)
+	local saved = env.var("LDE_HOME")
+	env.set("LDE_HOME", home)
+	local ok, err = pcall(fn)
+	fs.rmdir(home)
+	env.set("LDE_HOME", saved)
+	if not ok then error(err, 0) end
+end
+
+test.it("compile: the LuaJIT dist cache follows LDE_HOME", function()
+	local saved = env.var("LDE_HOME")
+	local home = path.join(tmpBase, "lde-home-location")
+	env.set("LDE_HOME", home)
+	local cacheDir = sea.getLuajitCacheDir()
+	env.set("LDE_HOME", saved)
+
+	test.equal(cacheDir, path.join(home, "luajit"), "the dist cache belongs to the lde home")
+end)
+
+test.it("compile: the LuaJIT dist cache defaults to ~/.lde, not the temp dir", function()
+	local saved = env.var("LDE_HOME")
+	env.set("LDE_HOME", nil)
+	local cacheDir = sea.getLuajitCacheDir()
+	env.set("LDE_HOME", saved)
+
+	local home = env.var("HOME") or env.var("USERPROFILE")
+	test.truthy(home, "tests need HOME or USERPROFILE set")
+	test.equal(cacheDir, path.join(home, ".lde", "luajit"), "the temp dir is wiped on reboot")
+end)
 
 test.it("compile: native C module is loadable in compiled binary", function()
 		local rockDir = path.join(tmpBase, "answer-rock")
@@ -164,9 +203,12 @@ build:write("target-info.txt", build.target .. "\n" .. out)
 
 	local app = lde.Package.open(dir) ---@cast app -nil
 	local crossName = crossTargetName()
-	local fakeDir = fakeDistCache(crossName)
-	pcall(function() app:compile(crossName) end)
-	if fakeDir then fs.rmdir(fakeDir) end
+	withFakeLdeHome("target-buildinfo", function()
+		fakeDistCache(crossName)
+		-- The compile may fail without a toolchain for the target — only the
+		-- recorded target info, asserted below, is under test.
+		pcall(function() app:compile(crossName) end)
+	end)
 
 	local info = assert(fs.read(path.join(dir, "target", "target-buildinfo", "target-info.txt")),
 		"build script should have run under the cross target")
@@ -189,9 +231,10 @@ build:write("target-info.txt", build.target)
 
 	local app = lde.Package.open(dir) ---@cast app -nil
 	local firstTarget = crossTargetName()
-	local firstFake = fakeDistCache(firstTarget)
-	pcall(function() app:compile(firstTarget) end)
-	if firstFake then fs.rmdir(firstFake) end
+	withFakeLdeHome("target-switch-1", function()
+		fakeDistCache(firstTarget)
+		pcall(function() app:compile(firstTarget) end)
+	end)
 	local info1 = assert(fs.read(path.join(dir, "target", "target-switch", "target-info.txt")))
 
 	local secondTarget
@@ -199,9 +242,10 @@ build:write("target-info.txt", build.target)
 		if name ~= firstTarget and not sea.isHostTarget(target) then secondTarget = name break end
 	end
 	test.truthy(secondTarget, "need a second cross target") ---@cast secondTarget -nil
-	local secondFake = fakeDistCache(secondTarget)
-	pcall(function() app:compile(secondTarget) end)
-	if secondFake then fs.rmdir(secondFake) end
+	withFakeLdeHome("target-switch-2", function()
+		fakeDistCache(secondTarget)
+		pcall(function() app:compile(secondTarget) end)
+	end)
 	local info2 = assert(fs.read(path.join(dir, "target", "target-switch", "target-info.txt")))
 
 	test.falsy(info1 == info2, "build script must re-run when the target changes")
@@ -251,25 +295,22 @@ test.it("compile: sea targets match the LuaJIT dist release assets", function()
 		test.truthy(expectedDists[name] ~= nil, "no expected LuaJIT dist for target " .. name)
 	end
 
-	local cacheDir = path.join(env.tmpdir(), "luajit-cache")
-	local created = {}
-	for name, distName in pairs(expectedDists) do
-		-- Fake the cache so getLuajitPath returns the dir without downloading.
-		local dir = path.join(cacheDir, distName, "include")
-		fs.mkdirAll(dir)
-		fs.write(path.join(dir, "lua.h"), "")
-		created[#created + 1] = path.join(cacheDir, distName)
+	withFakeLdeHome("dist-names", function()
+		local cacheDir = sea.getLuajitCacheDir()
+		for name, distName in pairs(expectedDists) do
+			-- Fake the cache so getLuajitPath returns the dir without downloading.
+			local dir = path.join(cacheDir, distName, "include")
+			fs.mkdirAll(dir)
+			fs.write(path.join(dir, "lua.h"), "")
 
-		local target = assert(sea.getTarget(name))
-		local targetDir = sea.getLuajitPath("gcc", target)
-		test.equal(path.basename(targetDir), distName, "luajit dist for " .. name)
-	end
+			local target = assert(sea.getTarget(name))
+			local targetDir = sea.getLuajitPath("gcc", target)
+			test.equal(targetDir, path.join(cacheDir, distName),
+				"luajit dist for " .. name .. " must resolve inside the dist cache")
+		end
+	end)
 
 	-- Unknown targets are rejected with the valid list.
 	local _, err = sea.getTarget("x86_64-pc-linux-gnu")
 	test.includes(tostring(err or ""), "expected one of")
-
-	for _, dir in ipairs(created) do
-		fs.rmdir(dir)
-	end
 end)

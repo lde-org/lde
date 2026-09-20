@@ -203,13 +203,24 @@ function sea.getTriple(target, compiler)
 		or (tripleArch .. "-linux-gnu")
 end
 
+---@return string
+local function userLdeDir()
+	local ldeHome = os.getenv("LDE_HOME")
+	if ldeHome and ldeHome ~= "" then return ldeHome end
+	return path.join(os.getenv("HOME") or os.getenv("USERPROFILE"), ".lde")
+end
+
+function sea.getLuajitCacheDir()
+	return path.join(userLdeDir(), "luajit")
+end
+
 ---@param compiler? string
 ---@param target? sea.Target # cross-compile target; nil = native host build
 ---@return string
 local function getLuajitPath(compiler, target)
 	compiler = compiler or env.var("SEA_CC") or "gcc"
 
-	local cacheDir = path.join(env.tmpdir(), "luajit-cache")
+	local cacheDir = sea.getLuajitCacheDir()
 	local platform, hostArch = getPlatformArch()
 	local arch, libc
 	if target then
@@ -229,7 +240,7 @@ local function getLuajitPath(compiler, target)
 		return targetDir
 	end
 
-	fs.mkdir(cacheDir)
+	fs.mkdirAll(cacheDir)
 
 	local tarballName = distName .. ".tar.gz"
 	local downloadUrl = string.format(
@@ -260,8 +271,11 @@ local function getLuajitPath(compiler, target)
 
 	local ok, err = Archive().new(tarballPath):extract(cacheDir)
 	if not ok then
-		print("??", downloadUrl, tarballPath)
-		error("Failed to extract LuaJIT: " .. (err or ""))
+		-- The cache outlives this process now, so a half-extracted dist must not
+		-- stay behind: the next build trusts include/lua.h as the only check and
+		-- would link against a truncated libluajit.a.
+		fs.rmdir(targetDir)
+		error("Failed to extract LuaJIT from " .. tarballPath .. ": " .. (err or ""))
 	end
 
 	fs.delete(tarballPath)
