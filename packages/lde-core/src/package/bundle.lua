@@ -65,14 +65,19 @@ local function bundleDir(projectName, dir, files)
 			lde.error.raise("Could not read file: " .. absPath)
 		end
 
-		local moduleName = relativePath:gsub(path.separator, "."):gsub("%.lua$", ""):gsub("%.?init$", "")
-		if moduleName ~= "" then
-			moduleName = projectName .. "." .. moduleName
-		else
-			moduleName = projectName
-		end
+		local dotted   = relativePath:gsub(path.separator, "."):gsub("%.lua$", "")
+		local stripped = dotted:gsub("%.?init$", "")
+		local moduleName = stripped ~= "" and (projectName .. "." .. stripped) or projectName
 
 		files[moduleName] = content
+
+		-- package.path resolves both "X" and "X.init" to X/init.lua (?/init.lua
+		-- and ?.lua), so a bundle has to preload both names. Rocks that ship
+		-- X/init.lua are relied on by both spellings: lgi explicitly does
+		-- require("lgi.init"), and only "lgi" used to be registered.
+		if stripped ~= dotted then
+			files[projectName .. "." .. dotted] = content
+		end
 
 		::continue::
 	end

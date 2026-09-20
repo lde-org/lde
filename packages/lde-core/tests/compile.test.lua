@@ -160,6 +160,51 @@ int luaopen_answer(lua_State *L) {
 		test.equal(stdout and stdout:gsub("%s+$", ""), "ok", "binary output: " .. tostring(stderr))
 	end)
 
+test.it("compile: X/init.lua is preloaded as both X and X.init", function()
+	-- package.path answers to both spellings, and rocks rely on it: lgi
+	-- forwarders do require("lgi.init") while everything else does
+	-- require("lgi"), so a bundle has to preload both.
+	local rockDir = path.join(tmpBase, "initmod-rock-dir")
+	fs.mkdir(rockDir)
+
+	fs.write(path.join(rockDir, "initmod.lua"), 'return { from = "init" }')
+	fs.write(path.join(rockDir, "initmod-rock-1.0.0-1.rockspec"), [[
+		package = "initmod-rock"
+		version = "1.0.0-1"
+		source = { url = "git://example.com/initmod-rock" }
+		build = { type = "builtin", modules = { ["initmod.init"] = "initmod.lua" } }
+	]])
+
+	local appDir = path.join(tmpBase, "initmod-app")
+	fs.mkdir(appDir)
+	fs.mkdir(path.join(appDir, "src"))
+	fs.write(path.join(appDir, "src", "init.lua"), [[
+		local plain  = require("initmod")
+		local dotted = require("initmod.init")
+		print("plain=" .. plain.from .. " dotted=" .. dotted.from)
+	]])
+	fs.write(path.join(appDir, "lde.json"), json.encode({
+		name = "initmod-app",
+		version = "0.1.0",
+		dependencies = { ["initmod-rock"] = { path = "../initmod-rock-dir" } }
+	}))
+
+	local app = lde.Package.open(appDir) ---@cast app -nil
+	app:build()
+	app:installDependencies()
+
+	local binTmp = app:compile()
+	local binPath = path.join(appDir, "initmod-app")
+	if jit.os == "Windows" then binPath = binPath .. ".exe" end
+	fs.move(binTmp, binPath)
+	if jit.os ~= "Windows" then fs.chmod(binPath, tonumber("755", 8)) end
+	test.truthy(fs.exists(binPath), "compiled binary should exist")
+
+	local code, stdout, stderr = process.exec(binPath, {})
+	test.equal(stdout and stdout:gsub("%s+$", ""), "plain=init dotted=init",
+		"binary output: " .. tostring(stderr))
+end)
+
 test.skipIf(hostTargetName() == nil)("compile: --target matching the host is a native build", function()
 	local name = assert(hostTargetName())
 	local dir = makeApp("target-native")
