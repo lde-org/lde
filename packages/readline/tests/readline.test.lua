@@ -27,6 +27,31 @@ if jit.os ~= "Windows" then
 		test.equal(vmin, 1)
 		test.equal(vtime, 0)
 	end)
+
+	test.it("enterRaw clears ICANON, ECHO and ISIG so reads return per keystroke", function()
+		-- only meaningful on a real TTY; skip if fd 0 is not a tty
+		ffi.cdef("int isatty(int fd);")
+		if ffi.C.isatty(0) == 0 then return end
+
+		-- Per-platform values (<sys/termios.h> vs asm/termbits.h): the Linux
+		-- bits on macOS clear ECHOE/ECHOKE instead, leaving the terminal
+		-- canonical, so no keystroke is ever delivered before Enter.
+		local bit    = require("bit")
+		local ICANON = jit.os == "OSX" and 0x100 or 0x2
+		local ISIG   = jit.os == "OSX" and 0x80 or 0x1
+		local ECHO   = 0x8
+
+		local Termios = ffi.typeof("struct termios")
+		local t       = Termios() --[[@as readline.ffi.termios]]
+		raw.enterRaw()
+		ffi.C.tcgetattr(0, t)
+		local lflag = tonumber(t.c_lflag)
+		raw.exitRaw()
+
+		test.equal(bit.band(lflag, ICANON), 0, "ICANON must be cleared")
+		test.equal(bit.band(lflag, ECHO), 0, "ECHO must be cleared")
+		test.equal(bit.band(lflag, ISIG), 0, "ISIG must be cleared")
+	end)
 end
 
 -- Helper: feed a sequence of byte strings, return {result, written}
