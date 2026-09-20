@@ -10,29 +10,33 @@ local function plain(s)
 	return ((s or ""):gsub("\27%[[0-9;]*m", ""))
 end
 
---- Run fn with os.exit stubbed to a throw and stdout captured in memory.
---- ansi.printf goes through the `print` global (which writes to C stdout),
---- so capture by patching print itself — no temp files (io.tmpfile is nil on
---- Android).
+--- Run fn with os.exit stubbed to a throw and stderr captured in memory. The
+--- boundary writes errors to stderr (stdout is the command's data) through
+--- io.stderr, so capture by swapping in a sink — no temp files (io.tmpfile is
+--- nil on Android).
 --- Returns the captured text and the exit code passed to os.exit (nil if
 --- os.exit was never called and fn returned normally).
 ---@param fn fun()
 ---@return string text
 ---@return integer? exitCode
 local function isCapture(fn)
-	local lines = {}
-	local prevPrint = print
+	local buf = {}
+	local prevStderr = io.stderr
 	local prevExit = os.exit
-	print = function(s)
-		lines[#lines + 1] = tostring(s)
-	end
+	io.stderr = {
+		write = function(_, ...)
+			for i = 1, select("#", ...) do buf[#buf + 1] = tostring(select(i, ...)) end
+			return true
+		end,
+		flush = function() end,
+	}
 	os.exit = function(code)
 		error("CAPTURED-EXIT:" .. tostring(code), 0)
 	end
 	local ok, err = pcall(fn)
 	os.exit = prevExit
-	print = prevPrint
-	local text = table.concat(lines, "\n")
+	io.stderr = prevStderr
+	local text = table.concat(buf)
 	if ok then return text, nil end
 	local marker = tostring(err):match("CAPTURED%-EXIT:(%d+)")
 	test.truthy(marker, "unexpected error escaped capture: " .. tostring(err))

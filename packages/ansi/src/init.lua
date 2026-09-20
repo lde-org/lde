@@ -624,31 +624,41 @@ function ansi.formatElapsed(seconds)
 end
 
 -- ─── Notice prefixes ─────────────────────────────────────────────────────
--- Consistent `label:` prefixes for user-facing output (colored label, gray
--- colon). Callers pass a format string plus args, exactly like ansi.printf.
+-- Consistent `label:` prefixes for diagnostics (colored label, gray colon).
+-- Callers pass a format string plus args, exactly like ansi.eprintf.
+
+--- Like ansi.printf, but for diagnostics. stdout carries the command's data —
+--- the program output of `lde run`/`lde x <tool>`, a completion script, a
+--- `--json` report — and callers pipe or `eval` it, so anything that isn't that
+--- data goes to stderr.
+---@param f string
+---@param ... any
+function ansi.eprintf(f, ...)
+	io.stderr:write(ansi.format(f, ...) .. "\n")
+end
 
 ---@param msg string
 ---@param ... any
 function ansi.error(msg, ...)
-	ansi.printf("{red}error{gray}:{reset} " .. msg, ...)
+	ansi.eprintf("{red}error{gray}:{reset} " .. msg, ...)
 end
 
 ---@param msg string
 ---@param ... any
 function ansi.warning(msg, ...)
-	ansi.printf("{yellow}warning{gray}:{reset} " .. msg, ...)
+	ansi.eprintf("{yellow}warning{gray}:{reset} " .. msg, ...)
 end
 
 ---@param msg string
 ---@param ... any
 function ansi.note(msg, ...)
-	ansi.printf("{blue}note{gray}:{reset} " .. msg, ...)
+	ansi.eprintf("{blue}note{gray}:{reset} " .. msg, ...)
 end
 
 ---@param msg string
 ---@param ... any
 function ansi.tip(msg, ...)
-	ansi.printf("{green}tip{gray}:{reset} " .. msg, ...)
+	ansi.eprintf("{green}tip{gray}:{reset} " .. msg, ...)
 end
 
 -- ─── Emoji support ───────────────────────────────────────────────────────

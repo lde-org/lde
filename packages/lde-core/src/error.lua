@@ -90,7 +90,8 @@ end
 
 --- Renders the boundary's catch and exits. Known errors print one clean line
 --- (exit 1); anything else is treated as a bug in lde and prints the crash
---- screen with the traceback (exit 2).
+--- screen with the traceback (exit 2). Both go to stderr: stdout is the
+--- command's data, which callers pipe or `eval`.
 ---@param err any # the value the boundary's xpcall caught
 ---@param trace string? # traceback string captured by the boundary
 function M.show(err, trace)
@@ -110,12 +111,12 @@ function M.show(err, trace)
 	local ok, v = pcall(require, "lde.version")
 	if ok and type(v) == "string" then version = v end
 
-	ansi.printf("{bold}{red}lde crashed.{reset}")
-	ansi.printf("{reset}")
-	ansi.printf("{red}This is a bug in lde{reset} ({gray}v%s{reset}). Please file an issue at:", version)
-	ansi.printf("{cyan}https://github.com/lde-org/lde/issues/new")
-	ansi.printf("{reset}")
-	ansi.printf("{gray}%s", trace or tostring(err))
+	ansi.eprintf("{bold}{red}lde crashed.{reset}")
+	ansi.eprintf("{reset}")
+	ansi.eprintf("{red}This is a bug in lde{reset} ({gray}v%s{reset}). Please file an issue at:", version)
+	ansi.eprintf("{cyan}https://github.com/lde-org/lde/issues/new")
+	ansi.eprintf("{reset}")
+	ansi.eprintf("{gray}%s", trace or tostring(err))
 	os.exit(2)
 end
 

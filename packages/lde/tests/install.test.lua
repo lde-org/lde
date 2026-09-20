@@ -265,18 +265,18 @@ build:write("init.lua", "return {}")
 		}
 	}))
 
-	local ok, out, err = ldecli({ "run" }, appDir)
+	local ok, out, stdout, stderr = ldecli({ "run" }, appDir)
 	test.truthy(ok, "lde run failed: " .. tostring(out))
-	test.includes(out or "", "app-ran")
-	test.falsy((out or ""):find("NOISY-MARKER", 1, true),
-		"build.lua output must be hidden by default: " .. tostring(out))
+	test.includes(stdout, "app-ran")
+	test.falsy(stdout:find("NOISY-MARKER", 1, true),
+		"build.lua output must be hidden by default: " .. stdout)
 	-- Compact install output is a single summary line, on stderr — stdout stays
 	-- clean so the caller can capture or `eval` the program's own output.
-	test.includes(err or "", "packages installed")
-	test.falsy((out or ""):find("packages installed", 1, true),
-		"install progress must not pollute stdout: " .. tostring(out))
-	test.falsy((err or ""):find("✓ noisy%-dep", 1, true),
-		"no per-dependency lines in compact mode: " .. tostring(err))
+	test.includes(stderr, "packages installed")
+	test.falsy(stdout:find("packages installed", 1, true),
+		"install progress must not pollute stdout: " .. stdout)
+	test.falsy(stderr:find("✓ noisy%-dep", 1, true),
+		"no per-dependency lines in compact mode: " .. stderr)
 
 	-- Touch the dep's source so the stamp is stale and the build re-runs.
 	fs.write(path.join(depDir, "src", "init.lua"), 'return {}\n-- touched\n')

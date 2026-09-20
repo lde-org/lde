@@ -215,16 +215,15 @@ test.it("lde test silences install/build output", function()
 		test.it("dummy passes", function() end)
 	]])
 
-	local ok, out, err = ldecli({ "test" }, pkg)
+	local ok, out = ldecli({ "test" }, pkg)
 	test.truthy(ok, "lde test failed: " .. tostring(out)) ---@cast out -nil
 	test.includes(out, "dummy passes")
 	-- Install/build progress would interleave with the results — it must be
-	-- silenced during tests, whichever stream it would land on.
-	local both = (out or "") .. (err or "")
-	test.falsy(both:find("packages installed", 1, true),
-		"install summary must not interleave with test results: " .. both)
-	test.falsy(both:find("QUIET%-MARKER", 1, true),
-		"build.lua output must not interleave with test results: " .. both)
+	-- silenced during tests (out is both streams).
+	test.falsy(out:find("packages installed", 1, true),
+		"install summary must not interleave with test results: " .. out)
+	test.falsy(out:find("QUIET%-MARKER", 1, true),
+		"build.lua output must not interleave with test results: " .. out)
 
 	fs.rmdir(tmpDir)
 end)
