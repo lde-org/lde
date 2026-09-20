@@ -28,19 +28,24 @@ else
 	]])
 end
 
+-- read is declared with the same prototype as process.raw.posix (which
+-- normally loads first and declares it), so re-declaring it here is a no-op
+-- in lde and keeps readByte working when this module is loaded on its own
+-- (tests, tooling, anything that doesn't pull the process package in first).
 ffi.cdef([[
 	int tcgetattr(int fd, struct termios *t);
 	int tcsetattr(int fd, int action, const struct termios *t);
 	int tcflush(int fd, int queue);
 	struct winsize { uint16_t ws_row; uint16_t ws_col; uint16_t ws_xpixel; uint16_t ws_ypixel; };
 	int ioctl(int fd, unsigned long req, ...);
+	long read(int fd, void* buf, size_t count);
 ]])
 
 local TCSANOW    = 0
 local ECHO       = 0x8
-local ICANON     = 0x2
-local ISIG       = 0x1
-local IXON       = 0x400
+local ICANON     = jit.os == "OSX" and 0x100 or 0x2
+local ISIG       = jit.os == "OSX" and 0x80  or 0x1
+local IXON       = jit.os == "OSX" and 0x200 or 0x400
 local IEXTEN     = jit.os == "OSX" and 0x400 or 0x8000
 local ICRNL      = 0x100
 local OPOST      = 0x1
