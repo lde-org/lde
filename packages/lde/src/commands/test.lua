@@ -32,7 +32,7 @@ local function makeReporter(pkgDir)
 			ansi.printf("  {bold}%s", file)
 		end,
 		onStart = function(name)
-			return ansi.progress(name)
+			return ansi.progress(name, { stream = "stdout" })
 		end,
 		onPass = function(name, handle)
 			handle:done(name)

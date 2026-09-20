@@ -86,55 +86,107 @@ test.it("dumb terminals disable emoji", function()
 end)
 
 --
--- ansi.installProgress (compact install UI)
+-- ansi.progress / ansi.installProgress (work diagnostics, on stderr)
 --
 
--- In a pipe (tests run non-TTY) the live line never renders: no per-dep
--- lines, just the final summary — an install prints exactly one line.
-test.it("installProgress prints only the summary in non-TTY mode", function()
-	local ansi = require("ansi")
-	local buf = {}
-	local oldWrite = io.write
-	io.write = function(...)
-		for i = 1, select("#", ...) do buf[#buf + 1] = tostring(select(i, ...)) end
+--- Capture both output streams while fn runs. Progress is diagnostics and
+--- belongs on stderr; stdout is the command's own data, so it must stay clean.
+--- Both the io.write function and the stream handles are stubbed: ansi writes
+--- through the handle it picked.
+---@param fn fun()
+---@return string stdout
+---@return string stderr
+local function captureStreams(fn)
+	local stdoutBuf, stderrBuf = {}, {}
+	local oldWrite, oldStdout, oldStderr = io.write, io.stdout, io.stderr
+
+	local function sink(buf)
+		return {
+			write = function(_, ...)
+				for i = 1, select("#", ...) do buf[#buf + 1] = tostring(select(i, ...)) end
+				return true
+			end,
+			flush = function() end,
+		}
 	end
 
-	local p = ansi.installProgress("Downloading dependencies")
-	p:update(0.5, "1/2")
-	p:setCurrent("curl-sys")
-	p:setCurrent("git2-sys")
-	p:tick()
-	p:finish("curl-sys")
-	p:finish("git2-sys")
-	p:done("2 packages installed")
+	io.write = function(...)
+		for i = 1, select("#", ...) do stdoutBuf[#stdoutBuf + 1] = tostring(select(i, ...)) end
+	end
+	io.stdout, io.stderr = sink(stdoutBuf), sink(stderrBuf)
 
-	io.write = oldWrite
-	local out = table.concat(buf)
-	test.includes(out, "2 packages installed")
-	-- No per-dependency lines and no live-line frames reached the output.
-	test.falsy(out:find("curl%-sys", 1, true))
-	test.falsy(out:find("1/2", 1, true))
+	local ok, err = pcall(fn)
+	io.write, io.stdout, io.stderr = oldWrite, oldStdout, oldStderr
+	if not ok then error(err, 0) end
+	return table.concat(stdoutBuf), table.concat(stderrBuf)
+end
+
+-- The live region only renders on a terminal. Pin the probe so the rendering
+-- path under test doesn't depend on how the suite's output is attached (a pty
+-- renders frames, a pipe doesn't).
+test.it("installProgress writes its summary to stderr, not stdout", function()
+	local ansi = require("ansi")
+	local wasStderrTTY = ansi.isStderrTTY
+	ansi.isStderrTTY = false
+
+	local stdout, stderr = captureStreams(function()
+		local p = ansi.installProgress("Downloading dependencies")
+		p:update(0.5, "1/2")
+		p:setCurrent("curl-sys")
+		p:setCurrent("git2-sys")
+		p:tick()
+		p:finish("curl-sys")
+		p:finish("git2-sys")
+		p:done("2 packages installed")
+	end)
+
+	ansi.isStderrTTY = wasStderrTTY
+	test.equal(stdout, "", "install progress must not write to stdout")
+	test.includes(stderr, "2 packages installed")
+	-- No per-dependency lines and no live-line frames: an install prints
+	-- exactly one line.
+	test.falsy(stderr:find("curl%-sys", 1, true))
+	test.falsy(stderr:find("1/2", 1, true))
+end)
+
+test.it("ansi.progress writes to stderr by default, and to stdout when asked", function()
+	local ansi = require("ansi")
+	local wasStderrTTY = ansi.isStderrTTY
+	ansi.isStderrTTY = false
+
+	-- Default: a download's lines are diagnostics, so stdout stays clean for the
+	-- caller (`eval "$(lde completion bash)"`, `lde <tool> | ...`).
+	local stdout, stderr = captureStreams(function()
+		local p = ansi.progress("Downloading luajit for macos-aarch64", { indent = false })
+		p:done("Downloaded luajit for macos-aarch64")
+	end)
+	test.includes(stderr, "Downloaded luajit for macos-aarch64")
+	test.equal(stdout, "", "a download must not write to stdout")
+
+	-- The test reporter's progress is its report, so it opts back into stdout.
+	local reporterStdout, reporterStderr = captureStreams(function()
+		ansi.progress("a test", { stream = "stdout" }):done("a test")
+	end)
+	ansi.isStderrTTY = wasStderrTTY
+	test.includes(reporterStdout, "a test")
+	test.equal(reporterStderr, "")
 end)
 
 test.it("ansi.isQuiet silences progress output entirely", function()
 	local ansi = require("ansi")
-	local buf = {}
-	local oldWrite = io.write
-	io.write = function(...)
-		for i = 1, select("#", ...) do buf[#buf + 1] = tostring(select(i, ...)) end
-	end
-
 	local wasQuiet = ansi.isQuiet
 	ansi.isQuiet = true
-	local p = ansi.progress("Downloading luajit for macos-aarch64", { indent = false })
-	p:update(0.5, "1.2 MB")
-	p:setLabel("Downloading luajit for macos-aarch64")
-	p:done("Downloaded luajit for macos-aarch64")
-	p:fail("Downloaded luajit for macos-aarch64")
-	ansi.isQuiet = wasQuiet
 
-	io.write = oldWrite
-	test.equal(table.concat(buf), "", "no progress output may reach the terminal in quiet mode")
+	local stdout, stderr = captureStreams(function()
+		local p = ansi.progress("Downloading luajit for macos-aarch64", { indent = false })
+		p:update(0.5, "1.2 MB")
+		p:setLabel("Downloading luajit for macos-aarch64")
+		p:done("Downloaded luajit for macos-aarch64")
+		p:fail("Downloaded luajit for macos-aarch64")
+	end)
+
+	ansi.isQuiet = wasQuiet
+	test.equal(stdout .. stderr, "", "no progress output may reach the terminal in quiet mode")
 end)
 
 -- Regression: ansi.now() must be a wall clock. A CPU-time source (which is what

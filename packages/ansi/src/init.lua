@@ -8,18 +8,23 @@ local ffi = require("ffi")
 ---@field tv_nsec number
 
 local isTTY = true
+-- Progress goes to stderr, so its live rendering needs its own probe (see
+-- ansi.progress); the payload stream is what isTTY tracks.
+local isStderrTTY = true
 local now
 do
 	if ffi.os == "Windows" then
 		pcall(ffi.cdef, "int _isatty(int fd);")
 		local ok, result = pcall(function() return ffi.C._isatty(1) ~= 0 end)
 		if ok then isTTY = result end
+		local okErr, resultErr = pcall(function() return ffi.C._isatty(2) ~= 0 end)
+		if okErr then isStderrTTY = resultErr end
 
-		if isTTY then
+		if isTTY or isStderrTTY then
 			-- Legacy Windows consoles (conhost) ignore ANSI escapes unless VT
-			-- processing is enabled. Without this, progress redraws (\x1b[2K\r)
-			-- print the escape bytes literally and never clear the previous line,
-			-- so each update appends a new entry instead of replacing it.
+			-- processing is enabled on the handle being written to. Without this,
+			-- progress redraws (\x1b[2K\r) print the escape bytes literally and
+			-- never clear the previous line, so each update appends a new entry.
 			pcall(ffi.cdef, [[
 				typedef void* HANDLE;
 				typedef uint32_t DWORD;
@@ -28,18 +33,22 @@ do
 				BOOL GetConsoleMode(HANDLE hConsoleHandle, DWORD *lpMode);
 				BOOL SetConsoleMode(HANDLE hConsoleHandle, DWORD dwMode);
 			]])
-			pcall(function()
-				local kernel32 = ffi.load("kernel32")
-				local STD_OUTPUT_HANDLE = ffi.cast("DWORD", -11)
-				local ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004
-				local hOut = kernel32.GetStdHandle(STD_OUTPUT_HANDLE)
-				local mode = ffi.new("DWORD[1]")
-				-- GetConsoleMode fails when stdout isn't a console (redirected), in
-				-- which case there's nothing to enable.
-				if kernel32.GetConsoleMode(hOut, mode) ~= 0 then
-					kernel32.SetConsoleMode(hOut, mode[0] | ENABLE_VIRTUAL_TERMINAL_PROCESSING)
-				end
-			end)
+			---@param nStdHandle number # STD_OUTPUT_HANDLE (-11) or STD_ERROR_HANDLE (-12)
+			local function enableVirtualTerminal(nStdHandle)
+				pcall(function()
+					local kernel32 = ffi.load("kernel32")
+					local ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004
+					local hOut = kernel32.GetStdHandle(ffi.cast("DWORD", nStdHandle))
+					local mode = ffi.new("DWORD[1]")
+					-- GetConsoleMode fails when the handle isn't a console (redirected),
+					-- in which case there's nothing to enable.
+					if kernel32.GetConsoleMode(hOut, mode) ~= 0 then
+						kernel32.SetConsoleMode(hOut, mode[0] | ENABLE_VIRTUAL_TERMINAL_PROCESSING)
+					end
+				end)
+			end
+			if isTTY then enableVirtualTerminal(-11) end
+			if isStderrTTY then enableVirtualTerminal(-12) end
 		end
 
 		pcall(ffi.cdef, [[
@@ -63,6 +72,8 @@ do
 		pcall(ffi.cdef, "int isatty(int fd);")
 		local ok, result = pcall(function() return ffi.C.isatty(1) ~= 0 end)
 		if ok then isTTY = result end
+		local okErr, resultErr = pcall(function() return ffi.C.isatty(2) ~= 0 end)
+		if okErr then isStderrTTY = resultErr end
 
 		pcall(ffi.cdef, "typedef struct { long tv_sec; long tv_nsec; } timespec;")
 		pcall(ffi.cdef, "int clock_gettime(int clk_id, timespec *tp);")
@@ -100,6 +111,12 @@ local ansi = {}
 -- results. Distinct from lde.isQuiet, which suppresses the install progress
 -- line at its call site.
 ansi.isQuiet = false
+
+-- Whether the progress stream (stderr) is a terminal. Live bars redraw with \r
+-- and erase escapes, which only make sense on one, so a redirected stream gets
+-- the final line alone. Writable so tests can pin the non-TTY path: rendering
+-- is otherwise terminal-dependent.
+ansi.isStderrTTY = isStderrTTY
 
 --- Shared no-op progress handle returned in quiet mode.
 local silentProgress = {
@@ -315,11 +332,19 @@ end
 ---@field done fun(self: ansi.Progress, msg: string?)
 ---@field fail fun(self: ansi.Progress, msg: string?)
 
+--- Progress is diagnostics, and stdout is the command's data: `eval "$(lde
+--- completion bash)"`, `lde <tool> | ...` and a tool wrapper run from a shell rc
+--- all read stdout as a payload, so a line written there corrupts the caller.
+--- The test reporter is the one caller whose progress IS its output, hence the
+--- `stream` opt-in. Resolved per call so an injected stream (tests) is honored.
 ---@param label string
----@param opts { indent: boolean? }? # indent=false prints flush-left (compact install output); default indented (test runner)
+---@param opts { indent: boolean?, stream: "stdout"|"stderr"? }? # indent=false prints flush-left (compact install output); default indented (test runner)
 ---@return ansi.Progress
 function ansi.progress(label, opts)
 	if ansi.isQuiet then return silentProgress end
+	local stream = opts and opts.stream or "stderr"
+	local out = stream == "stdout" ? io.stdout : io.stderr
+	local isTerminal = stream == "stdout" ? isTTY : ansi.isStderrTTY
 	local startTime = now()
 	local indent = opts == nil or opts.indent ~= false
 	local donePrefix, failPrefix, livePrefix = "  ✓ ", "  ✗ ", "  - "
@@ -327,7 +352,7 @@ function ansi.progress(label, opts)
 		donePrefix, failPrefix, livePrefix = "✓ ", "✗ ", "- "
 	end
 
-	if not isTTY then
+	if not isTerminal then
 		return {
 			update = function() end,
 			setLabel = function(_, newLabel)
@@ -335,14 +360,14 @@ function ansi.progress(label, opts)
 			end,
 			done = function(_, msg)
 				local elapsed = formatElapsed(now() - startTime)
-				io.write(colors.green ..
+				out:write(colors.green ..
 				donePrefix ..
 				colors.reset .. (msg or label) .. " " .. colors.gray .. "(" .. elapsed .. ")" .. colors.reset .. "\n")
-				io.flush()
+				out:flush()
 			end,
 			fail = function(_, msg)
-				io.write(colors.red .. failPrefix .. colors.reset .. (msg or label) .. "\n")
-				io.flush()
+				out:write(colors.red .. failPrefix .. colors.reset .. (msg or label) .. "\n")
+				out:flush()
 			end
 		}
 	end
@@ -356,10 +381,10 @@ function ansi.progress(label, opts)
 	--- rows on a narrow terminal: move to its first row and clear to the end
 	--- of the screen.
 	local function clearLine()
-		if lastLines > 1 then io.write(ESC .. (lastLines - 1) .. "A") end
-		io.write("\r" .. ESC .. "J")
+		if lastLines > 1 then out:write(ESC .. (lastLines - 1) .. "A") end
+		out:write("\r" .. ESC .. "J")
 		lastLines = 0
-		io.flush()
+		out:flush()
 	end
 
 	---@param ratio number?
@@ -383,8 +408,8 @@ function ansi.progress(label, opts)
 		line ..= " " .. colors.gray .. elapsed .. colors.reset
 
 		clearLine()
-		io.write(line)
-		io.flush()
+		out:write(line)
+		out:flush()
 		-- Bytes == display columns for the ASCII frame; how many rows the next
 		-- clear must cover if the line wrapped.
 		local plain = line:gsub("\27%[[0-9;]*[A-Za-z]", "")
@@ -405,15 +430,15 @@ function ansi.progress(label, opts)
 		done = function(_, msg)
 			local elapsed = formatElapsed(now() - startTime)
 			clearLine()
-			io.write(colors.green ..
+			out:write(colors.green ..
 			donePrefix ..
 			colors.reset .. (msg or label) .. " " .. colors.gray .. "(" .. elapsed .. ")" .. colors.reset .. "\n")
-			io.flush()
+			out:flush()
 		end,
 		fail = function(_, msg)
 			clearLine()
-			io.write(colors.red .. failPrefix .. colors.reset .. (msg or label) .. "\n")
-			io.flush()
+			out:write(colors.red .. failPrefix .. colors.reset .. (msg or label) .. "\n")
+			out:flush()
 		end
 	}
 end
@@ -451,6 +476,8 @@ local INSTALL_EMOJI = {
 ---@param fallbackLabel string # label shown on the total line while nothing is building
 ---@return ansi.InstallProgress
 function ansi.installProgress(fallbackLabel)
+	local out = io.stderr
+	local isTerminal = ansi.isStderrTTY
 	local startTime = now()
 	---@type string[] # active dependency labels, in build-start order
 	local rows = {}
@@ -471,17 +498,17 @@ function ansi.installProgress(fallbackLabel)
 	--- clear to the end of the screen. Each row is a single short line, so no
 	--- horizontal clearing is needed.
 	local function clearRegion()
-		if not isTTY then return end
-		if lastLines > 1 then io.write(ESC .. (lastLines - 1) .. "A") end
-		io.write("\r" .. ESC .. "J")
+		if not isTerminal then return end
+		if lastLines > 1 then out:write(ESC .. (lastLines - 1) .. "A") end
+		out:write("\r" .. ESC .. "J")
 		lastLines = 0
-		io.flush()
+		out:flush()
 	end
 
 	--- Write the live region (TTY only). Deduped to ~10Hz so the elapsed
 	--- counters can animate without spamming the terminal.
 	local function render()
-		if not isTTY then return end
+		if not isTerminal then return end
 		local nowT = now()
 		local rowKey = table.concat(rows, "\0")
 		if rowKey == lastRowKey and ratio == lastRatio and info == lastInfo and nowT - lastDraw < 0.1 then
@@ -510,8 +537,8 @@ function ansi.installProgress(fallbackLabel)
 		lines[#lines + 1] = total
 
 		clearRegion()
-		io.write(table.concat(lines, "\n"))
-		io.flush()
+		out:write(table.concat(lines, "\n"))
+		out:flush()
 		lastLines = #lines
 	end
 
@@ -553,16 +580,16 @@ function ansi.installProgress(fallbackLabel)
 
 	function progress:done(summary)
 		clearRegion()
-		io.write(colors.green ..
+		out:write(colors.green ..
 			"✓ " ..
 			colors.reset .. summary .. " " .. colors.gray .. "(" .. formatElapsed(now() - startTime) .. ")" .. colors.reset .. "\n")
-		io.flush()
+		out:flush()
 	end
 
 	function progress:fail(msg)
 		clearRegion()
-		io.write(colors.red .. "✗ " .. colors.reset .. msg .. "\n")
-		io.flush()
+		out:write(colors.red .. "✗ " .. colors.reset .. msg .. "\n")
+		out:flush()
 	end
 
 	function progress:clear()
