@@ -543,7 +543,8 @@ extern const unsigned char lde_bundle_end[];
 				name      = m.name,
 				chunkname = "@" .. m.name,
 				off       = offset,
-				len       = #m.code
+				len       = #m.code,
+				aliases   = m.aliases
 			}
 			blobParts[#blobParts + 1] = m.code
 			offset = offset + #m.code
@@ -559,6 +560,18 @@ extern const unsigned char lde_bundle_end[];
 				m.off,
 				m.len
 			)
+			-- Extra names for the same code (X/init.lua is both "X" and
+			-- "X.init" through package.path). Extra rows over the same blob:
+			-- the payload is embedded once, only the name lookup grows.
+			for _, alias in ipairs(m.aliases or {}) do
+				modEntries[#modEntries + 1] = string.format(
+					'\t{ "%s", "%s", %d, %d },',
+					alias:gsub(".", CEscapes),
+					("@" .. alias):gsub(".", CEscapes),
+					m.off,
+					m.len
+				)
+			end
 		end
 
 		loaderHelper = string.format([[
@@ -592,11 +605,17 @@ static int lde_module_loader(lua_State* L) {
 		end
 
 		for _, m in ipairs(modules) do
-			if m.name ~= source.name then
-				preloadSetup[#preloadSetup + 1] = string.format(
-					'lua_pushstring(L, "%s"); lua_pushcfunction(L, lde_module_loader); lua_settable(L, -3);',
-					m.name:gsub(".", CEscapes)
-				)
+			local names = { m.name }
+			for _, alias in ipairs(m.aliases or {}) do
+				names[#names + 1] = alias
+			end
+			for _, name in ipairs(names) do
+				if name ~= source.name then
+					preloadSetup[#preloadSetup + 1] = string.format(
+						'lua_pushstring(L, "%s"); lua_pushcfunction(L, lde_module_loader); lua_settable(L, -3);',
+						name:gsub(".", CEscapes)
+					)
+				end
 			end
 		end
 

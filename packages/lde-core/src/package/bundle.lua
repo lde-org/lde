@@ -52,8 +52,8 @@ end
 
 ---@param projectName string
 ---@param dir string
----@param files table<string, string>
-local function bundleDir(projectName, dir, files)
+---@param out lde.bundle.File[]
+local function bundleDir(projectName, dir, out)
 	for _, relativePath in ipairs(fs.scan(dir, "**" .. path.separator .. "*.lua")) do
 		if isTestFile(relativePath) then
 			goto continue
@@ -67,17 +67,19 @@ local function bundleDir(projectName, dir, files)
 
 		local dotted   = relativePath:gsub(path.separator, "."):gsub("%.lua$", "")
 		local stripped = dotted:gsub("%.?init$", "")
-		local moduleName = stripped ~= "" and (projectName .. "." .. stripped) or projectName
-
-		files[moduleName] = content
-
-		-- package.path resolves both "X" and "X.init" to X/init.lua (?/init.lua
-		-- and ?.lua), so a bundle has to preload both names. Rocks that ship
-		-- X/init.lua are relied on by both spellings: lgi explicitly does
-		-- require("lgi.init"), and only "lgi" used to be registered.
+		---@type string[]
+		local names = {}
 		if stripped ~= dotted then
-			files[projectName .. "." .. dotted] = content
+			-- X/init.lua answers to both "X" and "X.init" through package.path,
+			-- so the bundle has to preload both names. Rocks rely on the second
+			-- spelling: lgi explicitly does require("lgi.init").
+			names[#names + 1] = stripped ~= "" and (projectName .. "." .. stripped) or projectName
+			names[#names + 1] = projectName .. "." .. dotted
+		else
+			names[#names + 1] = projectName .. "." .. dotted
 		end
+
+		out[#out + 1] = { names = names, content = content }
 
 		::continue::
 	end
@@ -91,7 +93,19 @@ local function bundlePackage(package, opts)
 	local useBytecode = opts.bytecode or opts.raw
 	local raw = opts.raw
 
-	local files = {}
+	---@class lde.bundle.File
+	---@field names string[] # every name this file answers to, best first
+	---@field content string
+
+	--- Files directly under target/ (a rock's X.lua) and files found inside a
+	--- package directory (target/<pkg>/X.lua) are collected separately: when
+	--- both spellings of one name exist, package.path resolves ?.lua first, so
+	--- the plain file has to claim the plain name before the directory's
+	--- init.lua can.
+	---@type lde.bundle.File[]
+	local topFiles = {}
+	---@type lde.bundle.File[]
+	local dirFiles = {}
 	local modulesDir = package:getModulesDir()
 
 	-- Native modules (.so/.dll/.dylib): embedded as raw bytes and extracted
@@ -112,7 +126,7 @@ local function bundlePackage(package, opts)
 		end
 
 		if fs.isdir(p) then
-			bundleDir(entry.name, p, files)
+			bundleDir(entry.name, p, dirFiles)
 			for _, relativePath in ipairs(fs.scan(p, "**")) do
 				local ext = relativePath:match("%.([^.]+)$")
 				local isNative = false
@@ -133,7 +147,7 @@ local function bundlePackage(package, opts)
 			local content = fs.read(p)
 			if content then
 				local moduleName = entry.name:gsub("%.lua$", "")
-				files[moduleName] = content
+				topFiles[#topFiles + 1] = { names = { moduleName }, content = content }
 			end
 		else
 			-- Top-level native module (e.g. lfs.so from a rock that installs a
@@ -154,6 +168,39 @@ local function bundlePackage(package, opts)
 		::continue::
 	end
 
+	-- Give every file one primary name plus any remaining aliases. A file keeps
+	-- its own body under each of them: pointing X.init at module "X" instead
+	-- would recurse the moment X.lua is a forwarder to X/init.lua, which is
+	-- exactly what lgi ships.
+	---@type table<string, string>
+	local files = {}
+	---@type table<string, string[]>
+	local fileAliases = {}
+	---@type table<string, boolean>
+	local claimed = {}
+	---@param rec lde.bundle.File
+	local function claim(rec)
+		local primary
+		for _, name in ipairs(rec.names) do
+			if not claimed[name] then
+				claimed[name] = true
+				if not primary then
+					primary = name
+				else
+					local list = fileAliases[primary]
+					if not list then
+						list = {}
+						fileAliases[primary] = list
+					end
+					list[#list + 1] = name
+				end
+			end
+		end
+		if primary then files[primary] = rec.content end
+	end
+	for _, rec in ipairs(topFiles) do claim(rec) end
+	for _, rec in ipairs(dirFiles) do claim(rec) end
+
 	local mainName = package:getName()
 
 	if raw then
@@ -165,7 +212,8 @@ local function bundlePackage(package, opts)
 		for moduleName, content in pairs(files) do
 			modules[#modules + 1] = {
 				name = moduleName,
-				code = compileBytecode(content, moduleName)
+				code = compileBytecode(content, moduleName),
+				aliases = fileAliases[moduleName]
 			}
 		end
 		return { name = mainName, modules = modules }
@@ -220,22 +268,33 @@ local function bundlePackage(package, opts)
 			content = escapeString(content)
 		end
 
+		local loader
 		if moduleName == mainName then
 			-- Main entry: loaded eagerly so the final call can pass args through.
-			parts[#parts + 1] = string.format(
-				'package.preload["%s"] = load("%s", "@%s")',
-				moduleName, content, moduleName
-			)
+			loader = string.format('load("%s", "@%s")', content, moduleName)
 		else
 			-- Everything else: defer bytecode deserialization to first require(),
 			-- so trivial commands (--version, help) don't pay for the whole
 			-- module graph at startup. Forward the modname vararg that require
 			-- passes to preload loaders: modules use (...), e.g. lde-core does
 			-- package.loaded[(...)] = lde at the top.
-			parts[#parts + 1] = string.format(
-				'package.preload["%s"] = function(...) return load("%s", "@%s")(...) end',
-				moduleName, content, moduleName
-			)
+			loader = string.format('function(...) return load("%s", "@%s")(...) end', content, moduleName)
+		end
+
+		-- A module with preload aliases (X/init.lua answers to "X" and
+		-- "X.init") shares one loader between the names: emitting the file twice
+		-- would double its bytes, and aliasing to package.preload[moduleName]
+		-- would recurse when a sibling X.lua owns that name.
+		local list = fileAliases[moduleName]
+		if list and #list > 0 then
+			local var = "__lde_load_" .. moduleName:gsub("%W", "_")
+			parts[#parts + 1] = "local " .. var .. " = " .. loader
+			parts[#parts + 1] = string.format('package.preload["%s"] = %s', moduleName, var)
+			for _, alias in ipairs(list) do
+				parts[#parts + 1] = string.format('package.preload["%s"] = %s', alias, var)
+			end
+		else
+			parts[#parts + 1] = string.format('package.preload["%s"] = %s', moduleName, loader)
 		end
 	end
 
