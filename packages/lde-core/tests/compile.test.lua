@@ -205,6 +205,64 @@ test.it("compile: X/init.lua is preloaded as both X and X.init", function()
 		"binary output: " .. tostring(stderr))
 end)
 
+test.it("compile: X.lua forwarder next to X/init.lua neither loops nor drops a name", function()
+	local rockDir = path.join(tmpBase, "forward-rock-dir")
+	fs.mkdir(rockDir)
+	fs.mkdir(path.join(rockDir, "forward"))
+
+	fs.write(path.join(rockDir, "forward.lua"), 'return require "forward.init"\n')
+	fs.write(path.join(rockDir, "forward", "init.lua"), 'return { from = "init" }\n')
+	fs.write(path.join(rockDir, "forward-rock-1.0.0-1.rockspec"), [[
+		package = "forward-rock"
+		version = "1.0.0-1"
+		source = { url = "git://example.com/forward-rock" }
+		build = { type = "builtin", modules = {
+			["forward"] = "forward.lua",
+			["forward.init"] = "forward/init.lua",
+		} }
+	]])
+
+	local appDir = path.join(tmpBase, "forward-app")
+	fs.mkdir(appDir)
+	fs.mkdir(path.join(appDir, "src"))
+	fs.write(path.join(appDir, "src", "init.lua"), [[
+		local viaForwarder = require("forward")
+		local direct = require("forward.init")
+		assert(viaForwarder == direct, "both names must resolve to the same module")
+		print("forward=" .. direct.from)
+		return { from = viaForwarder.from }
+	]])
+	fs.write(path.join(appDir, "lde.json"), json.encode({
+		name = "forward-app",
+		version = "0.1.0",
+		dependencies = { ["forward-rock"] = { path = "../forward-rock-dir" } }
+	}))
+
+	local app = lde.Package.open(appDir) ---@cast app -nil
+	app:build()
+	app:installDependencies()
+
+	local binTmp = app:compile()
+	local binPath = path.join(appDir, "forward-app")
+	if jit.os == "Windows" then binPath = binPath .. ".exe" end
+	fs.move(binTmp, binPath)
+	if jit.os ~= "Windows" then fs.chmod(binPath, tonumber("755", 8)) end
+
+	local code, stdout, stderr = process.exec(binPath, {})
+	test.equal(stdout and stdout:gsub("%s+$", ""), "forward=init", "binary output: " .. tostring(stderr))
+
+	-- The lua-source bundle (`lde bundle`) is where the alias loop showed up.
+	local bundle = app:bundle({}) ---@cast bundle string
+	local chunk = load(bundle) ---@cast chunk -nil
+	test.truthy(chunk, "bundle must compile")
+	local realPrint = print
+	print = function() end
+	local ok, result = pcall(chunk)
+	print = realPrint
+	test.truthy(ok, tostring(result))
+	test.equal(type(result) == "table" and result.from, "init", "lua bundle main module result")
+end)
+
 test.skipIf(hostTargetName() == nil)("compile: --target matching the host is a native build", function()
 	local name = assert(hostTargetName())
 	local dir = makeApp("target-native")
