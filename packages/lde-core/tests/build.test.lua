@@ -2128,3 +2128,32 @@ build = {
 	local ok, berr = pkg:runBuildScript(outputDir)
 	test.truthy(ok, berr)
 end)
+
+test.it("rockspec: make bin guess skips modules and dotfiles", function()
+	-- LuaRocks' make/cmake rocks may install a CLI without declaring
+	-- install.bin, so lde guesses one from the package target dir. Modules live
+	-- in that same dir, and taking one of them made `lde x rocks:lgi` load a
+	-- native module as Lua source (whichever file readdir returned first) — or
+	-- announced a library as runnable.
+	local dir = path.join(tmpBase, "bin-guess-rock")
+	local outDir = path.join(dir, "target", "bin-guess")
+	fs.mkdirAll(outDir)
+
+	fs.write(path.join(dir, "bin-guess-1.0.0-1.rockspec"), [[
+package = "bin-guess"
+version = "1.0.0-1"
+source = { url = "git://example.com/bin-guess" }
+build = { type = "make" }
+]])
+	fs.write(path.join(outDir, ".lde-built"), "")
+	fs.write(path.join(outDir, "class.lua"), "return {}")
+	fs.write(path.join(outDir, "corelgilua51.so"), "not really a module")
+
+	local pkg, err = lde.Package.openRockspec(dir)
+	test.truthy(pkg, err) ---@cast pkg -nil
+	test.equal(pkg:readConfig().bin, nil, "a module must not be guessed as the binary")
+
+	-- An extensionless program (what a Makefile install promotes) still counts.
+	fs.write(path.join(outDir, "mytool"), "#!/bin/sh\necho hi\n")
+	test.equal(pkg:readConfig().bin, "mytool")
+end)

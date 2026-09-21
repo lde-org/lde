@@ -18,6 +18,20 @@ local asyncBuild = require("lde-core.util.async-build")
 -- lde Teal package builds do for their own src/ output).
 local TL_SOURCE_SUFFIXES = { "tl", "d.tl" }
 
+--- Module sources and compiled modules that can sit in a rock's target dir but
+--- are never a runnable entry point (see the make/cmake bin guess in
+--- readConfig). Dotfiles such as .lde-built are excluded by the caller.
+---@param name string
+---@return boolean
+local function isModuleFile(name)
+	return name:match("%.lua$") ~= nil
+		or name:match("%.tl$") ~= nil
+		or name:match("%.moon$") ~= nil
+		or name:match("%.so$") ~= nil
+		or name:match("%.dylib$") ~= nil
+		or name:match("%.dll$") ~= nil
+end
+
 --- LuaRocks accepts a plain string or a list for a native module's
 --- sources/libraries/libdirs/incdirs/defines (lzlib uses `libraries = "z"`),
 --- and a build-level default (build.libraries etc.) applies to every module
@@ -1093,13 +1107,21 @@ local function openRockspec(dir, rockspecPath)
 
 		local resolvedBin = binEntry
 		if not resolvedBin and (buildType == "make" or buildType == "cmake") then
-			-- Binaries from make/cmake installs are promoted into the package target dir
+			-- Binaries from make/cmake installs are promoted into the package
+			-- target dir, so take the first entry there that could be a program.
+			-- Modules are not entry points: a library's target dir holds files
+			-- like lgi's class.lua / core.lua / corelgilua51.so, and picking one
+			-- of those either loaded a native module as Lua source (whichever
+			-- file readdir happened to return first) or announced that a library
+			-- was runnable.
 			local targetDir = path.join(dir, "target", spec.package or "")
 			if fs.isdir(targetDir) then
 				local iter = fs.readdir(targetDir)
 				if iter then
 					for entry in iter do
-						if entry.type == "file" and entry.name ~= ".lde-built" then
+						if entry.type == "file"
+							and not entry.name:match("^%.")
+							and not isModuleFile(entry.name) then
 							resolvedBin = entry.name
 							break
 						end
