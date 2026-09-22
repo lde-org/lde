@@ -2,7 +2,7 @@
 -- BOOTSTRAP chunk (the guest-side module tracking + reload machinery). The
 -- end-to-end --hot/--watch loops are covered by packages/lde/tests/hot.test.lua
 -- through child processes; here the bootstrap runs in-process in a real guest
--- state so reload/reloadAll/checkKey are asserted directly.
+-- state so reload/checkKey are asserted directly.
 local test = require("lde-test")
 
 local lde = require("lde-core")
@@ -42,9 +42,9 @@ return b .. "+" .. c.tag
 ]])
 
 --- Build a guest state with the bootstrap installed; returns the state and the
---- guest-side reload/reloadAll/checkKey/beginEntry/flushAccepts functions.
+--- guest-side reload/checkKey/beginEntry/flushAccepts functions.
 ---@param mode "hot"|"watch"?
----@return table state, function reload, function reloadAll, function checkKey, function beginEntry, function flushAccepts
+---@return table state, function reload, function checkKey, function beginEntry, function flushAccepts
 local function setup(mode)
 	local state, _, cleanup = lde.runtime.createState({
 		packagePath = modDir .. "/?.lua;" .. modDir .. "/?/init.lua;",
@@ -65,14 +65,13 @@ local function setup(mode)
 	test.truthy(ok, tostring(hotState)) ---@cast hotState -nil
 	return state,
 		hotState:get("reload"), --[[@as function]]
-		hotState:get("reloadAll"), --[[@as function]]
 		hotState:get("checkKey"), --[[@as function]]
 		hotState:get("beginEntry"), --[[@as function]]
 		hotState:get("flushAccepts") --[[@as function]]
 end
 
 test.it("bootstrap tracks modules and their dependency edges", function()
-	local state, _, _, checkKey = setup()
+	local state, _, checkKey = setup()
 	state:eval('local m = require("main"); assert(m == "b+a+c")')
 
 	-- A loaded module's file must be a tracked reload key.
@@ -85,7 +84,7 @@ test.it("bootstrap tracks modules and their dependency edges", function()
 end)
 
 test.it("reload drops a changed module and its transitive dependents", function()
-	local state, reload, _, _ = setup()
+	local state, reload = setup()
 	state:eval('local m = require("main"); assert(m == "b+a+c")')
 
 	-- a.lua changed: reload(a) must drop a AND b AND main (b requires a,
@@ -102,7 +101,7 @@ test.it("reload drops a changed module and its transitive dependents", function(
 end)
 
 test.it("reload drops only the changed module when it has no dependents", function()
-	local state, reload, _, _ = setup()
+	local state, reload = setup()
 	state:eval('local m = require("main"); local d = require("d")')
 
 	-- d is required by nobody, so reloading its file drops exactly d.
@@ -114,25 +113,10 @@ test.it("reload drops only the changed module when it has no dependents", functi
 end)
 
 test.it("reload returns 0 for an untracked key", function()
-	local state, reload, _, _ = setup()
+	local state, reload = setup()
 	state:eval('local m = require("main")')
 
 	test.equal(reload(path.join(modDir, "nope.lua")), 0)
-	state:close()
-end)
-
-test.it("reloadAll drops every tracked module", function()
-	local state, _, reloadAll, checkKey = setup()
-	state:eval('local m = require("main")')
-
-	local dropped = reloadAll()
-	test.equal(dropped, 4) -- a, b, c, main (d was never loaded here)
-
-	local loaded = state:globals().package.loaded
-	test.falsy(loaded:get("main"))
-	test.falsy(loaded:get("b"))
-	-- Tracking metadata is cleared too: no file is a reload key anymore.
-	test.falsy(checkKey(path.join(modDir, "a.lua")))
 	state:close()
 end)
 
@@ -163,7 +147,7 @@ test.it("package.hot exists only in --hot mode", function()
 end)
 
 test.it("accept callbacks get the require path of every reloaded module", function()
-	local state, reload, _, _, _, flushAccepts = setup("hot")
+	local state, reload, _, _, flushAccepts = setup("hot")
 	state:eval([[
 		_G.seen = {}
 		local m = require("main")
@@ -180,7 +164,7 @@ test.it("accept callbacks get the require path of every reloaded module", functi
 end)
 
 test.it("a module hears about its own reload", function()
-	local state, reload, _, _, _, flushAccepts = setup("hot")
+	local state, reload, _, _, flushAccepts = setup("hot")
 	state:eval('local w = require("watcher")')
 	test.equal(state:eval("return #_G.seen"), 0, "no callback before the first reload")
 
@@ -198,22 +182,8 @@ test.it("a module hears about its own reload", function()
 	state:close()
 end)
 
-test.it("reloadAll notifies every dropped module", function()
-	local state, _, reloadAll, _, _, flushAccepts = setup("hot")
-	state:eval([[
-		_G.seen = {}
-		local m = require("main")
-		package.hot.accept(function(name) _G.seen[#_G.seen + 1] = name end)
-	]])
-
-	test.equal(reloadAll(), 4)
-	test.equal(flushAccepts(true), 4)
-	test.equal(state:eval("return table.concat(_G.seen, ',')"), "a,b,c,main")
-	state:close()
-end)
-
 test.it("flushAccepts drops notifications for a reload that was not applied", function()
-	local state, reload, _, _, _, flushAccepts = setup("hot")
+	local state, reload, _, _, flushAccepts = setup("hot")
 	state:eval([[
 		_G.seen = {}
 		require("c")
@@ -235,7 +205,7 @@ test.it("flushAccepts drops notifications for a reload that was not applied", fu
 end)
 
 test.it("a module reloaded twice in one cycle is announced once", function()
-	local state, reload, _, _, _, flushAccepts = setup("hot")
+	local state, reload, _, _, flushAccepts = setup("hot")
 	state:eval([[
 		_G.seen = {}
 		local m = require("main")
@@ -252,7 +222,7 @@ test.it("a module reloaded twice in one cycle is announced once", function()
 end)
 
 test.it("beginEntry replaces the entry point's stale registrations", function()
-	local state, reload, _, _, beginEntry, flushAccepts = setup("hot")
+	local state, reload, _, beginEntry, flushAccepts = setup("hot")
 	state:eval('local d = require("d")')
 	state:eval([[
 		_G.seen = {}
@@ -271,7 +241,7 @@ test.it("beginEntry replaces the entry point's stale registrations", function()
 end)
 
 test.it("a failing accept callback does not break the reload", function()
-	local state, reload, _, _, _, flushAccepts = setup("hot")
+	local state, reload, _, _, flushAccepts = setup("hot")
 	state:eval([[
 		_G.errs = {}
 		io.stderr = { write = function(_, ...) _G.errs[#_G.errs + 1] = table.concat({ ... }) end }

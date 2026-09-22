@@ -33,8 +33,8 @@ local EXIT_MARKER   = "__lde_exit__"
 --   4. exposes package.hot (--hot only) so modules can register accept()
 --      callbacks that fire when a module is reloaded, and poll() so a program
 --      that owns its own loop can ask for one,
---   5. returns reload() / reloadAll() / checkKey() / beginEntry() /
---      flushAccepts() on the module table.
+--   5. returns reload() / checkKey() / beginEntry() / flushAccepts() on the
+--      module table.
 local BOOTSTRAP = [==[
 -- The config table (prefixes, entry key, abs() helper, exit marker) is passed
 -- as the first vararg by the driver — same convention as lua-sys chunks.
@@ -47,7 +47,7 @@ local M = {
 	lastReloaded = {},
 	accepts     = {}, -- owner -> { fn, ... } (see acceptOwner)
 
-	-- Notifications queued by reload()/reloadAll() and fired by flushAccepts()
+	-- Notifications queued by reload() and fired by flushAccepts()
 	-- once the driver has cleared the screen and rebuilt (see flushAccepts).
 	-- The sets de-duplicate: one cycle can invalidate several batches, and a
 	-- callback or a module name can appear in more than one of them.
@@ -292,20 +292,7 @@ function M.reload(changedKey)
 	return #list
 end
 
--- Drop every tracked module. Used after a failed run so the next reload
--- starts from a clean slate.
-function M.reloadAll()
-	local list = {}
-	for name in pairs(M.moduleFile) do list[#list + 1] = name end
-	table.sort(list)
-	local callbacks = snapshotAccepts()
-	for i, name in ipairs(list) do drop(name) end
-	M.lastReloaded = list
-	queue(callbacks, list)
-	return #list
-end
-
--- Deliver the notifications queued by reload()/reloadAll(). The driver calls
+-- Deliver the notifications queued by reload(). The driver calls
 -- this once per reload cycle, after the screen is cleared and target/ is
 -- rebuilt but before the entry point re-runs, so a callback both prints
 -- visibly and require()s the fresh module.
@@ -425,7 +412,7 @@ end
 ---@param opts lde.WatchOptions
 local function run(opts)
 	local state, cleanup ---@type lua.State?, fun()?
-	local hotStateTbl, reloadFn, reloadAllFn, checkKeyFn, beginEntryFn, flushAcceptsFn ---@type lua.Table?, function?, function?, function?, function?, function?
+	local hotStateTbl, reloadFn, checkKeyFn, beginEntryFn, flushAcceptsFn ---@type lua.Table?, function?, function?, function?, function?
 
 	local entryKey = normalizeKey(opts.entry, opts.srcPrefix, opts.targetPrefix)
 	-- What a reload of the entry point itself is called in a summary: the entry
@@ -443,7 +430,8 @@ local function run(opts)
 	-- Re-entrancy guard: checkKey() executes guest code, which may call poll()
 	-- again from inside itself.
 	local inPoll = false
-	-- Set after a failed run: the next reload drops every tracked module.
+	-- Set after a failed run: the next change restarts the app in a fresh state
+	-- instead of patching the one the error left behind.
 	local fullReload = false
 
 	local watchers = {}
@@ -524,9 +512,6 @@ end
 		local rf = hotState:get("reload") ---@cast rf function
 		reloadFn = rf
 
-		local raf = hotState:get("reloadAll") ---@cast raf function
-		reloadAllFn = raf
-
 		local ckf = hotState:get("checkKey") ---@cast ckf function
 		checkKeyFn = ckf
 
@@ -605,17 +590,24 @@ end
 	end
 
 	-- Drop cached modules for the pending changes. Returns whether the entry
-	-- point should be re-run plus the names to report for it (hot mode only):
-	-- the modules that were patched, and "entry" when the entry point re-ran.
+	-- point should be re-run, the names to report for it (hot mode only), and
+	-- whether this cycle rebuilds the whole state (see restartState).
 	---@return boolean shouldRun
 	---@return string[] reloadedNames
+	---@return boolean restart
 	local function processPendingChanges()
 		local changes = pending
 		pending = {}
-		if #changes == 0 then return false, {} end
+		if #changes == 0 then return false, {}, false end
 
-		if opts.mode == "watch" then
-			return true, {}
+		-- A change after a failed run restarts the app, and --watch restarts on
+		-- every change. Dropping the tracked modules in place is not an option
+		-- here: re-running a module that calls ffi.cdef() at load time makes
+		-- LuaJIT refuse the second declaration of a type it already has, so a
+		-- state that has loaded FFI modules cannot be patched back to a clean
+		-- slate — only replaced.
+		if opts.mode == "watch" or fullReload then
+			return true, { entryLabel }, true
 		end
 
 		local entryChanged = false
@@ -629,13 +621,9 @@ end
 			end
 		end
 
-		local shouldRun = entryChanged or reloaded > 0 or fullReload
+		local shouldRun = entryChanged or reloaded > 0
 		local names = {}
 		if shouldRun then
-			if fullReload then
-				fullReload = false
-				reloaded = reloaded + (reloadAllFn and reloadAllFn() or 0)
-			end
 			if reloaded > 0 then
 				local lst = hotStateTbl and hotStateTbl:get("lastReloaded") ---@cast lst lua.Table
 				if lst then
@@ -647,7 +635,7 @@ end
 			-- leaving the summary empty.
 			if entryChanged or #names == 0 then names[#names + 1] = entryLabel end
 		end
-		return shouldRun, names
+		return shouldRun, names, false
 	end
 
 	if not installState() then return end
@@ -683,7 +671,7 @@ end
 		-- settled: it measures the reload itself (patching, rebuild, accept
 		-- callbacks), not the debounce or the wait for the loop's next poll.
 		local reloadStartedAt = ansi.now()
-		local shouldRun, reloadedNames = processPendingChanges()
+		local shouldRun, reloadedNames, restart = processPendingChanges()
 		if shouldRun then
 			ansi.clearScreen()
 
@@ -702,13 +690,20 @@ end
 				end
 				result = nil
 			else
-				if opts.mode == "watch" then
+				if restart then
+					-- Rebuild the state rather than patch it. The accept
+					-- notifications queued against the old one go with it: the
+					-- modules that registered them are gone too.
 					disposeState()
 					if not installState() then return end
+					-- Only now that a clean state is in place: a build failure
+					-- above has to leave the next change on the restart path.
+					fullReload = false
+				elseif flushAcceptsFn then
+					-- After clearScreen() (so callback output survives) and
+					-- after the rebuild, but before the entry re-runs.
+					flushAcceptsFn(true)
 				end
-				-- After clearScreen() (so callback output survives) and after
-				-- the rebuild, but before the entry re-runs.
-				if flushAcceptsFn then flushAcceptsFn(true) end
 				-- Reported last, so the duration covers everything the reload
 				-- did, and before runEntry(), so it stays above the new run's
 				-- output rather than being buried under it.

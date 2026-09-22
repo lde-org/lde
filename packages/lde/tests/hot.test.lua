@@ -230,6 +230,64 @@ end
 		"the reload summary must report how long the reload took, with a unit, got: " .. tostring(elapsed))
 end)
 
+test.it("lde run --hot rebuilds the state to recover from a run error", function()
+	local dir = makePackage("pkg-hot-error")
+	-- Declares an FFI type at load time. LuaJIT cannot un-declare a type, so
+	-- re-running this module inside a state that already declared it fails: the
+	-- only way back to a clean slate is a new state.
+	fs.write(path.join(dir, "src", "native.lua"), [==[
+local ffi = require("ffi")
+ffi.cdef[[ typedef struct { int marker; } pkg_hot_error_probe; ]]
+return "native-v1"
+]==])
+
+	---@param tag string
+	local function makeEntry(tag)
+		return string.format([[
+local native = require("pkg-hot-error.native")
+_G.runs = (_G.runs or 0) + 1
+local f = assert(io.open(arg[1], "a"))
+f:write("%s " .. native .. " runs=" .. _G.runs .. "\n")
+f:close()
+-- arg[2] is a marker the test owns: while it exists, every run fails.
+if io.open(arg[2]) then error("app boom") end
+while true do
+	package.hot.poll()
+end
+]], tag)
+	end
+
+	fs.write(path.join(dir, "src", "init.lua"), makeEntry("run"))
+
+	local logFile = path.join(tmpBase, "pkg-hot-error.log")
+	fs.write(logFile, "")
+	local failMarker = path.join(tmpBase, "pkg-hot-error.fail")
+	fs.delete(failMarker)
+
+	withChild({ "run", "--hot", "--", logFile, failMarker }, dir, function()
+		test.truthy(waitForLog(logFile, "run native-v1 runs=1", 15000), "initial run missing from log")
+
+		-- Drive the app into an error: the next change has to recover, and it
+		-- cannot do that by dropping modules inside the state the error left
+		-- behind (native.lua would re-declare its type and fail).
+		fs.write(failMarker, "")
+		fs.write(path.join(dir, "src", "init.lua"), makeEntry("run2"))
+		test.truthy(waitForLog(logFile, "run2 native-v1 runs=2", 15000),
+			"the entry did not re-run into the failure: " .. (fs.read(logFile) or ""))
+
+		-- Fix the cause and change the FFI module: the app must come back in a
+		-- rebuilt state, which shows in the counter restarting at 1.
+		fs.delete(failMarker)
+		fs.write(path.join(dir, "src", "native.lua"), [==[
+local ffi = require("ffi")
+ffi.cdef[[ typedef struct { int marker; } pkg_hot_error_probe; ]]
+return "native-v2"
+]==])
+		test.truthy(waitForLog(logFile, "run2 native-v2 runs=1", 15000),
+			"the app did not recover in a fresh state: " .. (fs.read(logFile) or ""))
+	end)
+end)
+
 test.it("lde run --hot does not interrupt a program that never yields", function()
 	local dir = makePackage("pkg-hot-blocking")
 	fs.write(path.join(dir, "src", "utilmod.lua"), 'return "v1"')
