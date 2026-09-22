@@ -295,3 +295,17 @@ test.it("accept rejects a non-function", function()
 	test.truthy(tostring(err):find("expects a function", 1, true))
 	state:close()
 end)
+
+test.it("reload times are reported in the unit that reads best", function()
+	-- A patch-only reload lands in the microsecond range, and a sub-millisecond
+	-- reload that rounds to "0ms" tells the reader nothing.
+	test.equal(watchrun.formatReloadTime(0.000007), "7.0µs")
+	test.equal(watchrun.formatReloadTime(0.0001), "100µs")
+	test.equal(watchrun.formatReloadTime(0.00042), "420µs")
+
+	-- From a millisecond up (a rebuild fits in here) to seconds.
+	test.equal(watchrun.formatReloadTime(0.001), "1.0ms")
+	test.equal(watchrun.formatReloadTime(0.00418), "4.2ms")
+	test.equal(watchrun.formatReloadTime(0.9999), "999.9ms")
+	test.equal(watchrun.formatReloadTime(1.25), "1.25s")
+end)

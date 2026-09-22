@@ -372,12 +372,51 @@ end
 ---@field mode "hot"|"watch"          # hot = same state, patch package.loaded; watch = fresh state per run
 ---@field createState fun(): lua.State, lua.Table, fun()  # state, globals, cleanup
 ---@field entry string                # absolute path to the entry script, re-read every run
+---@field entryLabel string?           # how a re-run of the entry point is named in reload summaries (default "entry")
 ---@field args string[]?              # [0] = entry, [1..] = script args; re-passed on each run
 ---@field watchDirs { dir: string, recursive: boolean }[]
 ---@field srcPrefix string?           # package src dir + path.separator
 ---@field targetPrefix string?        # package target/<name> dir + path.separator
 ---@field preReload fun()?              # runs before each reload (e.g. rebuild); false = skip the re-run
 ---@field onError fun(err: string): boolean? # renders a run error Bun-style; return true when printed
+
+-- Hot reloads are short by nature — patching a module with no rebuild takes
+-- microseconds — so a reload below a millisecond keeps its own unit instead of
+-- being rounded away: ansi.formatElapsed reports everything under 100ms as
+-- whole milliseconds, which reads as "0ms" for exactly that case.
+---@param seconds number
+local function formatReloadTime(seconds)
+	if seconds < 0.001 then
+		local us = seconds * 1e6
+		return us < 10 ? string.format("%.1fµs", us) : string.format("%.0fµs", us)
+	end
+	if seconds < 1 then return string.format("%.1fms", seconds * 1000) end
+	return ansi.formatElapsed(seconds)
+end
+
+-- Summarise one --hot reload cycle: the modules that were patched (plus "entry"
+-- when the entry point itself re-ran) and how long the reload took.
+--
+-- Every cycle that reloads prints exactly one of these. A change that only
+-- touches the entry point patches no module, so a summary built from module
+-- names alone would come out empty and hide a reload that did happen.
+--
+-- The line is flushed immediately: the entry point is handed control right
+-- after it, and a program that owns its loop (package.hot.poll) may never hand
+-- it back, so the bytes would otherwise sit in the stdout buffer until the next
+-- reload interrupts the run — or be lost entirely when the process is killed.
+---@param names string[]
+---@param elapsed number
+---@param isApplied boolean
+local function reportHotReload(names, elapsed, isApplied)
+	local took = formatReloadTime(elapsed)
+	if not isApplied then
+		ansi.printf("{red}Hot reload failed {gray}(%s)", took)
+	else
+		ansi.printf("{cyan}Reloaded: {yellow}%s {gray}(%s)", table.concat(names, ", "), took)
+	end
+	io.stdout:flush()
+end
 
 --- Run the entry point in a guest state, watching for file changes. In "hot"
 --- mode the state survives reloads and only the changed modules' package.loaded
@@ -389,6 +428,11 @@ local function run(opts)
 	local hotStateTbl, reloadFn, reloadAllFn, checkKeyFn, beginEntryFn, flushAcceptsFn ---@type lua.Table?, function?, function?, function?, function?, function?
 
 	local entryKey = normalizeKey(opts.entry, opts.srcPrefix, opts.targetPrefix)
+	-- What a reload of the entry point itself is called in a summary: the entry
+	-- chunk is never loaded through require(), so it has no module name to
+	-- report, and the caller's name for it (the package, the script file) is
+	-- what its sources are known by.
+	local entryLabel = opts.entryLabel or "entry"
 
 	-- Absolute paths of changed files, drained by the driver between runs.
 	local pending = {} ---@type string[]
@@ -561,8 +605,8 @@ end
 	end
 
 	-- Drop cached modules for the pending changes. Returns whether the entry
-	-- point should be re-run plus the reloaded module names (hot mode only),
-	-- so the caller can print them after clearing the screen.
+	-- point should be re-run plus the names to report for it (hot mode only):
+	-- the modules that were patched, and "entry" when the entry point re-ran.
 	---@return boolean shouldRun
 	---@return string[] reloadedNames
 	local function processPendingChanges()
@@ -598,6 +642,10 @@ end
 					for _i, v in lst:ipairs() do names[#names + 1] = v end
 				end
 			end
+			-- Every cycle that gets here re-runs the entry point, so a cycle
+			-- that patched no module still reports what restarted instead of
+			-- leaving the summary empty.
+			if entryChanged or #names == 0 then names[#names + 1] = entryLabel end
 		end
 		return shouldRun, names
 	end
@@ -605,6 +653,10 @@ end
 	if not installState() then return end
 
 	ansi.printf("{cyan}Watching %s for changes...", opts.watchDirs[1].dir)
+	-- Flushed for the same reason as the reload summary: the entry point runs
+	-- next and may never return, so a redirected stdout would hold this banner
+	-- (and the app's own output) until then.
+	io.stdout:flush()
 	local result ---@type string?
 	result = runAndReport()
 
@@ -627,15 +679,15 @@ end
 		sleep(30)
 		for _, watcher in ipairs(watchers) do watcher.poll() end
 
+		-- The reload clock starts once the change is known and the watchers have
+		-- settled: it measures the reload itself (patching, rebuild, accept
+		-- callbacks), not the debounce or the wait for the loop's next poll.
+		local reloadStartedAt = ansi.now()
 		local shouldRun, reloadedNames = processPendingChanges()
 		if shouldRun then
 			ansi.clearScreen()
 
-			if opts.mode == "hot" then
-				if #reloadedNames > 0 then
-					ansi.printf("{cyan}Reloaded: {yellow}%s", table.concat(reloadedNames, ", "))
-				end
-			else
+			if opts.mode == "watch" then
 				ansi.printf("{cyan}Change detected, restarting...")
 			end
 
@@ -645,6 +697,9 @@ end
 				-- package.hot.accept notifications describe a reload that never
 				-- happened, so they are dropped with it.
 				if flushAcceptsFn then flushAcceptsFn(false) end
+				if opts.mode == "hot" then
+					reportHotReload(reloadedNames, ansi.now() - reloadStartedAt, false)
+				end
 				result = nil
 			else
 				if opts.mode == "watch" then
@@ -654,6 +709,12 @@ end
 				-- After clearScreen() (so callback output survives) and after
 				-- the rebuild, but before the entry re-runs.
 				if flushAcceptsFn then flushAcceptsFn(true) end
+				-- Reported last, so the duration covers everything the reload
+				-- did, and before runEntry(), so it stays above the new run's
+				-- output rather than being buried under it.
+				if opts.mode == "hot" then
+					reportHotReload(reloadedNames, ansi.now() - reloadStartedAt, true)
+				end
 				result = runAndReport()
 			end
 		else
@@ -662,4 +723,7 @@ end
 	end
 end
 
-return { run = run, bootstrap = BOOTSTRAP }
+-- formatReloadTime is exported for its unit test: which unit a reload reads in
+-- depends on how long it took, and a real reload's duration is the machine's,
+-- not the test's, to choose.
+return { run = run, bootstrap = BOOTSTRAP, formatReloadTime = formatReloadTime }

@@ -48,6 +48,9 @@ local function runWithWatcher(pkg, pkgErr, name, scriptArgs, mode, jitDiag)
 		lde.watchrun.run({
 			mode = mode,
 			entry = entry,
+			-- No package to name it after: the script's own file name is what a
+			-- reader knows it by.
+			entryLabel = path.basename(entry),
 			args = args,
 			watchDirs = watchDirs,
 			onError = function(err)
@@ -126,6 +129,10 @@ local function runWithWatcher(pkg, pkgErr, name, scriptArgs, mode, jitDiag)
 	lde.watchrun.run({
 		mode = mode,
 		entry = entry,
+		-- Editing src/init.lua re-runs the whole package: report it as the
+		-- package, not as a module (it has no require() path of its own). A
+		-- named entry file is reported by its file name instead.
+		entryLabel = name and path.basename(entry) or config.name,
 		args = args,
 		watchDirs = { { dir = srcDir, recursive = true } },
 		srcPrefix = srcDir .. sep,

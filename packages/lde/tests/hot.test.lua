@@ -23,6 +23,13 @@ fs.mkdir(tmpBase)
 
 local ldePath = assert(env.execPath())
 
+-- CI forces colors on (GITHUB_ACTIONS/GITLAB_CI), so the session's output is
+-- stripped before it is matched on.
+---@param s string?
+local function plain(s)
+	return ((s or ""):gsub("\27%[[0-9;]*m", ""))
+end
+
 -- Poll the log file until it contains needle, or fail after timeoutMs.
 ---@param logPath string
 ---@param needle string
@@ -55,19 +62,38 @@ end
 
 -- Spawn the lde binary for a --hot/--watch session, run fn, then always kill
 -- the child (even when fn errors, so a failed test can't leak a watcher).
--- The child's stdout/stderr are discarded: the tests observe the session
--- through log files the app writes, and the watcher's "Watching..." /
+-- The child's stdout/stderr are discarded by default: the tests observe the
+-- session through log files the app writes, and the watcher's "Watching..." /
 -- "Reloaded:" chatter would otherwise pollute the test runner's output.
+--
+-- With `capture`, they are piped and returned instead (stdout ++ stderr), read
+-- after the child is killed. A killed process never flushes its stdout buffer,
+-- so what comes back is exactly what the session flushed while it ran — which
+-- is the point: it is how the driver's own reload chatter is observable when
+-- the app owns its loop and never hands control back.
 ---@param args string[]
 ---@param cwd string
 ---@param fn fun(child: process.Child)
-local function withChild(args, cwd, fn)
-	local child, err = process.spawn(ldePath, args, { cwd = cwd, stdout = "null", stderr = "null" })
+---@param capture boolean?
+local function withChild(args, cwd, fn, capture)
+	local child, err = process.spawn(ldePath, args, {
+		cwd = cwd,
+		stdout = capture and "pipe" or "null",
+		stderr = capture and "pipe" or "null",
+	})
 	if not child then error("spawn failed: " .. tostring(err), 2) end ---@cast child process.Child
 	local ok, perr = pcall(fn, child)
-	child:kill()
+	-- Force-killed in capture mode: SIGKILL guarantees the pipes reach EOF
+	-- (and so that wait() returns) no matter what the child is doing.
+	child:kill(capture)
+	local output
+	if capture then
+		local _, stdout, stderr = child:wait()
+		output = (stdout or "") .. (stderr or "")
+	end
 	sleep(150)
 	if not ok then error(perr, 2) end
+	return output
 end
 
 ---@param name string
@@ -144,6 +170,64 @@ end
 		test.truthy(waitForLog(logFile, "run v2 runs=2", 15000),
 			"package.hot.poll() did not trigger a reload")
 	end)
+end)
+
+test.it("lde run --hot prints a timed summary for every reload", function()
+	local dir = makePackage("pkg-hot-banner")
+	fs.write(path.join(dir, "src", "utilmod.lua"), 'return "v1"')
+
+	-- A loop that polls owns the program: it never returns to the driver, so a
+	-- reload summary left in the stdout buffer would sit there until the next
+	-- reload interrupted the run — or die with the process. The child's stdout
+	-- is captured and read after it is killed, so the summary has to have been
+	-- flushed when it was printed.
+	---@param tag string
+	local function makePollEntry(tag)
+		return string.format([[
+local util = require("pkg-hot-banner.utilmod")
+_G.runs = (_G.runs or 0) + 1
+local f = assert(io.open(arg[1], "a"))
+f:write("%s " .. util .. " runs=" .. _G.runs .. "\n")
+f:close()
+
+while true do
+	package.hot.poll()
+end
+]], tag)
+	end
+
+	fs.write(path.join(dir, "src", "init.lua"), makePollEntry("run"))
+
+	local logFile = path.join(tmpBase, "pkg-hot-banner.log")
+	fs.write(logFile, "")
+
+	local output = plain(withChild({ "run", "--hot", "--", logFile }, dir, function()
+		test.truthy(waitForLog(logFile, "run v1 runs=1", 15000), "initial run missing from log")
+
+		fs.write(path.join(dir, "src", "utilmod.lua"), 'return "version-2"')
+
+		test.truthy(waitForLog(logFile, "run version-2 runs=2", 15000),
+			"hot reload did not pick up the changed module")
+
+		-- Only the entry point changes: no module is patched, so the summary
+		-- reports the package name (the entry chunk has no require() path to be
+		-- named by). This is the session's last reload, so nothing later can
+		-- flush a banner that was left sitting in the buffer.
+		fs.write(path.join(dir, "src", "init.lua"), makePollEntry("entry-2"))
+
+		test.truthy(waitForLog(logFile, "entry-2 version-2 runs=3", 15000),
+			"hot reload did not re-run the changed entry point")
+	end, true))
+
+	test.includes(output, "Reloaded: pkg-hot-banner.utilmod",
+		"the reload summary must name the patched module: " .. output)
+	-- "Reloaded: pkg-hot-banner (" cannot match the module line above, which
+	-- carries the require() path and so reads "pkg-hot-banner.utilmod".
+	test.truthy(output:find("Reloaded: pkg-hot-banner (", 1, true),
+		"a reload that only re-runs the entry point must be reported under the package name: " .. output)
+	local elapsed = output:match("Reloaded: pkg%-hot%-banner %(([^%)]+)%)")
+	test.truthy(elapsed and (elapsed:find("µs", 1, true) or elapsed:find("ms", 1, true) or elapsed:find("s", 1, true)),
+		"the reload summary must report how long the reload took, with a unit, got: " .. tostring(elapsed))
 end)
 
 test.it("lde run --hot does not interrupt a program that never yields", function()
