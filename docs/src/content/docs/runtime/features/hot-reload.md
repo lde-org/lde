@@ -82,7 +82,20 @@ It runs *before* your entrypoint runs, but *after* lde rebuilds your package (bu
 > [!TIP]
 > This is useful for maintaining handles to things across re-runs like file handles, sockets, for web servers.
 
+### `package.hot.poll()`
+
+This function exists to pump the hotreloading loader, so that even in entirely blocking code, such as an event loop doing while true do end, you can still support hotreloading.
+
+> [!TIP]
+> This can and should be used by libraries to support hotreloading out of the box.
+
+```lua
+while running do
+	handleEvents()
+	if package.hot then package.hot.poll() end
+end
+```
+
 ## Limitations
 
-- **JIT is disabled while watching.** Hooks only fire on interpreted code, so the watched session runs slower than plain `lde run`.
-- **Blocking C calls can't be interrupted.** A module stuck in `io.read()`, `socket:receive()`, or similar won't notice a change until the call returns.
+- A program that blocks will not reload. For example, just a `while true do end` loop will block forever as control is never relinquished to lde. You can fix this with `package.hot.poll()` as seen above.

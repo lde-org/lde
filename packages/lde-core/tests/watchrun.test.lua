@@ -52,6 +52,10 @@ local function setup(mode)
 	local boot = state:load(watchrun.bootstrap, "@lde-watchrun")
 	local ok, hotState = boot:pcall({
 		abs = function(p) return path.resolve(env.cwd(), p) end,
+		-- Stands in for the driver's real watcher poll. What the real one does
+		-- (raise the reload marker when a tracked file changed) is covered
+		-- end-to-end in packages/lde/tests/hot.test.lua.
+		poll = function() return false end,
 		mode = mode,
 		srcPrefix = nil,
 		targetPrefix = nil,
@@ -148,9 +152,11 @@ test.it("package.hot exists only in --hot mode", function()
 	local hotState = setup("hot")
 	test.truthy(hotState:eval("return package.hot ~= nil"))
 	test.truthy(hotState:eval("return type(package.hot.accept)"))
+	test.truthy(hotState:eval("return type(package.hot.poll)"))
 	hotState:close()
 
-	-- --watch recreates the state on every run, so there is nothing to accept.
+	-- --watch recreates the state on every run, so there is nothing to accept
+	-- and no live loop to poll from.
 	local watchState = setup("watch")
 	test.falsy(watchState:eval("return package.hot"))
 	watchState:close()

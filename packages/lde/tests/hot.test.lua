@@ -113,6 +113,68 @@ test.it("lde run --hot reloads changed modules in-place", function()
 	end)
 end)
 
+test.it("lde run --hot keeps the JIT on and reloads a loop that polls", function()
+	local dir = makePackage("pkg-hot-poll")
+	fs.write(path.join(dir, "src", "utilmod.lua"), 'return "v1"')
+	-- A program that never returns: it can only be reloaded because it asks.
+	fs.write(path.join(dir, "src", "init.lua"), [[
+local util = require("pkg-hot-poll.utilmod")
+_G.runs = (_G.runs or 0) + 1
+
+local f = assert(io.open(arg[1], "a"))
+f:write("run " .. util .. " runs=" .. _G.runs ..
+	" jit=" .. tostring(jit.status()) .. " hook=" .. tostring(debug.gethook()) .. "\n")
+f:close()
+
+while true do
+	package.hot.poll()
+end
+]])
+
+	local logFile = path.join(tmpBase, "pkg-hot-poll.log")
+	fs.write(logFile, "")
+
+	withChild({ "run", "--hot", "--", logFile }, dir, function()
+		test.truthy(waitForLog(logFile, "run v1 runs=1 jit=true hook=nil", 15000),
+			"--hot must run without a debug hook and with the JIT on: " ..
+				tostring(fs.read(logFile)))
+
+		fs.write(path.join(dir, "src", "utilmod.lua"), 'return "v2"')
+
+		test.truthy(waitForLog(logFile, "run v2 runs=2", 15000),
+			"package.hot.poll() did not trigger a reload")
+	end)
+end)
+
+test.it("lde run --hot does not interrupt a program that never yields", function()
+	local dir = makePackage("pkg-hot-blocking")
+	fs.write(path.join(dir, "src", "utilmod.lua"), 'return "v1"')
+	fs.write(path.join(dir, "src", "init.lua"), [[
+local util = require("pkg-hot-blocking.utilmod")
+
+local f = assert(io.open(arg[1], "a"))
+f:write("run " .. util .. "\n")
+f:close()
+
+while true do end
+]])
+
+	local logFile = path.join(tmpBase, "pkg-hot-blocking.log")
+	fs.write(logFile, "")
+
+	withChild({ "run", "--hot", "--", logFile }, dir, function()
+		test.truthy(waitForLog(logFile, "run v1", 15000), "initial run missing from log")
+
+		fs.write(path.join(dir, "src", "utilmod.lua"), 'return "v2"')
+		sleep(1200)
+
+		-- Like bun --hot: a program that never hands control back keeps running
+		-- the code it started with, and the watcher simply waits.
+		test.falsy((fs.read(logFile) or ""):find("v2", 1, true),
+			"a program that never yields must not be reloaded")
+	end)
+end)
+
 test.it("lde run --hot reports reloads to package.hot.accept", function()
 	local dir = makePackage("pkg-hot-accept")
 	fs.write(path.join(dir, "src", "utilmod.lua"), 'return "v1"')

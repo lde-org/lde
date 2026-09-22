@@ -25,19 +25,14 @@ end
 local RELOAD_MARKER = "__lde_hot_reload__"
 local EXIT_MARKER   = "__lde_exit__"
 
--- Count-hook interval: the guest runs at most this many VM instructions
--- between watcher polls. Larger values reduce overhead, smaller values make
--- reload detection snappier. Hooks only fire on interpreted code, so the
--- guest JIT is disabled while one is installed (same tradeoff as a debugger).
-local HOOK_INTERVAL = 10000
-
 -- Guest-side infrastructure for `lde run --hot` / `lde run --watch`.
 -- Evaluated once per guest state, before the entry point runs. It:
 --   1. wraps the Lua file searcher to record which source file backs each module,
 --   2. wraps require() to record module → module dependency edges,
 --   3. wraps os.exit() so it aborts the run instead of the whole process,
 --   4. exposes package.hot (--hot only) so modules can register accept()
---      callbacks that fire when a module is reloaded,
+--      callbacks that fire when a module is reloaded, and poll() so a program
+--      that owns its own loop can ask for one,
 --   5. returns reload() / reloadAll() / checkKey() / beginEntry() /
 --      flushAccepts() on the module table.
 local BOOTSTRAP = [==[
@@ -188,8 +183,14 @@ end
 
 -- Only --hot exposes package.hot: --watch recreates the state on every change,
 -- so there is no live module to accept a reload.
+--
+-- accept(fn)  registers a callback for every module that gets reloaded.
+-- poll()      checks the source tree for changes; a program that owns its own
+--             loop calls it from the loop to be reloadable. It returns false
+--             when nothing changed, and otherwise aborts the current run so
+--             the driver can reload and re-run the entry point.
 if hot.mode == "hot" then
-	package.hot = { accept = accept }
+	package.hot = { accept = accept, poll = hot.poll }
 end
 
 ---@param names table<string, boolean>
@@ -391,13 +392,13 @@ local function run(opts)
 
 	-- Absolute paths of changed files, drained by the driver between runs.
 	local pending = {} ---@type string[]
-	-- True only while the entry chunk is executing: the hook is what gives the
-	-- driver control while the app runs, so it must not fire during the
-	-- driver's own guest calls (reload/checkKey).
+	-- True only while the entry chunk is executing. The app is what gives the
+	-- driver control (by returning, or by calling package.hot.poll()), so a
+	-- poll must not fire during the driver's own guest calls (reload/checkKey).
 	local running = false
-	-- Re-entrancy guard: checkKey() executes guest code, which fires this
-	-- hook again from inside itself.
-	local inHook = false
+	-- Re-entrancy guard: checkKey() executes guest code, which may call poll()
+	-- again from inside itself.
+	local inPoll = false
 	-- Set after a failed run: the next reload drops every tracked module.
 	local fullReload = false
 
@@ -420,31 +421,34 @@ local function run(opts)
 		return
 	end
 
-	-- Count hook: fires every HOOK_INTERVAL guest instructions. Polls the
-	-- watchers; when a relevant change is pending it aborts the running app
-	-- with RELOAD_MARKER so the driver can invalidate and re-run. Irrelevant
-	-- churn (logs, caches) is dropped here so it can't interrupt the app.
-	local function hook()
-		if inHook or not running then return end
-		inHook = true
+-- Poll the source tree for changes and return false when there was nothing to
+-- do. A program that owns its own loop calls this from it (see
+-- package.hot.poll); when a tracked file changed it raises RELOAD_MARKER
+-- instead of returning, which unwinds the run so the driver can reload and
+-- re-run the entry point.
+---@return boolean false
+local function poll()
+	if inPoll or not running then return false end
+	inPoll = true
 
-		for _, watcher in ipairs(watchers) do watcher.poll() end
-		if #pending > 0 then
-			for i = #pending, 1, -1 do
-				local abs = pending[i]
-				local relevant = opts.mode == "watch" or fullReload or (checkKeyFn and checkKeyFn(abs))
-				if relevant then
-					-- Leave pending intact: the driver processes it after the
-					-- error unwinds the guest stack.
-					inHook = false
-					error(RELOAD_MARKER, 0)
-				end
-				pending[i] = pending[#pending]
-				pending[#pending] = nil
+	for _, watcher in ipairs(watchers) do watcher.poll() end
+	if #pending > 0 then
+		for i = #pending, 1, -1 do
+			local abs = pending[i]
+			local relevant = opts.mode == "watch" or fullReload or (checkKeyFn and checkKeyFn(abs))
+			if relevant then
+				-- Leave pending intact: the driver processes it after the
+				-- error unwinds the guest stack.
+				inPoll = false
+				error(RELOAD_MARKER, 0)
 			end
+			pending[i] = pending[#pending]
+			pending[#pending] = nil
 		end
-		inHook = false
 	end
+	inPoll = false
+	return false
+end
 
 	local function installState()
 		state, _, cleanup = opts.createState()
@@ -455,6 +459,7 @@ local function run(opts)
 		local boot = state:load(BOOTSTRAP, "@lde-watchrun")
 		local ok, hotState = boot:pcall({
 			abs = function(p) return path.resolve(env.cwd(), p) end,
+			poll = poll,
 			mode = opts.mode,
 			srcPrefix = opts.srcPrefix,
 			targetPrefix = opts.targetPrefix,
@@ -462,7 +467,7 @@ local function run(opts)
 			exitMarker = EXIT_MARKER,
 		})
 		if not ok then
-			ansi.printf("{red}Failed to install watch hooks: %s", tostring(hotState))
+			ansi.printf("{red}Failed to install watch support: %s", tostring(hotState))
 			state:close()
 			if cleanup then cleanup() end
 			state, cleanup = nil, nil
@@ -487,9 +492,11 @@ local function run(opts)
 		local faf = hotState:get("flushAccepts") ---@cast faf function
 		flushAcceptsFn = faf
 
-		-- Disables the guest JIT for the whole session (hooks only fire on
-		-- interpreted code) — the price of being able to interrupt the app.
-		state:setHook(hook, "count", HOOK_INTERVAL)
+		-- No debug hook is installed: a hook only fires on interpreted code, so
+		-- keeping one would mean turning the guest JIT off for the whole
+		-- session. Without it a program that never returns control cannot be
+		-- interrupted (same as bun --hot); programs that own a loop call
+		-- package.hot.poll() to be reloadable.
 		return true
 	end
 
@@ -602,11 +609,11 @@ local function run(opts)
 	result = runAndReport()
 
 	while true do
-		-- If the app was interrupted by the hook, the pending changes are
-		-- already collected; otherwise wait for a change. Polling instead of
-		-- watcher.wait() keeps the inotify fd nonblocking, so the settle and
-		-- hook polls below never block (fs.watch's wait() leaves it blocking
-		-- on Linux).
+		-- If the app asked for a reload (returned, or raised from
+		-- package.hot.poll()), the pending changes are already collected;
+		-- otherwise wait for one. Polling instead of watcher.wait() keeps the
+		-- inotify fd nonblocking, so the settle and poll calls below never
+		-- block (fs.watch's wait() leaves it blocking on Linux).
 		if not (opts.mode == "hot" and result == "reload") then
 			while #pending == 0 do
 				for _, watcher in ipairs(watchers) do watcher.poll() end
