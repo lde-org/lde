@@ -15,29 +15,6 @@ local build = require("lde-core.package.build")
 -- Build timings collection (no-op while inactive; no dependency on lde-core).
 local timings = require("lde-core.util.timings")
 
----@type table<string, lde.Package.Config.FeatureFlag>
-local platformLookup = { Windows = "windows", Linux = "linux", OSX = "macos" }
-
---- Resolves which optional deps are enabled given a feature list + current platform.
----@param pkg lde.Package
----@param features lde.Package.Config.FeatureFlag[]
----@return table<string, true>
-local function resolveEnabledOptional(pkg, features)
-	local enabled = {}
-
-	local featureDefs = pkg:readConfig().features
-	if not featureDefs then return enabled end
-
-	for _, flag in ipairs(features) do
-		local deps = featureDefs[flag]
-		if deps then
-			for _, depName in ipairs(deps) do enabled[depName] = true end
-		end
-	end
-
-	return enabled
-end
-
 --- Hash of the lockfile, runtime version, manifest, and compile target. The
 --- .installed marker only matches when all four are unchanged, so a --target
 --- switch forces a reinstall that rebuilds native deps for the new target.
@@ -227,11 +204,12 @@ local function makeBuildScheduler(ctx)
 		local entry = ctx.stack[alias]
 		if not entry then return end
 
-		-- Optional deps that aren't enabled for this platform: skip, but mark
-		-- them done so dependents don't wait on them (clearing any
-		-- download-time row the resolver spawned).
-		local depInfo = ctx.dependencies[alias]
-		if depInfo and depInfo.optional and not ctx.enabledOptional[alias] then
+		-- Optional deps nothing wants: skip, but mark them done so dependents
+		-- don't wait on them (clearing any download-time row the resolver
+		-- spawned). The node says so itself -- the walk asks every package it
+		-- reaches which of its optional deps its features turn on, so a dep that
+		-- a *dependency* leaves off is skipped the same way one the root does.
+		if node.wanted == false then
 			attempted[alias] = true
 			done[alias] = true
 			if ctx.progress then ctx.progress:finish(alias) end
@@ -427,13 +405,15 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 	opts = opts or {}
 
 	features = features or {}
-	features[#features + 1] = platformLookup[jit.os]
 
 	local modulesDir = package:getModulesDir()
 
-	-- Gets which features are enabled (+ OS specific features); the install
-	-- integrity check and the build scheduler both consult it.
-	local enabledOptional = resolveEnabledOptional(package, features)
+	-- The root's own optional deps: which of them the features it was asked for turn
+	-- on, the platform's flag among them. The same question is asked again for every
+	-- package the walk reaches, in the resolver, where the declaring package of each
+	-- dependency is still known -- this one only answers for the root, and is what
+	-- the integrity check below consults.
+	local enabledOptional = resolve.enabledOptional(package, features)
 
 	-- Nothing to do (or already done): report the direct dep count so callers
 	-- can still print a "No changes" summary line. cached = the install was a

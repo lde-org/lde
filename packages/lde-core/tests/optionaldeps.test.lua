@@ -80,3 +80,51 @@ test.it("optional deps: still respected on second install (lockfile path)", func
 		end
 	end
 end)
+
+-- A package in the middle of the graph gates its own optional deps the same way the
+-- root does: the platform's flag is every package's, not just the one being installed.
+-- This is the case that does not fail a build when it is wrong -- the other platform's
+-- dependency is simply installed, and with it shipped, for a platform it cannot run on.
+local middleDir = path.join(tmpBase, "middle")
+fs.mkdir(middleDir)
+fs.mkdir(path.join(middleDir, "src"))
+fs.write(path.join(middleDir, "src", "init.lua"), 'return "middle"')
+fs.write(path.join(middleDir, "lde.json"), json.encode({
+	name = "middle",
+	version = "0.1.0",
+	dependencies = {
+		["linux-dep"]   = { path = "../linux-dep",   optional = true },
+		["windows-dep"] = { path = "../windows-dep", optional = true },
+		["macos-dep"]   = { path = "../macos-dep",   optional = true },
+	},
+	features = {
+		linux   = { "linux-dep" },
+		windows = { "windows-dep" },
+		macos   = { "macos-dep" },
+	}
+}))
+
+local viaDir = path.join(tmpBase, "via")
+fs.mkdir(viaDir)
+fs.write(path.join(viaDir, "lde.json"), json.encode({
+	name = "via",
+	version = "0.1.0",
+	dependencies = { middle = { path = "../middle" } },
+}))
+
+test.it("optional deps: a dependency's own optional deps are gated by its platform too", function()
+	local app = lde.Package.open(viaDir) ---@cast app -nil
+	app:installDependencies()
+
+	local targetDir = app:getModulesDir()
+	local expected = osDep[jit.os]
+
+	test.truthy(fs.exists(path.join(targetDir, "middle")), "the package in the middle is installed")
+	test.truthy(fs.exists(path.join(targetDir, expected)))
+
+	for _, name in ipairs(platforms) do
+		if name ~= expected then
+			test.falsy(fs.exists(path.join(targetDir, name)), name .. " is not installed, as it is not this platform's")
+		end
+	end
+end)

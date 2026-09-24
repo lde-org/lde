@@ -24,6 +24,44 @@ local function withConfigFlags(lockEntry, depInfo)
 	return lockEntry
 end
 
+--- The feature flag that names the platform being installed on. lde turns it on
+--- for every package, so a manifest can gate a dependency in the platform's own
+--- words -- `features = { windows = { "winapi" } }` -- without the packages that
+--- depend on it saying anything.
+local platformFeature = ({ Windows = "windows", Linux = "linux", OSX = "macos" })[jit.os]
+
+--- Which of a package's optional deps are wanted: those named by a feature that is
+--- on. The platform's flag is always on, and the rest are the ones the packages
+--- depending on it asked for, which is the `features` list on a dependency entry.
+---
+--- A dependency entry's features belong to the package declaring it, not to the
+--- package itself: winit's manifest says which of its optional deps `windows` and
+--- `linux` turn on, and hood -- which depends on winit -- is the one that names
+--- those flags. Nothing has to name the platform's own flag.
+---@param pkg lde.Package
+---@param features lde.Package.Config.FeatureFlag[]? # as the dependency entries declared them
+---@return table<string, true> enabled
+local function enabledOptional(pkg, features)
+	local enabled = {}
+
+	local featureDefs = pkg:readConfig().features
+	if not featureDefs then return enabled end
+
+	---@param flags lde.Package.Config.FeatureFlag[]
+	local function turnOn(flags)
+		for _, flag in ipairs(flags) do
+			for _, depName in ipairs(featureDefs[flag] or {}) do
+				enabled[depName] = true
+			end
+		end
+	end
+
+	if platformFeature then turnOn({ platformFeature }) end
+	if features then turnOn(features) end
+
+	return enabled
+end
+
 ---@class lde.install.Context
 ---@field relativeTo string
 ---@field stack table<string, { pkg: lde.Package, lock: lde.Lockfile.Dependency }>
@@ -74,6 +112,7 @@ end
 ---@field isExpandAfter boolean? # deps only knowable after content downloads
 ---@field gitPlan lde.install.GitPlan?
 ---@field deps table<string, lde.Package.Config.Dependency>?
+---@field wanted boolean? # false when every package that depends on it leaves it optional and off
 ---@field pkg lde.Package?
 ---@field expandDir string? # relativeTo base for the node's children
 ---@field isMaterialized boolean? # content already extracted/cloned this run
@@ -380,17 +419,38 @@ end
 ---@param ctx lde.install.Context
 ---@param graph table<string, lde.install.Node>
 ---@param order lde.install.Node[]
+---@param parent lde.install.Node? # the package these deps are declared by, nil for the root
 ---@return lde.install.Node[]
-local function addDeps(deps, relativeTo, ctx, graph, order)
+local function addDeps(deps, relativeTo, ctx, graph, order, parent)
+	-- Which of the declaring package's optional deps are on: the platform's flag, plus
+	-- the feature flags its own dependency entries named. A node whose deps came from a
+	-- rockspec has no manifest to read features from -- and a rockspec has no optional
+	-- deps either, so there is nothing to leave off. The root's set is the caller's.
+	local enabled = ctx.enabledOptional
+
+	if parent then
+		enabled = parent.pkg and enabledOptional(parent.pkg, parent.depInfo.features) or {}
+	end
+
 	---@type lde.install.Node[]
 	local newNodes = {}
 	for alias, depInfo in pairs(deps) do
+		-- Optional and left off by every package that asks for it: not wanted, so
+		-- it is never materialized -- and, since only what lands in target/ is
+		-- bundled, never shipped either.
+		local wanted = not depInfo.optional or enabled[alias] == true
+
 		if not graph[alias] then
 			local node = makeNode(alias, depInfo, relativeTo, ctx)
+			node.wanted = wanted
 			graph[alias] = node
 			order[#order + 1] = node
 			newNodes[#newNodes + 1] = node
 		else
+			-- Wanted by anyone means wanted: an alias two packages depend on is
+			-- installed if either of them asks for it for real.
+			if wanted then graph[alias].wanted = true end
+
 			-- Same alias requested again from a different place: verify the
 			-- sources match (e.g. two different path deps under one name).
 			local effective = applyLock(ctx, alias, depInfo)
@@ -705,6 +765,15 @@ local function resolveDependencies(dependencies, ctx)
 		local contentBatch = {}
 
 		for _, node in ipairs(frontier) do
+			-- A dep nothing wants is not expanded: what it would bring in is wanted by
+			-- nobody -- it is only a dependency of the package that is not installed --
+			-- and resolving it would install it anyway, for the package that isn't
+			-- there. The node itself is still in the lockfile, since it is still what
+			-- the manifest says; only its subtree is left out.
+			if node.wanted == false then
+				goto continue
+			end
+
 			if node.hasMetadata then
 				-- Fetch the published rockspec (tiny) to discover deps.
 				if not fs.exists(node.rockspecFile --[[@as string]]) then
@@ -714,7 +783,7 @@ local function resolveDependencies(dependencies, ctx)
 			elseif not node.isExpandAfter and not content(node) then
 				-- path deps: nothing to download, consume and expand immediately.
 				consume(node)
-				for _, child in ipairs(addDeps(node.deps or {}, node.expandDir or ctx.relativeTo, ctx, graph, order)) do
+				for _, child in ipairs(addDeps(node.deps or {}, node.expandDir or ctx.relativeTo, ctx, graph, order, node)) do
 					nextFrontier[#nextFrontier + 1] = child
 				end
 			end
@@ -750,18 +819,20 @@ local function resolveDependencies(dependencies, ctx)
 				else
 					-- Content already cached: consume + expand without downloading.
 					consume(node)
-					for _, child in ipairs(addDeps(node.deps or {}, node.expandDir or ctx.relativeTo, ctx, graph, order)) do
+					for _, child in ipairs(addDeps(node.deps or {}, node.expandDir or ctx.relativeTo, ctx, graph, order, node)) do
 						nextFrontier[#nextFrontier + 1] = child
 					end
 				end
 			end
+
+			::continue::
 		end
 
 		download.drain()
 
 		for _, node in ipairs(metaBatch) do
 			consume(node)
-			for _, child in ipairs(addDeps(node.deps or {}, node.expandDir or ctx.relativeTo, ctx, graph, order)) do
+			for _, child in ipairs(addDeps(node.deps or {}, node.expandDir or ctx.relativeTo, ctx, graph, order, node)) do
 				nextFrontier[#nextFrontier + 1] = child
 			end
 		end
@@ -776,7 +847,7 @@ local function resolveDependencies(dependencies, ctx)
 				goto continue
 			end
 			consume(node)
-			for _, child in ipairs(addDeps(node.deps or {}, node.expandDir or ctx.relativeTo, ctx, graph, order)) do
+			for _, child in ipairs(addDeps(node.deps or {}, node.expandDir or ctx.relativeTo, ctx, graph, order, node)) do
 				nextFrontier[#nextFrontier + 1] = child
 			end
 			::continue::
@@ -877,4 +948,5 @@ end
 return {
 	resolveDependencies = resolveDependencies,
 	registerNode = registerNode,
+	enabledOptional = enabledOptional,
 }
