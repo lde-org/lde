@@ -12,6 +12,10 @@ local env = require("env")
 --- backends expect (luarocks.fs, luarocks.dir, luarocks.path,
 --- luarocks.core.cfg, luarocks.util), implemented on lde's own fs/path/process
 --- deps and injected into a rocked sandbox guest state.
+---
+--- This is the *only* place the luarocks.* surface exists, and only
+--- rocked.runBackend installs it. A rockspec runs in a state with an empty
+--- environment and never sees these modules.
 
 -- Shell prefix for fs.execute: cmd.exe on Windows, sh elsewhere. Allocated
 -- once at module load rather than per command.
@@ -114,12 +118,70 @@ local function findFiles(dir)
 	return unpack(files)
 end
 
+local luarocks = {}
+
+-- ─── Backend environment ──────────────────────────────────────────────────
+
+-- Globals a custom build backend runs with. `luarocks.build.<type>` is an
+-- executable driver installed as a build dependency and `require` is the only
+-- way to obtain it, so a backend needs `package` and the standard data
+-- libraries. It still gets no I/O, process, debug, or FFI access.
+local BACKEND_LIBS = { "string", "table", "math", "package" }
+local BACKEND_FUNCS = {
+	"assert", "error", "getmetatable", "ipairs", "next", "pairs",
+	"pcall", "rawequal", "rawget", "rawset", "require", "select",
+	"setmetatable", "tonumber", "tostring", "type", "unpack", "xpcall",
+}
+
+---@param libs string[]
+---@param funcs string[]
+---@return table<string, boolean>
+local function allowSet(libs, funcs)
+	local allowed = {}
+	for _, name in ipairs(libs) do allowed[name] = true end
+	for _, name in ipairs(funcs) do allowed[name] = true end
+	return allowed
+end
+
+local BACKEND_ENV = allowSet(BACKEND_LIBS, BACKEND_FUNCS)
+
+-- The module names setup installs, spared when the sandbox strips
+-- package.loaded so a backend's require() can still find them. A rockspec's
+-- environment is empty, so its cache is cleared whole and these never survive
+-- into it.
+local POLYFILL_MODULES = {
+	"luarocks.fs",
+	"luarocks.dir",
+	"luarocks.path",
+	"luarocks.core.cfg",
+	"luarocks.util",
+}
+local POLYFILL_SET = {}
+for _, name in ipairs(POLYFILL_MODULES) do POLYFILL_SET[name] = true end
+
+--- True for a module name provided by these polyfills rather than by the
+--- standard library, so the sandbox keeps it reachable for build backends.
+---@param name string
+---@return boolean
+function luarocks.isPolyfill(name)
+	return POLYFILL_SET[name] == true
+end
+
+--- The environment a sandbox state runs a build backend in.
+---@return table<string, boolean>
+function luarocks.backendEnv()
+	return BACKEND_ENV
+end
+
+-- ─── Polyfill installation ────────────────────────────────────────────────
+
 --- Inject the polyfills into a guest state. The modules are plain host tables
 --- (functions become callbacks); assigning them through the package.loaded
 --- proxy coerces them into the guest by value, so require() returns them
 --- directly. package.preload can't hold them — preload entries are loader
 --- functions, and require() calls them.
-local luarocks = {}
+---
+--- Only rocked.runBackend calls this: a backend state, never a rockspec state.
 ---@param state lua.State
 ---@param opts rocked.SandboxOpts?
 function luarocks.setup(state, opts)

@@ -16,6 +16,27 @@ local function withEnv(name, value, fn)
 	if not ok then error(err, 2) end
 end
 
+--- The variables ansi's color detection reads. A test that asserts one signal
+--- decides the outcome has to clear the others first: the suite may run under
+--- NO_COLOR=1 or TERM=dumb (any non-tty CI, or a dumb terminal), either of
+--- which otherwise decides the result before the signal under test is read.
+local COLOR_ENV = { "NO_COLOR", "CLICOLOR_FORCE", "GITHUB_ACTIONS", "GITLAB_CI", "TERM" }
+
+--- Run fn with every color-detection variable unset.
+---@param fn fun()
+local function withCleanColorEnv(fn)
+	local saved = {}
+	for _, name in ipairs(COLOR_ENV) do
+		saved[name] = env.var(name)
+		env.set(name, nil)
+	end
+	package.loaded["ansi"] = nil
+	local ok, err = pcall(fn)
+	for _, name in ipairs(COLOR_ENV) do env.set(name, saved[name]) end
+	package.loaded["ansi"] = nil
+	if not ok then error(err, 2) end
+end
+
 test.it("NO_COLOR strips ANSI escapes", function()
 	withEnv("NO_COLOR", "1", function()
 		local ansi = require("ansi")
@@ -40,18 +61,31 @@ test.it("orange uses the extended-color ANSI code", function()
 	end)
 end)
 
-test.it("GitHub Actions emits ANSI escapes", function()
-	withEnv("GITHUB_ACTIONS", "true", function()
+test.it("no tty and no CI means no color", function()
+	-- The baseline every other case is a deviation from: with nothing set,
+	-- output is plain when stdout is not a terminal (as under a test runner).
+	withCleanColorEnv(function()
 		local ansi = require("ansi")
-		test.includes(ansi.format("{red}x"), "\27[31m")
+		test.equal(ansi.format("{red}x"), "x")
+	end)
+end)
+
+test.it("GitHub Actions emits ANSI escapes", function()
+	withCleanColorEnv(function()
+		withEnv("GITHUB_ACTIONS", "true", function()
+			local ansi = require("ansi")
+			test.includes(ansi.format("{red}x"), "\27[31m")
+		end)
 	end)
 end)
 
 test.it("NO_COLOR wins over GitHub Actions", function()
-	withEnv("GITHUB_ACTIONS", "true", function()
-		withEnv("NO_COLOR", "1", function()
-			local ansi = require("ansi")
-			test.equal(ansi.format("{red}x"), "x")
+	withCleanColorEnv(function()
+		withEnv("GITHUB_ACTIONS", "true", function()
+			withEnv("NO_COLOR", "1", function()
+				local ansi = require("ansi")
+				test.equal(ansi.format("{red}x"), "x")
+			end)
 		end)
 	end)
 end)

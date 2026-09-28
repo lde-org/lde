@@ -138,47 +138,61 @@ test.it("should be in a separate environment", function()
 		error("Expected rockspec to fail, but it succeeded")
 	end ---@cast parsed string
 
+	-- `_G` is empty, so `print` is not a function to call: the name is nil.
 	test.notEqual(parsed:find("attempt to call global 'print'"), nil)
 end)
 
-test.it("sandbox exposes only whitelisted globals", function()
+test.it("sandbox exposes no globals at all", function()
+	-- A rockspec runs with a completely empty environment: not even `type`, so
+	-- there is no Lua-level API to reach and nothing a chunk can name to obtain
+	-- one. Assignments still work — that is all a rockspec needs.
 	local ok, parsed = rocked.parse([[
-		package = "globals-probe"
+		local noted = tostring(1)
+	]])
+	if ok then
+		error("Expected the empty rockspec to fail, but it parsed")
+	end ---@cast parsed string
+	test.notEqual(parsed:find("attempt to call global 'tostring'"), nil)
+end)
+
+test.it("sandbox has no string metatable either", function()
+	-- `_G` is stripped, but every string shares one metatable: without detaching
+	-- it, `("x"):rep(3)` reaches string.rep without naming a global.
+	local ok, parsed = rocked.parse([[
+		package = "probe"
+		version = ("1.0-1"):rep(1)
+	]])
+	if ok then
+		error("Expected string method access to fail, but it parsed")
+	end ---@cast parsed string
+	test.notEqual(parsed:find("attempt to index a string value"), nil)
+end)
+
+test.it("sandbox accepts a data-only rockspec", function()
+	-- The lockdown must not reject a rockspec that is what a rockspec is
+	-- supposed to be: literals assigned to fields.
+	local ok, parsed = rocked.parse([[
+		package = "data-only"
 		version = "1.0-1"
-		source = { url = "https://example.com" }
+		source = { url = "https://example.com", tag = "v1.0.1" }
+		description = { summary = "no code" }
+		dependencies = { "lua >= 5.1" }
 		build = {
 			type = "builtin",
-			modules = {
-				["probe.os"]      = tostring(os ~= nil),
-				["probe.io"]      = tostring(io ~= nil),
-				["probe.debug"]   = tostring(debug ~= nil),
-				["probe.print"]   = tostring(print ~= nil),
-				["probe.load"]    = tostring(load ~= nil),
-				["probe.jit"]     = tostring(jit ~= nil),
-				["probe.math"]    = tostring(math ~= nil),
-				["probe.string"]  = tostring(string ~= nil),
-				["probe.pairs"]   = tostring(pairs ~= nil),
-				["probe.require"] = tostring(require ~= nil),
-			},
+			modules = { ["data_only"] = "src/init.lua" },
 		}
 	]])
 	if not ok then
-		error("probe parse failed: " .. tostring(parsed))
+		error("Expected a data-only rockspec to parse: " .. tostring(parsed))
 	end ---@cast parsed rocked.raw.Output
-	local m = parsed.build.modules --[[@as table<string, string>]]
-	test.equal(m["probe.os"], "false")
-	test.equal(m["probe.io"], "false")
-	test.equal(m["probe.debug"], "false")
-	test.equal(m["probe.print"], "false")
-	test.equal(m["probe.load"], "false")
-	test.equal(m["probe.jit"], "false")
-	test.equal(m["probe.math"], "true")
-	test.equal(m["probe.string"], "true")
-	test.equal(m["probe.pairs"], "true")
-	test.equal(m["probe.require"], "true")
+	test.equal(parsed.package, "data-only")
+	test.equal(parsed.source.tag, "v1.0.1")
+	test.equal(parsed.build.modules["data_only"], "src/init.lua")
 end)
 
 test.it("shouldn't run for too long", function()
+	-- The environment is empty but the chunk still runs, so the instruction
+	-- budget remains the ceiling on how long a rockspec can hold the process.
 	local spec = [[
 		while true do end
 	]]
@@ -189,6 +203,98 @@ test.it("shouldn't run for too long", function()
 	end ---@cast parsed string
 
 	test.notEqual(parsed:find("Rockspec took too long to run"), nil)
+end)
+
+local ROCKSPEC_SOURCE = [[
+package = "legit"
+version = "1.0-1"
+source = { url = "https://example.com" }
+build = { type = "builtin" }
+]]
+
+test.it("refuses a precompiled rockspec", function()
+	-- `load` accepts bytecode as readily as text and LuaJIT does not verify
+	-- it, so a rockspec must never reach the loader as bytecode.
+	local dumped = string.dump(assert(load(ROCKSPEC_SOURCE)))
+	test.equal(dumped:sub(1, 3), "\27LJ")
+
+	local ok, parsed = rocked.parse(dumped)
+	if ok then
+		error("Expected a bytecode rockspec to be refused, but it parsed")
+	end ---@cast parsed string
+	test.notEqual(parsed:find("must be Lua source, not precompiled bytecode"), nil)
+end)
+
+test.it("refuses a chunk that only looks like bytecode", function()
+	-- The signature check is the first line of defence: it must not depend on
+	-- the payload being loadable.
+	local ok, parsed = rocked.parse("\27LJ\2not-a-real-chunk")
+	if ok then
+		error("Expected a forged bytecode header to be refused, but it parsed")
+	end ---@cast parsed string
+	test.notEqual(parsed:find("must be Lua source, not precompiled bytecode"), nil)
+end)
+
+test.it("still parses the same rockspec as source", function()
+	-- Guard against the refusal above being too broad.
+	local ok, parsed = rocked.parse(ROCKSPEC_SOURCE)
+	if not ok then
+		error("Expected source to parse: " .. tostring(parsed))
+	end ---@cast parsed rocked.raw.Output
+	test.equal(parsed.package, "legit")
+	test.equal(parsed.version, "1.0-1")
+end)
+
+test.it("keeps the whole standard library out of reach", function()
+	local ok, parsed = rocked.parse([[
+		package = "probe"
+		version = "1.0-1"
+		source = { url = "u" }
+		package.loaded = "anything"
+	]])
+	if ok then
+		error("Expected `package` to be unavailable, but the rockspec parsed")
+	end ---@cast parsed string
+	test.notEqual(parsed:find("attempt to index global 'package'"), nil)
+end)
+
+test.it("backends still get require, rockspecs do not", function()
+	-- Build backends are executable drivers installed as build dependencies, so
+	-- they keep the minimal surface require() needs. This is the one place the
+	-- guest has a module table, and it must not leak the standard library.
+	local ok, err = rocked.runBackend("nonexistent-backend", { package = "x" })
+	test.equal(ok, false)
+	-- Reaching the require machinery at all is the point: the failure must be
+	-- the missing module, not the sandbox refusing `require` itself.
+	test.notEqual((err or ""):find("module 'luarocks.build.nonexistent%-backend' not found"), nil)
+end)
+
+test.it("polyfills are reachable from backends but not from rockspecs", function()
+	-- The luarocks.* modules wrap host fs/path/process, so they exist for one
+	-- purpose: letting a custom build backend run. A rockspec must not be able
+	-- to obtain them.
+	local luarocks = require("rocked.luarocks")
+	test.truthy(luarocks.isPolyfill("luarocks.fs"))
+	test.falsy(luarocks.isPolyfill("os"))
+
+	local backendEnv = luarocks.backendEnv()
+	test.truthy(backendEnv["package"])
+	test.truthy(backendEnv["require"])
+	test.falsy(backendEnv["os"])
+	test.falsy(backendEnv["io"])
+	test.falsy(backendEnv["debug"])
+
+	-- A rockspec has no `require` at all, so there is no path to them.
+	for _, name in ipairs({ "luarocks.fs", "luarocks.dir", "luarocks.path" }) do
+		local ok, err = rocked.parse(([[
+			local m = require("%s")
+			package = "leak"
+			version = "1.0-1"
+			source = { url = "u" }
+		]]):format(name))
+		test.falsy(ok, "a rockspec must not be able to require " .. name)
+		test.notEqual((err --[[@as string]]):find("attempt to call global 'require'"), nil)
+	end
 end)
 
 --
