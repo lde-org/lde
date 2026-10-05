@@ -1,6 +1,8 @@
 local fs = require("fs")
 local path = require("path")
 
+local features = require("lde-core.package.features")
+
 local lde = require("lde-core")
 
 local stringEscapes = {
@@ -53,9 +55,10 @@ end
 ---@param projectName string
 ---@param dir string
 ---@param out lde.bundle.File[]
-local function bundleDir(projectName, dir, out)
+---@param excludes string[]? # module-relative globs a feature flag drops
+local function bundleDir(projectName, dir, out, excludes)
 	for _, relativePath in ipairs(fs.scan(dir, "**" .. path.separator .. "*.lua")) do
-		if isTestFile(relativePath) then
+		if isTestFile(relativePath) or features.isExcluded(relativePath, excludes) then
 			goto continue
 		end
 
@@ -63,7 +66,7 @@ local function bundleDir(projectName, dir, out)
 		local content = fs.read(absPath)
 		if not content then
 			lde.error.raise("Could not read file: " .. absPath)
-		end
+		end ---@cast content -nil
 
 		local dotted   = relativePath:gsub(path.separator, "."):gsub("%.lua$", "")
 		local stripped = dotted:gsub("%.?init$", "")
@@ -86,7 +89,7 @@ local function bundleDir(projectName, dir, out)
 end
 
 ---@param package lde.Package
----@param opts { bytecode: boolean?, raw: boolean? }?
+---@param opts { bytecode: boolean?, raw: boolean?, features: lde.Package.Config.FeatureFlag[]? }?
 ---@return string|{ name: string, modules: { name: string, code: string }[] }
 local function bundlePackage(package, opts)
 	opts = opts or {}
@@ -107,6 +110,13 @@ local function bundlePackage(package, opts)
 	---@type lde.bundle.File[]
 	local dirFiles = {}
 	local modulesDir = package:getModulesDir()
+	local mainName = package:getName()
+
+	-- Feature-flag file exclusion. Every entry in target/ is filtered by the
+	-- globs its own features turn on, so a package can carry several platform
+	-- backends and still ship only the one that runs. target/<alias> resolves
+	-- through the lockfile and the dependency's own manifest.
+	local excludesFor = features.resolverFor(package, opts.features)
 
 	-- Native modules (.so/.dll/.dylib): embedded as raw bytes and extracted
 	-- next to the bundle at load time, so `require("cmod.core")` resolves
@@ -126,14 +136,18 @@ local function bundlePackage(package, opts)
 		end
 
 		if fs.isdir(p) then
-			bundleDir(entry.name, p, dirFiles)
+			local excludes = excludesFor(entry.name)
+			bundleDir(entry.name, p, dirFiles, excludes)
+			-- Native modules are filtered by the same feature globs: a feature
+			-- may drop a backend .so as well as the Lua that drives it, so
+			-- `build:feature(...)` and the manifest agree on one set of flags.
 			for _, relativePath in ipairs(fs.scan(p, "**")) do
 				local ext = relativePath:match("%.([^.]+)$")
 				local isNative = false
 				for _, e in ipairs(nativeExts) do
 					if ext == e then isNative = true break end
 				end
-				if isNative then
+				if isNative and not features.isExcluded(relativePath, excludes) then
 					local absPath = path.join(p, relativePath)
 					local content = fs.read(absPath)
 					if content then
@@ -144,20 +158,25 @@ local function bundlePackage(package, opts)
 				end
 			end
 		elseif entry.name:match("%.lua$") and not isTestFile(entry.name) then
-			local content = fs.read(p)
-			if content then
-				local moduleName = entry.name:gsub("%.lua$", "")
-				topFiles[#topFiles + 1] = { names = { moduleName }, content = content }
+			-- A rock's flat module (target/X.lua): keyed by its own name, which
+			-- is how a dependency alias would spell it in the lockfile.
+			if not features.isExcluded(entry.name, excludesFor(entry.name:gsub("%.lua$", ""))) then
+				local content = fs.read(p)
+				if content then
+					local moduleName = entry.name:gsub("%.lua$", "")
+					topFiles[#topFiles + 1] = { names = { moduleName }, content = content }
+				end
 			end
 		else
 			-- Top-level native module (e.g. lfs.so from a rock that installs a
-			-- single module into target/): embedded like the nested ones.
+			-- single module into target/): embedded like the nested ones, and
+			-- filtered by the same globs.
 			local ext = entry.name:match("%.([^.]+)$")
 			local isNative = false
 			for _, e in ipairs(nativeExts) do
 				if ext == e then isNative = true break end
 			end
-			if isNative then
+			if isNative and not features.isExcluded(entry.name, excludesFor(entry.name:gsub("%." .. ext .. "$", ""))) then
 				local content = fs.read(p)
 				if content then
 					local moduleName = entry.name:gsub("%." .. ext .. "$", "")
@@ -200,8 +219,6 @@ local function bundlePackage(package, opts)
 	end
 	for _, rec in ipairs(topFiles) do claim(rec) end
 	for _, rec in ipairs(dirFiles) do claim(rec) end
-
-	local mainName = package:getName()
 
 	if raw then
 		-- Raw bytecode table for sea.compile: each module's bytecode is kept

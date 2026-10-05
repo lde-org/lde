@@ -8,7 +8,10 @@ local lde = require("lde-core")
 -- Dependency resolution (the graph walk, node kinds, conflict detection) and
 -- the install build pass. Resolution drives the scheduler via ctx.build.
 local resolve = require("lde-core.package.install.resolve")
-
+-- Feature flags: which are on for a package, and what they turn on for it.
+-- (Named `featureFlags` because `features` is this module's parameter for the
+-- flags the caller asked for.)
+local featureFlags = require("lde-core.package.features")
 -- buildPackage plus the isStale stamp check the install fast path consults.
 local build = require("lde-core.package.build")
 
@@ -414,6 +417,10 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 	-- dependency is still known -- this one only answers for the root, and is what
 	-- the integrity check below consults.
 	local enabledOptional = resolve.enabledOptional(package, features)
+
+	-- Likewise record the root's own flags, so its build script asks the same
+	-- questions about itself that the resolver answers for each dependency.
+	package:setFeatures(featureFlags.enabledFlags(featureFlags.of(package), features))
 
 	-- Nothing to do (or already done): report the direct dep count so callers
 	-- can still print a "No changes" summary line. cached = the install was a

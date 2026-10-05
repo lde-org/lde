@@ -11,24 +11,27 @@ local path = require("path")
 local rocked = require("rocked")
 local download = require("lde-core.util.download")
 
+local features = require("lde-core.package.features")
+
 local lde = require("lde-core")
 
---- Copies config-only flags (optional, features) from a config entry onto a
---- lock entry.
+--- Copies config-only flags (optional, features, exclude) from a config entry
+--- onto a lock entry. `exclude` is the resolved file list the enabled features
+--- drop from this package's bundle; it is derived from the dependency's own
+--- manifest, so it has to be recorded here for the bundler to see it later --
+--- a dependency materialized as a copy keeps no manifest next to its modules.
 ---@param lockEntry lde.Lockfile.Dependency
 ---@param depInfo lde.Package.Config.Dependency
+---@param pkg lde.Package? # the dependency's package, when it is already open
 ---@return lde.Lockfile.Dependency
-local function withConfigFlags(lockEntry, depInfo)
+local function withConfigFlags(lockEntry, depInfo, pkg)
 	lockEntry.optional = depInfo.optional
 	lockEntry.features = depInfo.features
+	if pkg then
+		lockEntry.exclude = features.excludes(features.of(pkg), depInfo.features)
+	end
 	return lockEntry
 end
-
---- The feature flag that names the platform being installed on. lde turns it on
---- for every package, so a manifest can gate a dependency in the platform's own
---- words -- `features = { windows = { "winapi" } }` -- without the packages that
---- depend on it saying anything.
-local platformFeature = ({ Windows = "windows", Linux = "linux", OSX = "macos" })[jit.os]
 
 --- Which of a package's optional deps are wanted: those named by a feature that is
 --- on. The platform's flag is always on, and the rest are the ones the packages
@@ -39,27 +42,10 @@ local platformFeature = ({ Windows = "windows", Linux = "linux", OSX = "macos" }
 --- `linux` turn on, and hood -- which depends on winit -- is the one that names
 --- those flags. Nothing has to name the platform's own flag.
 ---@param pkg lde.Package
----@param features lde.Package.Config.FeatureFlag[]? # as the dependency entries declared them
+---@param requested lde.Package.Config.FeatureFlag[]? # as the dependency entries declared them
 ---@return table<string, true> enabled
-local function enabledOptional(pkg, features)
-	local enabled = {}
-
-	local featureDefs = pkg:readConfig().features
-	if not featureDefs then return enabled end
-
-	---@param flags lde.Package.Config.FeatureFlag[]
-	local function turnOn(flags)
-		for _, flag in ipairs(flags) do
-			for _, depName in ipairs(featureDefs[flag] or {}) do
-				enabled[depName] = true
-			end
-		end
-	end
-
-	if platformFeature then turnOn({ platformFeature }) end
-	if features then turnOn(features) end
-
-	return enabled
+local function enabledOptional(pkg, requested)
+	return features.enabledDependencies(features.of(pkg), requested)
 end
 
 ---@class lde.install.Context
@@ -407,7 +393,22 @@ local function registerNode(node, ctx)
 			lde.error.raise("Conflicting sources for dependency '" .. node.alias .. "':\n  " .. existingKey .. "\n  " .. newKey)
 		end
 	else
-		ctx.stack[node.alias] = { pkg = pkg, lock = withConfigFlags(lockEntry, node.depInfo) }
+		-- Record the flags that are on for this dependency, so its build script
+		-- can branch on them (`build:feature("unix")`) the same way the bundler
+		-- drops files for them. A dependency reachable via two aliases with
+		-- different flags keeps the union: wanted by anyone means wanted.
+		local flags = features.enabledFlags(features.of(pkg), node.depInfo.features)
+		if pkg.features then
+			local merged = {}
+			for _, flag in ipairs(pkg.features) do merged[flag] = true end
+			for _, flag in ipairs(flags) do merged[flag] = true end
+			flags = {}
+			for flag in pairs(merged) do flags[#flags + 1] = flag end
+			table.sort(flags)
+		end
+		pkg:setFeatures(flags)
+
+		ctx.stack[node.alias] = { pkg = pkg, lock = withConfigFlags(lockEntry, node.depInfo, pkg) }
 	end
 end
 

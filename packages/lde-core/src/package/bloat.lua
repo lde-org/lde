@@ -1,6 +1,8 @@
 local fs = require("fs")
 local path = require("path")
 
+local features = require("lde-core.package.features")
+
 local lde = require("lde-core")
 
 local bundlePackage = require("lde-core.package.bundle")
@@ -103,17 +105,22 @@ local function analyze(package)
 	end
 
 	-- Native libraries embedded by sea.compile, scanned exactly like
-	-- compile.lua scans them (tests/ excluded, same naming).
+	-- compile.lua scans them (tests/ excluded, same naming, same feature-flag
+	-- exclusions) so the report answers "what will the executable contain"
+	-- rather than "what is on disk".
 	local modulesDir = package:getModulesDir()
+	local excludesFor = features.resolverFor(package)
 	for entry in fs.readdir(modulesDir) do
 		local p = path.join(modulesDir, entry.name)
 		if entry.name == "tests" and rootName ~= "tests" then
 			goto continue
 		end
 
+		local excludes = excludesFor(entry.name)
+
 		if not fs.isdir(p) then
 			local ext = matchNativeExt(entry.name)
-			if ext then
+			if ext and not features.isExcluded(entry.name, excludes) then
 				local stat = fs.stat(p)
 				if stat then
 					addFile(entry.name:gsub("%." .. ext .. "$", ""), "native", tonumber(stat.size) or 0)
@@ -124,7 +131,7 @@ local function analyze(package)
 
 		for _, relativePath in ipairs(fs.scan(p, "**")) do
 			local ext = matchNativeExt(relativePath)
-			if ext then
+			if ext and not features.isExcluded(relativePath, excludes) then
 				local absPath = path.join(p, relativePath)
 				local stat = fs.stat(absPath)
 				if stat then

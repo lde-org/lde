@@ -1,28 +1,19 @@
 local ansi = require("ansi")
 local lde = require("lde-core")
 
----@type table<string, lde.Package.Config.FeatureFlag>
-local platformLookup = {
-	["Windows"] = "windows",
-	["Linux"] = "linux",
-	["OSX"] = "macos"
-}
+local features = require("lde-core.package.features")
 
 ---@type ansi.Color[]
 local depthColors = { "yellow", "magenta", "cyan" }
 
----@param features table<string, string[]>?
+--- The optional deps the platform's own flags turn on. Shared with the
+--- resolver, so `lde tree` can never disagree with what an install would pick
+--- -- it used to carry its own copy of the OS-to-flag table, which also had no
+--- `bsd` entry.
+---@param defs table<string, lde.Package.Config.FeatureDefinition>?
 ---@return table<string, true>
-local function enabledOptionals(features)
-	local enabled = {}
-	if not features then return enabled end
-	local platformDeps = features[platformLookup[jit.os]]
-	if platformDeps then
-		for _, name in ipairs(platformDeps) do
-			enabled[name] = true
-		end
-	end
-	return enabled
+local function enabledOptionals(defs)
+	return features.enabledDependencies(defs, nil)
 end
 
 --- Merge a root lockfile entry onto a manifest dependency so git deps resolve
@@ -165,8 +156,7 @@ local function tree(args)
 		end
 		table.sort(deps, function(a, b) return a.name < b.name end)
 
-		local features = pkg:readConfig().features
-		local enabled = enabledOptionals(features)
+		local enabled = enabledOptionals(features.of(pkg))
 
 		for i, dep in ipairs(deps) do
 			local last = i == #deps

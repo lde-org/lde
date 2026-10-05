@@ -70,6 +70,19 @@ function Package:getConfigPath() return configPathAtDir(self.dir) end
 
 function Package:getLockfilePath() return path.join(self.dir, "lde.lock") end
 
+--- Records the feature flags enabled for this package, as resolved from the
+--- dependency entry that pulled it in plus the platform's own flags. Set by the
+--- installer; a package built outside an install (`lde compile` on itself) has
+--- none recorded and falls back to the platform flags alone.
+---@param flags string[]
+function Package:setFeatures(flags) self.features = flags end
+
+--- The feature flags enabled for this package, sorted.
+---@return string[]
+function Package:getFeatures()
+	return require("lde-core.package.features").ofPackage(self)
+end
+
 ---@param pkg lde.Package
 ---@param outputDir string
 ---@param captureLog lde.buildLog.Capture? # non-nil in compact mode: guest print + sh/cc output is captured (hidden) instead of streamed
@@ -137,8 +150,9 @@ local function defaultBuildFn(pkg, outputDir, captureLog)
 	end
 
 	-- Inject lde-build instance into the guest state: build:cc() gets the
-	-- cross compiler and build.target reports the triple being built for.
-	Instance.setup(state, outputDir, ccBin, global.getTargetTriple(), global.getTargetFlag(), captureLog)
+	-- cross compiler, build.target reports the triple being built for, and
+	-- build:feature(name) reports which feature flags are on for this package.
+	Instance.setup(state, outputDir, ccBin, global.getTargetTriple(), global.getTargetFlag(), captureLog, pkg:getFeatures())
 
 	local cwd = pkg:getDir()
 	local oldCwd = env.cwd()

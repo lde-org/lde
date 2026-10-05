@@ -22,6 +22,7 @@ local process = require("process")
 ---@field target string # clang triple for the current build (target triple when cross-compiling, host triple otherwise)
 ---@field targetFlag string? # clang -target flag when cross-compiling, nil when native
 ---@field captureLog lde.buildLog.Capture? # non-nil: capture build:sh/build:cc output instead of streaming it
+---@field features table<string, boolean> # enabled feature flags, keyed by flag name
 local Instance = {}
 Instance.__index = Instance
 
@@ -38,7 +39,29 @@ function Instance.new(outDir, gccBin, target, targetFlag, captureLog)
 		target = target or "unknown",
 		targetFlag = targetFlag,
 		captureLog = captureLog,
+		features = {},
 	}, Instance)
+end
+
+--- Records the feature flags enabled for this build.
+---@param flags string[]
+---@return lde.build.Instance self
+function Instance:setFeatures(flags)
+	local set = {}
+	for _, flag in ipairs(flags) do
+		set[flag] = true
+	end
+	self.features = set
+	return self
+end
+
+--- True when the named feature flag is enabled for this build. The build script
+--- sees the same answer as `build:feature(name)` in the guest, and as the
+--- `features` exclusions the bundler applies to the Lua half.
+---@param name string
+---@return boolean
+function Instance:feature(name)
+	return self.features[name] == true
 end
 
 ---@param url string
@@ -262,20 +285,27 @@ end
 -- this chunk wires them into the table, forwarding calls. `cc` receives its
 -- argument table already unpacked — only primitives cross host↔guest.
 local GUEST_SOURCE = [==[
-	local outDir, gccBin, target, fetch, write, read, extract, copy, delete, move, exists, scan, sh, cc = ...
+	local outDir, gccBin, target, features, fetch, write, read, extract, copy, delete, move, exists, scan, sh, cc = ...
+	-- Enabled feature flags, newline-joined: only primitives cross the boundary,
+	-- so the host joins the list and the guest splits it back into a set.
+	local featureSet = {}
+	for flag in features:gmatch("[^\n]+") do
+		featureSet[flag] = true
+	end
 	local build = {
-		outDir  = outDir,
-		gccBin  = gccBin,
-		target  = target,
-		fetch   = function(self, url)        return fetch(url)         end,
-		write   = function(self, rel, cnt)   write(rel, cnt)           end,
-		read    = function(self, rel)        return read(rel)          end,
-		extract = function(self, rel, dest)  extract(rel, dest)        end,
-		copy    = function(self, rel, dest)  copy(rel, dest)           end,
-		delete  = function(self, rel)        delete(rel)               end,
-		move    = function(self, rel, dest)  move(rel, dest)           end,
-		exists  = function(self, rel)        return exists(rel)        end,
-		scan    = function(self, rel, glob)
+		outDir   = outDir,
+		gccBin   = gccBin,
+		target   = target,
+		features = featureSet,
+		fetch    = function(self, url)        return fetch(url)         end,
+		write    = function(self, rel, cnt)   write(rel, cnt)           end,
+		read     = function(self, rel)        return read(rel)          end,
+		extract  = function(self, rel, dest)  extract(rel, dest)        end,
+		copy     = function(self, rel, dest)  copy(rel, dest)           end,
+		delete   = function(self, rel)        delete(rel)               end,
+		move     = function(self, rel, dest)  move(rel, dest)           end,
+		exists   = function(self, rel)        return exists(rel)        end,
+		scan     = function(self, rel, glob)
 			-- Only primitives cross the host boundary, so the host joins the
 			-- list and the guest splits it back apart.
 			local files = {}
@@ -284,8 +314,15 @@ local GUEST_SOURCE = [==[
 			end
 			return files
 		end,
-		sh      = function(self, cmd)        sh(cmd)                   end,
-		cc      = function(self, args)       return cc(unpack(args))   end,
+		sh       = function(self, cmd)        sh(cmd)                   end,
+		cc       = function(self, args)       return cc(unpack(args))   end,
+		--- True when the named feature flag is enabled for this build. Build
+		--- scripts use this to decide what to emit -- which sources to compile,
+		--- which backend .so to produce -- so a package can keep several
+		--- backends in one repository and let a feature pick one.
+		---@param name string
+		---@return boolean
+		feature  = function(self, name)       return featureSet[name] == true end,
 	}
 	package.preload["lde-build"] = function() return build end
 	package.preload["lpm-build"] = function() return build end
@@ -303,10 +340,13 @@ local GUEST_SOURCE = [==[
 ---@param target?   string # clang triple for build:target() (defaults to "unknown")
 ---@param targetFlag? string # clang -target flag prepended to cc invocations when cross-compiling
 ---@param captureLog lde.buildLog.Capture? # non-nil in compact mode: sh/cc output is captured instead of streamed
-function Instance.setup(state, outputDir, gccBin, target, targetFlag, captureLog)
+---@param featureFlags string[]? # enabled feature flags, for build:feature(name)
+function Instance.setup(state, outputDir, gccBin, target, targetFlag, captureLog, featureFlags)
 	local inst = Instance.new(outputDir, gccBin, target, targetFlag, captureLog)
+	table.sort(featureFlags or {})
+	inst:setFeatures(featureFlags or {})
 	state:load(GUEST_SOURCE, "@lde-build"):call(
-		inst.outDir, inst.gccBin, inst.target,
+		inst.outDir, inst.gccBin, inst.target, table.concat(featureFlags or {}, "\n"),
 		function(url)          return inst:fetch(url)     end,
 		function(rel, content) inst:write(rel, content)   end,
 		function(rel)          return inst:read(rel)      end,

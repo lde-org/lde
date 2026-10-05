@@ -2,6 +2,8 @@ local sea = require("sea")
 local fs = require("fs")
 local path = require("path")
 
+local features = require("lde-core.package.features")
+
 local lde = require("lde-core")
 
 -- Build timings collection (no-op while inactive; no dependency on lde-core).
@@ -91,6 +93,10 @@ local function compilePackage(package, targetName)
 		local sharedLibs = {}
 		local modulesDir = package:getModulesDir()
 
+		-- The same feature globs the Lua half of the bundle uses, so a feature
+		-- can drop a native backend as well as the Lua that drives it.
+		local excludesFor = features.resolverFor(package)
+
 		for entry in fs.readdir(modulesDir) do
 			local p = path.join(modulesDir, entry.name)
 			if entry.name == "tests" and package:getName() ~= "tests" then
@@ -100,9 +106,11 @@ local function compilePackage(package, targetName)
 				goto continue
 			end
 
+			local excludes = excludesFor(entry.name)
+
 			if not fs.isdir(p) then
 				local ext = matchNativeExt(entry.name, nativeExts)
-				if ext then
+				if ext and not features.isExcluded(entry.name, excludes) then
 					local content = fs.read(p)
 					if not content then lde.error.raise("Could not read file: " .. p) end
 					local moduleName = entry.name:gsub("%." .. ext .. "$", "")
@@ -113,7 +121,7 @@ local function compilePackage(package, targetName)
 
 			for _, relativePath in ipairs(fs.scan(p, "**")) do
 				local ext = matchNativeExt(relativePath, nativeExts)
-				if ext then
+				if ext and not features.isExcluded(relativePath, excludes) then
 					local absPath = path.join(p, relativePath)
 					local content = fs.read(absPath)
 					if not content then lde.error.raise("Could not read file: " .. absPath) end

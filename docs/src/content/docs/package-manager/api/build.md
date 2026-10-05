@@ -26,7 +26,25 @@ The path of the output directory: where lde copied your sources and where everyt
 
 The compiler target triple of the current build: the target platform's triple when cross-compiling with `lde compile --target`, the host triple otherwise. Useful for naming artifacts, e.g. `build:write("lib-" .. build.target .. ".so", ...)`.
 
+### `Build.features: table<string, boolean>`
+
+The [feature flags](/docs/package-manager/features/optional-dependencies) enabled for this build, keyed by flag name, so `build.features.windows` is `true` on Windows. Prefer `build:feature(name)` unless you are iterating over the set.
+
 ## Methods
+
+### `Build:feature(name: string) -> boolean`
+
+Whether the named feature flag is enabled for this build. Use it to emit only the backend the current platform needs, or to compile optional functionality:
+
+```lua
+if build:feature("unix") then
+	build:cc({ "cc", "-shared", "-fPIC", "src/posix.c", "-o", "mypackage/posix.so" })
+elseif build:feature("windows") then
+	build:cc({ "cc", "-shared", "src/win32.c", "-o", "mypackage/win32.dll" })
+end
+```
+
+The platform's own flags (`windows`, `linux`, `macos`, `bsd`, `unix`) are always on for the matching platform, and any flag a dependent asked for is on whether or not your manifest declares it — so a flag is allowed to drive nothing but your build script.
 
 ### `Build:fetch(url: string) -> string`
 
