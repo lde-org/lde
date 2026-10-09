@@ -9,6 +9,6 @@
 		"util": { "path": "../util" },
 		"ansi": { "path": "../ansi" },
 		"archive": { "version": "^0.1.0" },
-		"curl-sys": { "version": "^0.1.1" }
+		"curl-sys": { "version": "0.1" }
 	}
 }
