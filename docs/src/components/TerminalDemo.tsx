@@ -111,8 +111,8 @@ const PROJECT_TYPES = [
 
 const LANGUAGES = [
 	{ id: "lua", color: 34, desc: "Your typical lua project" },
-	{ id: "moonscript", color: 35, desc: "A dynamically typed whitespace based language" },
 	{ id: "teal", color: 36, desc: "Typed lua with type checking support" },
+	{ id: "moonscript", color: 35, desc: "A dynamically typed whitespace based language" },
 ];
 
 function randomNewChoice() {

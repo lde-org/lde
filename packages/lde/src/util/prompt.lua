@@ -348,9 +348,9 @@ function prompt.scaffoldOptions(args)
 			local choice = prompt.select({
 				prompt = "Language",
 				options = {
-					{ key = "lua",       desc = "Your typical lua project", color = "blue" },
+					{ key = "lua",        desc = "Your typical lua project", color = "blue" },
+					{ key = "teal",       desc = "Typed lua with type checking support", color = "cyan" },
 					{ key = "moonscript", desc = "A dynamically typed whitespace based language", color = "magenta" },
-					{ key = "teal",      desc = "Typed lua with type checking support", color = "cyan" },
 				},
 				default = "lua",
 			})

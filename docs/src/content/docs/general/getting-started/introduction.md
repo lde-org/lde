@@ -35,8 +35,8 @@ Select **blank** for now.
 ```
 ? Language
 > lua  Your typical lua project
-  moonscript  A dynamically typed whitespace based language
   teal  Typed lua with type checking support
+  moonscript  A dynamically typed whitespace based language
 ```
 
 You can use whatever language you want. We'll use **lua**, of course.
