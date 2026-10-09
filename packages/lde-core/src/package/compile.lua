@@ -78,16 +78,19 @@ local function compilePackage(package, targetName)
 
 		-- sea.compile throws a raw string when the main module is missing; check
 		-- first so a broken project (no src/init.lua, src as a file, ...) fails
-		-- cleanly instead of crashing. Packages named "tests" are the one case
-		-- where the entry dir is skipped by the test-fixture filter, hence the
-		-- name comparison in bundlePackage.
-		local mainName = package:getName()
+		-- cleanly instead of crashing. The entry is the one `lde run` executes:
+		-- the manifest's `bin` when set, src/init.lua otherwise. Packages named
+		-- "tests" are the one case where the entry dir is skipped by the
+		-- test-fixture filter, hence the name comparison in bundlePackage.
+		local mainName = source.name
 		local hasMain = false
 		for _, m in ipairs(source.modules) do
 			if m.name == mainName then hasMain = true break end
 		end
 		if not hasMain then
-			lde.error.raise("Cannot compile: no entry module '" .. mainName .. "' in the bundle (is src/init.lua present?)")
+			local bin = package:readConfig().bin
+			lde.error.raise("Cannot compile: no entry module '" .. mainName .. "' in the bundle (is "
+				.. (bin and ("src/" .. bin) or "src/init.lua") .. " present?)")
 		end
 
 		local sharedLibs = {}
@@ -139,7 +142,7 @@ local function compilePackage(package, targetName)
 		-- toolchain, compiler failure, dist download); they are surfaced as
 		-- clean user-facing errors below, not "lde crashed".
 		local seaHandle = timings.active() and timings.start("sea compile", "compile") or nil
-		local executable = sea.compile(package:getName(), source, sharedLibs, lde.global.getCCBin(), targetName)
+		local executable = sea.compile(mainName, source, sharedLibs, lde.global.getCCBin(), targetName)
 		if seaHandle then timings.finish(seaHandle) end
 		return executable
 	end)

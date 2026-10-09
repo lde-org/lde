@@ -589,6 +589,26 @@ test.it("lde bundle --bytecode writes a LuaJIT bytecode bundle", function()
 	test.truthy(content:sub(1, 3) == "\27LJ", "expected bytecode bundle, got source")
 end)
 
+test.it("lde bundle uses the manifest bin as the entry point", function()
+	local dir = makeProject("bundle-bin", nil, { name = "bundle-bin", bin = "main.lua" })
+	fs.write(path.join(dir, "src", "init.lua"), 'print("WRONG-ENTRY")')
+	fs.write(path.join(dir, "src", "main.lua"), [[
+print("bin-bundle:" .. (({ ... })[1] or "noargs"))
+]])
+
+	local ok, out = cli({ "bundle" }, dir)
+	test.truthy(ok, "lde bundle failed: " .. tostring(out))
+	local bundlePath = path.join(dir, "bundle-bin.lua")
+	test.truthy(fs.exists(bundlePath), "bundle file not written")
+
+	-- The bundle forwards its own arguments to the entry module.
+	local execPath = env.execPath() ---@cast execPath -nil
+	local code, runOut = process.exec(execPath, { "--lua", bundlePath, "hi" })
+	test.truthy(code == 0, "bundle did not run: " .. tostring(runOut))
+	test.includes(runOut or "", "bin-bundle:hi")
+	test.falsy((runOut or ""):find("WRONG-ENTRY", 1, true), "the bundle ran src/init.lua, not the bin entry")
+end)
+
 --
 -- lde compile (full sea pipeline)
 --
@@ -596,10 +616,13 @@ end)
 test.it("lde compile produces a runnable binary that receives argv", function()
 	local dir = makeProject("compile-cli", nil, { name = "compile-cli" })
 	-- The compiled main module receives argv as its varargs (same convention as
-	-- the lde binary itself, which reads ... at the top level).
+	-- the lde binary itself, which reads ... at the top level) and through the
+	-- stock global arg table (arg[0] = the executable, arg[1..] = the args).
+	-- A program that reads arg[] must behave the same compiled and interpreted.
 	fs.write(path.join(dir, "src", "init.lua"), [[
 local args = { ... }
 print("compiled-ok:" .. (args[1] or "noargs"))
+print("compiled-arg:" .. tostring(arg and arg[0]) .. "|" .. tostring(arg and arg[1]))
 ]])
 
 	local ok, out = cli({ "compile" }, dir)
@@ -611,6 +634,40 @@ print("compiled-ok:" .. (args[1] or "noargs"))
 	local code, runOut = process.exec(binPath, { "hi" })
 	test.truthy(code == 0, "compiled binary failed: " .. tostring(runOut))
 	test.includes(runOut or "", "compiled-ok:hi")
+	test.includes(runOut or "", "compiled-arg:" .. binPath .. "|hi")
+end)
+
+test.it("lde compile uses the manifest bin as the entry point", function()
+	local dir = makeProject("compile-bin", nil, { name = "compile-bin", bin = "main.lua" })
+	-- src/init.lua is a library here: the binary must run src/main.lua, the same
+	-- file `lde run` executes.
+	fs.write(path.join(dir, "src", "init.lua"), 'print("WRONG-ENTRY")')
+	fs.write(path.join(dir, "src", "main.lua"), [[
+print("bin-entry:" .. (({ ... })[1] or "noargs"))
+print("bin-arg:" .. tostring(arg and arg[1]))
+]])
+
+	local ok, out = cli({ "compile" }, dir)
+	test.truthy(ok, "lde compile failed: " .. tostring(out))
+	local binPath = path.join(dir, "compile-bin")
+	if jit.os == "Windows" then binPath = binPath .. ".exe" end
+	test.truthy(fs.exists(binPath), "compiled binary missing")
+
+	local code, runOut = process.exec(binPath, { "hi" })
+	test.truthy(code == 0, "compiled binary failed: " .. tostring(runOut))
+	test.includes(runOut or "", "bin-entry:hi")
+	test.includes(runOut or "", "bin-arg:hi")
+	test.falsy((runOut or ""):find("WRONG-ENTRY", 1, true), "the binary ran src/init.lua, not the bin entry")
+end)
+
+test.it("lde compile names the missing bin entry in its error", function()
+	local dir = makeProject("compile-bin-missing", nil, { name = "compile-bin-missing", bin = "cli.lua" })
+
+	local ok, out = cli({ "compile" }, dir)
+	test.falsy(ok, "compile must fail when the bin entry is missing")
+	local msg = plain(out or "")
+	test.includes(msg, "no entry module 'compile-bin-missing.cli'")
+	test.includes(msg, "src/cli.lua")
 end)
 
 -- The release target matching the host (nil when none does, e.g. musl hosts).

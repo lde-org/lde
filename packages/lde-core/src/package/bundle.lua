@@ -88,6 +88,23 @@ local function bundleDir(projectName, dir, out, excludes)
 	end
 end
 
+-- The module name of the entry point: the file `lde run` executes. `bin` in the
+-- manifest is a path relative to the built modules dir (target/<name>/), so
+-- "main.lua" is bundled as "<name>.main". A file named init.lua answers to its
+-- directory's name, so "init.lua" is the package name itself. Without `bin` the
+-- entry is src/init.lua, which is also the package name.
+---@param package lde.Package
+local function entryModuleName(package)
+	local name = package:getName()
+	local bin = package:readConfig().bin
+	if not bin then return name end
+
+	local dotted = bin:gsub("%.lua$", ""):gsub("%.tl$", ""):gsub("%.moon$", "")
+	dotted = dotted:gsub("[/\\]", "."):gsub("%.?init$", "")
+	if dotted == "" then return name end
+	return name .. "." .. dotted
+end
+
 ---@param package lde.Package
 ---@param opts { bytecode: boolean?, raw: boolean?, features: lde.Package.Config.FeatureFlag[]? }?
 ---@return string|{ name: string, modules: { name: string, code: string }[] }
@@ -110,7 +127,7 @@ local function bundlePackage(package, opts)
 	---@type lde.bundle.File[]
 	local dirFiles = {}
 	local modulesDir = package:getModulesDir()
-	local mainName = package:getName()
+	local mainName = entryModuleName(package)
 
 	-- Feature-flag file exclusion. Every entry in target/ is filtered by the
 	-- globs its own features turn on, so a package can carry several platform
@@ -315,7 +332,7 @@ local function bundlePackage(package, opts)
 		end
 	end
 
-	parts[#parts + 1] = string.format('return package.preload["%s"](...)', package:getName())
+	parts[#parts + 1] = string.format('return package.preload["%s"](...)', mainName)
 
 	local result = table.concat(parts, "\n") .. "\n"
 

@@ -160,6 +160,64 @@ int luaopen_answer(lua_State *L) {
 		test.equal(stdout and stdout:gsub("%s+$", ""), "ok", "binary output: " .. tostring(stderr))
 	end)
 
+test.it("compile: the binary receives argv as varargs and in the global arg table", function()
+	local dir = path.join(tmpBase, "argv-app")
+	fs.mkdir(dir)
+	fs.mkdir(path.join(dir, "src"))
+	fs.write(path.join(dir, "src", "init.lua"), [[
+local args = { ... }
+print("n=" .. #args .. " first=" .. (args[1] or "none"))
+print("arg=" .. type(arg) .. " arg0=" .. tostring(arg and arg[0]) .. " arg1=" .. tostring(arg and arg[1]))
+]])
+	fs.write(path.join(dir, "lde.json"), json.encode({
+		name = "argv-app",
+		version = "0.1.0",
+		dependencies = {}
+	}))
+
+	local app = lde.Package.open(dir) ---@cast app -nil
+	local binTmp = app:compile()
+	local binPath = path.join(dir, "argv-app")
+	if jit.os == "Windows" then binPath = binPath .. ".exe" end
+	fs.move(binTmp, binPath)
+	if jit.os ~= "Windows" then fs.chmod(binPath, tonumber("755", 8)) end
+
+	local code, stdout, stderr = process.exec(binPath, { "hi", "there" })
+	test.truthy(code == 0, "compiled binary failed: " .. tostring(stderr))
+	local out = stdout or ""
+	test.includes(out, "n=2 first=hi", "varargs: " .. out)
+	-- Stock Lua semantics: arg[0] is the executable, arg[1..] the arguments.
+	test.includes(out, "arg=table arg0=" .. binPath .. " arg1=hi", "arg table: " .. out)
+end)
+
+test.it("compile: the binary runs the manifest bin entry point", function()
+	local dir = path.join(tmpBase, "bin-app")
+	fs.mkdir(dir)
+	fs.mkdir(path.join(dir, "src"))
+	fs.write(path.join(dir, "src", "init.lua"), 'print("WRONG-ENTRY")')
+	fs.write(path.join(dir, "src", "cli.lua"), [[
+print("cli:" .. (({ ... })[1] or "none") .. " arg:" .. tostring(arg and arg[1]))
+]])
+	fs.write(path.join(dir, "lde.json"), json.encode({
+		name = "bin-app",
+		version = "0.1.0",
+		bin = "cli.lua",
+		dependencies = {}
+	}))
+
+	local app = lde.Package.open(dir) ---@cast app -nil
+	local binTmp = app:compile()
+	local binPath = path.join(dir, "bin-app")
+	if jit.os == "Windows" then binPath = binPath .. ".exe" end
+	fs.move(binTmp, binPath)
+	if jit.os ~= "Windows" then fs.chmod(binPath, tonumber("755", 8)) end
+
+	local code, stdout, stderr = process.exec(binPath, { "hi" })
+	test.truthy(code == 0, "compiled binary failed: " .. tostring(stderr))
+	test.equal(stdout and stdout:gsub("%s+$", ""), "cli:hi arg:hi",
+		"the bin entry must run with its arguments: " .. tostring(stderr))
+end)
+
 test.it("compile: X/init.lua is preloaded as both X and X.init", function()
 	-- package.path answers to both spellings, and rocks rely on it: lgi
 	-- forwarders do require("lgi.init") while everything else does
@@ -376,6 +434,44 @@ test.it("compile: cross target context selects the cross compiler and flags", fu
 		local _, out = process.exec(cc, { "--version" })
 		test.truthy(out and out:find("clang", 1, true), "cross compiler should be clang, got: " .. tostring(cc))
 	end
+end)
+
+test.it("compile: the bundle entry module follows the manifest bin", function()
+	local dir = path.join(tmpBase, "bin-entry")
+	fs.mkdir(dir)
+	fs.mkdir(path.join(dir, "src"))
+	fs.write(path.join(dir, "src", "init.lua"), 'return "init"')
+	fs.write(path.join(dir, "src", "cli.lua"), 'return "cli"')
+	fs.write(path.join(dir, "lde.json"), json.encode({
+		name = "bin-entry",
+		version = "0.1.0",
+		bin = "cli.lua",
+		dependencies = {}
+	}))
+
+	local app = lde.Package.open(dir) ---@cast app -nil
+	app:build()
+
+	-- The raw bundle names its entry for sea.compile (the C side calls that
+	-- module with argv); the entry is the file `lde run` executes.
+	local raw = app:bundle({ raw = true }) ---@cast raw { name: string, modules: { name: string, code: string }[] }
+	test.equal(raw.name, "bin-entry.cli", "the entry module must be the bin file")
+
+	---@type table<string, boolean>
+	local names = {}
+	for _, m in ipairs(raw.modules) do names[m.name] = true end
+	test.truthy(names["bin-entry.cli"], "the bin module must be in the bundle")
+	test.truthy(names["bin-entry"], "src/init.lua must still ship as the package module")
+end)
+
+test.it("compile: without bin the entry module is the package module", function()
+	local dir = makeApp("bin-entry-default")
+
+	local app = lde.Package.open(dir) ---@cast app -nil
+	app:build()
+
+	local raw = app:bundle({ raw = true }) ---@cast raw { name: string, modules: { name: string, code: string }[] }
+	test.equal(raw.name, "bin-entry-default", "src/init.lua is the package module")
 end)
 
 test.it("compile: sea targets match the LuaJIT dist release assets", function()

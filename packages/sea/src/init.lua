@@ -708,6 +708,13 @@ int main(int argc, char** argv) {
 
 	]] .. shimStartup .. [[
 
+	lua_createtable(L, argc, 0);
+	for (int i = 0; i < argc; i++) {
+		lua_pushstring(L, argv[i]);
+		lua_rawseti(L, -2, i);
+	}
+	lua_setglobal(L, "arg");
+
 	lua_getglobal(L, "package");
 	lua_getfield(L, -1, "preload");
 
