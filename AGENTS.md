@@ -36,9 +36,7 @@ cp lde ~/.lde/lde # install globally
 
 ### Type Checking
 
-Run `just check` to run Lua Language Server's type checks on the codebase.
-
-Never leave the tree with diagnostics.
+Run `just check` to run lye's type checks on the codebase.
 
 ## minilde.lua
 
