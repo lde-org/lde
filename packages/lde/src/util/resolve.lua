@@ -1,9 +1,9 @@
-local env = require("env")
-local fs = require("fs")
+const env = require("env")
+const fs = require("fs")
 local path = require("path")
 
-local lde = require("lde-core")
-local gitShorthand = require("lde.util.gitShorthand")
+const lde = require("lde-core")
+const gitShorthand = require("lde.util.gitShorthand")
 
 --- Resolves a rocks: name to a Package
 ---@param name string e.g. "rocks:busted@2.0"
@@ -11,7 +11,7 @@ local gitShorthand = require("lde.util.gitShorthand")
 ---@return lde.Package?, string?
 local function resolveRocks(name, isOffline)
 	local rocksName, versionStr = name:match("^rocks:([^@]+)@?(.*)$")
-	versionStr = versionStr ~= "" and versionStr or nil
+	versionStr = versionStr ~= "" ? versionStr : nil
 
 	local pkg, _, err = lde.util.openLuarocksPackage(rocksName, versionStr, isOffline)
 	return pkg, err
@@ -23,9 +23,9 @@ end
 ---@param parsed { git: string?, path: string?, isOffline: boolean? }? # Pre-consumed --git/--path/--isOffline values (the install command peeks them to decide its project-install branch)
 ---@return lde.Package?, string?, string?
 local function resolvePackage(args, parsed)
-	local isOffline = (parsed and parsed.isOffline) or args:flag("offline")
-	local gitUrl = parsed and parsed.git or args:option("git")
-	local localPath = parsed and parsed.path or args:option("path")
+	const isOffline = (parsed and parsed.isOffline) or args:flag("offline")
+	const gitUrl = parsed?.git ?? args:option("git")
+	const localPath = parsed?.path ?? args:option("path")
 	local userCwd = env.cwd()
 
 	if gitUrl then
@@ -57,7 +57,7 @@ local function resolvePackage(args, parsed)
 		-- The <pkg>@ form carries the sub-package name in the shorthand itself;
 		-- otherwise an optional positional is popped (a literal "--" is the arg
 		-- separator, not a package name).
-		local shorthandUrl, subPackage, serr = gitShorthand.expand(name)
+		const shorthandUrl, subPackage, serr = gitShorthand.expand(name)
 		if serr then return nil, serr end
 		if shorthandUrl then
 			local cloneUrl, branch = lde.global.parseGitUrl(shorthandUrl)
@@ -104,7 +104,7 @@ local function resolvePackage(args, parsed)
 		local _, commit = lde.global.resolveRegistryVersion(portfile, versionStr or nil)
 		local repoDir
 		if isOffline then
-			repoDir = lde.global.getGitRepoDir(packageName, commit)
+			repoDir = lde.global.getGitRepoDir(packageName, commit --[[@as string]])
 			if not fs.exists(repoDir) then
 				return nil, "offline: '" .. packageName .. "' is not cached locally (run `lde x " .. packageName .. "` online once to cache it)"
 			end

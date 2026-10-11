@@ -1,13 +1,13 @@
-local test = require("lde-test")
+const test = require("lde-test")
 
-local lde = require("lde-core")
+const lde = require("lde-core")
 
-local fs = require("fs")
-local env = require("env")
+const fs = require("fs")
+const env = require("env")
 local path = require("path")
-local json = require("json")
+const json = require("json")
 local process = require("process")
-local Archive = require("archive")
+const Archive = require("archive")
 
 local tmpBase = path.join(env.tmpdir(), "lde-package-tests")
 
@@ -64,7 +64,7 @@ test.skipIf(jit.os == "Windows")("Package.open fails gracefully when the cwd no 
 	fs.mkdir(parent)
 	fs.mkdir(dir)
 
-	local oldCwd = env.cwd()
+	const oldCwd = env.cwd()
 	test.truthy(env.chdir(dir))
 
 	-- Delete the tree from a child process that has left it first: Linux
@@ -163,7 +163,7 @@ test.it("Package:readConfig caches and returns the same object", function()
 	local pkg = assert(lde.Package.open(dir))
 
 	local c1 = pkg:readConfig()
-	local c2 = pkg:readConfig()
+	const c2 = pkg:readConfig()
 	test.equal(c1, c2)
 end)
 
@@ -546,7 +546,7 @@ build = {
 
 	-- The nested archive holds the real source tree (stripComponents=true drops
 	-- the ceru-1.0/ top-level dir on extraction).
-	local arch = Archive.new({
+	const arch = Archive.new({
 		["ceru-1.0/src/init.lua"] = "return require('ceru.cli').run()",
 		["ceru-1.0/bin/ceru"] = "#!/usr/bin/env lua\nrequire('ceru')\n",
 	})
@@ -575,7 +575,7 @@ build = {
 	test.equal(config.bin, "ceru")
 
 	local hasBuilt, deferred = pkg:build()
-	local derr = deferred and tostring(deferred) or nil
+	const derr = deferred ? tostring(deferred) : nil
 	test.truthy(hasBuilt, derr or "build failed")
 	test.truthy(fs.isfile(path.join(srcDir, "target", "ceru", "ceru")))
 	test.truthy(fs.isfile(path.join(srcDir, "target", "ceru", "init.lua")))
@@ -611,7 +611,7 @@ test.it("Package:runScript runs with the package directory as cwd", function()
 	local ok, out = pkg:runScript("pwd", true)
 	test.truthy(ok)
 	-- pwd may return a symlink-resolved path; check the basename matches.
-	local normalized = (out or ""):gsub("%s+$", "")
+	const normalized = (out or ""):gsub("%s+$", "")
 	test.truthy(normalized:find("script%-cwd$"), "script ran in the wrong cwd: " .. tostring(out))
 end)
 

@@ -129,7 +129,6 @@ local benchTools = {}
 
 ---@param code number?
 ---@param err string?
----@return string
 local function failureMsg(code, err)
 	if err and #err > 0 then return err end
 	if code then return "exit code " .. code end
@@ -264,7 +263,6 @@ local function printSummary()
 	ansi.printf(header)
 
 	---@param v string?
-	---@return string
 	local function cell(v)
 		return string.format("%" .. col .. "s", v or "n/a")
 	end

@@ -1,10 +1,10 @@
 local test = require("lde-test")
 
-local fs = require("fs")
-local env = require("env")
-local path = require("path")
-local json = require("json")
-local process = require("process")
+const fs = require("fs")
+const env = require("env")
+const path = require("path")
+const json = require("json")
+const process = require("process")
 local ffi = require("ffi")
 
 -- Cross-platform sleep used to poll the child's log file.
@@ -76,10 +76,10 @@ end
 ---@param fn fun(child: process.Child)
 ---@param capture boolean?
 local function withChild(args, cwd, fn, capture)
-	local child, err = process.spawn(ldePath, args, {
+	const child, err = process.spawn(ldePath, args, {
 		cwd = cwd,
-		stdout = capture and "pipe" or "null",
-		stderr = capture and "pipe" or "null",
+		stdout = capture ? "pipe" : "null",
+		stderr = capture ? "pipe" : "null",
 	})
 	if not child then error("spawn failed: " .. tostring(err), 2) end ---@cast child process.Child
 	local ok, perr = pcall(fn, child)
@@ -97,7 +97,6 @@ local function withChild(args, cwd, fn, capture)
 end
 
 ---@param name string
----@return string dir
 local function makePackage(name)
 	local dir = path.join(tmpBase, name)
 	fs.mkdir(dir)
@@ -129,13 +128,13 @@ test.it("lde run --hot reloads changed modules in-place", function()
 	fs.write(logFile, "")
 
 	withChild({ "run", "--hot", "--", logFile }, dir, function()
-		test.truthy(waitForLog(logFile, "run v1 runs=1", 15000), "initial run missing from log")
+		test.truthy(waitForLog(logFile, "run v1 runs=1", 15_000), "initial run missing from log")
 
 		fs.write(path.join(dir, "src", "utilmod.lua"), 'return "v2"')
 
 		-- The counter must be 2: --hot keeps the state alive and only drops the
 		-- changed module from package.loaded (a --watch restart would reset it).
-		test.truthy(waitForLog(logFile, "run v2 runs=2", 15000), "hot reload did not pick up v2 in-place")
+		test.truthy(waitForLog(logFile, "run v2 runs=2", 15_000), "hot reload did not pick up v2 in-place")
 	end)
 end)
 
@@ -161,13 +160,13 @@ end
 	fs.write(logFile, "")
 
 	withChild({ "run", "--hot", "--", logFile }, dir, function()
-		test.truthy(waitForLog(logFile, "run v1 runs=1 jit=true hook=nil", 15000),
+		test.truthy(waitForLog(logFile, "run v1 runs=1 jit=true hook=nil", 15_000),
 			"--hot must run without a debug hook and with the JIT on: " ..
 				tostring(fs.read(logFile)))
 
 		fs.write(path.join(dir, "src", "utilmod.lua"), 'return "v2"')
 
-		test.truthy(waitForLog(logFile, "run v2 runs=2", 15000),
+		test.truthy(waitForLog(logFile, "run v2 runs=2", 15_000),
 			"package.hot.poll() did not trigger a reload")
 	end)
 end)
@@ -225,7 +224,7 @@ end
 	-- carries the require() path and so reads "pkg-hot-banner.utilmod".
 	test.truthy(output:find("Reloaded: pkg-hot-banner (", 1, true),
 		"a reload that only re-runs the entry point must be reported under the package name: " .. output)
-	local elapsed = output:match("Reloaded: pkg%-hot%-banner %(([^%)]+)%)")
+	const elapsed = output:match("Reloaded: pkg%-hot%-banner %(([^%)]+)%)")
 	test.truthy(elapsed and (elapsed:find("µs", 1, true) or elapsed:find("ms", 1, true) or elapsed:find("s", 1, true)),
 		"the reload summary must report how long the reload took, with a unit, got: " .. tostring(elapsed))
 end)
@@ -462,24 +461,24 @@ test.it("passes", function() end)
 -- touched
 ]])
 
-		test.truthy(waitForCount(countPath, "x", 2, 15000), "test suite did not re-run after the file changed")
+		test.truthy(waitForCount(countPath, "x", 2, 15_000), "test suite did not re-run after the file changed")
 	end)
 end)
 
 -- Teal/Moonscript sources compile to .lua under target/, so a src/*.tl change
 -- must invalidate the compiled module (and a broken compile must not wedge the
 -- hot loop — the next fix must be picked up).
-local TEAL_V1 = [[
+const TEAL_V1 = [[
 local f = assert(io.open(arg[1], "a"))
 f:write("teal v1\n")
 f:close()
 ]]
-local TEAL_V2 = [[
+const TEAL_V2 = [[
 local f = assert(io.open(arg[1], "a"))
 f:write("teal v2\n")
 f:close()
 ]]
-local TEAL_FIXED = [[
+const TEAL_FIXED = [[
 local f = assert(io.open(arg[1], "a"))
 f:write("teal fixed\n")
 f:close()

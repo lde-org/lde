@@ -5,13 +5,13 @@
 -- manifest, and running a loose file through `lde run`.
 local test = require("lde-test")
 
-local fs = require("fs")
-local env = require("env")
+const fs = require("fs")
+const env = require("env")
 local path = require("path")
-local json = require("json")
-local process = require("process")
+const json = require("json")
+const process = require("process")
 
-local cli = require("tests.lib.ldecli")
+const cli = require("tests.lib.ldecli")
 
 local tmpBase = path.join(env.tmpdir(), "lde-commands-tests")
 fs.rmdir(tmpBase)
@@ -19,7 +19,6 @@ fs.mkdir(tmpBase)
 
 ---Strip ANSI escape sequences so output matches work with or without colors.
 ---@param s string
----@return string
 local function plain(s)
 	return ((s or ""):gsub("\27%[[0-9;]*m", ""))
 end
@@ -27,7 +26,6 @@ end
 ---@param name string
 ---@param deps table?
 ---@param extra table?
----@return string dir
 local function makeProject(name, deps, extra)
 	local dir = path.join(tmpBase, name)
 	fs.mkdir(dir)
@@ -48,7 +46,6 @@ end
 --- A local git repo usable as an offline git dependency (libgit2's lsRemote
 --- and clone accept plain local paths). Returns the repo dir.
 ---@param name string
----@return string repoDir
 local function makeLocalGitRepo(name)
 	local repoDir = path.join(tmpBase, name .. "-repo")
 	fs.rmdir(repoDir)
@@ -86,7 +83,6 @@ end
 --- The commit a local repo's HEAD points at (rev-parse, with its trailing
 --- newline trimmed).
 ---@param repoDir string
----@return string
 local function gitHead(repoDir)
 	local _, stdout = process.exec("git", { "rev-parse", "HEAD" }, { cwd = repoDir })
 	return ((stdout or ""):gsub("%s+$", ""))
@@ -97,8 +93,6 @@ end
 --- The name is a parameter because two tests share this fixture: reusing one
 --- repo/tree path would make commit shas and the git cache collide across them.
 ---@param name string
----@return string treeDir
----@return string repoDir
 local function makeRangedRegistry(name)
 	local repoDir = makeLocalGitRepo(name)
 
@@ -254,7 +248,7 @@ test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde update <name> pins a newer git 
 	test.includes(plain(out2 or ""), "->")
 	local lock2Raw = fs.read(path.join(dir, "lde.lock")) ---@cast lock2Raw -nil
 	local lock2 = json.decode(lock2Raw) ---@cast lock2 table<string, any>
-	local commit2 = lock2.dependencies["upd-dep"].commit
+	const commit2 = lock2.dependencies["upd-dep"].commit
 	test.truthy(commit2 and commit2 ~= commit1, "lockfile commit must move to the new HEAD")
 
 	-- The updated pin must be installable.
@@ -290,8 +284,8 @@ test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde update leaves a git dep pinned 
 	test.truthy(ok, "lde update failed: " .. tostring(out))
 	test.includes(plain(out or ""), "no changes")
 
-	local lockRaw = fs.read(path.join(dir, "lde.lock")) ---@cast lockRaw -nil
-	local lock = json.decode(lockRaw) ---@cast lock table<string, any>
+	const lockRaw = fs.read(path.join(dir, "lde.lock")) ---@cast lockRaw -nil
+	const lock = json.decode(lockRaw) ---@cast lock table<string, any>
 	test.equal(lock.dependencies["pinned-dep"].commit, pinned, "a lde.json commit pin must not move")
 
 	ok, out = cli({ "sync" }, dir)
@@ -323,7 +317,7 @@ test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde update floats a caret dep to th
 	commitMore(repoDir, "src/v2.lua", 'return "v2"')
 	local sha2 = gitHead(repoDir)
 	commitMore(repoDir, "src/v3.lua", 'return "v3"')
-	local sha3 = gitHead(repoDir)
+	const sha3 = gitHead(repoDir)
 	fs.write(path.join(treeDir, "registry", "packages", "caret-dep.json"), json.encode({
 		name = "caret-dep",
 		description = "offline test package",
@@ -382,7 +376,7 @@ test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde update re-resolves a ranged reg
 
 	-- The range itself is not rewritten, and the next install materializes the
 	-- newly resolved version.
-	local raw = fs.read(path.join(dir, "lde.json")) ---@cast raw -nil
+	const raw = fs.read(path.join(dir, "lde.json")) ---@cast raw -nil
 	local config = json.decode(raw) ---@cast config table<string, any>
 	test.equal(config.dependencies["ranged-dep"].version, "0.1")
 
@@ -671,9 +665,9 @@ test.it("lde compile names the missing bin entry in its error", function()
 end)
 
 -- The release target matching the host (nil when none does, e.g. musl hosts).
-local sea = require("sea")
-local hostTargetName = (function()
-	local host = sea.getHostTarget()
+const sea = require("sea")
+const hostTargetName = (function()
+	const host = sea.getHostTarget()
 	for name, target in pairs(sea.targets) do
 		if target.platform == host.platform and target.arch == host.arch
 			and (target.libc or "") == (host.libc or "") then
@@ -743,7 +737,7 @@ test.it("lde run --flamegraph writes an HTML flamegraph", function()
 		end
 		for i = 1, 20 do work(2000000) end
 	]])
-	local fgPath = path.join(tmpBase, "fg-cli.html")
+	const fgPath = path.join(tmpBase, "fg-cli.html")
 	fs.delete(fgPath)
 
 	local ok, out = cli({ "run", "--flamegraph", fgPath }, dir)
@@ -769,7 +763,7 @@ test.it("lde run --json writes programmatically checkable profile data", functio
 		for i = 1, 30 do hotspot(2000000) end
 		print("json-done")
 	]])
-	local jsonPath = path.join(tmpBase, "json-cli.json")
+	const jsonPath = path.join(tmpBase, "json-cli.json")
 	fs.delete(jsonPath)
 
 	local ok, out = cli({ "run", "--json", jsonPath }, dir)
@@ -777,7 +771,7 @@ test.it("lde run --json writes programmatically checkable profile data", functio
 	test.includes(out or "", "json-done")
 	test.truthy(fs.exists(jsonPath), "profile JSON not written: " .. tostring(out))
 
-	local dataRaw = fs.read(jsonPath) ---@cast dataRaw -nil
+	const dataRaw = fs.read(jsonPath) ---@cast dataRaw -nil
 	local data = json.decode(dataRaw) ---@cast data table<string, any>
 	test.truthy(data, "profile JSON must decode")
 	test.truthy(data.total > 0, "expected sampled data, got total=" .. tostring(data.total))

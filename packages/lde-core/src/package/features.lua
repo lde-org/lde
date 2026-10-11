@@ -54,17 +54,17 @@
 --- `enabledDependencies`, `enabledFlags`, `excludes` -- works on that and never
 --- sees a package name again.
 
-local fs = require("fs")
-local json = require("json")
-local path = require("path")
+const fs = require("fs")
+const json = require("json")
+const path = require("path")
 
-local features = {}
+const features = {}
 
 --- The flag naming the platform being installed on, by jit.os. BSD is listed
 --- explicitly: it had no flag before, so a manifest gating on `bsd` had no way
 --- to ever turn it on.
 ---@type table<string, string>
-local OS_FLAGS = {
+const OS_FLAGS = {
 	Windows = "windows",
 	Linux = "linux",
 	OSX = "macos",
@@ -77,11 +77,14 @@ local OS_FLAGS = {
 ---@field deps string[]? # optional dependency aliases this flag enables
 ---@field modules string[]? # module paths below the module dir that this flag drops
 
+--- A manifest's `features` as it is written: a flag and the entries it turns on, before
+--- `features.parse` splits them into a dependency alias and a module of the package's own.
+---@alias lde.Package.Config.FeatureDeclarations table<string, string[]>
+
 ---@alias lde.Package.Config.FeatureDefinitions table<string, lde.Package.Config.FeatureDefinition>
 
 --- Flags lde always turns on for every package: the OS's own flag, plus `unix`
 --- on every non-Windows platform.
----@return string[] flags
 function features.platformFlags()
 	local os = OS_FLAGS[jit.os]
 	if not os then return {} end
@@ -109,7 +112,6 @@ end
 --- dropping it would leave a package quietly shipping files it asked to exclude.
 ---@param declared table<string, any>?
 ---@param packageName string? # the declaring package, needed to read module names
----@return table<string, lde.Package.Config.FeatureDefinition>?
 function features.parse(declared, packageName)
 	if type(declared) ~= "table" then return nil end
 
@@ -125,8 +127,8 @@ function features.parse(declared, packageName)
 		end
 
 		---@type lde.Package.Config.FeatureDefinition
-		local split = {}
-		for _, entry in ipairs(def --[[@as string[] ]]) do
+		const split = {}
+		for _, entry in ipairs(def) do
 			if isModuleName(entry, packageName) then
 				-- Strip the prefix and map dots onto directories, the same way
 				-- require() resolves the name. Only reachable with a prefix, so
@@ -147,7 +149,6 @@ end
 --- The normalized `features` table of a package, or nil when it declares none.
 --- A rockspec-backed package has no manifest and therefore no features.
 ---@param pkg lde.Package
----@return table<string, lde.Package.Config.FeatureDefinition>?
 function features.of(pkg)
 	return features.parse(pkg:readConfig().features, pkg:getName())
 end
@@ -155,8 +156,7 @@ end
 --- The flags that are on for a package: the platform's own, plus the ones the
 --- package's dependents named on their dependency entries.
 ---@param defs table<string, lde.Package.Config.FeatureDefinition>? # normalized, from parse()/of()
----@param requested lde.Package.Config.FeatureFlag[]? # as the dependency entries declared them
----@return lde.Package.Config.FeatureDefinition[] on # the enabled flags' effects
+---@param requested string[]? # as the dependency entries declared them
 function features.enabled(defs, requested)
 	---@type lde.Package.Config.FeatureDefinition[]
 	local on = {}
@@ -165,7 +165,7 @@ function features.enabled(defs, requested)
 	---@param flags string[]
 	local function turnOn(flags)
 		for _, flag in ipairs(flags) do
-			local def = defs[flag]
+			const def = defs[flag]
 			if def then on[#on + 1] = def end
 		end
 	end
@@ -178,11 +178,10 @@ end
 
 --- The optional dependency aliases the enabled flags turn on.
 ---@param defs table<string, lde.Package.Config.FeatureDefinition>? # normalized
----@param requested lde.Package.Config.FeatureFlag[]?
----@return table<string, true> enabled # alias -> true
+---@param requested string[]?
 function features.enabledDependencies(defs, requested)
 	---@type table<string, true>
-	local enabled = {}
+	const enabled = {}
 	for _, def in ipairs(features.enabled(defs, requested)) do
 		for _, alias in ipairs(def.deps or {}) do
 			enabled[alias] = true
@@ -206,10 +205,9 @@ end
 ---     then build:cc{...} end` with no `features` entry at all -- so requesting
 ---     it must be enough.
 ---@param defs table<string, lde.Package.Config.FeatureDefinition>? # normalized, unused beyond presence
----@param requested lde.Package.Config.FeatureFlag[]?
----@return string[] flags
+---@param requested string[]?
 function features.enabledFlags(defs, requested)
-	---@type string[]
+	---@type string[], table<string, boolean>
 	local flags, seen = {}, {}
 
 	---@param flag string
@@ -233,7 +231,6 @@ end
 --- `raw/windows/init.lua` and a prebuilt `raw/windows.so` are all the module
 --- `raw/windows`, so one name covers every form a module can ship in.
 ---@param relativePath string
----@return string
 local function modulePathOf(relativePath)
 	local modulePath = relativePath:gsub("\\", "/"):gsub("^%./", "")
 	modulePath = modulePath:gsub("%.[^./]+$", "")
@@ -245,7 +242,7 @@ end
 --- de-duplicated: the result is written into the lockfile, and an unstable list
 --- would churn the lockfile on every install.
 ---@param defs table<string, lde.Package.Config.FeatureDefinition>? # normalized
----@param requested lde.Package.Config.FeatureFlag[]?
+---@param requested string[]?
 ---@return string[]? excludes # nil when nothing is excluded
 function features.excludes(defs, requested)
 	local seen, list = {}, {}
@@ -279,12 +276,11 @@ end
 --- The subset of `relativePaths` the excluded modules leave alone.
 ---@param relativePaths string[]
 ---@param excludes string[]?
----@return string[]
 function features.filter(relativePaths, excludes)
 	if not excludes or #excludes == 0 then return relativePaths end
 
 	---@type string[]
-	local kept = {}
+	const kept = {}
 	for _, relativePath in ipairs(relativePaths) do
 		if not features.isExcluded(relativePath, excludes) then
 			kept[#kept + 1] = relativePath
@@ -301,7 +297,7 @@ end
 ---@param pkg lde.Package
 ---@return string[] flags
 function features.ofPackage(pkg)
-	local explicit = pkg.features
+	const explicit = pkg.features
 	if explicit then return explicit end
 	return features.enabledFlags(features.of(pkg), nil)
 end
@@ -312,7 +308,7 @@ end
 --- `lde.Lockfile.Dependency` and a hand-built `{ exclude = {...} }` (tests,
 --- callers that only care about features) satisfy it.
 ---@alias lde.Package.FeatureLockEntry
---- | { features: lde.Package.Config.FeatureFlag[]?, exclude: string[]? }
+--- | { features: string[]?, exclude: string[]? }
 --- | lde.Lockfile.Dependency
 
 --- The excluded module paths to apply to `target/<alias>`, where `alias` is a
@@ -330,32 +326,32 @@ end
 ---@param lockEntry lde.Package.FeatureLockEntry?
 ---@return string[]? excludes
 function features.excludesFor(modulesDir, alias, lockEntry)
-	local content = fs.read(path.join(modulesDir, alias, "..", "lde.json"))
+	const content = fs.read(path.join(modulesDir, alias, "..", "lde.json"))
 	if content then
-		local ok, decoded = pcall(json.decode, content)
+		const ok, decoded = pcall(json.decode, content)
 		if ok and type(decoded) == "table" then
 			local defs = features.parse(decoded.features, decoded.name or alias)
 			if defs then
-				return features.excludes(defs, lockEntry and lockEntry.features or nil)
+				return features.excludes(defs, lockEntry?.features)
 			end
 		end
 	end
 
-	return lockEntry and lockEntry.exclude or nil
+	return lockEntry ? lockEntry.exclude : nil
 end
 
 --- Binds `excludesFor` to one package's modules dir, so every scan over
 --- `target/` -- the Lua bundle, the native-module bundle, the bloat report --
 --- filters entries by the same rules instead of each re-deriving them.
 ---@param package lde.Package
----@param requested lde.Package.Config.FeatureFlag[]? # extra flags for the package itself
+---@param requested string[]? # extra flags for the package itself
 ---@return fun(alias: string): string[]?
 function features.resolverFor(package, requested)
 	local modulesDir = package:getModulesDir()
-	local mainName = package:getName()
+	const mainName = package:getName()
 	local lockfile = package:readLockfile()
-	local lockDeps = lockfile and lockfile.raw.dependencies or {}
-	local rootExcludes = features.excludes(features.of(package), requested)
+	const lockDeps = lockfile?.raw?.dependencies ?? {}
+	const rootExcludes = features.excludes(features.of(package), requested)
 
 	return function(alias)
 		if alias == mainName then return rootExcludes end

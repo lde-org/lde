@@ -1,11 +1,11 @@
-local test = require("lde-test")
+const test = require("lde-test")
 
-local fs = require("fs")
-local env = require("env")
-local path = require("path")
-local json = require("json")
+const fs = require("fs")
+const env = require("env")
+const path = require("path")
+const json = require("json")
 
-local ldecli = require("tests.lib.ldecli")
+const ldecli = require("tests.lib.ldecli")
 
 test.it("runs Teal (.tl) packages out of the box", function()
 	local tmpDir = path.join(env.tmpdir(), "lde-teal-run-test")
@@ -40,7 +40,7 @@ test.it("runs Teal (.tl) packages out of the box", function()
 	-- Bundles only carry the compiled Lua; .tl sources never leak in.
 	local ok2, bundleErr = ldecli({ "bundle" }, tmpDir)
 	if not ok2 then error("bundle failed: " .. tostring(bundleErr), 2) end
-	local bundle = fs.read(path.join(tmpDir, "tealfix.lua"))
+	const bundle = fs.read(path.join(tmpDir, "tealfix.lua"))
 	if not bundle then error("bundle produced no output", 2) end
 	test.falsy(bundle:find(".tl", 1, true))
 

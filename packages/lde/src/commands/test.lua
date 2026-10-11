@@ -1,13 +1,13 @@
-local fs = require("fs")
-local path = require("path")
-local ansi = require("ansi")
-local env = require("env")
-local process = require("process")
-local ffi = require("ffi")
+const fs = require("fs")
+const path = require("path")
+const ansi = require("ansi")
+const env = require("env")
+const process = require("process")
+const ffi = require("ffi")
 
-local errorsnippet = require("lde.util.errorsnippet")
+const errorsnippet = require("lde.util.errorsnippet")
 
-local lde = require("lde-core")
+const lde = require("lde-core")
 
 -- Cross-platform sleep used to poll the file watchers in --watch mode.
 local sleep
@@ -57,7 +57,7 @@ local function printFileErrors(results, pkgDir)
 	for _, file in ipairs(results.files) do
 		if file.error then
 			ansi.printf("  {red}FAIL {white}%s", file.file)
-			local testDir = results.package and results.package:getTestDir() or pkgDir
+			local testDir = results.package ? (results.package:getTestDir()) : pkgDir
 			if not errorsnippet.printError(pkgDir, file.error, path.join(testDir, file.file)) then
 				ansi.printf("     {red}%s", file.error)
 			end
@@ -81,7 +81,6 @@ local function printSummary(failures, passed, total, skipped)
 end
 
 ---@param percent number
----@return string
 local function percentColor(percent)
 	if percent >= 90 then return "green" end
 	if percent >= 70 then return "yellow" end
@@ -110,7 +109,7 @@ local function coverageReport(pkg, coverage)
 	local files, totalExecutable, totalCovered = coverage:compute()
 
 	local pkgDir = pkg:getDir()
-	local targetPrefix = path.join("target", pkg:getName()) .. path.separator
+	const targetPrefix = path.join("target", pkg:getName()) .. path.separator
 
 	---@type lde.CoverageFileRow[]
 	local rows = {}
@@ -148,7 +147,7 @@ end
 ---@param pkg lde.Package
 ---@param coverage lde.Coverage
 local function printCoverage(pkg, coverage)
-	local report = coverageReport(pkg, coverage)
+	const report = coverageReport(pkg, coverage)
 	local rows = report.files
 	if #rows == 0 then
 		ansi.printf("  {yellow}Coverage: no source files were loaded")
@@ -167,9 +166,9 @@ local function printCoverage(pkg, coverage)
 		covW = math.max(covW, #tostring(r.covered))
 		totW = math.max(totW, #tostring(r.executable))
 	end
-	local ratioW = covW + 1 + totW
+	const ratioW = covW + 1 + totW
 	-- Widest row: 2 indent + file + 1 + ratio + 1 + "lines" + 2 + "100.0%".
-	local sepW = fileW + ratioW + 17
+	const sepW = fileW + ratioW + 17
 
 	print()
 	ansi.printf("  {bold}Coverage")
@@ -177,13 +176,13 @@ local function printCoverage(pkg, coverage)
 	for _, r in ipairs(rows) do
 		-- The color token is spliced into the format string at runtime so
 		-- ansi.format resolves it; {%s} would survive gsub and print literally.
-		local color = percentColor(r.percent)
+		const color = percentColor(r.percent)
 		ansi.printf("  {gray}%-" .. fileW .. "s{reset} %" .. ratioW .. "s {gray}lines{reset}  {" .. color .. "}%.1f%%",
 			r.file, ("%d/%d"):format(r.covered, r.executable), r.percent)
 	end
 	print("  " .. ansi.colorize("gray", string.rep("─", sepW)))
-	local totalPercent = totalExecutable > 0 and totalCovered / totalExecutable * 100 or 0
-	local totalColor = percentColor(totalPercent)
+	const totalPercent = totalExecutable > 0 and totalCovered / totalExecutable * 100 or 0
+	const totalColor = percentColor(totalPercent)
 	-- Right-align the Total's ratio with the rows ("  Total: " is 9 chars).
 	ansi.printf("  Total: %s {gray}lines{reset}  {" .. totalColor .. "}%.1f%%",
 		("%" .. (ratioW + fileW - 6) .. "s"):format(("%d/%d"):format(totalCovered, totalExecutable)), totalPercent)
@@ -195,20 +194,20 @@ end
 ---@param reports lde.CoverageReport[]
 ---@param jsonPath string
 local function writeCoverageJson(reports, jsonPath)
-	local json = require("json")
+	const json = require("json")
 	local totalExecutable, totalCovered = 0, 0
 	for _, r in ipairs(reports) do
-		totalExecutable = totalExecutable + r.totalExecutable
-		totalCovered = totalCovered + r.totalCovered
+		totalExecutable += r.totalExecutable
+		totalCovered += r.totalCovered
 	end
-	local data = {
+	const data = {
 		version = 1,
 		totalExecutable = totalExecutable,
 		totalCovered = totalCovered,
 		percent = totalExecutable > 0 and totalCovered / totalExecutable * 100 or 0,
 		packages = reports,
 	}
-	local content = json.encode(data)
+	const content = json.encode(data)
 	if not content then
 		ansi.printf("{red}Failed to encode coverage JSON")
 		return
@@ -236,14 +235,14 @@ end
 ---@param coverage boolean?
 local function runWatch(filters, coverage)
 	local dirty = false
-	local watchers = {}
+	const watchers = {}
 
 	---@param dir string
 	---@param recursive boolean
 	---@param filter? fun(name: string): boolean
 	local function addWatch(dir, recursive, filter)
 		if not fs.isdir(dir) then return end
-		local watcher = fs.watch(dir, function(_event, name)
+		const watcher = fs.watch(dir, function(_event, name)
 			if not filter or filter(name) then dirty = true end
 		end, { recursive = recursive })
 		if not watcher then
@@ -252,7 +251,7 @@ local function runWatch(filters, coverage)
 		watchers[#watchers + 1] = watcher
 	end
 
-	local configFiles = function(name)
+	const configFiles = function(name)
 		return name == "lde.json" or name == "build.lua"
 	end
 
@@ -312,7 +311,7 @@ end
 
 ---@param args clap.Args
 local function test(args)
-	local watch = args:flag("watch")
+	const watch = args:flag("watch")
 	local coverage = args:flag("coverage")
 	-- --json <file> writes the coverage report as JSON (implies --coverage).
 	local jsonOut = args:option("json")
@@ -323,7 +322,7 @@ local function test(args)
 	args:flag("") -- consume the `--` separator if present
 	local filters = {}
 	while true do
-		local v = args:pop()
+		const v = args:pop()
 		if not v then break end
 		filters[#filters + 1] = v
 	end
@@ -386,7 +385,7 @@ local function test(args)
 		end
 
 		ansi.printf("{white}Running tests from {cyan}%d {white}%s",
-			#packages, #packages == 1 and "package" or "packages")
+			#packages, #packages == 1 ? "package" : "packages")
 		print()
 
 		-- Whether any package actually ran a file: with a filter, a run where
@@ -404,14 +403,14 @@ local function test(args)
 			if results.error then
 				ansi.printf("  {red}%s", results.error)
 				hadFailures = true
-				totalFailures = totalFailures + 1
+				totalFailures += 1
 			elseif results.external then
 				-- External runners (busted) print their own results.
 				anyMatched = true
 				if results.exitCode ~= 0 then
 					ansi.printf("  {red}Tests: failed (exit %s)", tostring(results.exitCode))
 					hadFailures = true
-					totalFailures = totalFailures + 1
+					totalFailures += 1
 				else
 					ansi.printf("  {green}Tests: passed")
 					totalPassed = totalPassed + 1
@@ -427,9 +426,9 @@ local function test(args)
 			else
 				anyMatched = true
 				printFileErrors(results, pkg:getDir())
-				totalPassed = totalPassed + (results.total - results.failures)
-				totalFailures = totalFailures + results.failures
-				totalSkipped = totalSkipped + (results.skipped or 0)
+				totalPassed += (results.total - results.failures)
+				totalFailures += results.failures
+				totalSkipped += (results.skipped or 0)
 				if results.failures > 0 then hadFailures = true end
 			end
 			if coverage then

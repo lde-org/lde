@@ -1,17 +1,15 @@
-local fs = require("fs")
-local path = require("path")
+const fs = require("fs")
+const path = require("path")
 
-local features = require("lde-core.package.features")
+const features = require("lde-core.package.features")
 
-local lde = require("lde-core")
 
-local bundlePackage = require("lde-core.package.bundle")
+const bundlePackage = require("lde-core.package.bundle")
 
-local nativeExts = jit.os == "Windows" and { "dll" }
+const nativeExts = jit.os == "Windows" and { "dll" }
 	or (jit.os == "OSX" and { "so", "dylib" } or { "so" })
 
 ---@param fileName string
----@return string?
 local function matchNativeExt(fileName)
 	for _, ext in ipairs(nativeExts) do
 		if fileName:match("%." .. ext .. "$") then
@@ -52,13 +50,13 @@ local function analyze(package)
 	package:build()
 	package:installDependencies()
 
-	local source = bundlePackage(package, { raw = true })
+	const source = bundlePackage(package, { raw = true })
 	local rootName = package:getName()
 
 	---@type table<string, lde.bloat.Entry>
-	local entriesByName = {}
+	const entriesByName = {}
 	---@type string[]
-	local order = {}
+	const order = {}
 	local totalBytes = 0
 	local luaFiles = 0
 	local luaBytes = 0
@@ -109,14 +107,14 @@ local function analyze(package)
 	-- exclusions) so the report answers "what will the executable contain"
 	-- rather than "what is on disk".
 	local modulesDir = package:getModulesDir()
-	local excludesFor = features.resolverFor(package)
+	const excludesFor = features.resolverFor(package)
 	for entry in fs.readdir(modulesDir) do
 		local p = path.join(modulesDir, entry.name)
 		if entry.name == "tests" and rootName ~= "tests" then
 			goto continue
 		end
 
-		local excludes = excludesFor(entry.name)
+		const excludes = excludesFor(entry.name)
 
 		if not fs.isdir(p) then
 			local ext = matchNativeExt(entry.name)
@@ -132,7 +130,7 @@ local function analyze(package)
 		for _, relativePath in ipairs(fs.scan(p, "**")) do
 			local ext = matchNativeExt(relativePath)
 			if ext and not features.isExcluded(relativePath, excludes) then
-				local absPath = path.join(p, relativePath)
+				const absPath = path.join(p, relativePath)
 				local stat = fs.stat(absPath)
 				if stat then
 					local moduleName = string.gsub(relativePath, path.separator, "."):gsub("%." .. ext .. "$", "")
@@ -150,9 +148,9 @@ local function analyze(package)
 	for _, alias in ipairs(order) do
 		entries[#entries + 1] = entriesByName[alias]
 	end
-	table.sort(entries, function(a, b) return a.bytes > b.bytes end)
+	table.sort(entries, |a, b| -> a.bytes > b.bytes)
 	for _, entry in ipairs(entries) do
-		table.sort(entry.files, function(a, b) return a.bytes > b.bytes end)
+		table.sort(entry.files, |a, b| -> a.bytes > b.bytes)
 	end
 
 	return {

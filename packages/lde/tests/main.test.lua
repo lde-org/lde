@@ -1,14 +1,14 @@
 local test = require("lde-test")
 
-local fs = require("fs")
-local env = require("env")
+const fs = require("fs")
+const env = require("env")
 local path = require("path")
-local json = require("json")
-local git2 = require("git2-sys")
+const json = require("json")
+const git2 = require("git2-sys")
 
-local lde = require("lde-core")
+const lde = require("lde-core")
 
-local ldecli = require("tests.lib.ldecli")
+const ldecli = require("tests.lib.ldecli")
 
 test.it("should not ignore --git in ldx", function()
 	local cloneUrl = "https://github.com/bycruz/hood"
@@ -150,7 +150,7 @@ test.it("lde test monorepo mode runs each package from its own cwd", function()
 	-- exists inside the package dir, so the read succeeds only when the
 	-- package runs from its own directory (the cwd `lde test -C <pkg>` uses),
 	-- never from the monorepo root.
-	local testSource = [[
+	const testSource = [[
 		local test = require("lde-test")
 		test.it("reads a cwd-relative fixture", function()
 			local f = assert(io.open("fixtures/marker.txt"))
@@ -320,7 +320,7 @@ end)
 
 test.it("lde -v prints the version like --version", function()
 	local okV, outV = ldecli { "-v" }
-	local okLong, outLong = ldecli { "--version" }
+	const okLong, outLong = ldecli { "--version" }
 
 	test.truthy(okV)
 	test.truthy(okLong)

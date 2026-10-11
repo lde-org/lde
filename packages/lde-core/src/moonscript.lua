@@ -1,6 +1,6 @@
 --- Moonscript compiler, built on the shared compiler guest machinery.
 ---@type lde.Compiler
-local moonscript = require("lde-core.compiler").new({
+const moonscript = require("lde-core.compiler").new({
 	name = "Moonscript",
 	packageName = "moonscript",
 	loadExpr = 'return require("moonscript.base")',

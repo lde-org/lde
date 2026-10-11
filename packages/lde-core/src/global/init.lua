@@ -1,35 +1,34 @@
 local fs = require("fs")
-local json = require("json")
 local path = require("path")
-local process = require("process")
+const process = require("process")
 local semver = require("semver")
-local lde = require("lde-core")
-local ansi = require("ansi")
-local env = require("env")
-local util = require("util")
+const lde = require("lde-core")
+const ansi = require("ansi")
+const env = require("env")
+const util = require("util")
 
-local global = {}
+const global = {}
 package.loaded[(...)] = global
 
 -- Lazily wrap native modules to avoid loading them (which uses a ton of memory and adds some overhead to copy the file)
 -- This isn't done with require() inline because that would cause issues with LuaJIT compilation.
-local curl = util.lazy(|| -> require("curl-sys"))
+const curl = util.lazy(|| -> require("curl-sys"))
 local Archive = util.lazy(|| -> require("archive"))
 local git2 = util.lazy(|| -> require("git2-sys"))
-local sea = util.lazy(|| -> require("sea"))
+const sea = util.lazy(|| -> require("sea"))
 
 --- Total-time budget for a single download transfer. curl-sys exposes no
 --- default timeout, so a server that accepts the connection but never
 --- finishes the body (or a half-open connection) would block forever; the
 --- timeout turns that into a per-dependency failure instead of a hang.
-local DOWNLOAD_TIMEOUT = 120 -- seconds
+const DOWNLOAD_TIMEOUT = 120 -- seconds
 
 --- Marker file written into a git cache dir once it is fully materialized
 --- (extracted or cloned). Dirs without it are treated as possibly-partial —
 --- an interrupted run leaves a half-extracted tree that looks cached by
 --- existence alone, which made the next sync trust it and then fail with
 --- "No lde.json with name '<name>' found in: <dir>".
-local GIT_CACHE_MARKER = ".lde-complete"
+const GIT_CACHE_MARKER = ".lde-complete"
 
 global.getConfig = require("lde-core.global.config")
 global.currentVersion = (function()
@@ -46,7 +45,6 @@ end
 --- Returns "github", "gitlab", "codeberg", "bitbucket", or nil if the URL is
 --- not a recognized git host (hosts with archive endpoints for tarball downloads).
 ---@param url string
----@return string?
 local function isRecognizedGitHost(url)
 	if url:match("^https?://github%.com/") then return "github" end
 	if url:match("^https?://gitlab%.com/") then return "gitlab" end
@@ -59,7 +57,6 @@ end
 ---@param url string  # git clone URL (may have .git suffix or /tree/... paths)
 ---@param ref string  # commit SHA, branch name, or tag
 ---@param hostType string  # "github", "gitlab", "codeberg", or "bitbucket"
----@return string
 local function buildTarballUrl(url, ref, hostType)
 	local base = url:gsub("%.git$", "")
 	base = base:gsub("/tree/.*$", "")
@@ -147,7 +144,7 @@ end
 --- resolved-URL cache) lives here so per-tree installs share it instead of
 --- re-downloading per tree.
 function global.getUserDir()
-	local ldeHome = os.getenv("LDE_HOME")
+	const ldeHome = os.getenv("LDE_HOME")
 	if ldeHome and ldeHome ~= "" then return ldeHome end
 	return path.join(os.getenv("HOME") or os.getenv("USERPROFILE"), ".lde")
 end
@@ -199,21 +196,18 @@ function global.setTarget(target)
 	currentTarget = target
 end
 
----@return sea.Target?
 function global.getTarget()
 	return currentTarget
 end
 
 --- Stable key for the current target, mixed into build/install stamps so a
 --- target switch forces native dependencies to rebuild.
----@return string
 function global.getTargetKey()
 	local target = currentTarget
-	return target and target.name or ""
+	return target?.name ?? ""
 end
 
 --- The clang -target flag for the current cross target, nil when native.
----@return string?
 function global.getTargetFlag()
 	local target = currentTarget
 	if not target then return nil end
@@ -232,10 +226,9 @@ end
 --- The compiler invocation for the current target: the compiler binary plus
 --- the clang -target flag when cross-compiling. Suitable for CC=/LD= env
 --- vars passed to make/cmake from build scripts and rockspec builds.
----@return string
 function global.getCCCommand()
-	local cc = global.getCCBin()
-	local flag = global.getTargetFlag()
+	const cc = global.getCCBin()
+	const flag = global.getTargetFlag()
 	return flag ? (cc .. " " .. flag) : cc
 end
 
@@ -288,7 +281,7 @@ function global.getCCBin()
 	end
 
 	if jit.os == "Windows" then
-		local mingwGcc = path.join(global.getMingwDir(), "bin", "gcc.exe")
+		const mingwGcc = path.join(global.getMingwDir(), "bin", "gcc.exe")
 		if fs.exists(mingwGcc) then
 			return mingwGcc
 		end
@@ -301,14 +294,13 @@ end
 --- On Windows, prefers the bundled mingw toolchain's mingw32-make (the
 --- conventional name there) and falls back to the bare name so a make on
 --- PATH is used when no toolchain is installed.
----@return string
 function global.getMakeBin()
 	if jit.os == "Windows" then
-		local mingwMake = path.join(global.getMingwDir(), "bin", "mingw32-make.exe")
+		const mingwMake = path.join(global.getMingwDir(), "bin", "mingw32-make.exe")
 		if fs.exists(mingwMake) then
 			return mingwMake
 		end
-		local makeExe = path.join(global.getMingwDir(), "bin", "make.exe")
+		const makeExe = path.join(global.getMingwDir(), "bin", "make.exe")
 		if fs.exists(makeExe) then
 			return makeExe
 		end
@@ -322,7 +314,6 @@ end
 --- Windows, prefers the bundled toolchain's BusyBox sh so scripts get POSIX
 --- semantics (positional args, quoting) on every platform; falls back to
 --- cmd.exe when no toolchain is installed.
----@return string bin
 ---@return string flag
 ---@return boolean isCmd # true when the shell is cmd.exe (double-quote escaping)
 function global.getScriptShell()
@@ -369,6 +360,7 @@ end
 
 ---@param name string
 ---@return lde.Portfile?
+---@return string? sha
 ---@return string? err
 function global.lookupRegistryPackage(name)
 	return getRegistry():lookup(name)
@@ -377,6 +369,7 @@ end
 ---@param portfile lde.Portfile
 ---@param version string?
 ---@return string version
+---@return string repoDir
 ---@return string commit
 function global.resolveRegistryVersion(portfile, version)
 	return getRegistry():resolveVersion(portfile, version)
@@ -394,9 +387,8 @@ end
 --- "/" is normalized to the OS separator so the nested path is platform-consistent.
 ---@param repoName string
 ---@param commit string
----@return string
 function global.getGitRepoDir(repoName, commit)
-	local safeName = (repoName:gsub("[^%w_%-/]", "_"):gsub("/", path.separator))
+	const safeName = (repoName:gsub("[^%w_%-/]", "_"):gsub("/", path.separator))
 	return path.join(global.getGitCacheDir(), safeName .. "-" .. sanitize(commit))
 end
 
@@ -484,8 +476,6 @@ end
 --- annotated tags point at a tag object rather than a commit.
 ---@param repoUrl string
 ---@param ref string? -- branch or tag name, or nil/"" for HEAD
----@return string? sha
----@return string? err
 local function resolveGitRef(repoUrl, ref)
 	if not ref or ref == "" or ref == "HEAD" then
 		return git2().lsRemote(repoUrl, "HEAD") --[[@as string?]]
@@ -516,8 +506,6 @@ global.resolveGitRef = resolveGitRef
 ---@param branch string?
 ---@param commit string?
 ---@param isOffline boolean?
----@return string repoDir
----@return string commit
 function global.getOrInitGitRepo(repoName, repoUrl, branch, commit, isOffline)
 	if not commit then
 		if isOffline then
@@ -599,7 +587,7 @@ function global.planGitRepo(repoName, repoUrl, branch, commit)
 	if fs.exists(repoDir) and not global.isGitRepoCached(repoDir, repoName) then
 		fs.rmdir(repoDir)
 	end
-	local plan = { dir = repoDir, commit = commit }
+	const plan = { dir = repoDir, commit = commit }
 
 	if not fs.exists(repoDir) then
 		local hostType = isRecognizedGitHost(repoUrl)
@@ -645,14 +633,13 @@ end
 --- download is in flight; the extracted dir is reused in that case.
 ---@param url string
 ---@param isOffline boolean?
----@return string dir
 function global.getOrInitArchive(url, isOffline)
 	local archiveDir = global.getArchiveDir(url)
 	if isOffline and not fs.exists(archiveDir) then
 		lde.error.raise("offline: archive is not cached locally (run once online to cache it): " .. url)
 	end
 	if not fs.exists(archiveDir) then
-		local filename = url:match("([^/]+)$") or url
+		const filename = url:match("([^/]+)$") or url
 		local bar = lde.isVerbose ? ansi.progress("Downloading " .. filename) : nil
 		-- Created up front: curl.download opens archiveDir .. ".archive" directly,
 		-- so the parent must exist. Removed again on failure (see below).
@@ -677,7 +664,7 @@ function global.getOrInitArchive(url, isOffline)
 			if not fs.exists(archiveFile) then
 				-- A concurrent install extracted and deleted the .archive file while
 				-- we were downloading; reuse its extracted dir when it's ready.
-				local iter = fs.readdir(archiveDir)
+				const iter = fs.readdir(archiveDir)
 				if iter then
 					for _ in iter do
 						return true, nil
@@ -717,7 +704,6 @@ end
 
 --- Cache directory an archive URL extracts into.
 ---@param url string
----@return string
 function global.getArchiveDir(url)
 	return path.join(global.getTarCacheDir(), sanitize(url))
 end
@@ -785,8 +771,6 @@ end
 ---@param repoName string
 ---@param cloneUrl string
 ---@param branch string?
----@return string repoDir
----@return string commit
 function global.getOrCloneRepo(repoName, cloneUrl, branch)
 	local commit, err = resolveGitRef(cloneUrl, branch)
 	if not commit then
@@ -824,7 +808,7 @@ end
 ---@return string? err
 function global.findNamedPackageIn(dir, name)
 	for _, config in ipairs(fs.scan(dir, "**" .. path.separator .. "lde.json")) do
-		local parentDir = path.join(dir, path.dirname(config))
+		const parentDir = path.join(dir, path.dirname(config))
 		local pkg = lde.Package.open(parentDir)
 		if pkg and pkg:getName() == name then
 			return pkg, nil
@@ -850,13 +834,13 @@ end
 ---@param packageName string
 function global.writeWrapper(toolName, packageDir, packageName)
 	local toolsDir = global.getToolsDir()
-	local ldeBin = env.execPath() or "lde"
+	const ldeBin = env.execPath() or "lde"
 	local treeFlag = ""
 	if global.getDir() ~= global.getUserDir() then
 		treeFlag = " --tree '" .. global.getDir() .. "'"
 	end
 	-- sh double-quotes the binary path (spaces), cmd needs its own form below.
-	local invocation = packageDir
+	const invocation = packageDir
 		and ("\"" .. ldeBin .. "\" x --path '" .. packageDir .. "' " .. packageName .. treeFlag .. " --")
 		or ("\"" .. ldeBin .. "\" x" .. treeFlag .. " " .. packageName .. " --offline --")
 
@@ -868,7 +852,7 @@ function global.writeWrapper(toolName, packageDir, packageName)
 		if global.getDir() ~= global.getUserDir() then
 			winTreeFlag = " --tree \"" .. global.getDir() .. "\""
 		end
-		local winInvocation = packageDir
+		const winInvocation = packageDir
 			and ('"' .. ldeBin .. '" x --path "' .. packageDir .. '" ' .. packageName .. winTreeFlag .. " --")
 			or ('"' .. ldeBin .. '" x' .. winTreeFlag .. " " .. packageName .. " --offline --")
 		local content = "@echo off\n" .. winInvocation .. " %*\n"
@@ -904,7 +888,7 @@ function global.writeWrapper(toolName, packageDir, packageName)
 	end
 end
 
-local TOOLCHAIN_BASE = "https://github.com/lde-org/toolchain-dist/releases/download/latest"
+const TOOLCHAIN_BASE = "https://github.com/lde-org/toolchain-dist/releases/download/latest"
 
 --- Ensures a toolchain exists at ~/.lde/mingw (Windows only).
 --- Downloads a 7z extractor temporarily to extract the .7z archive.
@@ -913,7 +897,7 @@ local TOOLCHAIN_BASE = "https://github.com/lde-org/toolchain-dist/releases/downl
 function global.ensureMingw(opts)
 	if jit.os ~= "Windows" then return end
 
-	local arch = (opts and opts.arch) or jit.arch
+	const arch = opts?.arch ?? jit.arch
 	-- Map LuaJIT arch to URL arch names
 	local urlArch, sevenZArch
 	if arch == "x64" then
@@ -936,7 +920,7 @@ function global.ensureMingw(opts)
 	local code = process.exec("gcc", { "--version" })
 	if code == 0 then return end
 
-	local p1 = lde.isVerbose ? ansi.progress("Downloading 7z extractor") : nil
+	const p1 = lde.isVerbose ? ansi.progress("Downloading 7z extractor") : nil
 
 	local tmpDir = path.join(global.getDir(), "mingw-tmp")
 	fs.mkdir(tmpDir)
@@ -964,7 +948,7 @@ function global.ensureMingw(opts)
 	end
 	if p1 then p1:done("Downloaded 7z extractor") end
 
-	local p2 = lde.isVerbose ? ansi.progress("Downloading toolchain") : nil
+	const p2 = lde.isVerbose ? ansi.progress("Downloading toolchain") : nil
 	local dlOpts2
 	if p2 then
 		dlOpts2 = {
@@ -985,8 +969,9 @@ function global.ensureMingw(opts)
 	end
 	if p2 then p2:done("Downloaded toolchain") end
 
-	local p3 = lde.isVerbose ? ansi.progress("Extracting toolchain") : nil
+	const p3 = lde.isVerbose ? ansi.progress("Extracting toolchain") : nil
 	fs.mkdir(mingwDir)
+	local _
 	code, _, stderr = process.exec(sevenzPath, { "x", archivePath, "-o" .. mingwDir, "-y" })
 	fs.rmdir(tmpDir)
 	if code ~= 0 then
@@ -996,7 +981,7 @@ function global.ensureMingw(opts)
 	end
 
 	-- The 7z contains a single top-level folder (toolchain); flatten it
-	local entries = fs.readdir(mingwDir)
+	const entries = fs.readdir(mingwDir)
 	local first = entries and entries()
 	if first and first.type == "dir" then
 		local inner = path.join(mingwDir, first.name)
@@ -1014,17 +999,17 @@ function global.init()
 	-- whose parents also need creating, not just the final dir.
 	fs.mkdirAll(global.getDir())
 
-	local gitCacheDir = global.getGitCacheDir()
+	const gitCacheDir = global.getGitCacheDir()
 	if not fs.exists(gitCacheDir) then
 		fs.mkdir(gitCacheDir)
 	end
 
-	local tarCacheDir = global.getTarCacheDir()
+	const tarCacheDir = global.getTarCacheDir()
 	if not fs.exists(tarCacheDir) then
 		fs.mkdir(tarCacheDir)
 	end
 
-	local rockspecCacheDir = global.getRockspecCacheDir()
+	const rockspecCacheDir = global.getRockspecCacheDir()
 	if not fs.exists(rockspecCacheDir) then
 		fs.mkdir(rockspecCacheDir)
 	end

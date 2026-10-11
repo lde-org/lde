@@ -1,5 +1,5 @@
-local process = require("process")
-local env = require("env")
+const process = require("process")
+const env = require("env")
 
 local ldePath = assert(env.execPath())
 
@@ -11,7 +11,7 @@ local ldePath = assert(env.execPath())
 ---@return string stdout # for assertions about a specific stream
 ---@return string stderr
 return function(args, cwd, opts)
-	local code, stdout, stderr = process.exec(ldePath, args, { cwd = cwd, stdin = opts and opts.stdin })
+	local code, stdout, stderr = process.exec(ldePath, args, { cwd = cwd, stdin = opts?.stdin })
 	stdout, stderr = stdout or "", stderr or ""
 	return code == 0, stdout .. stderr, stdout, stderr
 end

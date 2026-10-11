@@ -1,9 +1,9 @@
-local test = require("lde-test")
-local lde = require("lde-core")
-local fs = require("fs")
+const test = require("lde-test")
+const lde = require("lde-core")
+const fs = require("fs")
 local env = require("env")
-local path = require("path")
-local json = require("json")
+const path = require("path")
+const json = require("json")
 
 local tmpBase = path.join(env.tmpdir(), "lde-commonrocks-tests")
 fs.rmdir(tmpBase)
@@ -27,7 +27,7 @@ end
 test.it("luarocks: lpeg matches a pattern", function()
 	local app = makeApp("rocks-lpeg", { lpeg = { luarocks = "lpeg" } })
 	app:installDependencies()
-	local ok, err = app:runString([[
+	local ok, _ = app:runString([[
 		local lpeg = require("lpeg")
 		assert(lpeg.match(lpeg.R("09")^1, "42") == 3)
 	]])
@@ -37,7 +37,7 @@ end)
 test.it("luarocks: luasocket parses a url", function()
 	local app = makeApp("rocks-luasocket", { socket = { luarocks = "luasocket" } })
 	app:installDependencies()
-	local ok, err = app:runString([[
+	local ok, _ = app:runString([[
 		local url = require("socket.url")
 		local t = url.parse("https://example.com/path")
 		assert(t.host == "example.com")
@@ -49,7 +49,7 @@ test.it("luarocks: lua-cjson encodes and decodes",
 	function()
 		local app = makeApp("rocks-cjson", { cjson = { luarocks = "lua-cjson" } })
 		app:installDependencies()
-		local ok, err = app:runString([[
+		local ok, _ = app:runString([[
 		local cjson = require("cjson")
 		local t = cjson.decode(cjson.encode({ x = 1 }))
 		assert(t.x == 1)
@@ -92,7 +92,7 @@ test.it("luarocks: teal compiler keeps its .tl source in target for tl check", f
 	test.truthy(ok, err or "tl check of a require(\"tl\") snippet failed")
 end)
 
-local isAndroid = env.var("ANDROID_ROOT") ~= nil
+const isAndroid = env.var("ANDROID_ROOT") ~= nil
 
 -- Android: Skip because termux doesn't expose crypt symbols.
 -- Windows: luaposix's luke build is POSIX-only (it splits PATH on ':' and
@@ -100,7 +100,7 @@ local isAndroid = env.var("ANDROID_ROOT") ~= nil
 test.skipIf(isAndroid or jit.os == "Windows")("luarocks: luaposix gets pid", function()
 	local app = makeApp("rocks-luaposix", { posix = { luarocks = "luaposix" } })
 	app:installDependencies()
-	local ok, err = app:runString([[
+	local ok, _ = app:runString([[
 		local unistd = require("posix.unistd")
 		assert(unistd.getpid() > 0)
 	]])

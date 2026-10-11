@@ -1,6 +1,6 @@
-local ansi = require("ansi")
-local fs = require("fs")
-local json = require("json")
+const ansi = require("ansi")
+const fs = require("fs")
+const json = require("json")
 
 --- Build timings collection and report writer (`lde sync --timings`,
 --- `lde compile --timings`). Units record wall-clock spans of the build
@@ -30,14 +30,14 @@ local t0 = 0
 local meta = {}
 
 ---@type table<string, string>
-local KIND_COLORS = {
+const KIND_COLORS = {
 	build = "#4c9be8",
 	download = "#e8764c",
 	bundle = "#b44ce8",
 	compile = "#e84c6b",
 }
 
-local M = {}
+const M = {}
 
 --- Start a collection. Subsequent start()/finish() calls record units until
 --- a report is written or begin() is called again.
@@ -48,7 +48,6 @@ function M.begin(opts)
 	meta = opts or {}
 end
 
----@return boolean true while a collection is active
 function M.active()
 	return units ~= nil
 end
@@ -79,7 +78,7 @@ end
 
 --- Maximum number of units whose [start, end) intervals overlap at any instant
 --- — i.e. the peak parallelism of the build.
----@param unitsList { start: number, end: number }[]
+---@param unitsList { start: number, end: number? }[]
 ---@return integer
 local function maxParallelism(unitsList)
 	local events = {}
@@ -117,7 +116,7 @@ function M.data()
 				["end"] = u["end"],
 				duration = duration,
 			}
-			local kindSum = byKind[u.kind] or { count = 0, time = 0 }
+			const kindSum = byKind[u.kind] or { count = 0, time = 0 }
 			kindSum.count += 1
 			kindSum.time += duration
 			byKind[u.kind] = kindSum
@@ -125,7 +124,7 @@ function M.data()
 			count += 1
 		end
 	end
-	table.sort(out, function(a, b) return a.start < b.start end)
+	table.sort(out, |a, b| -> a.start < b.start)
 	-- Include trailing work (report write, final file moves) in the total.
 	totalTime = math.max(totalTime, ansi.now() - t0)
 	return {
@@ -133,7 +132,9 @@ function M.data()
 		ldeVersion = meta.version,
 		command = meta.command,
 		package = meta.package,
-		startedAt = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+		-- The format is fixed, so the result is the string it spells rather than the `osdate` a
+		-- `*t` format would give; `string|osdate` is what the definition says for both.
+		startedAt = os.date("!%Y-%m-%dT%H:%M:%SZ") --[[@as string]],
 		totalTime = totalTime,
 		maxParallelism = maxParallelism(out),
 		units = out,
@@ -154,18 +155,16 @@ function M.writeJSON(path)
 end
 
 ---@param seconds number
----@return string
 local function formatDuration(seconds)
 	if seconds < 0.001 then return "<1ms" end
 	if seconds < 1 then return string.format("%.0fms", seconds * 1000) end
 	if seconds < 60 then return string.format("%.2fs", seconds) end
 	local m = math.floor(seconds / 60)
-	local s = seconds - m * 60
+	const s = seconds - m * 60
 	return string.format("%dm%02.1fs", m, s)
 end
 
 ---@param s string
----@return string
 local function htmlEscape(s)
 	return (s:gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;"):gsub('"', "&quot;"))
 end
@@ -174,8 +173,8 @@ end
 ---@param total number
 ---@return number
 local function tickStep(total)
-	local target = total / 10
-	local steps = { 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 1200, 1800, 3600 }
+	const target = total / 10
+	const steps = { 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 1200, 1800, 3600 }
 	for _, s in ipairs(steps) do
 		if s >= target then return s end
 	end
@@ -186,9 +185,8 @@ end
 --- ended before it starts, so overlapping units land on distinct rows. Returns
 --- the units with a `lane` field (0-based) and the lane count.
 ---@param unitsList { start: number, end: number, lane: integer? }[]
----@return integer # number of lanes used
 local function assignLanes(unitsList)
-	local laneEnds = {}
+	const laneEnds = {}
 	for _, u in ipairs(unitsList) do
 		local lane
 		for i = 1, #laneEnds do
@@ -204,15 +202,14 @@ local function assignLanes(unitsList)
 end
 
 ---@param data table # result of M.data()
----@return string
 local function renderHTML(data)
 	local total = data.totalTime
 	if total <= 0 then total = 1 end
 	local unitsList = data.units
-	table.sort(unitsList, function(a, b) return a.start < b.start end)
-	local lanes = assignLanes(unitsList)
+	table.sort(unitsList, |a, b| -> a.start < b.start)
+	const lanes = assignLanes(unitsList)
 
-	local cards = {
+	const cards = {
 		{ v = formatDuration(data.totalTime), k = "Total time" },
 		{ v = tostring(data.maxParallelism), k = "Max parallelism" },
 		{ v = tostring(data.summary.units), k = "Units" },
@@ -224,7 +221,7 @@ local function renderHTML(data)
 	if longest then
 		cards[#cards + 1] = { v = formatDuration(longest.duration), k = "Longest task" }
 	end
-	local cardHTML = {}
+	const cardHTML = {}
 	for _, c in ipairs(cards) do
 		cardHTML[#cardHTML + 1] = '<div class="card"><div class="v">'
 			.. htmlEscape(c.v) .. '</div><div class="k">' .. c.k .. "</div></div>"
@@ -235,8 +232,8 @@ local function renderHTML(data)
 	for i, u in ipairs(unitsList) do
 		rows[#rows + 1] = u
 	end
-	table.sort(rows, function(a, b) return a.duration > b.duration end)
-	local tableHTML = {}
+	table.sort(rows, |a, b| -> a.duration > b.duration)
+	const tableHTML = {}
 	for i, u in ipairs(rows) do
 		local color = KIND_COLORS[u.kind] or "#8b94a3"
 		tableHTML[#tableHTML + 1] = "<tr><td>" .. i .. '</td><td>'
@@ -247,8 +244,8 @@ local function renderHTML(data)
 	end
 
 	-- Time axis ruler (aligned with the chart's track column).
-	local step = tickStep(total)
-	local axis = {}
+	const step = tickStep(total)
+	const axis = {}
 	for t = 0, total, step do
 		local left = t / total * 100
 		axis[#axis + 1] = '<span style="left:' .. left .. '%">'
@@ -257,7 +254,7 @@ local function renderHTML(data)
 	axis[#axis + 1] = '<span style="left:100%">' .. formatDuration(total) .. "</span>"
 
 	-- Gantt rows: one lane per parallel slot.
-	local gantt = {}
+	const gantt = {}
 	for _, u in ipairs(unitsList) do
 		local left = u.start / total * 100
 		local width = u.duration / total * 100
@@ -270,15 +267,15 @@ local function renderHTML(data)
 	end
 
 	-- Legend: kinds present, with counts and total time.
-	local legend = {}
+	const legend = {}
 	for _, u in ipairs(unitsList) do
-		local key = u.kind
+		const key = u.kind
 		if not legend[key] then legend[key] = { color = KIND_COLORS[key] or "#8b94a3", count = 0, time = 0 } end
-		local l = legend[key]
+		const l = legend[key]
 		l.count += 1
 		l.time += u.duration
 	end
-	local legendHTML = {}
+	const legendHTML = {}
 	for kind, l in pairs(legend) do
 		legendHTML[#legendHTML + 1] = '<span><i style="background:' .. l.color
 			.. '"></i>' .. htmlEscape(kind) .. " × " .. l.count .. " ("
@@ -286,10 +283,10 @@ local function renderHTML(data)
 	end
 
 	local title = "lde timings · " .. tostring(data.package or "")
-	local subtitle = table.concat({
+	const subtitle = table.concat({
 		"Generated " .. htmlEscape(data.startedAt or ""),
-		data.command and ("command: lde " .. htmlEscape(data.command)) or nil,
-		data.ldeVersion and ("lde " .. htmlEscape(data.ldeVersion)) or nil,
+		data.command ? ("command: lde " .. htmlEscape(data.command)) : nil,
+		data.ldeVersion ? ("lde " .. htmlEscape(data.ldeVersion)) : nil,
 	}, " · ")
 
 	return [==[<!DOCTYPE html>
@@ -349,7 +346,7 @@ end
 ---@return string? err
 function M.writeHTML(path)
 	if not units then return nil, "no timings collected" end
-	local html = renderHTML(M.data())
+	const html = renderHTML(M.data())
 	if not fs.write(path, html) then
 		return nil, "failed to write " .. path
 	end

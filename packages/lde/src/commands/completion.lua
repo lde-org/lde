@@ -1,6 +1,6 @@
-local lde = require("lde-core")
+const lde = require("lde-core")
 
-local usage = require("lde.commands.usage")
+const usage = require("lde.commands.usage")
 
 -- Scripts are emitted as-is except for the __DIR_FLAGS__/__FILE_FLAGS__
 -- placeholders, which are filled from usage.lua so the flag lists can't drift
@@ -135,12 +135,12 @@ local scripts = {
 
 ---@param args clap.Args
 local function completion(args)
-	local shell = args:pop()
+	const shell = args:pop()
 	if not shell then
 		lde.error.raise("Usage: lde completion <bash|zsh|fish>")
 	end
 
-	local script = scripts[shell]
+	const script = scripts[shell]
 	if not script then
 		lde.error.raise("Unknown shell: " .. shell .. " (supported: bash, zsh, fish)")
 	end

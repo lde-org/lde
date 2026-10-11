@@ -1,8 +1,8 @@
-local curl = require("curl-sys")
-local fs = require("fs")
-local path = require("path")
-local archive = require("archive")
-local process = require("process")
+const curl = require("curl-sys")
+const fs = require("fs")
+const path = require("path")
+const archive = require("archive")
+const process = require("process")
 
 -- Minimal lua-sys surface used here (the full classes live in the lua-sys
 -- package, which is a dependency of the caller, not of lde-build).
@@ -23,7 +23,7 @@ local process = require("process")
 ---@field targetFlag string? # clang -target flag when cross-compiling, nil when native
 ---@field captureLog lde.buildLog.Capture? # non-nil: capture build:sh/build:cc output instead of streaming it
 ---@field features table<string, boolean> # enabled feature flags, keyed by flag name
-local Instance = {}
+const Instance = {}
 Instance.__index = Instance
 
 ---@param outDir string
@@ -31,7 +31,6 @@ Instance.__index = Instance
 ---@param target? string # triple reported by build:target()/build.target
 ---@param targetFlag? string # clang -target flag to prepend to every cc invocation
 ---@param captureLog lde.buildLog.Capture? # non-nil in compact mode: build output is captured (hidden) and dumped to a temp file on failure
----@return lde.build.Instance
 function Instance.new(outDir, gccBin, target, targetFlag, captureLog)
 	return setmetatable({
 		outDir = outDir,
@@ -47,7 +46,7 @@ end
 ---@param flags string[]
 ---@return lde.build.Instance self
 function Instance:setFeatures(flags)
-	local set = {}
+	const set = {}
 	for _, flag in ipairs(flags) do
 		set[flag] = true
 	end
@@ -65,7 +64,6 @@ function Instance:feature(name)
 end
 
 ---@param url string
----@return string
 function Instance:fetch(url)
 	-- Total-time budget: a server that accepts the connection but never
 	-- finishes the body would otherwise hang the build forever.
@@ -109,7 +107,7 @@ end
 ---@param dest string # Relative path at output dir
 function Instance:copy(rel, dest)
 	local full = path.join(self.outDir, rel)
-	local destAbs = path.join(self.outDir, dest)
+	const destAbs = path.join(self.outDir, dest)
 
 	-- Build outputs (native .so/.dll files) can be dlopen'd by the running
 	-- process while a rebuild replaces them; copy atomically (temp + rename)
@@ -166,7 +164,7 @@ end
 ---@param glob? string # Glob filter, matched against paths relative to rel
 ---@return string[] # matching paths relative to the output dir, unsorted
 function Instance:scan(rel, glob)
-	local root = path.normalize(rel)
+	const root = path.normalize(rel)
 	local full = path.join(self.outDir, root)
 	if not fs.isdir(full) then
 		return {}
@@ -193,8 +191,8 @@ function Instance:scan(rel, glob)
 	local files = {}
 
 	for _, child in ipairs(fs.scan(full, "**")) do
-		local normalized = child:gsub("\\", "/")
-		local isMatch = not pattern or normalized:find(pattern) ~= nil
+		const normalized = child:gsub("\\", "/")
+		const isMatch = not pattern or normalized:find(pattern) ~= nil
 			or (rootPattern ~= nil and normalized:find(rootPattern) ~= nil)
 
 		if isMatch then
@@ -221,7 +219,7 @@ function Instance:sh(cmd)
 	-- the line and prepends the cwd to the first quoted arg, doubling paths).
 	-- `unsafe` skips that escaping; on POSIX args reach sh -c directly and it
 	-- is a no-op.
-	local shell, flag = jit.os == "Windows" and "cmd" or "sh", jit.os == "Windows" and "/c" or "-c"
+	local shell, flag = jit.os == "Windows" ? "cmd" : "sh", jit.os == "Windows" ? "/c" : "-c"
 	if self.captureLog then
 		local code, stdout, stderr = process.exec(shell, { flag, cmd }, {
 			cwd = self.outDir,
@@ -251,8 +249,6 @@ end
 --- On Windows, prepends the mingw bin dir to PATH so subtools (as.exe, ld.exe, etc.) are found.
 --- Errors if the compiler exits non-zero.
 ---@param args string[] # compiler arguments, e.g. {"-c", "foo.c", "-o", "foo.o"}
----@return string stdout
----@return string stderr
 function Instance:cc(args)
 	local bin = self.gccBin
 	local execArgs = args
@@ -263,7 +259,7 @@ function Instance:cc(args)
 	local execEnv
 	if jit.os == "Windows" and bin ~= "gcc" then
 		local mingwBinDir = path.dirname(bin)
-		local curPath = os.getenv("PATH") or ""
+		const curPath = os.getenv("PATH") or ""
 		if not curPath:find(mingwBinDir, 1, true) then
 			execEnv = { PATH = mingwBinDir .. ";" .. curPath }
 		end
@@ -342,20 +338,20 @@ local GUEST_SOURCE = [==[
 ---@param captureLog lde.buildLog.Capture? # non-nil in compact mode: sh/cc output is captured instead of streamed
 ---@param featureFlags string[]? # enabled feature flags, for build:feature(name)
 function Instance.setup(state, outputDir, gccBin, target, targetFlag, captureLog, featureFlags)
-	local inst = Instance.new(outputDir, gccBin, target, targetFlag, captureLog)
+	const inst = Instance.new(outputDir, gccBin, target, targetFlag, captureLog)
 	table.sort(featureFlags or {})
 	inst:setFeatures(featureFlags or {})
 	state:load(GUEST_SOURCE, "@lde-build"):call(
 		inst.outDir, inst.gccBin, inst.target, table.concat(featureFlags or {}, "\n"),
 		function(url)          return inst:fetch(url)     end,
 		function(rel, content) inst:write(rel, content)   end,
-		function(rel)          return inst:read(rel)      end,
+		rel -> inst:read(rel),
 		function(rel, dest)    inst:extract(rel, dest)    end,
 		function(rel, dest)    inst:copy(rel, dest)       end,
 		function(rel)          inst:delete(rel)           end,
 		function(rel, dest)    inst:move(rel, dest)       end,
-		function(rel)          return inst:exists(rel)    end,
-		function(rel, glob)    return table.concat(inst:scan(rel, glob), "\n") end,
+		rel -> inst:exists(rel),
+		|rel, glob| -> table.concat(inst:scan(rel, glob), "\n"),
 		function(cmd)          inst:sh(cmd)               end,
 		function(...)          return inst:cc({ ... })    end
 	)

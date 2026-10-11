@@ -1,29 +1,28 @@
-local fs = require("fs")
-local path = require("path")
-local util = require("util")
-local ansi = require("ansi")
+const fs = require("fs")
+const path = require("path")
+const util = require("util")
+const ansi = require("ansi")
 
-local lde = require("lde-core")
+const lde = require("lde-core")
 
 -- Dependency resolution (the graph walk, node kinds, conflict detection) and
 -- the install build pass. Resolution drives the scheduler via ctx.build.
-local resolve = require("lde-core.package.install.resolve")
+const resolve = require("lde-core.package.install.resolve")
 -- Feature flags: which are on for a package, and what they turn on for it.
 -- (Named `featureFlags` because `features` is this module's parameter for the
 -- flags the caller asked for.)
-local featureFlags = require("lde-core.package.features")
+const featureFlags = require("lde-core.package.features")
 -- buildPackage plus the isStale stamp check the install fast path consults.
 local build = require("lde-core.package.build")
 
 -- Build timings collection (no-op while inactive; no dependency on lde-core).
-local timings = require("lde-core.util.timings")
+const timings = require("lde-core.util.timings")
 
 --- Hash of the lockfile, runtime version, manifest, and compile target. The
 --- .installed marker only matches when all four are unchanged, so a --target
 --- switch forces a reinstall that rebuilds native deps for the new target.
 ---@param content string
 ---@param manifest string
----@return string
 local function installedHash(content, manifest)
 	return util.hash(content .. "\n" .. tostring(lde.global.currentVersion)
 		.. "\n" .. manifest .. "\n" .. lde.global.getTargetKey())
@@ -47,9 +46,9 @@ local function commitLockfile(pkg, stack, modulesDir, isStale)
 	-- lockfile carries the new manifest hash — the next slice trusts it and
 	-- keeps the stale version instead of re-resolving. Commit only the fresh
 	-- stack; the other slice re-resolves on its own install.
-	local lockEntries = {}
+	const lockEntries = {}
 	if not isStale then
-		local existing = pkg:readLockfile()
+		const existing = pkg:readLockfile()
 		if existing then
 			for alias, entry in pairs(existing:getDependencies()) do
 				lockEntries[alias] = entry
@@ -86,11 +85,11 @@ end
 ---@param ctx lde.install.Context
 ---@return { addNode: fun(node: lde.install.Node), finish: fun() }
 local function makeBuildScheduler(ctx)
-	local asyncBuild = require("lde-core.util.async-build")
+	const asyncBuild = require("lde-core.util.async-build")
 
 	-- Cross-platform sleep used while polling spawned build workers so the
 	-- loop doesn't busy-wait between checks.
-	local ffi = require("ffi")
+	const ffi = require("ffi")
 	local sleep
 	if jit.os == "Windows" then
 		pcall(ffi.cdef, "void Sleep(unsigned long dwMilliseconds);")
@@ -105,15 +104,15 @@ local function makeBuildScheduler(ctx)
 	---@type table<string, boolean>
 	local done = {}      -- alias -> build finished or skipped
 	---@type lde.install.Node[]
-	local queue = {}     -- content-ready nodes waiting to build
+	const queue = {}     -- content-ready nodes waiting to build
 	---@type table<string, boolean>
-	local queued = {}    -- alias -> addNode already ran
+	const queued = {}    -- alias -> addNode already ran
 	---@type table<string, boolean>
-	local attempted = {} -- alias -> attemptBuild already ran
+	const attempted = {} -- alias -> attemptBuild already ran
 	---@type table<string, table<string, true>> # alias -> direct dependency aliases (build graph edges)
-	local children = {}
+	const children = {}
 	---@type table<string, boolean>
-	local building = {}  -- alias -> a build is in flight (row shown on the progress region)
+	const building = {}  -- alias -> a build is in flight (row shown on the progress region)
 
 	-- Forward declarations: the functions below reference each other.
 	local pumpQueue
@@ -127,11 +126,11 @@ local function makeBuildScheduler(ctx)
 	---@return integer built
 	---@return integer total
 	local function subtreeCount(alias)
-		local seen = { [alias] = true }
-		local frontier = { alias }
-		local built, total = done[alias] and 1 or 0, 1
+		const seen = { [alias] = true }
+		const frontier = { alias }
+		local built, total = done[alias] ? 1 : 0, 1
 		while #frontier > 0 do
-			local a = table.remove(frontier)
+			const a = table.remove(frontier)
 			for child in pairs(children[a] or {}) do
 				if not seen[child] then
 					seen[child] = true
@@ -152,7 +151,7 @@ local function makeBuildScheduler(ctx)
 		local doneCount, total = 0, 0
 		for _ in pairs(done) do doneCount += 1 end
 		for _ in pairs(ctx.stack) do total += 1 end
-		ctx.progress:update(total > 0 and doneCount / total or nil, doneCount .. "/" .. total)
+		ctx.progress:update(total > 0 ? doneCount / total : nil, doneCount .. "/" .. total)
 		for alias in pairs(building) do
 			local built, sub = subtreeCount(alias)
 			ctx.progress:setDepCount(alias, built, sub)
@@ -247,17 +246,17 @@ local function makeBuildScheduler(ctx)
 		-- work build here; the marker is picked lazily from what is already
 		-- known — no I/O beyond the one stat below.
 		local pkg = entry.pkg
-		local hasBuildLua = fs.exists(pkg:getBuildScriptPath())
-		local isBuild = pkg.buildfn ~= nil or hasBuildLua
+		const hasBuildLua = fs.exists(pkg:getBuildScriptPath())
+		const isBuild = pkg.buildfn ~= nil or hasBuildLua
 		if ctx.progress and isBuild then
 			building[alias] = true
-			local kind = hasBuildLua and "tools" or (pkg.isRockspec and "rock" or "wrench")
+			const kind = hasBuildLua ? "tools" : pkg.isRockspec ? "rock" : "wrench"
 			ctx.progress:setCurrent(alias, kind)
 		end
 
 		-- The unit spans the real build: from pkg:build() to the deferred
 		-- finalizer (spawned compiles draining) or the synchronous return.
-		local buildHandle = timings.active() and timings.start("build " .. alias, "build") or nil
+		const buildHandle = timings.active() ? timings.start("build " .. alias, "build") : nil
 		local hasBuilt, deferred = pkg:build(dest)
 		if deferred then
 			pending[#pending + 1] = { alias = alias, build = deferred, handle = buildHandle }
@@ -289,7 +288,7 @@ local function makeBuildScheduler(ctx)
 			end
 		end
 	end
-	local scheduler = {}
+	const scheduler = {}
 
 	--- Queue a node for building; opens its package and records its stack
 	--- entry first (once per alias). Idempotent per alias.
@@ -300,7 +299,7 @@ local function makeBuildScheduler(ctx)
 		queued[alias] = true
 		queue[#queue + 1] = node
 		-- Record the build-graph edge (used for per-dependency subtree counts).
-		local set = children[alias] or {}
+		const set = children[alias] or {}
 		for depAlias in pairs(node.deps or {}) do set[depAlias] = true end
 		children[alias] = set
 		if not ctx.stack[alias] then
@@ -318,7 +317,7 @@ local function makeBuildScheduler(ctx)
 			local hasProgressed = false
 			local i = 1
 			while i <= #pending do
-				local job = pending[i]
+				const job = pending[i]
 				if job.build.poll() ~= nil then
 					table.remove(pending, i)
 					finalizeJob(job)
@@ -402,7 +401,7 @@ end
 ---@param opts { summary: boolean?, isLocked: boolean?, rootExtract: fun()? }?
 ---@return { checked: integer, installs: integer, hasChanged: boolean, isCached: boolean }
 local function installDependencies(package, dependencies, relativeTo, features, opts)
-	local isRoot = dependencies == nil
+	const isRoot = dependencies == nil
 	dependencies = dependencies or package:getDependencies()
 	relativeTo = relativeTo or package.dir
 	opts = opts or {}
@@ -427,7 +426,7 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 	-- no-op because everything was already materialized.
 	local function noopResult()
 		local installs = 0
-		for _ in pairs(dependencies) do installs += 1 end
+		for _ in pairs(dependencies or {}) do installs += 1 end
 		return { checked = installs, installs = installs, hasChanged = false, isCached = true }
 	end
 
@@ -440,8 +439,8 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 	-- Bypassed under --locked so it always re-verifies the manifest against the
 	-- lockfile instead of trusting the marker.
 	if isRoot and not opts.isLocked then
-		local installedPath = path.join(modulesDir, ".installed")
-		local lockfilePath = package:getLockfilePath()
+		const installedPath = path.join(modulesDir, ".installed")
+		const lockfilePath = package:getLockfilePath()
 		if fs.exists(lockfilePath) and fs.exists(installedPath) then
 			local content = fs.read(lockfilePath)
 			-- commitLockfile writes installedHash; the check must use the same
@@ -452,7 +451,7 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 				-- may still be gone (e.g. `rm -rf ~/.lde/git` dangling the git
 				-- symlinks in target/). Verify the install is intact before trusting
 				-- the marker so `lde run` re-installs instead of failing at require.
-				if isInstallIntact(package, dependencies, enabledOptional, modulesDir) then
+				if isInstallIntact(package, dependencies or {}, enabledOptional, modulesDir) then
 					return noopResult()
 				end
 			end
@@ -466,13 +465,13 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 	-- with transitive requests for the same alias. Re-resolve everything from
 	-- the manifest and rewrite the lockfile instead.
 	local rootLockfile = package:readLockfile()
-	local isLockfileStale = rootLockfile ~= nil and rootLockfile:isStale(package:readConfig())
+	const isLockfileStale = rootLockfile ~= nil and rootLockfile:isStale(package:readConfig())
 	if opts.isLocked and isLockfileStale then
 		lde.error.raise("Lockfile is out of date: lde.json dependencies changed since it was written. Run `lde sync` to update it.")
 	end
 	if isLockfileStale then rootLockfile = nil end
 
-	local ctx = {
+	const ctx = {
 		relativeTo = relativeTo,
 		stack = {},
 		-- The lockfile pins every previously-resolved alias (runtime and dev),
@@ -486,10 +485,10 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 		modulesDir = modulesDir,
 		enabledOptional = enabledOptional,
 	}
-	ctx.build = makeBuildScheduler(ctx)
+	ctx.build = makeBuildScheduler(ctx --[[@as lde.install.Context]])
 
 	local installs = 0
-	for _ in pairs(dependencies) do installs += 1 end
+	for _ in pairs(dependencies or {}) do installs += 1 end
 
 	-- Parallel download session: sources are prefetched in batches during the
 	-- graph walk and materialized afterwards. Always cleaned up, even on error.
@@ -503,10 +502,10 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 	-- overlapped `install rocks:` flow (the root package's own download started
 	-- before resolution). In that case the session is shared and the caller
 	-- ends it.
-	local download = require("lde-core.util.download")
-	local isSessionActive = download.active()
-	local progress = (not lde.isVerbose and not lde.isQuiet and installs > 0)
-		and ansi.installProgress("Downloading dependencies") or nil
+	const download = require("lde-core.util.download")
+	const isSessionActive = download.active()
+	const progress = (not lde.isVerbose and not lde.isQuiet and installs > 0)
+		? ansi.installProgress("Downloading dependencies") : nil
 	ctx.progress = progress
 	if not isSessionActive then
 		-- User-level archive cache: downloaded content bytes are reusable
@@ -516,7 +515,7 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 		download.begin(progress and {
 			archiveCache = path.join(lde.global.getUserDir(), "archives"),
 			progress = function(done, total)
-				local ratio = total > 0 and (done / total) or nil
+				local ratio = total > 0 ? (done / total) : nil
 				progress:update(ratio, ansi.formatBytes(done) .. " / " .. ansi.formatBytes(total))
 			end
 		} or {
@@ -524,8 +523,8 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 		})
 	end
 
-	local resolveHandle = timings.active()
-		and timings.start("resolve " .. package:getName(), "download") or nil
+	const resolveHandle = timings.active()
+		? timings.start("resolve " .. package:getName(), "download") : nil
 	local ok, err = pcall(resolve.resolveDependencies, dependencies, ctx)
 	if not ok then
 		download.abort()
@@ -574,11 +573,11 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 	-- partial dir. The lockfile is left untouched so failed pins don't stick.
 	if ctx.failures and #ctx.failures > 0 then
 		local parts = {}
-		for _, node in ipairs(ctx.failures) do
+		for _, node in ipairs(ctx.failures or {}) do
 			parts[#parts + 1] = "  - " .. node.alias .. ": " .. node.error
 		end
 		lde.error.raise("Failed to install " .. #ctx.failures .. " dependenc"
-			.. (#ctx.failures == 1 and "y" or "ies") .. ":\n" .. table.concat(parts, "\n"))
+			.. (#ctx.failures == 1 ? "y" : "ies") .. ":\n" .. table.concat(parts, "\n"))
 	end
 
 	commitLockfile(package, ctx.stack, modulesDir, isLockfileStale)

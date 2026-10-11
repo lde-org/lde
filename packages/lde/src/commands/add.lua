@@ -1,22 +1,22 @@
-local json = require("json")
-local ansi = require("ansi")
-local fs = require("fs")
+const json = require("json")
+const ansi = require("ansi")
+const fs = require("fs")
 local path = require("path")
-local semver = require("semver")
+const semver = require("semver")
 
-local lde = require("lde-core")
-local gitShorthand = require("lde.util.gitShorthand")
+const lde = require("lde-core")
+const gitShorthand = require("lde.util.gitShorthand")
 
 ---@param args clap.Args
 local function add(args)
 	-- Consume flags/options before popping the positional name so
 	-- `lde add --dev foo` parses the same as `lde add foo --dev`.
-	local isDevelopment = args:flag("dev")
+	const isDevelopment = args:flag("dev")
 
-	local gitUrl = args:option("git")
-	local pathValue = args:option("path")
+	const gitUrl = args:option("git")
+	const pathValue = args:option("path")
 
-	local rawName = args:pop()
+	const rawName = args:pop()
 	if not rawName then
 		lde.error.raise("Usage: lde add <name>[@<version>] --path <path> | --git <url>")
 	end ---@cast rawName -nil
@@ -44,7 +44,7 @@ local function add(args)
 		-- inside a monorepo. The dependency key is the sub-package name (or
 		-- the repo basename for the plain form) — the name lde expects to find
 		-- inside the repo.
-		local shorthandUrl, subPackage, serr = gitShorthand.expand(rawName)
+		const shorthandUrl, subPackage, serr = gitShorthand.expand(rawName)
 		if serr then
 			lde.error.raise(serr)
 		end
@@ -55,7 +55,7 @@ local function add(args)
 		end
 	end
 
-	local registryVersion = args:option("version") or versionFromName
+	const registryVersion = args:option("version") or versionFromName
 
 	local p, err = lde.Package.open()
 	if not p then
@@ -64,7 +64,7 @@ local function add(args)
 
 	local configPath = p:getConfigPath()
 
-	local configRaw = fs.read(configPath)
+	const configRaw = fs.read(configPath)
 	if not configRaw then
 		lde.error.raise("Config file not found: " .. configPath)
 	end ---@cast configRaw -nil
@@ -77,15 +77,15 @@ local function add(args)
 	local dependencyTable ---@type lde.Package.Config.Dependencies
 	if isDevelopment then
 		if not config.devDependencies then
-			json.addField(config, "devDependencies", {})
+			json.addField(config --[[@as table]], "devDependencies", {})
 		end
 
-		dependencyTable = config.devDependencies
+		dependencyTable = config.devDependencies --[[@as table]]
 	else
 		if not config.dependencies then
-			json.addField(config, "dependencies", {})
+			json.addField(config --[[@as table]], "dependencies", {})
 		end
-		dependencyTable = config.dependencies
+		dependencyTable = config.dependencies --[[@as table]]
 	end ---@cast dependencyTable -nil
 
 	-- Whether the name routes through the luarocks branch. Existing deps are
@@ -94,7 +94,7 @@ local function add(args)
 	local isRocks = rawName:match("^rocks:") ~= nil
 	local isUpdate = false
 
-	local existing = dependencyTable[name]
+	const existing = dependencyTable[name]
 	if existing then
 		if not registryVersion and not depType then
 			ansi.warning("Dependency already exists: %s", name)
@@ -107,8 +107,8 @@ local function add(args)
 		if not depType and existing.luarocks then
 			isRocks = true
 		elseif not depType and (existing.git or existing.path) then
-			lde.error.raise("Cannot set a version on '" .. name .. "': it is a " .. (existing.git and "git" or "path") .. " dependency", {
-				hint = "Use `lde add " .. name .. " --" .. (existing.git and "git" or "path") .. " <value>` to change its source.",
+			lde.error.raise("Cannot set a version on '" .. name .. "': it is a " .. (existing.git ? "git" : "path") .. " dependency", {
+				hint = "Use `lde add " .. name .. " --" .. (existing.git ? "git" : "path") .. " <value>` to change its source.",
 			})
 		end
 	end
@@ -116,7 +116,7 @@ local function add(args)
 	local dep
 	---@type lde.Lockfile.GitDependency?
 	local gitLockEntry
-	local verb = isUpdate and "Updated" or "Added"
+	local verb = isUpdate ? "Updated" : "Added"
 	if depType == "path" then
 		dep = { path = depValue }
 	elseif depType == "git" then
@@ -131,7 +131,7 @@ local function add(args)
 		-- still verifies the commit exists when it fetches the repo.
 		local pin = commit
 		if not pin then
-			local sha, rerr = lde.global.resolveGitRef(depValue, branch)
+			const sha, rerr = lde.global.resolveGitRef(depValue, branch)
 			if not sha then
 				lde.error.raise(
 					"Failed to resolve '" .. (branch or "HEAD") .. "' for " .. depValue .. ": " .. (rerr or "unknown error"),
@@ -140,7 +140,7 @@ local function add(args)
 			pin = sha
 		end ---@cast pin -nil
 
-		local lockEntry = { git = depValue, commit = pin }
+		const lockEntry = { git = depValue, commit = pin }
 		if branch then lockEntry.branch = branch end
 		gitLockEntry = lockEntry
 
@@ -160,8 +160,8 @@ local function add(args)
 		end
 
 		dep = { luarocks = name, version = pinnedVersion or nil }
-		ansi.printf("{green}%s luarocks %s: %s{reset}%s", verb, isDevelopment and "dev dependency" or "dependency", name,
-			pinnedVersion and ansi.format(" ({cyan}version: %s{reset})", pinnedVersion) or "")
+		ansi.printf("{green}%s luarocks %s: %s{reset}%s", verb, isDevelopment ? "dev dependency" : "dependency", name,
+			pinnedVersion ? ansi.format(" ({cyan}version: %s{reset})", pinnedVersion) : "")
 	else
 		-- Registry dependency
 		lde.global.syncRegistry()
@@ -173,7 +173,7 @@ local function add(args)
 
 		-- resolveRegistryVersion treats "latest" as "newest", so a bare name
 		-- and @latest both resolve to the newest release here.
-		local resolvedVersion = lde.global.resolveRegistryVersion(portfile, registryVersion)
+		const resolvedVersion = lde.global.resolveRegistryVersion(portfile, registryVersion)
 
 		-- A single version is saved as a caret range, so later installs move to
 		-- newer compatible releases instead of freezing on the version that

@@ -1,7 +1,7 @@
 local fs = require("fs")
 local path = require("path")
 local process = require("process")
-local env = require("env")
+const env = require("env")
 
 -- The fs module exposes rawfs fields (chmod) through its copy loop; declare
 -- the ones used here so the language server sees them.
@@ -19,7 +19,7 @@ local env = require("env")
 
 -- Shell prefix for fs.execute: cmd.exe on Windows, sh elsewhere. Allocated
 -- once at module load rather than per command.
-local SHELL = jit.os == "Windows" and { "cmd", "/c" } or { "sh", "-c" }
+const SHELL = jit.os == "Windows" and { "cmd", "/c" } or { "sh", "-c" }
 
 --- Permission gate for sandbox side effects. `permissions` maps an action
 --- name (e.g. "execute") to a callback that receives the detail (e.g. the
@@ -30,7 +30,7 @@ local SHELL = jit.os == "Windows" and { "cmd", "/c" } or { "sh", "-c" }
 ---@param detail string
 ---@return boolean
 local function checkPermission(permissions, action, detail)
-	local allow = permissions and permissions[action]
+	const allow = permissions?.[action]
 	if allow == nil then return true end
 	if type(allow) == "function" then return allow(detail) ~= false end
 	return allow ~= false
@@ -47,15 +47,15 @@ local function runCommand(cmd, cwd, permissions)
 	-- MSVCRT-style per-arg escaping process applies on Windows.
 	local opts = jit.os == "Windows" and { unsafe = true } or nil
 	if cwd then opts = opts or {}; opts.cwd = cwd end
-	local code = process.exec(SHELL[1], { SHELL[2], cmd }, opts)
+	const code = process.exec(SHELL[1], { SHELL[2], cmd }, opts)
 	return code == 0
 end
 
 ---@param tool string
 ---@return boolean
 local function toolAvailable(tool)
-	local sep = jit.os == "Windows" and ";" or ":"
-	local exe = jit.os == "Windows" and (tool .. ".exe") or tool
+	const sep = jit.os == "Windows" and ";" or ":"
+	const exe = jit.os == "Windows" and (tool .. ".exe") or tool
 	for dir in (os.getenv("PATH") or ""):gmatch("[^" .. sep .. "]+") do
 		if dir ~= "" and fs.exists(path.join(dir, exe)) then return true end
 	end
@@ -87,7 +87,6 @@ end
 
 --- Create a directory under the system temp dir and return its path.
 ---@param name string
----@return string
 local function makeTempDir(name)
 	local p = path.join(env.tmpdir(), name)
 	fs.mkdirAll(p)
@@ -99,8 +98,8 @@ end
 --- assembles them into a table.
 ---@param dir string
 local function listDirNames(dir)
-	local names = {}
-	local iter = fs.readdir(dir)
+	const names = {}
+	const iter = fs.readdir(dir)
 	if iter then
 		for entry in iter do names[#names + 1] = entry.name end
 	end
@@ -111,14 +110,14 @@ end
 --- string values for the guest to assemble.
 ---@param dir string
 local function findFiles(dir)
-	local files = {}
+	const files = {}
 	if fs.isdir(dir) then
 		for _, rel in ipairs(fs.scan(dir, "**")) do files[#files + 1] = rel end
 	end
 	return unpack(files)
 end
 
-local luarocks = {}
+const luarocks = {}
 
 -- ─── Backend environment ──────────────────────────────────────────────────
 
@@ -127,7 +126,7 @@ local luarocks = {}
 -- way to obtain it, so a backend needs `package` and the standard data
 -- libraries. It still gets no I/O, process, debug, or FFI access.
 local BACKEND_LIBS = { "string", "table", "math", "package" }
-local BACKEND_FUNCS = {
+const BACKEND_FUNCS = {
 	"assert", "error", "getmetatable", "ipairs", "next", "pairs",
 	"pcall", "rawequal", "rawget", "rawset", "require", "select",
 	"setmetatable", "tonumber", "tostring", "type", "unpack", "xpcall",
@@ -137,26 +136,26 @@ local BACKEND_FUNCS = {
 ---@param funcs string[]
 ---@return table<string, boolean>
 local function allowSet(libs, funcs)
-	local allowed = {}
+	const allowed = {}
 	for _, name in ipairs(libs) do allowed[name] = true end
 	for _, name in ipairs(funcs) do allowed[name] = true end
 	return allowed
 end
 
-local BACKEND_ENV = allowSet(BACKEND_LIBS, BACKEND_FUNCS)
+const BACKEND_ENV = allowSet(BACKEND_LIBS, BACKEND_FUNCS)
 
 -- The module names setup installs, spared when the sandbox strips
 -- package.loaded so a backend's require() can still find them. A rockspec's
 -- environment is empty, so its cache is cleared whole and these never survive
 -- into it.
-local POLYFILL_MODULES = {
+const POLYFILL_MODULES = {
 	"luarocks.fs",
 	"luarocks.dir",
 	"luarocks.path",
 	"luarocks.core.cfg",
 	"luarocks.util",
 }
-local POLYFILL_SET = {}
+const POLYFILL_SET = {}
 for _, name in ipairs(POLYFILL_MODULES) do POLYFILL_SET[name] = true end
 
 --- True for a module name provided by these polyfills rather than by the
@@ -168,7 +167,6 @@ function luarocks.isPolyfill(name)
 end
 
 --- The environment a sandbox state runs a build backend in.
----@return table<string, boolean>
 function luarocks.backendEnv()
 	return BACKEND_ENV
 end
@@ -188,24 +186,24 @@ function luarocks.setup(state, opts)
 	opts = opts or {}
 
 	local cwd = opts.cwd or ""
-	local libDir = opts.libDir or ""
+	const libDir = opts.libDir or ""
 
-	local platform = jit.os == "Windows" and "windows"
+	const platform = jit.os == "Windows" and "windows"
 		or (jit.os == "OSX" and "osx" or "unix")
 
 	local ext = platform == "windows" and "dll"
 		or (platform == "osx" and "dylib")
 		or "so"
 
-	local g = state:globals() --[[@as { package: { loaded: table<string, any> } }]]
-	local loaded = g.package.loaded
+	const g = state:globals() --[[@as { package: { loaded: table<string, any> } }]]
+	const loaded = g.package.loaded
 	loaded["luarocks.fs"] = {
 		exists            = fs.exists,
 		is_dir            = fs.isdir,
 		make_dir          = fs.mkdirAll,
 		copy              = copyWithMode,
 		delete            = fs.delete,
-		execute           = function(cmd) return runCommand(cmd, cwd ~= "" and cwd or nil, opts.permissions) end,
+		execute           = function(cmd) return runCommand(cmd, cwd ~= "" ? cwd : nil, opts.permissions) end,
 		is_tool_available = toolAvailable,
 		current_dir       = env.cwd,
 		absolute_name     = absoluteName,
@@ -222,8 +220,8 @@ function luarocks.setup(state, opts)
 	}
 	loaded["luarocks.path"] = {
 		lib_dir     = function(_name, _version) return libDir end,
-		lua_dir     = function(_name, _version) return libDir end,
-		install_dir = function(_name, _version) return libDir end,
+		lua_dir     = |_name, _version| -> libDir,
+		install_dir = |_name, _version| -> libDir,
 	}
 	loaded["luarocks.core.cfg"] = {
 		lua_version            = "5.1",
@@ -234,7 +232,7 @@ function luarocks.setup(state, opts)
 		lib_extension          = ext,
 	}
 	loaded["luarocks.util"] = {
-		get_luajit_version = function() return jit.version end,
+		get_luajit_version = || -> jit.version,
 		printout           = print,
 		printerr           = function(s) io.stderr:write(tostring(s) .. "\n") end,
 	}

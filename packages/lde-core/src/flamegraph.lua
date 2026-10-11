@@ -1,6 +1,6 @@
-local fs = require("fs")
+const fs = require("fs")
 
-local M = {}
+const M = {}
 
 --- Build a tree from { "outerFrame;...;innerFrame" = count } folded stacks.
 ---@param stacks table<string, number>
@@ -31,7 +31,6 @@ end
 
 --- Minimal JSON encoder for the tree (only needs string keys n, integer v, array c).
 ---@param s string
----@return string
 --- Minimal JSON encoder for the tree (only needs string keys n, integer v, array c).
 local function jsonStr(s)
 	return '"' .. s:gsub('\\', '\\\\'):gsub('"', '\\"'):gsub('\n', '\\n') .. '"'
@@ -49,7 +48,7 @@ local function jsonNode(node)
 	return s .. '}'
 end
 
-local TEMPLATE = [==[<!DOCTYPE html>
+const TEMPLATE = [==[<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
@@ -194,10 +193,10 @@ function M.write(stacks, total, intervalMs, path, title)
 	if not next(stacks) then return nil, "no stack data collected" end
 
 	local root = M.buildTree(stacks, title or "root")
-	local json = jsonNode(root):gsub("</%f[a-z]", "<\\/")  -- escape </tag> sequences
+	const json = jsonNode(root):gsub("</%f[a-z]", "<\\/")  -- escape </tag> sequences
 
-	local safeTitle = (title or "profile"):gsub("[%^%$%(%)%%%.%[%]%*%+%-%?]", "%%%0")
-	local html = TEMPLATE
+	const safeTitle = (title or "profile"):gsub("[%^%$%(%)%%%.%[%]%*%+%-%?]", "%%%0")
+	const html = TEMPLATE
 		:gsub("__TITLE__", safeTitle)
 		:gsub("__DATA__", (json:gsub("%%", "%%%%")))
 		:gsub("__MS__", tostring(intervalMs))

@@ -1,12 +1,12 @@
-local fs = require("fs")
-local json = require("json")
-local semver = require("semver")
-local luarocks = require("luarocks")
+const fs = require("fs")
+const json = require("json")
+const semver = require("semver")
+const luarocks = require("luarocks")
 
-local global = require("lde-core.global")
-local util = require("lde-core.util")
+const global = require("lde-core.global")
+const util = require("lde-core.util")
 
-local git2 = require("util").lazy(function() return require("git2-sys") end)
+const git2 = require("util").lazy(function() return require("git2-sys") end)
 
 --- The entry exactly as lde.json declares it. getDependencies()/getDevDependencies()
 --- overlay the lockfile's pin on top of the manifest, so the merged view they
@@ -16,9 +16,9 @@ local git2 = require("util").lazy(function() return require("git2-sys") end)
 ---@return lde.Package.Config.Dependency?
 local function declaredDependency(package, name)
 	local config = package:readConfig()
-	local depInfo = config.dependencies and config.dependencies[name]
+	const depInfo = config.dependencies?.[name]
 	if depInfo then return depInfo end
-	return config.devDependencies and config.devDependencies[name]
+	return config.devDependencies?.[name]
 end
 
 --- Checks a git dependency for newer commits via ls-remote and pins any
@@ -34,12 +34,12 @@ local function updateGitDependency(package, name, depInfo)
 	-- repo's default HEAD) and leaves pinned ones alone, or the lockfile would
 	-- silently install a commit the manifest doesn't declare. Re-adding the
 	-- dependency is how a pin moves.
-	local declared = declaredDependency(package, name)
+	const declared = declaredDependency(package, name)
 	if declared and declared.commit then
 		return false, "pinned in lde.json (" .. declared.commit:sub(1, 7) .. ")"
 	end
 
-	local ref = depInfo.branch and ("refs/heads/" .. depInfo.branch) or "HEAD"
+	const ref = depInfo.branch ? ("refs/heads/" .. depInfo.branch) : "HEAD"
 	local latestCommit, err = git2().lsRemote(depInfo.git, ref)
 	if not latestCommit then
 		return false, "failed: " .. (err or "unknown error")
@@ -63,7 +63,7 @@ local function updateGitDependency(package, name, depInfo)
 		end
 	end
 
-	local msg = depInfo.commit
+	const msg = depInfo.commit
 		and (depInfo.commit:sub(1, 7) .. " -> " .. latestCommit:sub(1, 7))
 		or ("at " .. latestCommit:sub(1, 7))
 
@@ -81,7 +81,7 @@ end
 local function updateRegistryDependency(package, name, depInfo)
 	global.syncRegistry()
 
-	local packageName = depInfo.name or name
+	const packageName = depInfo.name or name
 	local portfile, err = global.lookupRegistryPackage(packageName)
 	if not portfile then
 		return false, "registry error: " .. err
@@ -94,7 +94,7 @@ local function updateRegistryDependency(package, name, depInfo)
 	-- lde.json. The lockfile is what pins the range, so dropping its entry for
 	-- this dependency lets the next install float to the newest match.
 	if not semver.isExact(depInfo.version) then
-		local resolved = semver.maxSatisfying(versions, depInfo.version)
+		const resolved = semver.maxSatisfying(versions, depInfo.version)
 		if not resolved then
 			return false, "no version satisfies " .. depInfo.version
 		end ---@cast resolved -nil
@@ -102,7 +102,7 @@ local function updateRegistryDependency(package, name, depInfo)
 		local lockfile = package:readLockfile()
 		local isLocked = lockfile and lockfile:getDependency(name)
 		if lockfile and isLocked and isLocked.commit ~= versions[resolved] then
-			local deps = lockfile:getDependencies()
+			const deps = lockfile:getDependencies()
 			deps[name] = nil
 			lockfile:save()
 			return true, depInfo.version .. " -> " .. resolved
@@ -152,11 +152,11 @@ local function updateLuarocksDependency(package, name, depInfo)
 	local manifest, err = util.getManifest()
 	if not manifest then return false, "manifest error: " .. (err or "") end
 
-	local latestUrl = luarocks.getRockspecUrl(manifest, depInfo.luarocks)
+	const latestUrl = luarocks.getRockspecUrl(manifest --[[@as luarocks.Manifest]], depInfo.luarocks)
 	if not latestUrl then return false, "not found in luarocks registry" end
 
-	local latest = latestUrl:match(depInfo.luarocks .. "%-([^/]+)%.rockspec$")
-	local current = depInfo.version
+	const latest = latestUrl:match(depInfo.luarocks .. "%-([^/]+)%.rockspec$")
+	const current = depInfo.version
 
 	if not latest or latest == current then
 		return false, "already up to date" .. (current and (" (" .. current .. ")") or "")
@@ -185,8 +185,8 @@ end
 local function updateDependencies(package, dependencies)
 	dependencies = dependencies or package:getDependencies()
 
-	local results = {}
-	for name, depInfo in pairs(dependencies) do
+	const results = {}
+	for name, depInfo in pairs(dependencies or {}) do
 		local updated, message
 		if depInfo.luarocks then
 			if package.isRockspec then

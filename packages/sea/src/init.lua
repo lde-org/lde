@@ -1,16 +1,16 @@
-local sea = {}
+const sea = {}
 
-local process = require("process")
+const process = require("process")
 local path = require("path")
 local env = require("env")
-local fs = require("fs")
-local jit = require("jit")
-local ansi = require("ansi")
+const fs = require("fs")
+const jit = require("jit")
+const ansi = require("ansi")
 
-local util = require("util")
+const util = require("util")
 
-local curl = util.lazy(|| -> require("curl-sys"))
-local Archive = util.lazy(|| -> require("archive"))
+const curl = util.lazy(|| -> require("curl-sys"))
+const Archive = util.lazy(|| -> require("archive"))
 
 local ljDistRepo = "lde-org/luajit"
 local ljDistTag = "latest"
@@ -68,7 +68,7 @@ local function getTargetFromCompiler(compiler)
 		end
 	end
 
-	local lddPatterns = { ["musl"] = "musl", ["gnu"] = "GNU libc" }
+	const lddPatterns = { ["musl"] = "musl", ["gnu"] = "GNU libc" }
 
 	local _, lddout = process.exec("ldd", { "--version" })
 	for libc, pattern in pairs(lddPatterns) do
@@ -129,16 +129,14 @@ end
 
 --- Whether a target matches the host (a native build, not a cross compile).
 ---@param target sea.Target
----@return boolean
 function sea.isHostTarget(target)
-	local host = sea.getHostTarget()
+	const host = sea.getHostTarget()
 	return target.platform == host.platform
 		and target.arch == host.arch
 		and (target.libc or "") == (host.libc or "")
 end
 
 ---@param compiler string
----@return boolean
 local function isClang(compiler)
 	local _, out = process.exec(compiler, { "--version" })
 	return out ~= nil and out:find("clang", 1, true) ~= nil
@@ -158,7 +156,7 @@ end
 ---@param compiler string
 ---@param target sea.Target
 local function crossLinkArgs(compiler, target)
-	local extra = {}
+	const extra = {}
 	local _, lldOut = process.exec("ld.lld", { "--version" })
 	if lldOut and lldOut ~= "" then
 		extra[#extra + 1] = "-fuse-ld=lld"
@@ -188,7 +186,7 @@ end
 function sea.getTriple(target, compiler)
 	if target then return target.triple end
 
-	compiler = compiler or env.var("SEA_CC") or "gcc"
+	local compiler = compiler or env.var("SEA_CC") or "gcc"
 	local _, out = process.exec(compiler, { "-dumpmachine" })
 	if out and out ~= "" then
 		local triple = out:match("^%s*(.-)%s*$")
@@ -196,16 +194,15 @@ function sea.getTriple(target, compiler)
 	end
 
 	local platform, arch = getPlatformArch()
-	local tripleArch = arch == "aarch64" and "aarch64" or "x86_64"
+	const tripleArch = arch == "aarch64" and "aarch64" or "x86_64"
 	return (platform == "windows" and (tripleArch .. "-w64-windows-gnu"))
 		or (platform == "macos" and (tripleArch .. "-apple-darwin"))
 		or (platform == "freebsd" and (tripleArch .. "-unknown-freebsd"))
 		or (tripleArch .. "-linux-gnu")
 end
 
----@return string
 local function userLdeDir()
-	local ldeHome = os.getenv("LDE_HOME")
+	const ldeHome = os.getenv("LDE_HOME")
 	if ldeHome and ldeHome ~= "" then return ldeHome end
 	return path.join(os.getenv("HOME") or os.getenv("USERPROFILE"), ".lde")
 end
@@ -216,9 +213,8 @@ end
 
 ---@param compiler? string
 ---@param target? sea.Target # cross-compile target; nil = native host build
----@return string
 local function getLuajitPath(compiler, target)
-	compiler = compiler or env.var("SEA_CC") or "gcc"
+	local compiler = compiler or env.var("SEA_CC") or "gcc"
 
 	local cacheDir = sea.getLuajitCacheDir()
 	local platform, hostArch = getPlatformArch()
@@ -228,12 +224,12 @@ local function getLuajitPath(compiler, target)
 		arch = target.arch
 		libc = target.libc
 	else
-		local compilerArch, probeLibc = getTargetFromCompiler(compiler)
+		const compilerArch, probeLibc = getTargetFromCompiler(compiler)
 		arch = compilerArch or hostArch
 		libc = probeLibc
 	end
 
-	local distName = table.concat({ "libluajit", platform, arch, libc }, "-")
+	const distName = table.concat({ "libluajit", platform, arch, libc }, "-")
 	local targetDir = path.join(cacheDir, distName)
 
 	if fs.exists(path.join(targetDir, "include", "lua.h")) then
@@ -242,7 +238,7 @@ local function getLuajitPath(compiler, target)
 
 	fs.mkdirAll(cacheDir)
 
-	local tarballName = distName .. ".tar.gz"
+	const tarballName = distName .. ".tar.gz"
 	local downloadUrl = string.format(
 		"https://github.com/%s/releases/download/%s/%s",
 		ljDistRepo,
@@ -251,13 +247,13 @@ local function getLuajitPath(compiler, target)
 	)
 	local tarballPath = path.join(cacheDir, tarballName)
 
-	local ljLabel = "luajit for " .. (target and target.name or (platform .. "-" .. arch))
+	local ljLabel = "luajit for " .. (target?.name ?? (platform .. "-" .. arch))
 
-	local bar = ansi.progress("Downloading " .. ljLabel, { indent = false })
+	const bar = ansi.progress("Downloading " .. ljLabel, { indent = false })
 	local ok, dlErr = curl().download(downloadUrl, tarballPath, {
 		progress = function(dltotal, dlnow)
-			local ratio = dltotal > 0 and (dlnow / dltotal) or nil
-			local info = dltotal > 0
+			local ratio = dltotal > 0 ? (dlnow / dltotal) : nil
+			const info = dltotal > 0
 				and (ansi.formatBytes(dlnow) .. " / " .. ansi.formatBytes(dltotal))
 				or ansi.formatBytes(dlnow)
 			bar:update(ratio, info)
@@ -287,7 +283,7 @@ end
 
 sea.getLuajitPath = getLuajitPath
 
-local CEscapes = {
+const CEscapes = {
 	["\a"] = "\\a",
 	["\b"] = "\\b",
 	["\f"] = "\\f",
@@ -302,7 +298,6 @@ local CEscapes = {
 
 ---Sanitise a library name so it is safe to use as a C identifier.
 ---@param name string
----@return string
 local function safeIdent(name)
 	return (string.gsub(name, "[^%w]", "_"))
 end
@@ -312,17 +307,16 @@ end
 ---@param sharedLibs? { name: string, content: string }[]
 ---@param compiler? string # path to compiler binary; defaults to SEA_CC env var, a clang on PATH, then gcc
 ---@param targetName? string # release target (e.g. "windows-x86-64") to cross-compile for; nil or a host-matching target = native build
----@return string
 function sea.compile(main, source, sharedLibs, compiler, targetName)
 	local outPath = path.join(env.tmpdir(), "sea.out")
 	sharedLibs = sharedLibs or {}
-	compiler = compiler or env.var("SEA_CC") or "gcc"
+	local compiler = compiler or env.var("SEA_CC") or "gcc"
 
 	-- Resolve the compile target. A --target matching the host is a native
 	-- build: same LuaJIT dist, same flags, no -target flag.
 	local target
 	if targetName then
-		local resolved, terr = sea.getTarget(targetName)
+		const resolved, terr = sea.getTarget(targetName)
 		if not resolved then
 			error(terr or ("Unknown compile target '" .. targetName .. "'"))
 		end ---@cast resolved -nil
@@ -340,7 +334,6 @@ function sea.compile(main, source, sharedLibs, compiler, targetName)
 			.. compiler .. "'. Install clang, or set SEA_CC to a clang with a sysroot for '" .. target.triple .. "'.")
 	end
 
-	local filePreloads
 
 	-- For each shared library, emit a uint8_t array and the write+preload logic.
 	-- The path is deterministic: /tmp/lde-lib-<name>-<hash>.so so that
@@ -352,14 +345,14 @@ function sea.compile(main, source, sharedLibs, compiler, targetName)
 
 	-- The platform this binary runs on: the target's when cross-compiling,
 	-- the host's otherwise. Drives lib naming, the ffi shim, and link flags.
-	local platform = target and target.platform
+	local platform = target?.platform
 		or (jit.os == "Windows" and "windows" or jit.os == "OSX" and "macos" or jit.os == "BSD" and "freebsd" or "linux")
-	local libExt = platform == "windows" and "dll" or "so"
+	const libExt = platform == "windows" and "dll" or "so"
 
-	for _, lib in ipairs(sharedLibs) do
+	for _, lib in ipairs(sharedLibs or {}) do
 		local id                            = safeIdent(lib.name)
 		local hash                          = util.hash(lib.content)
-		local libFileName                   = string.format("lde-lib-%s-%s.%s", lib.name, hash, libExt)
+		const libFileName                   = string.format("lde-lib-%s-%s.%s", lib.name, hash, libExt)
 		ffiShimEntries[#ffiShimEntries + 1] = string.format('["%s"]="%s"', lib.name, libFileName)
 		-- alias as libcurl, libcurl.so/libcurl.dylib, and curl
 		local leaf                          = lib.name:match("[^.]+$")  -- e.g. "libcurl"
@@ -428,9 +421,9 @@ extern const unsigned char %s_lib_end[];
 	lua_setfield(L, -2, "%s");]], id, luaopenSym, string.gsub(lib.name, ".", CEscapes))
 	end
 
-	local hasLibs        = #sharedLibs > 0
-	local libDeclsStr    = table.concat(libDecls, "\n")
-	local libTmpDirInit  = not hasLibs and "" or [[
+	const hasLibs        = #sharedLibs > 0
+	const libDeclsStr    = table.concat(libDecls, "\n")
+	const libTmpDirInit  = not hasLibs ? "" : [[
 char lde_tmpdir[4096];
 {
 #ifdef _WIN32
@@ -448,8 +441,8 @@ char lde_tmpdir[4096];
 	}
 }
 ]]
-	local libStartupStr  = libTmpDirInit .. table.concat(libStartup, "\n")
-	local libPreloadsStr = table.concat(libPreloads, "\n")
+	const libStartupStr  = libTmpDirInit .. table.concat(libStartup, "\n")
+	const libPreloadsStr = table.concat(libPreloads, "\n")
 
 	local ffiShim = ""
 	if #ffiShimEntries > 0 then
@@ -478,7 +471,7 @@ char lde_tmpdir[4096];
 	-- Remaps ffi.load to the embedded shared libs. Kept as its own chunk
 	-- (instead of being prepended to the bundle) so it works for both source
 	-- and bytecode bundles.
-	local shimSource = ffiShim
+	const shimSource = ffiShim
 	local shimStartup = ""
 	if shimSource ~= "" then
 		shimStartup = string.format(
@@ -488,14 +481,13 @@ char lde_tmpdir[4096];
 		)
 	end
 
-	local isRawBundle = type(source) == "table"
-	local isBytecode  = not isRawBundle and (source --[[@as string]]):sub(1, 3) == "\27LJ"
+	const isRawBundle = type(source) == "table"
+	const isBytecode  = not isRawBundle and (source --[[@as string]]):sub(1, 3) == "\27LJ"
 
 	-- Link a raw byte blob into the binary (1:1 size, zero runtime decode).
 	-- The path is content-addressed so recompiles of unchanged code reuse the
 	-- file; returns the C declarations (asm + externs) for the blob.
 	---@param content string
-	---@return string
 	local function writeBundleBlob(content)
 		local hash   = util.hash(content)
 		local bcPath = path.join(env.tmpdir(), "lde-bundle-" .. hash .. ".bc")
@@ -535,8 +527,8 @@ extern const unsigned char lde_bundle_end[];
 		-- Only the main entry is loaded eagerly (it needs argv); everything else
 		-- deserializes on first require(), so --version/help never touch the
 		-- whole module graph.
-		local blobParts = {}
-		local modules   = {}
+		const blobParts = {}
+		const modules   = {}
 		local offset    = 0
 		for _, m in ipairs(source.modules) do
 			modules[#modules + 1] = {
@@ -547,7 +539,7 @@ extern const unsigned char lde_bundle_end[];
 				aliases   = m.aliases
 			}
 			blobParts[#blobParts + 1] = m.code
-			offset = offset + #m.code
+			offset += #m.code
 		end
 		bundleDecls = writeBundleBlob(table.concat(blobParts))
 
@@ -646,7 +638,7 @@ static int lde_module_loader(lua_State* L) {
 		}
 	end
 
-	local extraIncludes = {}
+	const extraIncludes = {}
 	if hasLibs then
 		extraIncludes[#extraIncludes + 1] = "#include <stdint.h>\n#include <string.h>\n#include <stdlib.h>\n"
 	end
@@ -654,7 +646,7 @@ static int lde_module_loader(lua_State* L) {
 		-- lde_module_loader uses strcmp/size_t.
 		extraIncludes[#extraIncludes + 1] = "#include <string.h>\n#include <stddef.h>\n"
 	end
-	local stdintInclude = table.concat(extraIncludes) .. "#ifndef _WIN32\n#include <unistd.h>\n#endif\n"
+	const stdintInclude = table.concat(extraIncludes) .. "#ifndef _WIN32\n#include <unistd.h>\n#endif\n"
 
 	-- lde_loadlib_loader: a C closure that calls package.loadlib(upvalue1, "*").
 	-- Only emitted when there are shared libs to avoid dead-code warnings.
@@ -680,6 +672,7 @@ static int lde_loadlib_loader(lua_State* L) {
 }
 ]]
 	end
+
 
 	local code = stdintInclude .. [[
 #include <stdio.h>

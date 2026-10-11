@@ -1,11 +1,11 @@
-local test = require("lde-test")
+const test = require("lde-test")
 
-local fs = require("fs")
-local env = require("env")
+const fs = require("fs")
+const env = require("env")
 local path = require("path")
-local json = require("json")
+const json = require("json")
 
-local ldecli = require("tests.lib.ldecli")
+const ldecli = require("tests.lib.ldecli")
 
 local tmpBase = path.join(env.tmpdir(), "lde-remove-tests")
 fs.rmdir(tmpBase)
@@ -16,7 +16,7 @@ local function makeProject(name, deps, devDeps)
 	fs.mkdir(dir)
 	fs.mkdir(path.join(dir, "src"))
 	fs.write(path.join(dir, "src", "init.lua"), "")
-	local conf = {
+	const conf = {
 		name = name,
 		version = "0.1.0",
 		dependencies = deps or {}

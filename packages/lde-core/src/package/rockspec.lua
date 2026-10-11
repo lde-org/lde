@@ -1,28 +1,27 @@
-local rocked = require("rocked")
-local sea = require("sea")
-local lde = require("lde-core")
+const rocked = require("rocked")
+const sea = require("sea")
+const lde = require("lde-core")
 
-local fs = require("fs")
+const fs = require("fs")
 local env = require("env")
 local path = require("path")
-local process = require("process")
-local util = require("util")
+const process = require("process")
+const util = require("util")
 
-local curl = util.lazy(|| -> require("curl-sys"))
+const curl = util.lazy(|| -> require("curl-sys"))
 
 -- Enables concurrent native compiles during install builds (see build loop).
-local asyncBuild = require("lde-core.util.async-build")
+const asyncBuild = require("lde-core.util.async-build")
 
 -- Teal source suffixes kept alongside a rock's compiled modules in target/ so
 -- `tl check -I target` can resolve the rock's module types (mirroring what
 -- lde Teal package builds do for their own src/ output).
-local TL_SOURCE_SUFFIXES = { "tl", "d.tl" }
+const TL_SOURCE_SUFFIXES = { "tl", "d.tl" }
 
 --- Module sources and compiled modules that can sit in a rock's target dir but
 --- are never a runnable entry point (see the make/cmake bin guess in
 --- readConfig). Dotfiles such as .lde-built are excluded by the caller.
 ---@param name string
----@return boolean
 local function isModuleFile(name)
 	return name:match("%.lua$") ~= nil
 		or name:match("%.tl$") ~= nil
@@ -58,18 +57,17 @@ end
 
 ---@param src table # lde.rockspec.NativeModuleSpec or rocked.raw.NativeSource (same shape)
 ---@param buildTable table?
----@return table
 local function normalizeNativeModule(src, buildTable)
 	local sources = src.sources
 	if type(sources) == "string" then
 		src.sources = { sources }
 	end
 	for _, f in ipairs({ "libraries", "libdirs", "incdirs", "defines" }) do
-		local value = src[f]
+		const value = src[f]
 		if type(value) == "string" then
 			src[f] = { value }
 		elseif value == nil and buildTable then
-			local fallback = buildTable[f]
+			const fallback = buildTable[f]
 			if fallback ~= nil then
 				src[f] = type(fallback) == "string" and { fallback } or fallback
 			end
@@ -84,7 +82,6 @@ end
 --- libyaml-0.so.2 without the unversioned libyaml.so dev symlink cannot be
 --- linked with -lyaml, so it is not a match.
 ---@param name string
----@return string[]
 local function externalLibFiles(name)
 	if jit.os == "Windows" then
 		return { "lib" .. name .. ".dll.a", name .. ".dll.a", "lib" .. name .. ".a",
@@ -101,7 +98,6 @@ end
 --- checks "lib"; lib64 (Fedora) and the Debian/Ubuntu multiarch tuple dir
 --- (e.g. lib/x86_64-linux-gnu) cover the other common layouts.
 ---@param prefix string
----@return string[]
 local function externalLibSubdirs(prefix)
 	local subdirs = jit.os == "OSX" and { "lib" } or { "lib64", "lib" }
 	if jit.os ~= "Windows" and jit.os ~= "OSX" then
@@ -121,7 +117,6 @@ end
 ---@param prefix string
 ---@param subdirs string[]
 ---@param files string[]
----@return string? dir # absolute dir of the first match
 local function findExternalDir(prefix, subdirs, files)
 	for _, subdir in ipairs(subdirs) do
 		local dirPath = path.join(prefix, subdir)
@@ -150,7 +145,7 @@ local function resolveExternalDeps(extDeps, vars, packageName)
 		extFiles = type(extFiles) == "table" and extFiles or {}
 
 		local prefixes
-		local override = env.var(name .. "_DIR")
+		const override = env.var(name .. "_DIR")
 		if override then
 			prefixes = { override }
 		elseif jit.os == "Windows" then
@@ -163,8 +158,8 @@ local function resolveExternalDeps(extDeps, vars, packageName)
 		-- kind -> where to look (subdirs + candidate files). Mirrors LuaRocks'
 		-- external_deps_subdirs/external_deps_patterns per platform.
 		---@type { kind: string, subdirs: string[], files: string[] }[]
-		local checks = {}
-		local library = extFiles.library
+		const checks = {}
+		const library = extFiles.library
 		if library then
 			local names = type(library) == "table" and library or { library }
 			local files = {}
@@ -173,12 +168,12 @@ local function resolveExternalDeps(extDeps, vars, packageName)
 			end
 			checks[#checks + 1] = { kind = "library", subdirs = externalLibSubdirs(prefixes[1]), files = files }
 		end
-		local header = extFiles.header
+		const header = extFiles.header
 		if header then
 			local names = type(header) == "table" and header or { header }
 			checks[#checks + 1] = { kind = "header", subdirs = { "include" }, files = names }
 		end
-		local program = extFiles.program
+		const program = extFiles.program
 		if program then
 			local names = type(program) == "table" and program or { program }
 			local files = {}
@@ -205,10 +200,10 @@ local function resolveExternalDeps(extDeps, vars, packageName)
 				-- root prefixes ("/" -> "") to avoid "//lib64" paths.
 				local prefix = (rawPrefix:gsub("/+$", ""))
 				---@type table<string, string>
-				local dirs = {}
+				const dirs = {}
 				local okAll = true
 				for _, check in ipairs(checks) do
-					local foundDir = findExternalDir(prefix, check.subdirs, check.files)
+					const foundDir = findExternalDir(prefix, check.subdirs, check.files)
 					if not foundDir then
 						okAll = false
 						break
@@ -226,7 +221,7 @@ local function resolveExternalDeps(extDeps, vars, packageName)
 			end
 
 			if not matched then
-				local missing = checks[1]
+				const missing = checks[1]
 				local tried = {}
 				for _, rawPrefix in ipairs(prefixes) do
 					local prefix = (rawPrefix:gsub("/+$", ""))
@@ -271,12 +266,12 @@ local function autodetectModules(pkgDir, packageName)
 	-- joins them with pkgDir), so when scanning a src/ subdir the relative
 	-- path must be prefixed back up (src/luarocks/build/x.lua, not
 	-- luarocks/build/x.lua).
-	local basePrefix = base ~= pkgDir
+	const basePrefix = base ~= pkgDir
 		and (path.relative(pkgDir, base):gsub("\\", "/") .. "/")
 		or ""
 
 	for _, rel in ipairs(fs.scan(base, "**")) do
-		local first = rel:match("^([^/\\]+)")
+		const first = rel:match("^([^/\\]+)")
 		if first == "target" or first == ".git" or first == "build.lde" or first == "install.lde" then
 			goto continue
 		end
@@ -286,8 +281,8 @@ local function autodetectModules(pkgDir, packageName)
 			-- init.lua / <dir>/init.lua map to the package / dir name
 			modName = modName:gsub("%.init$", "")
 			if modName == "" then modName = packageName end
-			local srcPath = basePrefix .. rel
-			local isInit = rel:match("[/\\]init%.lua$") or rel == "init.lua"
+			const srcPath = basePrefix .. rel
+			const isInit = rel:match("[/\\]init%.lua$") or rel == "init.lua"
 			-- When a module name is claimed by both a file (x.lua) and a
 			-- directory entry (<dir>/init.lua), the file wins, mirroring
 			-- require()'s ?.lua-before-?/init.lua search order. LuaRocks' own
@@ -329,10 +324,10 @@ local function nativeGccArgs(src, ctx)
 	local ljPath = ctx.luajitPath
 	local dir = ctx.packageDir
 	local modulesDir = ctx.modulesDir
-	local makePath = ctx.makePath or function(p) return p end
+	local makePath = ctx.makePath or p -> p
 
 	local srcFiles = {}
-	local sourceList = src.sources ---@cast sourceList string[]
+	const sourceList = src.sources ---@cast sourceList string[]
 	for _, s in ipairs(sourceList) do
 		srcFiles[#srcFiles + 1] = path.join(dir, s)
 	end
@@ -347,7 +342,7 @@ local function nativeGccArgs(src, ctx)
 	args[#args + 1] = "-DLUAJIT_VERSION=LuaJIT 2.1.0-beta3"
 	args[#args + 1] = "-DLUA_VERSION_NUM=501"
 	args[#args + 1] = "-I" .. path.join(ljPath, "include")
-	local defines = src.defines or {} ---@cast defines string[]
+	const defines = src.defines or {} ---@cast defines string[]
 	for _, d in ipairs(defines) do args[#args + 1] = "-D" .. d end
 	if jitOS == "Windows" then
 		-- compat-5.3 (bundled by rocks like bit32) selects strerror_r when
@@ -359,7 +354,7 @@ local function nativeGccArgs(src, ctx)
 	-- Rockspec `incdirs` entries: absolute, relative to the package dir, or
 	-- $(VAR) placeholders resolved from the rock's standard variables (unknown
 	-- vars are skipped). LuaSec needs this for its bundled src/luasocket headers.
-	local incVars = {
+	const incVars = {
 		LUA_INCDIR = path.join(ljPath, "include"),
 		LUA_LIBDIR = path.join(ljPath, "lib"),
 		PREFIX = modulesDir,
@@ -369,11 +364,11 @@ local function nativeGccArgs(src, ctx)
 	if ctx.extVars then
 		for k, v in pairs(ctx.extVars) do incVars[k] = v end
 	end
-	local incdirs = src.incdirs or {} ---@cast incdirs string[]
+	const incdirs = src.incdirs or {} ---@cast incdirs string[]
 	for _, inc in ipairs(incdirs) do
 		local resolved = (inc:gsub("%$%(([%w_]+)%)", function(k) return incVars[k] or "" end))
 		if resolved ~= "" and not resolved:find("$", 1, true) then
-			local incPath = path.isAbsolute(resolved) and resolved or path.join(dir, resolved)
+			const incPath = path.isAbsolute(resolved) ? resolved : path.join(dir, resolved)
 			args[#args + 1] = "-I" .. makePath(incPath)
 		end
 	end
@@ -381,7 +376,7 @@ local function nativeGccArgs(src, ctx)
 	args[#args + 1] = "-o"
 	args[#args + 1] = ctx.destAbs
 	args[#args + 1] = "-L" .. path.join(ljPath, "lib")
-	local libdirs = src.libdirs or {} ---@cast libdirs string[]
+	const libdirs = src.libdirs or {} ---@cast libdirs string[]
 	for _, d in ipairs(libdirs) do
 		local resolved = (d:gsub("%$%(([%w_]+)%)", function(k) return incVars[k] or "" end))
 		if resolved ~= "" and not resolved:find("$", 1, true) then
@@ -413,7 +408,7 @@ local function openRockspec(dir, rockspecPath)
 	local function toolchainEnv()
 		if jit.os ~= "Windows" then return nil end
 		local mingwBin = path.join(lde.global.getMingwDir(), "bin")
-		local curPath = env.var("PATH") or ""
+		const curPath = env.var("PATH") or ""
 		if curPath:find(mingwBin, 1, true) then return nil end
 		return { PATH = mingwBin .. ";" .. curPath }
 	end
@@ -444,7 +439,7 @@ local function openRockspec(dir, rockspecPath)
 		if fs.exists(cacheFile) then
 			content = fs.read(cacheFile)
 		else
-			local res, err = curl().get(rockspecPath)
+			const res, err = curl().get(rockspecPath)
 			if not res then
 				return nil, "Could not fetch rockspec: " .. rockspecPath .. ": " .. (err or "")
 			end
@@ -462,7 +457,7 @@ local function openRockspec(dir, rockspecPath)
 		end
 	end ---@cast content -nil
 
-	local ok, spec = rocked.parse(content)
+	const ok, spec = rocked.parse(content)
 	if not ok then
 		return nil, "Failed to parse rockspec: " .. (spec or rockspecPath)
 	end ---@cast spec rocked.raw.Output
@@ -477,14 +472,14 @@ local function openRockspec(dir, rockspecPath)
 
 	local modules = {}
 	local nativeModules = {}
-	local binScripts, installLuaFiles = {}, {}
+	const binScripts, installLuaFiles = {}, {}
 
 	-- Only builtin/module builds interpret build.modules as lua/native module
 	-- sources; other backends (make, cmake, custom like rust-mlua) consume the
 	-- table themselves (rust-mlua uses an array of crate names), so never warn
 	-- about entries we don't understand.
-	local buildType = spec.build and spec.build.type or "builtin"
-	local interpretsModules = buildType == "builtin" or buildType == "module"
+	local buildType = spec.build?.type ?? "builtin"
+	const interpretsModules = buildType == "builtin" or buildType == "module"
 
 	if spec.build then
 		for modname, src in pairs(spec.build.modules or {}) do
@@ -500,7 +495,7 @@ local function openRockspec(dir, rockspecPath)
 				end
 			elseif type(src) == "table" and src.sources then ---@cast src rocked.raw.NativeSource
 				nativeModules[modname] = normalizeNativeModule(src, spec.build)
-			elseif type(src) == "table" and src[1] then
+			elseif type(src) == "table" and (src --[[@as table]])[1] then
 				nativeModules[modname] = normalizeNativeModule({ sources = src }, spec.build)
 			elseif type(src) == "table" and lde.isVerbose and interpretsModules then
 				io.stderr:write("warning: " ..
@@ -509,16 +504,16 @@ local function openRockspec(dir, rockspecPath)
 		end
 
 		-- Merge platform-specific modules
-		local platFallbacks = {
+		const platFallbacks = {
 			darwin = { "macosx", "unix" },
 			linux  = { "linux", "unix" },
 			win32  = { "win32", "mingw32" }
 		}
-		local jitPlatform = jit.os == "Windows" and "win32" or jit.os == "OSX" and "darwin" or "linux"
+		const jitPlatform = jit.os == "Windows" ? "win32" : jit.os == "OSX" ? "darwin" : "linux"
 
 		local platBuild
 		for _, key in ipairs(platFallbacks[jitPlatform] or { jitPlatform }) do
-			platBuild = spec.build.platforms and spec.build.platforms[key]
+			platBuild = spec.build.platforms?.[key]
 			if platBuild then break end
 		end
 
@@ -527,7 +522,7 @@ local function openRockspec(dir, rockspecPath)
 				(spec.package or "?") .. ": no platform config for '" .. jitPlatform .. "'\n")
 		end
 
-		local platformModules = platBuild and platBuild.modules or {} ---@cast platformModules table<string, rocked.raw.BuildSource>
+		const platformModules = platBuild?.modules ?? {} ---@cast platformModules table<string, rocked.raw.BuildSource>
 		for modname, src in pairs(platformModules) do
 			if type(src) == "string" then
 				if path.extension(src) == "lua" then
@@ -553,7 +548,7 @@ local function openRockspec(dir, rockspecPath)
 	end
 
 	local binEntry
-	local bk, bv = next(binScripts)
+	const bk, bv = next(binScripts)
 	if bk then binEntry = type(bk) == "number" and path.basename(bv --[[@as string]]) or bk end
 
 	-- LuaRocks' builtin backend autodetects modules when a rockspec (format
@@ -583,7 +578,7 @@ local function openRockspec(dir, rockspecPath)
 	---@param rel string # package-relative path of a file or directory
 	local function stampSource(rel)
 		if rel:match("^https?://") then return end -- remote sources are fetched per build
-		local p = path.isAbsolute(rel) and rel or path.join(dir, rel)
+		const p = path.isAbsolute(rel) ? rel : path.join(dir, rel)
 		if fs.isdir(p) then
 			for _, f in ipairs(fs.scan(p, "**")) do
 				local c = fs.read(path.join(p, f))
@@ -606,7 +601,7 @@ local function openRockspec(dir, rockspecPath)
 	table.sort(sourceHash)
 	-- The stamp covers the compile target so a --target switch rebuilds the
 	-- native outputs for the new target.
-	local buildStamp = util.hash(content .. "\n" .. tostring(lde.global.currentVersion)
+	const buildStamp = util.hash(content .. "\n" .. tostring(lde.global.currentVersion)
 		.. "\n" .. lde.global.getTargetKey() .. "\n" .. table.concat(sourceHash, ","))
 
 	pkg.buildfn = function(_, outputDir)
@@ -625,7 +620,7 @@ local function openRockspec(dir, rockspecPath)
 		-- $(NAME)_DIR substitution.
 		local extVars = {}
 		if spec.external_dependencies then
-			local extErr = resolveExternalDeps(spec.external_dependencies, extVars, spec.package or "?")
+			const extErr = resolveExternalDeps(spec.external_dependencies, extVars, spec.package or "?")
 			if extErr then return nil, extErr end
 		end
 
@@ -635,7 +630,6 @@ local function openRockspec(dir, rockspecPath)
 		-- backslashes in unquoted make recipes, and Windows tools accept '/'
 		-- in paths.
 		---@param p string
-		---@return string
 		local function makePath(p)
 			if jit.os ~= "Windows" then return p end
 			return (p:gsub("\\", "/"))
@@ -692,7 +686,7 @@ local function openRockspec(dir, rockspecPath)
 			-- broke lgi on macOS, where GOBJECT_INTROSPECTION_LIBDIR is only ever
 			-- defined by a darwin-only `CFLAGS += ...`.
 			---@type table<string, string>
-			local makeEnv = toolchainEnv() or {}
+			const makeEnv = toolchainEnv() or {}
 			for k, v in pairs(stdVars) do makeEnv[k] = v end
 
 			---@param extraVars table<string, string>?
@@ -705,8 +699,8 @@ local function openRockspec(dir, rockspecPath)
 				return args
 			end
 
-			local buildTarget = spec.build.build_target or ""
-			local installTarget = spec.build.install_target or "install"
+			const buildTarget = spec.build.build_target or ""
+			const installTarget = spec.build.install_target or "install"
 
 			local buildArgs = buildVarList(spec.build.variables)
 			if buildTarget ~= "" then buildArgs[#buildArgs + 1] = buildTarget end
@@ -721,7 +715,7 @@ local function openRockspec(dir, rockspecPath)
 			-- install_variables on top for the install pass. Rocks like lgi rely
 			-- on it: their Makefile's install target reads LUA_LIBDIR and
 			-- LUA_SHAREDIR, which the rockspec defines only in build.variables.
-			local installVars = {}
+			const installVars = {}
 			for k, v in pairs(spec.build.variables or {}) do installVars[k] = v end
 			for k, v in pairs(spec.build.install_variables or {}) do installVars[k] = v end
 			local installArgs = buildVarList(installVars)
@@ -782,7 +776,7 @@ local function openRockspec(dir, rockspecPath)
 				{ cwd = dir })
 			if code ~= 0 then return nil, "cmake install failed: " .. (stderr or "") end
 
-			local soExt = jit.os == "Windows" and "**.dll" or (jit.os == "OSX" and "**.dylib" or "**.so")
+			const soExt = jit.os == "Windows" ? "**.dll" : jit.os == "OSX" ? "**.dylib" : "**.so"
 			for _, rel in ipairs(fs.scan(installDir, soExt)) do
 				fs.copy(path.join(installDir, rel), path.join(modulesDir, path.basename(rel)))
 			end
@@ -819,7 +813,7 @@ local function openRockspec(dir, rockspecPath)
 				-- module) so `tl check -I target` can resolve this module's types,
 				-- the same contract lde Teal builds give their own src/ output.
 				for i = 1, #TL_SOURCE_SUFFIXES do
-					local tlSuffix = TL_SOURCE_SUFFIXES[i]
+					const tlSuffix = TL_SOURCE_SUFFIXES[i]
 					local srcTl = srcAbs:gsub("%.lua$", "." .. tlSuffix)
 					if fs.isfile(srcTl) then
 						fs.copy(srcTl, destAbs:gsub("%.lua$", "." .. tlSuffix))
@@ -828,7 +822,7 @@ local function openRockspec(dir, rockspecPath)
 			end
 
 			---@type { child: process.Child?, modname: string, code: number? }[]
-			local nativeChildren = {}
+			const nativeChildren = {}
 			for modname, src in pairs(nativeModules) do
 				-- LuaJIT uses .so on macOS too (its default cpath is ?.so), and
 				-- rockspec build systems like luke hardcode .so in their install
@@ -862,7 +856,7 @@ local function openRockspec(dir, rockspecPath)
 				-- children and then runs finishNative() below. Otherwise keep the
 				-- historical blocking behavior.
 				local ccBin = lde.global.getCCBin()
-				local spawnOpts = { env = toolchainEnv(), stdout = "pipe", stderr = "pipe" }
+				const spawnOpts = { env = toolchainEnv(), stdout = "pipe", stderr = "pipe" }
 				if asyncBuild.isActive() then
 					local child, serr = process.spawn(ccBin, gccArgs, spawnOpts)
 					if not child then
@@ -899,9 +893,9 @@ local function openRockspec(dir, rockspecPath)
 				end
 
 				for k, v in pairs(binScripts) do
-					local binName = type(k) == "number" and path.basename(v) or k
-					local binDest = path.join(outputDir, binName)
-					local binDestDir = path.dirname(binDest)
+					const binName = type(k) == "number" and path.basename(v) or k
+					const binDest = path.join(outputDir, binName)
+					const binDestDir = path.dirname(binDest)
 					if not fs.isdir(binDestDir) then fs.mkdirAll(binDestDir) end
 					local binSrc = path.join(dir, v)
 					if not fs.copy(binSrc, binDest) or not fs.isfile(binDest) then
@@ -924,7 +918,7 @@ local function openRockspec(dir, rockspecPath)
 					-- .d.tl declaration files keep both suffixes; others keep their
 					-- last extension.
 					local ext = srcBase:match("%.d%.tl$") ? "d.tl" : srcBase:match("%.([^%.]+)$")
-					local modBase = ext and srcBase:sub(1, -#ext - 2) or srcBase
+					const modBase = ext ? (srcBase:sub(1, -#ext - 2)) : srcBase
 					if type(modname) == "number" then
 						-- LuaRocks semantics: a numeric key installs the file under its
 						-- own basename (e.g. "tl.tl" becomes module "tl").
@@ -996,15 +990,14 @@ local function openRockspec(dir, rockspecPath)
 			}
 			for k, v in pairs(extVars) do vars[k] = v end
 
-			local cmdEnv = {}
+			const cmdEnv = {}
 			for k, v in pairs(vars) do cmdEnv[k] = v end
-			local tcEnv = toolchainEnv()
+			const tcEnv = toolchainEnv()
 			if tcEnv then
 				for k, v in pairs(tcEnv) do cmdEnv[k] = v end
 			end
 
 			---@param cmd string
-			---@return string
 			local function subst(cmd)
 				return (cmd:gsub("%$%(([%w_]+)%)", function(k) return vars[k] or "" end))
 			end
@@ -1023,12 +1016,12 @@ local function openRockspec(dir, rockspecPath)
 						if c == '"' then
 							i += 1
 							while i <= #cmd and cmd:sub(i, i) ~= '"' do
-								token = token .. cmd:sub(i, i)
+								token ..= cmd:sub(i, i)
 								i += 1
 							end
 							if i <= #cmd then i += 1 end -- skip closing quote
 						else
-							token = token .. c
+							token ..= c
 							i += 1
 						end
 					end
@@ -1072,9 +1065,9 @@ local function openRockspec(dir, rockspecPath)
 			-- backend installs its output into modulesDir itself.
 			-- Backends address files relative to their source dir, so chdir
 			-- there like build.lua scripts do (and restore on every path).
-			local prevDir = env.cwd()
+			const prevDir = env.cwd()
 			env.chdir(dir)
-			local r1, r2, r3 = pcall(rocked.runBackend, buildType, {
+			const r1, r2, r3 = pcall(rocked.runBackend, buildType, {
 				name = spec.package,
 				version = spec.version,
 				build = spec.build,
@@ -1114,7 +1107,7 @@ local function openRockspec(dir, rockspecPath)
 			-- of those either loaded a native module as Lua source (whichever
 			-- file readdir happened to return first) or announced that a library
 			-- was runnable.
-			local targetDir = path.join(dir, "target", spec.package or "")
+			const targetDir = path.join(dir, "target", spec.package or "")
 			if fs.isdir(targetDir) then
 				local iter = fs.readdir(targetDir)
 				if iter then
@@ -1142,7 +1135,7 @@ local function openRockspec(dir, rockspecPath)
 	return pkg, nil
 end
 
-local M = {
+const M = {
 	open = openRockspec,
 	nativeGccArgs = nativeGccArgs,
 	normalizeNativeModule = normalizeNativeModule,

@@ -1,12 +1,12 @@
 -- NOTE: These tests require network access — they clone from GitHub.
-local test = require("lde-test")
+const test = require("lde-test")
 
-local lde = require("lde-core")
+const lde = require("lde-core")
 
-local fs = require("fs")
-local env = require("env")
-local path = require("path")
-local json = require("json")
+const fs = require("fs")
+const env = require("env")
+const path = require("path")
+const json = require("json")
 
 local tmpBase = path.join(env.tmpdir(), "lde-git-tests")
 
@@ -77,7 +77,7 @@ test.it("rockspec git dep: luafilesystem native C module works", function()
 	pkg:installDependencies()
 	pkg:build()
 
-	local lockfile = pkg:readLockfile()
+	const lockfile = pkg:readLockfile()
 	test.truthy(lockfile) ---@cast lockfile -nil
 	local entry = lockfile:getDependency("luafilesystem")
 	test.truthy(entry) ---@cast entry -nil

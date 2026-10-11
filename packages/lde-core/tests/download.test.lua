@@ -1,11 +1,11 @@
 -- Unit tests for lde-core.util.download's session seeding: partial leftover
 -- files from interrupted runs must not be trusted as complete downloads, or
 -- the next sync extracts garbage ("Failed to extract") instead of re-fetching.
-local test = require("lde-test")
+const test = require("lde-test")
 
-local fs = require("fs")
-local env = require("env")
-local path = require("path")
+const fs = require("fs")
+const env = require("env")
+const path = require("path")
 
 local download = require("lde-core.util.download")
 
@@ -18,7 +18,6 @@ local destBase = path.join(tmpBase, "dest")
 
 --- Fresh session against an empty archive cache. The batch is created (curl
 --- is loaded) but nothing is transferred unless a test adds a real URL.
----@return string cacheDir
 local function beginSession()
 	-- Another lde-core test may have left a session open (an aborted install);
 	-- the module-level session is a singleton, so clear it first.

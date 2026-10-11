@@ -58,22 +58,20 @@
 ---@field dirFn fun(): string # registry checkout directory (dynamic: honors --tree)
 ---@field url string # registry git URL
 ---@field isSynced boolean? # only sync once per process
-local Registry = {}
+const Registry = {}
 Registry.__index = Registry
 
 --- The user-level lde dir: LDE_HOME when set, else ~/.lde. Mirrors
 --- lde-core.global.getUserDir() so a Registry built without an injected
 --- dirFn (production always injects one) lands in the same tree.
----@return string
 local function userLdeDir()
 	local path = require("path")
-	local ldeHome = os.getenv("LDE_HOME")
+	const ldeHome = os.getenv("LDE_HOME")
 	if ldeHome and ldeHome ~= "" then return ldeHome end
 	return path.join(os.getenv("HOME") or os.getenv("USERPROFILE"), ".lde")
 end
 
 --- Default registry checkout dir: <user lde dir>/registry.
----@return string
 local function defaultDir()
 	local path = require("path")
 	return path.join(userLdeDir(), "registry")
@@ -96,10 +94,9 @@ local function defaultDecodeJson(content)
 end
 
 ---@param opts? lde.RegistryOpts
----@return lde.Registry
 function Registry.new(opts)
 	opts = opts or {}
-	local self = setmetatable({}, Registry)
+	const self = setmetatable({}, Registry)
 	self.fs = opts.fs or (require("fs") --[[@as lde.RegistryFs]])
 	self.path = opts.path or (require("path") --[[@as lde.RegistryPath]])
 	self.semver = opts.semver or (require("semver") --[[@as lde.RegistrySemver]])
@@ -121,7 +118,7 @@ end
 --- command invocation is a fresh process and search/add/install all sync, so
 --- without this `lde search` pays a git fetch (network round trip) every time.
 ---@type integer
-local SYNC_TTL = 10 * 60
+const SYNC_TTL = 10 * 60
 
 --- Clone the registry if not present, otherwise pull to update. A failed pull
 --- (e.g. offline) is non-fatal; cached data is used. Only runs once per
@@ -145,8 +142,8 @@ function Registry:sync()
 		-- A recent fetch means the checkout is current: skip the network
 		-- round trip. FETCH_HEAD is touched by every fetch. (fs.stat may be
 		-- absent on minimal test doubles — then always pull.)
-		local fetchHead = self.path.join(registryDir, ".git", "FETCH_HEAD")
-		local fstat = self.fs.stat and self.fs.stat(fetchHead)
+		const fetchHead = self.path.join(registryDir, ".git", "FETCH_HEAD")
+		const fstat = self.fs.stat and self.fs.stat(fetchHead)
 		if not (fstat and (os.time() - fstat.modifyTime) < SYNC_TTL) then
 			local repo = git.open(registryDir)
 			if repo and repo.pull then repo:pull() end
@@ -164,7 +161,6 @@ end
 ---   * the full name is at most 128 characters
 ---
 ---@param name string
----@return string? err # nil when the name is valid
 function Registry:validateName(name)
 	if type(name) ~= "string" or name == "" then
 		return "package name cannot be empty"
@@ -188,7 +184,6 @@ function Registry:validateName(name)
 	end
 
 	---@param part string
-	---@return boolean
 	local function isPartValid(part)
 		return part:match("^[a-z][a-z0-9_-]*[a-z0-9]$") ~= nil
 			or part:match("^[a-z]$") ~= nil
@@ -213,16 +208,16 @@ end
 ---@return lde.Portfile?
 ---@return string? err
 function Registry:lookup(name)
-	local nameErr = self:validateName(name)
+	const nameErr = self:validateName(name)
 	if nameErr then
 		return nil, "Invalid package name '" .. tostring(name) .. "': " .. nameErr
 	end
 
 	-- Namespaced names (ns/foo) live at packages/ns/foo.json; split on "/" and
 	-- re-join with the OS separator so nested lookups work on Windows too.
-	local relPath = (name:gsub("/", self.path.separator))
-	local portfilePath = self.path.join(self:getDir(), "packages", relPath .. ".json")
-	local content = self.fs.read(portfilePath)
+	const relPath = (name:gsub("/", self.path.separator))
+	const portfilePath = self.path.join(self:getDir(), "packages", relPath .. ".json")
+	const content = self.fs.read(portfilePath)
 	if not content then
 		return nil, "Package '" .. name .. "' not found in lde registry"
 	end
@@ -250,7 +245,7 @@ function Registry:resolveVersion(portfile, version)
 	end ---@cast versions -nil
 
 	if version then
-		local commit = versions[version]
+		const commit = versions[version]
 		if commit then return version, commit end
 
 		-- Not an exact published version: it may still be a range. A pin that

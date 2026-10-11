@@ -1,10 +1,10 @@
-local env  = require("env")
-local fs   = require("fs")
-local ffi  = require("ffi")
-local path = require("path")
-local ansi = require("ansi")
+const env  = require("env")
+const fs   = require("fs")
+const ffi  = require("ffi")
+const path = require("path")
+const ansi = require("ansi")
 
-local runtime = require("lde-core.runtime")
+const runtime = require("lde-core.runtime")
 
 -- Cross-platform sleep used to debounce the file watchers.
 local sleep
@@ -332,7 +332,6 @@ return M
 -- change must match the "src:foo.lua" key the guest recorded. Mirrors the
 -- guest bootstrap's canonicalKey.
 ---@param key string
----@return string
 local function canonicalKey(key)
 	if key:sub(1, 4) == "src:" then
 		return (key:gsub("%.tl$", ".lua"):gsub("%.moon$", ".lua"))
@@ -344,7 +343,6 @@ end
 ---@param p string
 ---@param srcPrefix string?
 ---@param targetPrefix string?
----@return string
 local function normalizeKey(p, srcPrefix, targetPrefix)
 	if targetPrefix and p:sub(1, #targetPrefix) == targetPrefix then
 		return canonicalKey("src:" .. p:sub(#targetPrefix + 1))
@@ -374,7 +372,7 @@ end
 ---@param seconds number
 local function formatReloadTime(seconds)
 	if seconds < 0.001 then
-		local us = seconds * 1e6
+		const us = seconds * 1e6
 		return us < 10 ? string.format("%.1fµs", us) : string.format("%.0fµs", us)
 	end
 	if seconds < 1 then return string.format("%.1fms", seconds * 1000) end
@@ -419,7 +417,7 @@ local function run(opts)
 	-- chunk is never loaded through require(), so it has no module name to
 	-- report, and the caller's name for it (the package, the script file) is
 	-- what its sources are known by.
-	local entryLabel = opts.entryLabel or "entry"
+	const entryLabel = opts.entryLabel or "entry"
 
 	-- Absolute paths of changed files, drained by the driver between runs.
 	local pending = {} ---@type string[]
@@ -434,11 +432,11 @@ local function run(opts)
 	-- instead of patching the one the error left behind.
 	local fullReload = false
 
-	local watchers = {}
+	const watchers = {}
 	for _, w in ipairs(opts.watchDirs) do
 		local dir = w.dir
 		if fs.isdir(dir) then
-			local watcher = fs.watch(dir, function(_event, name)
+			const watcher = fs.watch(dir, function(_event, name)
 				if name and name ~= "" then pending[#pending + 1] = path.join(dir, name) end
 			end, { recursive = w.recursive })
 			if watcher then
@@ -467,7 +465,7 @@ local function poll()
 	if #pending > 0 then
 		for i = #pending, 1, -1 do
 			local abs = pending[i]
-			local relevant = opts.mode == "watch" or fullReload or (checkKeyFn and checkKeyFn(abs))
+			const relevant = opts.mode == "watch" or fullReload or (checkKeyFn and checkKeyFn(abs))
 			if relevant then
 				-- Leave pending intact: the driver processes it after the
 				-- error unwinds the guest stack.
@@ -483,14 +481,17 @@ local function poll()
 end
 
 	local function installState()
+		-- The middle value is not wanted, and `_` is a name like any other: without this it is a
+		-- global being written on every install.
+		local _
 		state, _, cleanup = opts.createState()
 
 		-- The bootstrap closes over this config; it's passed as the chunk's
 		-- varargs. abs() resolves the searcher's relative file paths against
 		-- the guest cwd.
-		local boot = state:load(BOOTSTRAP, "@lde-watchrun")
+		const boot = state:load(BOOTSTRAP, "@lde-watchrun")
 		local ok, hotState = boot:pcall({
-			abs = function(p) return path.resolve(env.cwd(), p) end,
+			abs = p -> path.resolve(env.cwd(), p),
 			poll = poll,
 			mode = opts.mode,
 			srcPrefix = opts.srcPrefix,
@@ -509,16 +510,16 @@ end
 		---@cast hotState lua.Table
 		hotStateTbl = hotState
 
-		local rf = hotState:get("reload") ---@cast rf function
+		const rf = hotState:get("reload") ---@cast rf function
 		reloadFn = rf
 
-		local ckf = hotState:get("checkKey") ---@cast ckf function
+		const ckf = hotState:get("checkKey") ---@cast ckf function
 		checkKeyFn = ckf
 
-		local bef = hotState:get("beginEntry") ---@cast bef function
+		const bef = hotState:get("beginEntry") ---@cast bef function
 		beginEntryFn = bef
 
-		local faf = hotState:get("flushAccepts") ---@cast faf function
+		const faf = hotState:get("flushAccepts") ---@cast faf function
 		flushAcceptsFn = faf
 
 		-- No debug hook is installed: a hook only fires on interpreted code, so
@@ -547,7 +548,7 @@ end
 		end
 		-- "@" chunk label: LuaJIT reports file-backed errors as path:line.
 		-- A nil label would fall back to the source text (truncated).
-		local chunk = state:load(source, "@" .. opts.entry)
+		const chunk = state:load(source, "@" .. opts.entry)
 		-- Resets the entry's package.hot.accept registrations: this run
 		-- re-registers them, and the previous run's closures are stale.
 		if beginEntryFn then beginEntryFn() end
@@ -556,11 +557,11 @@ end
 		running = false
 
 		if not ok then
-			local msg = tostring(result)
+			const msg = tostring(result)
 			if msg:find(RELOAD_MARKER, 1, true) then
 				return "reload"
 			end
-			local exitCode = msg:match(EXIT_MARKER .. "([0-9]+)")
+			const exitCode = msg:match(EXIT_MARKER .. "([0-9]+)")
 			if exitCode then
 				return "exit", tonumber(exitCode)
 			end
@@ -574,7 +575,7 @@ end
 		if result == "error" then
 			-- The caller can render the error Bun-style (source snippet +
 			-- at path:line) via opts.onError; fall back to a plain line.
-			local rendered = opts.onError and opts.onError(tostring(info))
+			const rendered = opts.onError and opts.onError(tostring(info))
 			if not rendered then
 				ansi.printf("{red}Error: %s", tostring(info))
 			end
@@ -596,7 +597,7 @@ end
 	---@return string[] reloadedNames
 	---@return boolean restart
 	local function processPendingChanges()
-		local changes = pending
+		const changes = pending
 		pending = {}
 		if #changes == 0 then return false, {}, false end
 
@@ -617,7 +618,7 @@ end
 			if key == entryKey then
 				entryChanged = true
 			elseif reloadFn then
-				reloaded = reloaded + reloadFn(key)
+				reloaded += reloadFn(key)
 			end
 		end
 
@@ -625,7 +626,7 @@ end
 		local names = {}
 		if shouldRun then
 			if reloaded > 0 then
-				local lst = hotStateTbl and hotStateTbl:get("lastReloaded") ---@cast lst lua.Table
+				const lst = hotStateTbl and hotStateTbl:get("lastReloaded") ---@cast lst lua.Table
 				if lst then
 					for _i, v in lst:ipairs() do names[#names + 1] = v end
 				end
@@ -679,7 +680,7 @@ end
 				ansi.printf("{cyan}Change detected, restarting...")
 			end
 
-			local buildOk = opts.preReload == nil or opts.preReload()
+			const buildOk = opts.preReload == nil or opts.preReload()
 			if not buildOk then
 				-- Keep the previous state; the next change retries. The queued
 				-- package.hot.accept notifications describe a reload that never

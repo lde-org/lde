@@ -1,9 +1,9 @@
 -- Version parsing and range matching. Ranges are what a manifest's registry
 -- dependency uses when it names more than one version: "0.1" is the whole 0.1
 -- prefix, "^0.1.2" the 0.1 line, ">=1.2 <2" a comparable window.
-local test = require("lde-test")
+const test = require("lde-test")
 
-local semver = require("semver")
+const semver = require("semver")
 
 --
 -- parse / compare

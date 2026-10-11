@@ -1,5 +1,5 @@
-local test = require("lde-test")
-local rocked = require("rocked")
+const test = require("lde-test")
+const rocked = require("rocked")
 
 local fs = require("fs")
 local path = require("path")
@@ -8,7 +8,7 @@ local path = require("path")
 -- surface small): os.tmpname() returns a path inside the system temp dir.
 local tmpBase = path.dirname(os.tmpname())
 
-local BUSTED_ROCKSPEC = [==[
+const BUSTED_ROCKSPEC = [==[
 local package_name = "busted"
 local package_version = "2.3.0"
 local rockspec_revision = "1"
@@ -205,7 +205,7 @@ test.it("shouldn't run for too long", function()
 	test.notEqual(parsed:find("Rockspec took too long to run"), nil)
 end)
 
-local ROCKSPEC_SOURCE = [[
+const ROCKSPEC_SOURCE = [[
 package = "legit"
 version = "1.0-1"
 source = { url = "https://example.com" }
@@ -215,7 +215,7 @@ build = { type = "builtin" }
 test.it("refuses a precompiled rockspec", function()
 	-- `load` accepts bytecode as readily as text and LuaJIT does not verify
 	-- it, so a rockspec must never reach the loader as bytecode.
-	local dumped = string.dump(assert(load(ROCKSPEC_SOURCE)))
+	const dumped = string.dump(assert(load(ROCKSPEC_SOURCE)))
 	test.equal(dumped:sub(1, 3), "\27LJ")
 
 	local ok, parsed = rocked.parse(dumped)
@@ -273,11 +273,11 @@ test.it("polyfills are reachable from backends but not from rockspecs", function
 	-- The luarocks.* modules wrap host fs/path/process, so they exist for one
 	-- purpose: letting a custom build backend run. A rockspec must not be able
 	-- to obtain them.
-	local luarocks = require("rocked.luarocks")
+	const luarocks = require("rocked.luarocks")
 	test.truthy(luarocks.isPolyfill("luarocks.fs"))
 	test.falsy(luarocks.isPolyfill("os"))
 
-	local backendEnv = luarocks.backendEnv()
+	const backendEnv = luarocks.backendEnv()
 	test.truthy(backendEnv["package"])
 	test.truthy(backendEnv["require"])
 	test.falsy(backendEnv["os"])
@@ -361,7 +361,7 @@ end)
 -- custom build backends
 --
 
-local FAKE_BACKEND = [==[
+const FAKE_BACKEND = [==[
 local fs = require("luarocks.fs")
 local dir = require("luarocks.dir")
 local path = require("luarocks.path")
@@ -456,13 +456,13 @@ test.it("runBackend honors permissions callbacks", function()
 			variables = { OUT = path.join(base, "out.txt") },
 		}
 	end
-	local opts = {
+	const opts = {
 		packagePath = path.join(base, "?.lua") .. ";" .. path.join(base, "?", "init.lua"),
 	}
 
 	-- Denied: the callback is consulted and the command never runs.
 	local consulted = false
-	local ok, err = rocked.runBackend("perm", rockspec(), {
+	local ok, _ = rocked.runBackend("perm", rockspec(), {
 		permissions = {
 			execute = function(cmd)
 				consulted = true
@@ -479,7 +479,7 @@ test.it("runBackend honors permissions callbacks", function()
 	local ok2, err2 = rocked.runBackend("perm", rockspec(), opts)
 	test.truthy(ok2, err2)
 	local ok3, err3 = rocked.runBackend("perm", rockspec(), {
-		permissions = { execute = function() return true end },
+		permissions = { execute = || -> true },
 		packagePath = opts.packagePath,
 	})
 	test.truthy(ok3, err3)

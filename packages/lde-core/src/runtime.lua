@@ -1,11 +1,11 @@
-local lua  = require("lua-sys")
+const lua  = require("lua-sys")
 local env  = require("env")
-local fs   = require("fs")
-local path = require("path")
-local ansi = require("ansi")
-local lde  = require("lde-core")
-local teal = require("lde-core.teal")
-local moonscript = require("lde-core.moonscript")
+const fs   = require("fs")
+const path = require("path")
+const ansi = require("ansi")
+const lde  = require("lde-core")
+const teal = require("lde-core.teal")
+const moonscript = require("lde-core.moonscript")
 
 local PROFILER_MS_PER_SAMPLE = 1
 
@@ -25,29 +25,26 @@ local function printProfileReport(counts, vmstates, total, cwd)
 
 	local totalMs = total * PROFILER_MS_PER_SAMPLE
 	---@param ms number
-	---@return string
 	local function fmtTime(ms)
 		if ms < 1000 then return string.format("~%dms", ms) end
 		return string.format("~%.1fs", ms / 1000)
 	end
 
 	local BAR_WIDTH = 20
-	local vmColors = { N = "green", I = "yellow", C = "cyan", G = "red", J = "magenta" }
-	local vmLabels = { N = "JIT compiled", I = "Interpreted", C = "C code", G = "GC", J = "JIT compiler" }
-	local vmOrder  = { "N", "I", "C", "G", "J" }
+	const vmColors = { N = "green", I = "yellow", C = "cyan", G = "red", J = "magenta" }
+	const vmLabels = { N = "JIT compiled", I = "Interpreted", C = "C code", G = "GC", J = "JIT compiler" }
+	const vmOrder  = { "N", "I", "C", "G", "J" }
 
 	---@param n number
 	---@param color string
-	---@return string
 	local function bar(n, color)
-		local filled = math.max(0, math.min(BAR_WIDTH, math.floor(n / total * BAR_WIDTH + 0.5)))
-		local s = filled > 0 and ansi.colorize(color, string.rep("█", filled)) or ""
-		local empty = BAR_WIDTH - filled
-		return empty > 0 and s .. ansi.colorize("gray", string.rep("░", empty)) or s
+		const filled = math.max(0, math.min(BAR_WIDTH, math.floor(n / total * BAR_WIDTH + 0.5)))
+		const s = filled > 0 ? ansi.colorize(color, string.rep("█", filled)) : ""
+		const empty = BAR_WIDTH - filled
+		return empty > 0 ? s .. ansi.colorize("gray", string.rep("░", empty)) : s
 	end
 
 	---@param loc string
-	---@return string
 	local function relativize(loc)
 		if cwd and loc:sub(1, #cwd + 1) == cwd .. "/" then
 			loc = loc:sub(#cwd + 2)
@@ -55,7 +52,7 @@ local function printProfileReport(counts, vmstates, total, cwd)
 		return (loc:gsub("^target/[^/]+/", ""))
 	end
 
-	local sep = ansi.colorize("gray", string.rep("─", 54))
+	const sep = ansi.colorize("gray", string.rep("─", 54))
 
 	io.write("\n")
 	wln(ansi.format("  {bold}Profile{reset} · {cyan}%s{reset} · {gray}%d samples @ %dms",
@@ -81,12 +78,12 @@ local function printProfileReport(counts, vmstates, total, cwd)
 
 	local sorted = {}
 	for loc, count in pairs(counts) do sorted[#sorted + 1] = { loc = loc, count = count } end
-	table.sort(sorted, function(a, b) return a.count > b.count end)
+	table.sort(sorted, |a, b| -> a.count > b.count)
 
 	for i = 1, math.min(#sorted, 20) do
 		local e     = sorted[i]
-		local pct   = e.count / total * 100
-		local color = i == 1 and "red" or i <= 3 and "yellow" or "white"
+		const pct   = e.count / total * 100
+		const color = i == 1 ? "red" : i <= 3 ? "yellow" : "white"
 		wln("  "
 			.. ansi.colorize(color, string.format("%5.1f%%", pct))
 			.. "  " .. ansi.colorize("gray", string.format("%-7s", fmtTime(e.count * PROFILER_MS_PER_SAMPLE)))
@@ -108,7 +105,7 @@ local function startProfiler(state)
 
 	-- Frames to skip when looking for a meaningful hotspot key.
 	-- These are lde internals or Lua builtins that appear at the top of every stack.
-	local skipFrames = {
+	const skipFrames = {
 		["require"]    = true,
 		["pcall"]      = true,
 		["xpcall"]     = true,
@@ -118,25 +115,24 @@ local function startProfiler(state)
 
 	-- Strip the name:line suffix that luajit appends in "f;" mode (e.g. "foo:42" → "foo").
 	---@param f string
-	---@return string
 	local function frameName(f)
 		return (f:gsub(":%d+$", ""))
 	end
 
 	lua.profiler.start(state, "fi" .. PROFILER_MS_PER_SAMPLE, function(stack, samples, vmstate)
-		total = total + samples
+		total += samples
 		vmstates[vmstate] = (vmstates[vmstate] or 0) + samples
 		if vmstate == "G" or not stack or stack == "" then return end
 
 		-- Accumulate the full stack for flamegraph (clean frame names).
 		local cleanParts = {}
 		for frame in stack:gmatch("([^;]+)") do
-			local name = frameName(frame)
+			const name = frameName(frame)
 			if name ~= "" and name ~= "?" then
 				cleanParts[#cleanParts + 1] = name
 			end
 		end
-		local cleanStack = table.concat(cleanParts, ";")
+		const cleanStack = table.concat(cleanParts, ";")
 		if cleanStack ~= "" then
 			stacks[cleanStack] = (stacks[cleanStack] or 0) + samples
 		end
@@ -175,10 +171,10 @@ local function writeProfileJson(filePath, counts, vmstates, stacks, total)
 	for loc, count in pairs(counts) do
 		hotspots[#hotspots + 1] = { loc = loc, count = count }
 	end
-	table.sort(hotspots, function(a, b) return a.count > b.count end)
+	table.sort(hotspots, |a, b| -> a.count > b.count)
 
-	local json = require("json")
-	local content = json.encode({
+	const json = require("json")
+	const content = json.encode({
 		version = 1,
 		intervalMs = PROFILER_MS_PER_SAMPLE,
 		total = total,
@@ -222,13 +218,14 @@ local function createState(opts)
 
 	-- Change cwd on the host process (guest inherits the same OS environment)
 	local oldCwd
-	if opts.cwd then
+	const here = opts.cwd
+	if here then
 		oldCwd = env.cwd()
-		env.chdir(opts.cwd)
+		env.chdir(here --[[@as string]])
 	end
 
 	-- Apply env vars; save originals for restore
-	local oldEnvVars = {}
+	const oldEnvVars = {}
 	if opts.env then
 		for k, v in pairs(opts.env) do
 			oldEnvVars[k] = env.var(k)
@@ -246,14 +243,14 @@ local function createState(opts)
 	local g     = state:globals() --[[@as { package: { path: string?, cpath: string?, loaded: table<string, any> }, arg: any }]]
 
 	-- Set package.path / package.cpath
-	local pkg = g.package
+	const pkg = g.package
 	if opts.packagePath  then pkg.path  = opts.packagePath  end
 	if opts.packageCPath then pkg.cpath = opts.packageCPath end
 
 	-- Inject preloaded modules directly into package.loaded so require() returns
 	-- them immediately — no loader function or cross-boundary callback needed.
 	if opts.preload then
-		local loaded = pkg.loaded
+		const loaded = pkg.loaded
 		for modname, loader in pairs(opts.preload) do
 			if type(loader) == "function" then
 				loaded[modname] = loader()
@@ -271,7 +268,7 @@ local function createState(opts)
 	-- Populate arg[] — args[0] is arg[0] (the chunk name / script path),
 	-- args[1..] are the positional arguments.
 	local args   = opts.args or {}
-	local argTbl = state:table()
+	const argTbl = state:table()
 	argTbl[0]   = args[0] or "?"
 	for i, v in ipairs(args) do argTbl[i] = v end
 	g.arg = argTbl
@@ -285,7 +282,6 @@ end
 ---@param source    string  Lua source code to run
 ---@param chunkName string  Label shown in error traces
 ---@param opts      lde.ExecuteOptions?
----@return boolean ok
 ---@return any ...  error message on failure, return values on success
 local function executeSource(source, chunkName, opts)
 	opts = opts or {}
@@ -312,7 +308,7 @@ local function executeSource(source, chunkName, opts)
 	-- so its bootstrap chunk can load into it.
 	local jitDiagSession, jitdiagReport
 	if opts.jit then
-		local jitdiag = require("lde-core.jitdiag")
+		const jitdiag = require("lde-core.jitdiag")
 		jitDiagSession = jitdiag.install(state, { cwd = opts.cwd or env.cwd() })
 		if jitDiagSession then
 			jitdiagReport = function(session, cwd) jitdiag.report(session, cwd) end
@@ -336,14 +332,15 @@ local function executeSource(source, chunkName, opts)
 		-- caller requested them — but the report and status lines are
 		-- suppressed while quiet (the test runner sets lde.isQuiet so library
 		-- calls under `lde test` don't spam the suite's output).
-		local isQuiet = lde.isQuiet
+		const isQuiet = lde.isQuiet
 		if not isQuiet and opts.profile then
 			printProfileReport(counts, vmstates, total, opts.cwd or env.cwd())
 		end
-		if opts.flamegraph then
-			local title = chunkName and chunkName:match("[^/\\\\]+$")
-			local fgOk, fgErr = lde.flamegraph.write(
-				stacks, total, PROFILER_MS_PER_SAMPLE, opts.flamegraph, title)
+		const flamegraph = opts.flamegraph
+		if flamegraph then
+			const title = chunkName and chunkName:match("[^/\\\\]+$")
+			const fgOk, fgErr = lde.flamegraph.write(
+				stacks, total, PROFILER_MS_PER_SAMPLE, flamegraph --[[@as string]], title)
 			if not isQuiet then
 				if fgOk then
 					ansi.printf("{cyan}Flamegraph written to %s", opts.flamegraph)
@@ -352,8 +349,9 @@ local function executeSource(source, chunkName, opts)
 				end
 			end
 		end
-		if opts.profileJson then
-			local jOk, jErr = writeProfileJson(opts.profileJson, counts, vmstates, stacks, total)
+		const profileJson = opts.profileJson
+		if profileJson then
+			const jOk, jErr = writeProfileJson(profileJson --[[@as string]], counts, vmstates, stacks, total)
 			if not isQuiet then
 				if jOk then
 					ansi.printf("{cyan}Profile JSON written to %s", opts.profileJson)
@@ -444,21 +442,21 @@ local function executeLuaCLI(args, opts)
 	opts = opts or {}
 
 	-- Parse `-e <code>` chunks at the front, then an optional script.
-	local eChunks = {}
+	const eChunks = {}
 	local i = 1
 	while args[i] == "-e" do
-		i = i + 1
+		i += 1
 		if args[i] == nil then
 			return false, "no code given for -e"
 		end
 		eChunks[#eChunks + 1] = args[i]
-		i = i + 1
+		i += 1
 	end
 	---@type string?
 	local script = args[i]
 	local scriptArgs = {}
 	for j = i + 1, #args do scriptArgs[#scriptArgs + 1] = args[j] end
-	local interactive = script == "-i"
+	const interactive = script == "-i"
 	if interactive then script = nil end
 	if not script and #eChunks == 0 and not interactive then
 		return false, "no script or -e chunk given after --lua"
@@ -511,7 +509,7 @@ local function executeLuaCLI(args, opts)
 			ok, r = pcall(repl.eval, repl)
 		end
 	elseif ok and script then
-		local source, err = fs.read(script)
+		local source, err = fs.read(script --[[@as string]])
 		if not source then
 			ok, r = false, "Failed to read " .. script .. ": " .. (err or "unknown error")
 		else

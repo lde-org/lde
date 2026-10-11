@@ -1,12 +1,12 @@
-local test = require("lde-test")
+const test = require("lde-test")
 
-local fs = require("fs")
-local env = require("env")
-local path = require("path")
-local json = require("json")
-local util = require("util")
+const fs = require("fs")
+const env = require("env")
+const path = require("path")
+const json = require("json")
+const util = require("util")
 
-local ldecli = require("tests.lib.ldecli")
+const ldecli = require("tests.lib.ldecli")
 
 test.it("runs Moonscript (.moon) packages out of the box", function()
 	local tmpDir = path.join(env.tmpdir(), "lde-moon-run-test")
@@ -48,7 +48,7 @@ test.it("runs a bare .moon file outside a package", function()
 		print s
 	]]))
 
-	local script = path.join(tmpDir, "hello.moon") --[[@as string]]
+	const script = path.join(tmpDir, "hello.moon") --[[@as string]]
 	local ok, out = ldecli({ script })
 	test.truthy(ok)
 	test.includes(out or "", "bare moon")

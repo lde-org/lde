@@ -1,21 +1,21 @@
-local test = require("lde-test")
+const test = require("lde-test")
 
-local lde = require("lde-core")
+const lde = require("lde-core")
 
 local features = require("lde-core.package.features")
-local bundlePackage = require("lde-core.package.bundle")
+const bundlePackage = require("lde-core.package.bundle")
 
-local fs = require("fs")
-local env = require("env")
+const fs = require("fs")
+const env = require("env")
 local path = require("path")
-local json = require("json")
+const json = require("json")
 
 local tmpBase = path.join(env.tmpdir(), "lde-features-tests")
 fs.rmdir(tmpBase)
 fs.mkdir(tmpBase)
 
-local platformFlag = ({ Windows = "windows", Linux = "linux", OSX = "macos", BSD = "bsd" })[jit.os]
-local isWindows = jit.os == "Windows"
+const platformFlag = ({ Windows = "windows", Linux = "linux", OSX = "macos", BSD = "bsd" })[jit.os]
+const isWindows = jit.os == "Windows"
 
 -- ── platform flags ───────────────────────────────────────────────────────────
 
@@ -30,7 +30,7 @@ end)
 
 test.it("platform flags: unix is on for every non-Windows platform", function()
 	local defs = features.parse({ unix = { "term" }, windows = { "winapi" } }, "pkg")
-	local enabled = features.enabledDependencies(defs, nil)
+	const enabled = features.enabledDependencies(defs, nil)
 	if isWindows then
 		test.truthy(enabled["winapi"])
 		test.falsy(enabled["term"])
@@ -161,7 +161,7 @@ test.it("enabledFlags: requested flags are on even when undeclared", function()
 end)
 
 test.it("enabledFlags: free of duplicates", function()
-	local seen = {}
+	const seen = {}
 	for _, flag in ipairs(features.enabledFlags(nil, { "b", "a", "b" })) do
 		test.falsy(seen[flag])
 		seen[flag] = true
@@ -294,8 +294,8 @@ test.it("bundle: a native module dropped by a feature is not embedded", function
 	dep:installDependencies()
 	dep:build()
 
-	local withNative = bundlePackage(dep, {}) --[[@as string]]
-	local withoutNative = bundlePackage(dep, { features = { "windows" } }) --[[@as string]]
+	const withNative = bundlePackage(dep, {}) --[[@as string]]
+	const withoutNative = bundlePackage(dep, { features = { "windows" } }) --[[@as string]]
 
 	-- The `windows` flag drops `e2e-dep.plugin`, which is src/plugin.so.
 	test.truthy(withNative:find("PLUGIN-BYTES-MARKER", 1, true))
@@ -311,16 +311,16 @@ test.it("bundle: the filtered bundle still runs", function()
 	-- Chunk name is absolute on purpose: a bundle that embeds native modules
 	-- extracts them next to itself, and a relative name would drop them in the
 	-- working directory (i.e. the repo) when the chunk runs.
-	local chunk = assert(loadstring(source, "@" .. path.join(tmpBase, "e2e-bundle.lua")))
-	local result = chunk()
+	const chunk = assert(loadstring(source, "@" .. path.join(tmpBase, "e2e-bundle.lua")))
+	const result = chunk()
 	test.equal(type(result), "table")
 	test.truthy(result.win or result.unix)
 end)
 
 test.it("bundle: the lockfile records the resolved excludes", function()
 	local app = lde.Package.open(appDir) ---@cast app -nil
-	local lockfile = lde.Lockfile.open(app:getLockfilePath()) ---@cast lockfile -nil
-	local entry = lockfile:getDependency("e2e-dep") ---@cast entry -nil
+	const lockfile = lde.Lockfile.open(app:getLockfilePath()) ---@cast lockfile -nil
+	const entry = lockfile:getDependency("e2e-dep") ---@cast entry -nil
 
 	-- Module names are resolved to module paths before they land in the lockfile.
 	test.truthy((table.concat(entry.exclude or {}, ",")):find("sub/nested/win", 1, true))

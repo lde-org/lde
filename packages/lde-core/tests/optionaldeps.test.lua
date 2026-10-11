@@ -1,17 +1,17 @@
-local test = require("lde-test")
+const test = require("lde-test")
 
-local lde = require("lde-core")
+const lde = require("lde-core")
 
-local fs = require("fs")
-local env = require("env")
+const fs = require("fs")
+const env = require("env")
 local path = require("path")
-local json = require("json")
+const json = require("json")
 
 local tmpBase = path.join(env.tmpdir(), "lde-optionaldeps-tests")
 fs.rmdir(tmpBase)
 fs.mkdir(tmpBase)
 
-local platforms = { "linux-dep", "windows-dep", "macos-dep" }
+const platforms = { "linux-dep", "windows-dep", "macos-dep" }
 for _, name in ipairs(platforms) do
 	local dir = path.join(tmpBase, name)
 	fs.mkdir(dir)
@@ -37,7 +37,7 @@ fs.write(path.join(appDir, "lde.json"), json.encode({
 	}
 }))
 
-local osDep = { Linux = "linux-dep", Windows = "windows-dep", OSX = "macos-dep" }
+const osDep = { Linux = "linux-dep", Windows = "windows-dep", OSX = "macos-dep" }
 
 test.it("optional deps: only the current platform dep is installed", function()
 	local app = lde.Package.open(appDir) ---@cast app -nil
@@ -56,10 +56,10 @@ end)
 
 test.it("optional deps: lockfile preserves optional flag", function()
 	local app = lde.Package.open(appDir) ---@cast app -nil
-	local lockfile = lde.Lockfile.open(app:getLockfilePath())
+	const lockfile = lde.Lockfile.open(app:getLockfilePath())
 	test.truthy(lockfile) ---@cast lockfile -nil
 	for _, name in ipairs(platforms) do
-		local entry = lockfile:getDependency(name)
+		const entry = lockfile:getDependency(name)
 		test.truthy(entry) ---@cast entry -nil
 		test.truthy(entry.optional)
 	end

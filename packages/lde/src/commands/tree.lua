@@ -1,17 +1,15 @@
-local ansi = require("ansi")
-local lde = require("lde-core")
+const ansi = require("ansi")
+const lde = require("lde-core")
 
-local features = require("lde-core.package.features")
+const features = require("lde-core.package.features")
 
----@type ansi.Color[]
-local depthColors = { "yellow", "magenta", "cyan" }
+const depthColors = { "yellow", "magenta", "cyan" }
 
 --- The optional deps the platform's own flags turn on. Shared with the
 --- resolver, so `lde tree` can never disagree with what an install would pick
 --- -- it used to carry its own copy of the OS-to-flag table, which also had no
 --- `bsd` entry.
 ---@param defs table<string, lde.Package.Config.FeatureDefinition>?
----@return table<string, true>
 local function enabledOptionals(defs)
 	return features.enabledDependencies(defs, nil)
 end
@@ -25,7 +23,7 @@ end
 ---@param name string
 ---@return lde.Package.Config.Dependency
 local function mergeLocked(info, locked, name)
-	local entry = locked[name]
+	const entry = locked[name]
 	if not entry then return info end
 	local merged = {}
 	for k, v in pairs(info) do merged[k] = v end
@@ -103,7 +101,7 @@ local function tree(args)
 	-- The root lockfile flat-pins every resolved alias in the tree; merge it
 	-- into each package's manifest deps as the tree walks (a dep's own
 	-- lockfile is not authoritative for transitive pins).
-	local lockfile = pkg:readLockfile()
+	const lockfile = pkg:readLockfile()
 	local locked = {}
 	if lockfile and not lockfile:isStale(pkg:readConfig()) then
 		locked = lockfile.raw.dependencies or {}
@@ -128,7 +126,7 @@ local function tree(args)
 	---@param prefix string
 	---@param isLast boolean
 	local function printTree(pkg, displayName, cfg, depth, prefix, isLast)
-		local connector = depth == 0 and "" or (isLast and "└── " or "├── ")
+		local connector = depth == 0 ? "" : isLast ? "└── " : "├── "
 		local name = displayName or pkg:getName()
 		-- With --why, everything off the root->target path is dimmed.
 		local color = (not relevant or relevant[name]) and depthColors[depth % #depthColors + 1] or "gray"
@@ -148,27 +146,27 @@ local function tree(args)
 			ansi.printf("%s%s%s", prefix, connector, rendered)
 		end
 
-		local childPrefix = depth == 0 and "" or (prefix .. (isLast and "    " or "│   "))
+		local childPrefix = depth == 0 ? "" : prefix .. (isLast ? "    " : "│   ")
 
 		local deps = {} ---@type { name: string, info: lde.Package.Config.Dependency }[]
 		for depName, info in pairs(getMergedDeps(pkg, locked)) do
 			deps[#deps + 1] = { name = depName, info = info }
 		end
-		table.sort(deps, function(a, b) return a.name < b.name end)
+		table.sort(deps, |a, b| -> a.name < b.name)
 
-		local enabled = enabledOptionals(features.of(pkg))
+		const enabled = enabledOptionals(features.of(pkg))
 
 		for i, dep in ipairs(deps) do
-			local last = i == #deps
+			const last = i == #deps
 			local info = dep.info
 
 			if info.optional and not enabled[dep.name] then
-				local treeChar = last and "└── " or "├── "
+				local treeChar = last ? "└── " : "├── "
 				ansi.printf("%s%s{gray}%s {gray}(optional, skipped on %s)", childPrefix, treeChar, dep.name, jit.os)
 			else
 				local depPkg, derr = openDep(pkg, dep.name, info)
 				if not depPkg then
-					local treeChar = last and "└── " or "├── "
+					local treeChar = last ? "└── " : "├── "
 					local why = derr or "not installed yet — run `lde sync`"
 					ansi.printf("%s%s{red}%s {gray}(%s)", childPrefix, treeChar, dep.name, why)
 				else

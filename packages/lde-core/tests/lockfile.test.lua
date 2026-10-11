@@ -1,11 +1,11 @@
-local test = require("lde-test")
+const test = require("lde-test")
 
-local lde = require("lde-core")
+const lde = require("lde-core")
 
-local fs = require("fs")
-local env = require("env")
+const fs = require("fs")
+const env = require("env")
 local path = require("path")
-local json = require("json")
+const json = require("json")
 
 local tmpBase = path.join(env.tmpdir(), "lde-lockfile-tests")
 
@@ -25,7 +25,7 @@ test.it("Lockfile.new with empty dependencies", function()
 	local lf = lde.Lockfile.new(path.join(tmpBase, "empty-lock.json"), {})
 
 	test.equal(lf:getVersion(), "1")
-	local deps = lf:getDependencies()
+	const deps = lf:getDependencies()
 	test.equal(test.count(deps), 0)
 end)
 
@@ -45,7 +45,7 @@ test.it("Lockfile:save writes to disk and Lockfile.open reads it back", function
 
 	test.truthy(fs.exists(lockPath))
 
-	local loaded = lde.Lockfile.open(lockPath) ---@cast loaded -nil
+	const loaded = lde.Lockfile.open(lockPath) ---@cast loaded -nil
 	test.equal(loaded:getVersion(), "1")
 	local alpha = loaded:getDependency("alpha") ---@cast alpha table
 	test.match(alpha, { path = "../alpha" })
@@ -58,7 +58,7 @@ test.it("Lockfile:save writes to disk and Lockfile.open reads it back", function
 end)
 
 test.it("Lockfile.open returns nil for a missing file", function()
-	local result = lde.Lockfile.open(path.join(tmpBase, "does-not-exist.json"))
+	const result = lde.Lockfile.open(path.join(tmpBase, "does-not-exist.json"))
 	test.falsy(result)
 end)
 
@@ -83,13 +83,15 @@ test.it("Lockfile:save produces valid JSON", function()
 
 	lf:save()
 
-	local content = fs.read(lockPath) ---@cast content -nil
+	const content = fs.read(lockPath) ---@cast content -nil
 	local decoded = json.decode(content) ---@cast decoded table
 	test.match(decoded, { version = "1", dependencies = { mylib = { path = "../mylib" } } })
 end)
 
 test.it("Lockfile.manifestHash is stable and tracks the dependency declarations", function()
 	local config = {
+		name = "test",
+		version = "1.0.0",
 		dependencies = {
 			a = { git = "https://example.com/a.git" },
 			b = { version = "1.0.0" }
@@ -100,7 +102,7 @@ test.it("Lockfile.manifestHash is stable and tracks the dependency declarations"
 	test.equal(h1, lde.Lockfile.manifestHash(config))
 
 	-- Key order in a hand-built table must not matter (json.encode sorts).
-	local reordered = {
+	const reordered = {
 		dependencies = {
 			b = { version = "1.0.0" },
 			a = { git = "https://example.com/a.git" }

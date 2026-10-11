@@ -2,15 +2,15 @@
 -- message" line plus a highlighted source snippet with a caret under the
 -- failing line, when the source can be located. Shared by `lde test`, `lde
 -- run`, and `lde x`.
-local ansi = require("ansi")
-local fs = require("fs")
+const ansi = require("ansi")
+const fs = require("fs")
 local path = require("path")
-local highlight = require("readline.highlight")
+const highlight = require("readline.highlight")
 
-local errorsnippet = {}
+const errorsnippet = {}
 
 -- Lines of context shown above and below the failing line.
-local CONTEXT = 2
+const CONTEXT = 2
 
 -- Split source text into lines (dropping the empty entry left by a final newline).
 ---@param src string
@@ -19,7 +19,7 @@ local function splitLines(src)
 	local lines = {}
 	local pos = 1
 	while true do
-		local nl = src:find("\n", pos, true)
+		const nl = src:find("\n", pos, true)
 		if nl then
 			lines[#lines + 1] = src:sub(pos, nl - 1)
 			pos = nl + 1
@@ -33,13 +33,12 @@ local function splitLines(src)
 end
 
 ---@param line string
----@return string
 local function expandTabs(line)
 	return (line:gsub("\t", "    "))
 end
 
 -- Assertion names, longest first so e.g. "greaterEqual" wins over "equal".
-local ASSERT_NAMES = {
+const ASSERT_NAMES = {
 	"greaterEqual", "lessEqual", "notEqual", "deepEqual",
 	"includes", "truthy", "falsy", "greater", "less", "match", "equal",
 }
@@ -59,7 +58,7 @@ local function findCaretCol(line, msg)
 			if not s then return nil end
 			local e = s + #word
 			local before = s > 1 and line:sub(s - 1, s - 1) or ""
-			local after = line:sub(e, e)
+			const after = line:sub(e, e)
 			if not before:match("[%w_]") and not after:match("[%w_]") then
 				return s
 			end
@@ -89,7 +88,7 @@ local function findCaretCol(line, msg)
 	-- A variable/field called out in a runtime error, e.g.
 	-- `attempt to index a nil value (local 'x')`.
 	if msg then
-		local var = msg:match("^.*'([^']+)'")
+		const var = msg:match("^.*'([^']+)'")
 		if var then
 			local s = findWord(var)
 			if s then return s, #var end
@@ -131,7 +130,6 @@ end
 --- A loader frame whose innermost source is an eval chunk (`[string "-e"]`) is
 --- left alone: that frame *is* the position.
 ---@param msg string
----@return string
 local function stripNestedFrames(msg)
 	-- Chunk-loader frames nest innermost-last.
 	while true do
@@ -159,7 +157,7 @@ local function parseError(err)
 	end
 	-- Compile errors: strip the "Failed to compile <path>:" wrapper and prefer
 	-- the compiler's "path:line:col: msg" position.
-	local compileFile, compileErr = err:match("^Failed to compile (.-):\n(.*)$")
+	const compileFile, compileErr = err:match("^Failed to compile (.-):\n(.*)$")
 	if compileFile then
 		local file, line, col, msg = compileErr:match("^(.-):(%d+):(%d+): (.*)$")
 		if file then
@@ -169,7 +167,7 @@ local function parseError(err)
 		-- Moonscript reports the line only:
 		--   Failed to parse:
 		--    [N] >>    <source line>
-		local mLine = compileErr:match("%[(%d+)%]")
+		const mLine = compileErr:match("%[(%d+)%]")
 		if mLine then
 			return path.normalize(compileFile), tonumber(mLine), nil, (compileErr:match("^([^\n]*)"))
 		end
@@ -208,14 +206,14 @@ end
 ---@param knownFile? string
 ---@return string[]
 local function sourceCandidates(pkgDir, msgFile, knownFile)
-	local candidates = {}
+	const candidates = {}
 	msgFile = msgFile:gsub("^@", "")
 
 	if msgFile:match("^%.%.%.") then
 		-- Truncated short_src: find the real file by its path tail.
 		local rest = msgFile:gsub("^%.%.%.[/\\]*", "")
 		while rest ~= "" do
-			local candidate = path.join(pkgDir, rest)
+			const candidate = path.join(pkgDir, rest)
 			if fs.exists(candidate) then
 				candidates[#candidates + 1] = candidate
 				break
@@ -243,7 +241,6 @@ end
 ---@param pkgDir string
 ---@param msgFile string
 ---@param knownFile? string
----@return string? actual, string? src
 local function resolveSource(pkgDir, msgFile, knownFile)
 	for _, c in ipairs(sourceCandidates(pkgDir, msgFile, knownFile)) do
 		if fs.exists(c) then
@@ -251,9 +248,9 @@ local function resolveSource(pkgDir, msgFile, knownFile)
 			if src then
 				-- Prefer the source tests/ copy over the built target/tests/
 				-- mirror (the error line belongs to the same file).
-				local testsPrefix = path.join(pkgDir, "target", "tests") .. path.separator
+				const testsPrefix = path.join(pkgDir, "target", "tests") .. path.separator
 				if c:sub(1, #testsPrefix) == testsPrefix then
-					local srcTests = path.join(pkgDir, "tests", c:sub(#testsPrefix + 1))
+					const srcTests = path.join(pkgDir, "tests", c:sub(#testsPrefix + 1))
 					if fs.exists(srcTests) then c = srcTests end
 				end
 				return c, src
@@ -270,7 +267,6 @@ end
 ---@param pkgDir string
 ---@param msgFile string
 ---@param knownFile? string
----@return string? actual
 local function resolveFile(pkgDir, msgFile, knownFile)
 	for _, c in ipairs(sourceCandidates(pkgDir, msgFile, knownFile)) do
 		if fs.exists(c) then return c end
@@ -291,18 +287,18 @@ local function printSnippet(src, line, msg)
 	local startLine = math.max(1, line - CONTEXT)
 	local endLine   = math.min(#lines, line + CONTEXT)
 	local width     = #tostring(endLine)
-	local indent    = "     "
-	local bar       = ansi.colorize("gray", "│")
-	local pad       = string.rep(" ", width)
+	const indent    = "     "
+	const bar       = ansi.colorize("gray", "│")
+	const pad       = string.rep(" ", width)
 
 	-- Code lines with the gutter prefix: indent + right-aligned number +
 	-- separator + bar + separator. Every other line (bars, caret) reuses the
 	-- same prefix so the gutter stays horizontally aligned.
 	local prefix = indent .. pad .. " " .. bar .. " "
-	local gutter = {}
+	const gutter = {}
 	for ln = startLine, endLine do
 		local num = string.rep(" ", width - #tostring(ln)) .. tostring(ln)
-		local code = highlight(expandTabs(lines[ln]))
+		const code = highlight(expandTabs(lines[ln]))
 		gutter[ln] = indent .. ansi.colorize("gray", num) .. " " .. bar .. " " .. code
 	end
 
@@ -313,7 +309,7 @@ local function printSnippet(src, line, msg)
 	if msg and msg:find("<eof>", 1, true) then
 		col, len = #failing + 1, 1
 	end
-	local caret = ansi.format("{red}{bold}%s{reset}", string.rep("^", len))
+	const caret = ansi.format("{red}{bold}%s{reset}", string.rep("^", len))
 
 	print(indent .. pad .. " " .. bar)
 	for ln = startLine, line - 1 do print(gutter[ln]) end
@@ -382,9 +378,8 @@ end
 --- The lde version + platform line printed under run errors, mirroring how
 --- Bun annotates its errors. Kept separate so it can be extended with trace
 --- frames in between.
----@return string
 local function versionFooter()
-	local ok, v = pcall(require, "lde.version")
+	const ok, v = pcall(require, "lde.version")
 	return string.format("lde v%s", ok and v or "0.11.0")
 end
 

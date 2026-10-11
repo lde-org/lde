@@ -1,44 +1,39 @@
-local ansi = require("ansi")
-local env = require("env")
-local fs = require("fs")
-local json = require("json")
-local path = require("path")
+const ansi = require("ansi")
+const env = require("env")
+const fs = require("fs")
+const json = require("json")
+const path = require("path")
 
-local lde = require("lde-core")
-local prompt = require("lde.util.prompt")
+const lde = require("lde-core")
+const prompt = require("lde.util.prompt")
 
 -- Distinct, contrasting colors for the top 5 dependencies; lower ranks and the
 -- bar remainder render in gray. Colors are rank-stable so the bar, the legend
 -- and the list always agree.
----@type ansi.Color[]
-local barColors = { "red", "green", "yellow", "blue", "magenta" }
-local BAR_WIDTH = 40
-local VIEW_HEIGHT = 5
+const barColors = { "red", "green", "yellow", "blue", "magenta" }
+const BAR_WIDTH = 40
+const VIEW_HEIGHT = 5
 
 ---@param bytes number
 ---@param denominator number
----@return string
 local function pctStr(bytes, denominator)
-	local pct = bytes / denominator * 100
+	const pct = bytes / denominator * 100
 	if pct >= 10 then return string.format("%.0f%%", pct) end
 	return string.format("%.1f%%", pct)
 end
 
 ---@param count number
----@return string
 local function fileCount(count)
-	return count .. (count == 1 and " file" or " files")
+	return count .. (count == 1 ? " file" : " files")
 end
 
 ---@param bytes number
----@return string
 local function sizeStr(bytes)
 	return ansi.colorize("cyan", ansi.formatBytes(bytes))
 end
 
 ---@param bytes number
 ---@param denominator number
----@return string
 local function pctColored(bytes, denominator)
 	return ansi.colorize("cyan", pctStr(bytes, denominator))
 end
@@ -47,9 +42,8 @@ end
 --- `entry.` prefix; the entry's own init module renders as init.lua.
 ---@param entry lde.bloat.Entry
 ---@param file lde.bloat.File
----@return string
 local function displayName(entry, file)
-	local prefix = entry.name .. "."
+	const prefix = entry.name .. "."
 	if file.name:sub(1, #prefix) == prefix then
 		return file.name:sub(#prefix + 1)
 	end
@@ -63,13 +57,12 @@ end
 ---@param index number
 ---@param denominator number
 ---@param isExpanded boolean? # nil in the static view, which shows no marker
----@return string
 local function entryRow(entry, index, denominator, isExpanded)
 	local marker = ""
 	if isExpanded ~= nil then
-		marker = isExpanded and "[+] " or "[ ] "
+		marker = isExpanded ? "[+] " : "[ ] "
 	end
-	local rootMarker = entry.isRoot and ansi.colorize("gray", " (your code)") or ""
+	const rootMarker = entry.isRoot and ansi.colorize("gray", " (your code)") or ""
 	return marker
 		.. ansi.colorize(barColors[index] or "gray", entry.name) .. "  "
 		.. sizeStr(entry.bytes) .. " (" .. pctColored(entry.bytes, denominator) .. ")"
@@ -79,16 +72,14 @@ end
 ---@param entry lde.bloat.Entry
 ---@param file lde.bloat.File
 ---@param denominator number
----@return string
 local function fileRow(entry, file, denominator)
-	local suffix = file.kind == "native" and ansi.colorize("gray", " (native)") or ""
+	const suffix = file.kind == "native" and ansi.colorize("gray", " (native)") or ""
 	return "├─ " .. displayName(entry, file) .. suffix .. "  "
 		.. sizeStr(file.bytes) .. " (" .. pctColored(file.bytes, denominator) .. ")"
 end
 
 ---@class lde.bloat.BarSegment
 ---@field name string
----@field color ansi.Color
 ---@field bytes number
 
 --- The proportional bar: each of the top 5 entries gets a colored run of
@@ -100,8 +91,7 @@ end
 ---@return string
 ---@return lde.bloat.BarSegment[]
 local function barAndLegend(entries, denominator)
-	---@type { color: ansi.Color, count: number }[]
-	local segments = {}
+	const segments = {}
 	---@type lde.bloat.BarSegment[]
 	local legend = {}
 	local used = 0
@@ -115,7 +105,7 @@ local function barAndLegend(entries, denominator)
 			count = math.floor(entry.bytes / denominator * BAR_WIDTH),
 		}
 		legend[#legend + 1] = { name = entry.name, color = color, bytes = entry.bytes }
-		used = used + segments[#segments].count
+		used += segments[#segments].count
 	end
 
 	-- Floor rounding can leave a small dep with a zero-width segment; give
@@ -123,12 +113,12 @@ local function barAndLegend(entries, denominator)
 	for _, segment in ipairs(segments) do
 		if used < BAR_WIDTH and segment.count == 0 then
 			segment.count = 1
-			used = used + 1
+			used += 1
 		end
 	end
 	segments[#segments + 1] = { color = "gray", count = BAR_WIDTH - used }
 
-	local line = {}
+	const line = {}
 	for _, segment in ipairs(segments) do
 		if segment.count > 0 then
 			line[#line + 1] = ansi.colorize(segment.color, string.rep("█", segment.count))
@@ -162,14 +152,14 @@ end
 ---@param binaryBytes number?
 ---@return boolean
 local function renderPreamble(report, binaryPath, binaryBytes)
-	local hasBinary = binaryBytes ~= nil and binaryBytes > 0
+	const hasBinary = binaryBytes ~= nil and binaryBytes > 0
 	if hasBinary then ---@cast binaryBytes -nil
 	end
 	local denominator = report.totalBytes
 
 	if hasBinary then
 		ansi.printf("{bold}Bloat report:{reset} %s {gray}(binary: %s - %s)",
-			report.rootName, binaryPath, sizeStr(binaryBytes))
+			report.rootName, binaryPath, sizeStr(binaryBytes or 0))
 	else
 		ansi.printf("{bold}Bloat report:{reset} %s", report.rootName)
 	end
@@ -180,10 +170,10 @@ local function renderPreamble(report, binaryPath, binaryBytes)
 	if hasBinary then
 		local overhead = binaryBytes - report.totalBytes
 		ansi.printf("{bold}Total:{reset} %s {gray}(binary){reset} - %s embedded (%d files)",
-			sizeStr(binaryBytes), sizeStr(report.totalBytes), report.luaFiles + report.nativeFiles)
+			sizeStr(binaryBytes or 0), sizeStr(report.totalBytes or 0), report.luaFiles + report.nativeFiles)
 		if overhead > 0 then
 			ansi.printf("{bold}LuaJIT runtime + C glue:{reset} %s (%s of binary)",
-				sizeStr(overhead), pctColored(overhead, binaryBytes))
+				sizeStr(overhead or 0), pctColored(overhead or 0, binaryBytes or 0))
 		end
 	else
 		ansi.printf("{bold}Total:{reset} %s embedded (%d files)",
@@ -197,7 +187,7 @@ local function renderPreamble(report, binaryPath, binaryBytes)
 
 	local restBytes = 0
 	for i = 6, #report.entries do
-		restBytes = restBytes + report.entries[i].bytes
+		restBytes += report.entries[i].bytes
 	end
 
 	print("")
@@ -233,15 +223,14 @@ end
 ---@param report lde.bloat.Report
 ---@param denominator number
 local function interactiveBrowse(report, denominator)
-	local raw = jit.os == "Windows" and require("readline.raw.windows") or require("readline.raw.posix")
+	const raw = jit.os == "Windows" ? require("readline.raw.windows") : require("readline.raw.posix")
 
 	---@type table<number, boolean>
-	local expanded = {}
+	const expanded = {}
 	local window = VIEW_HEIGHT
 	local cursor = 1
 	local offset = 0
 
-	---@return lde.bloat.UIRow[]
 	local function visibleRows()
 		local out = {} ---@type lde.bloat.UIRow[]
 		for i, entry in ipairs(report.entries) do
@@ -257,7 +246,6 @@ local function interactiveBrowse(report, denominator)
 
 	local lastCount = 0
 	---@param hidden number
-	---@return string
 	local function footerText(hidden)
 		if hidden > 0 then
 			return ansi.format("{gray}↑/↓ select · enter toggle · %d more below · q/esc quit{reset}", hidden)
@@ -266,7 +254,7 @@ local function interactiveBrowse(report, denominator)
 	end
 
 	local function draw()
-		local rows = visibleRows()
+		const rows = visibleRows()
 		local total = #rows
 		if total == 0 then return end
 		cursor = math.max(1, math.min(total, cursor))
@@ -280,7 +268,7 @@ local function interactiveBrowse(report, denominator)
 			if i == cursor then
 				text = ansi.colorize("underline", text)
 			end
-			lines[#lines + 1] = (i == cursor and ansi.colorize("green", "> ") or "  ") .. text
+			lines[#lines + 1] = (i == cursor ? ansi.colorize("green", "> ") : "  ") .. text
 		end
 
 		if lastCount > 0 then
@@ -319,7 +307,7 @@ local function interactiveBrowse(report, denominator)
 
 	local done = false
 	while not done do
-		local ch = raw.readByte()
+		const ch = raw.readByte()
 		if ch == nil or ch == "\x03" or ch == "q" or ch == "Q" then
 			done = true
 		elseif ch == "\r" or ch == "\n" then
@@ -331,9 +319,9 @@ local function interactiveBrowse(report, denominator)
 		elseif ch == "\x1b[B" then
 			move(1)
 		elseif ch == "\x1b" then -- POSIX: escape byte, then [ then a letter
-			local a = raw.readByte()
+			const a = raw.readByte()
 			if a == "[" then
-				local b = raw.readByte()
+				const b = raw.readByte()
 				if b == "A" then move(-1)
 				elseif b == "B" then move(1) end
 			else
@@ -357,7 +345,7 @@ end
 ---@param binaryBytes number?
 ---@return string
 local function jsonReport(report, binaryPath, binaryBytes)
-	local payload = {
+	const payload = {
 		name = report.rootName,
 		totalBytes = report.totalBytes,
 		luaFiles = report.luaFiles,
@@ -372,7 +360,7 @@ local function jsonReport(report, binaryPath, binaryBytes)
 		payload.overheadBytes = binaryBytes - report.totalBytes
 	end
 	for _, entry in ipairs(report.entries) do
-		local e = { name = entry.name, bytes = entry.bytes, isRoot = entry.isRoot, files = {} }
+		const e = { name = entry.name, bytes = entry.bytes, isRoot = entry.isRoot, files = {} }
 		for _, file in ipairs(entry.files) do
 			e.files[#e.files + 1] = { name = file.name, kind = file.kind, bytes = file.bytes }
 		end
@@ -395,7 +383,7 @@ local function bloat(args)
 		jsonPath = ""
 	end
 
-	local pkg, err = lde.Package.open()
+	const pkg, err = lde.Package.open()
 	if not pkg then
 		lde.error.raise(err)
 	end ---@cast pkg -nil
@@ -404,7 +392,7 @@ local function bloat(args)
 	-- build/install progress bars (which print to stdout); file mode keeps them.
 	local report
 	if jsonPath == "" then
-		local wasVerbose, wasQuiet = lde.isVerbose, lde.isQuiet
+		const wasVerbose, wasQuiet = lde.isVerbose, lde.isQuiet
 		lde.isVerbose = false
 		lde.isQuiet = true
 		report = pkg:bloat()
@@ -424,7 +412,7 @@ local function bloat(args)
 		else
 			candidate = path.resolve(env.cwd(), binaryPath)
 		end
-		local stat = fs.stat(candidate)
+		const stat = fs.stat(candidate)
 		if not stat then
 			lde.error.raise("Binary not found: " .. candidate, {
 				hint = "Run `lde compile` first, or pass the path: lde bloat --binary <path>",

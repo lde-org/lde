@@ -1,6 +1,6 @@
-local util = {}
+const util = {}
 
-local rapidhash = require("rapidhash")
+const rapidhash = require("rapidhash")
 
 ---@param str string
 function util.dedent(str)
@@ -12,7 +12,7 @@ function util.dedent(str)
 	local minIndent = math.huge
 	for _, line in ipairs(lines) do
 		if line:match("%S") then
-			local indent = line:match("^%s*")
+			const indent = line:match("^%s*")
 			minIndent = math.min(minIndent, #indent)
 		end
 	end
@@ -27,13 +27,12 @@ function util.dedent(str)
 		end
 	end
 
-	local result = table.concat(lines, "\n")
+	const result = table.concat(lines, "\n")
 	return result:match("^(.-)%s*$") or result
 end
 
 ---Compute a 64-bit rapidhash of a string, returned as a 16-char lowercase hex string.
 ---@param s string
----@return string
 function util.hash(s)
 	return rapidhash.hex(s)
 end

@@ -1,9 +1,9 @@
-local ansi = require("ansi")
-local fs = require("fs")
-local path = require("path")
+const ansi = require("ansi")
+const fs = require("fs")
+const path = require("path")
 
-local lde = require("lde-core")
-local sea = require("sea")
+const lde = require("lde-core")
+const sea = require("sea")
 
 ---@param args clap.Args
 local function compile(args)
@@ -11,27 +11,27 @@ local function compile(args)
 	-- install/resolve, per-dependency builds, bundle, sea link) and writes an
 	-- HTML report to target/timings.html; --json switches to JSON
 	-- (target/timings.json). --json implies collection on its own.
-	local wantJSON = args:flag("json")
+	const wantJSON = args:flag("json")
 	local timings = nil
 	if args:flag("timings") or wantJSON then
 		timings = lde.timings
 	end
 
 	local outFile = args:option("outfile")
-	local targetName = args:option("target")
+	const targetName = args:option("target")
 
 	-- Validate the target before opening the package / building, so a typo
 	-- fails instantly and the default output name can carry the target.
 	local target
 	if targetName then
-		local resolved, terr = sea.getTarget(targetName)
+		const resolved, terr = sea.getTarget(targetName)
 		if not resolved then
 			lde.error.raise(terr)
 		end ---@cast resolved -nil
 		target = resolved
 	end
 
-	local pkg, err = lde.Package.open()
+	const pkg, err = lde.Package.open()
 	if not pkg then
 		lde.error.raise(err)
 	end ---@cast pkg -nil
@@ -41,7 +41,7 @@ local function compile(args)
 		timings.begin({
 			command = "compile",
 			package = pkg:getName(),
-			version = ok and version or nil,
+			version = ok ? version : nil,
 		})
 	end
 
@@ -60,7 +60,7 @@ local function compile(args)
 	-- Windows targets get .exe, whether native (host Windows) or cross. A
 	-- host-matching target has the host platform, so either way the target's
 	-- platform is the one the binary runs on.
-	local hostPlatform = jit.os == "Windows" and "windows"
+	const hostPlatform = jit.os == "Windows" and "windows"
 		or jit.os == "OSX" and "macos"
 		or jit.os == "BSD" and "freebsd"
 		or "linux"
@@ -86,7 +86,7 @@ local function compile(args)
 		lde.error.raise("Failed to move executable: " .. moveErr)
 	end
 
-	local finalOk, finalErr = fs.move(staged, outFile)
+	const finalOk, finalErr = fs.move(staged, outFile)
 	if not finalOk then
 		fs.delete(staged)
 		lde.error.raise("Failed to move executable: " .. finalErr)
@@ -97,7 +97,7 @@ local function compile(args)
 	end
 
 	if timings then
-		local reportPath = path.join(pkg:getModulesDir(), wantJSON and "timings.json" or "timings.html")
+		const reportPath = path.join(pkg:getModulesDir(), wantJSON ? "timings.json" : "timings.html")
 		local okWrite, werr
 		if wantJSON then
 			okWrite, werr = timings.writeJSON(reportPath)

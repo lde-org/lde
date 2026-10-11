@@ -437,7 +437,6 @@ local function makeMainLua(mods, shims)
 end
 
 ---@param code number?
----@return string
 local function fmtCode(code)
 	if code == nil then return "?" end
 	return tostring(code)

@@ -1,19 +1,19 @@
-local ansi = require("ansi")
+const ansi = require("ansi")
 
-local lde = require("lde-core")
-local resolvePackage = require("lde.util.resolve")
+const lde = require("lde-core")
+const resolvePackage = require("lde.util.resolve")
 
-local fs = require("fs")
+const fs = require("fs")
 local path = require("path")
-local json = require("json")
-local rocked = require("rocked")
+const json = require("json")
+const rocked = require("rocked")
 
 -- Resolution inputs for `rocks:` lookups. The resolved URL is a pure function
 -- of these two files (the URL cache for unversioned names, the manifest for
 -- versioned ones), so the receipt can vouch for "the resolution is unchanged"
 -- by comparing their mtimes instead of re-resolving.
-local URL_CACHE_PATH = path.join(lde.global.getUserDir(), "luarocks-url-cache-5.1.json")
-local MANIFEST_PATH = path.join(lde.global.getUserDir(), "luarocks-manifest.raw")
+const URL_CACHE_PATH = path.join(lde.global.getUserDir(), "luarocks-url-cache-5.1.json")
+const MANIFEST_PATH = path.join(lde.global.getUserDir(), "luarocks-manifest.raw")
 
 -- stat().modifyTime is an int64 cdata; normalize to a Lua number so the
 -- receipt survives json.encode/decode round-trips.
@@ -31,7 +31,6 @@ end
 --- materialization test, but reads only the receipt + a few stat calls instead
 --- of opening and parsing the package.
 ---@param rocksName string
----@return string
 local function rocksReceiptPath(rocksName)
 	return path.join(lde.global.getDir(), "rocks-installed", rocksName .. ".json")
 end
@@ -40,7 +39,7 @@ end
 ---@param rocksName string
 ---@return boolean
 local function isRocksInstalled(rocksName)
-	local receiptPath = rocksReceiptPath(rocksName)
+	const receiptPath = rocksReceiptPath(rocksName)
 	if not fs.exists(receiptPath) then return false end
 
 	-- decodeJson returns (decoded, err) — the value is the first return.
@@ -122,7 +121,7 @@ end
 local function installRocks(name)
 	local download = require("lde-core.util.download")
 	local rocksName, versionStr = name:match("^rocks:([^@]+)@?(.*)$")
-	versionStr = versionStr ~= "" and versionStr or nil
+	versionStr = versionStr ~= "" ? versionStr : nil
 
 	-- Fast path: the receipt proves this exact resolution is already
 	-- installed and intact (its URL-cache/manifest mtimes guarantee the
@@ -173,7 +172,7 @@ local function installRocks(name)
 	-- The published rockspec is tiny; wait only for it, then resolve deps while
 	-- the .src.rock keeps downloading.
 	local rockspecUrl = srcUrl:gsub("%.src%.rock$", ".rockspec")
-	local rockspecFile = lde.util.rockspecCacheFile(rockspecUrl)
+	const rockspecFile = lde.util.rockspecCacheFile(rockspecUrl)
 	local content
 	if fs.exists(rockspecFile) then
 		content = fs.read(rockspecFile)
@@ -183,7 +182,7 @@ local function installRocks(name)
 		content = fs.read(rockspecFile)
 	end
 	if not content then lde.error.raise("Failed to fetch rockspec: " .. rockspecUrl) end ---@cast content -nil
-	local ok, spec = rocked.parse(content)
+	const ok, spec = rocked.parse(content)
 	if not ok then lde.error.raise("Failed to parse rockspec '" .. rockspecUrl .. "': " .. tostring(spec)) end
 
 	-- Wait for the .src.rock download, then extract it and open the package
@@ -193,7 +192,7 @@ local function installRocks(name)
 	-- copied from the sources, so building from a made-up directory would
 	-- silently produce an empty install with no bin.
 	download.waitBackground(archiveFile)
-	local exOk, exErr = lde.global.extractArchive(srcUrl, archiveFile, archiveDir)
+	const exOk, exErr = lde.global.extractArchive(srcUrl, archiveFile, archiveDir)
 	if not exOk then
 		lde.error.raise("Failed to extract '" .. srcUrl .. "': " .. (exErr or "unknown error"))
 	end
@@ -214,7 +213,7 @@ local function install(args)
 	-- The option() calls consume their values; capture them up front so the
 	-- project-install check and resolvePackage can both see them.
 	local gitUrl = args:option("git")
-	local pathDir = args:option("path")
+	const pathDir = args:option("path")
 
 	-- No flags and no name = install deps for current project
 	if not gitUrl and not pathDir and not args:peek() then
@@ -223,26 +222,26 @@ local function install(args)
 			lde.error.raise(err)
 		end ---@cast pkg -nil
 
-		local start = ansi.now()
-		local opts = { summary = true }
+		const start = ansi.now()
+		const opts = { summary = true }
 
 		-- Errors propagate to the CLI boundary, which renders them cleanly.
 		local runtime = pkg:installDependencies(nil, nil, nil, opts)
-		local dev = not args:flag("production") and pkg:installDevDependencies(opts)
+		const dev = not args:flag("production") and pkg:installDevDependencies(opts)
 
 		if (runtime and runtime.hasChanged) or (dev and dev.hasChanged) then
 			ansi.printf("{green}All dependencies installed successfully.")
 		else
-			local installs = (runtime and runtime.installs or 0) + (dev and dev.installs or 0)
-			local checked = (runtime and runtime.checked or 0) + (dev and dev.checked or 0)
+			local installs = (runtime?.installs ?? 0) + (dev?.installs ?? 0)
+			local checked = (runtime?.checked ?? 0) + (dev?.checked ?? 0)
 			if checked > 0 then
-				local isCached = runtime and runtime.isCached
+				const isCached = runtime?.isCached
 				local format = isCached
 					and "{gray}No changes in %d %s across %d %s (cached) (%s)"
 					or "{gray}No changes in %d %s across %d %s (%s)"
 				ansi.printf(format,
-					installs, installs == 1 and "install" or "installs",
-					checked, checked == 1 and "package" or "packages",
+					installs, installs == 1 ? "install" : "installs",
+					checked, checked == 1 ? "package" : "packages",
 					ansi.formatElapsed(ansi.now() - start))
 			end
 		end

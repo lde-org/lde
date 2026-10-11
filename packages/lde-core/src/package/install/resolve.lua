@@ -6,9 +6,9 @@
 --- (download session, build scheduler, modules dir) and consumes the result
 --- (ctx.stack, ctx.order) to build and commit the lockfile.
 
-local fs = require("fs")
+const fs = require("fs")
 local path = require("path")
-local rocked = require("rocked")
+const rocked = require("rocked")
 local download = require("lde-core.util.download")
 
 local features = require("lde-core.package.features")
@@ -23,7 +23,6 @@ local lde = require("lde-core")
 ---@param lockEntry lde.Lockfile.Dependency
 ---@param depInfo lde.Package.Config.Dependency
 ---@param pkg lde.Package? # the dependency's package, when it is already open
----@return lde.Lockfile.Dependency
 local function withConfigFlags(lockEntry, depInfo, pkg)
 	lockEntry.optional = depInfo.optional
 	lockEntry.features = depInfo.features
@@ -43,7 +42,6 @@ end
 --- those flags. Nothing has to name the platform's own flag.
 ---@param pkg lde.Package
 ---@param requested lde.Package.Config.FeatureFlag[]? # as the dependency entries declared them
----@return table<string, true> enabled
 local function enabledOptional(pkg, requested)
 	return features.enabledDependencies(features.of(pkg), requested)
 end
@@ -109,7 +107,6 @@ end
 --- Returns a string key that uniquely identifies a dependency's source.
 ---@param entry lde.Lockfile.Dependency
 ---@param pkg lde.Package
----@return string
 local function sourceKey(entry, pkg)
 	if entry.git then return "git:" .. entry.git .. "@" .. (entry.commit or "") end
 	if entry.path then return "path:" .. pkg.dir end
@@ -151,8 +148,8 @@ local function depSourceKey(alias, depInfo, relativeTo)
 		-- Resolve to the concrete version so two parents with different
 		-- constraints that land on the same version don't conflict.
 		local name = depInfo.name or depInfo.luarocks
-		local constraint = depInfo.version or ""
-		local v = lde.util.resolveLuarocksBest(name, constraint)
+		const constraint = depInfo.version or ""
+		const v = lde.util.resolveLuarocksBest(name, constraint)
 		return "luarocks:" .. name .. "@" .. (v or constraint)
 	elseif depInfo.version then
 		-- Registry deps resolve to a git repo, so their identity is the
@@ -172,7 +169,6 @@ end
 ---@param ctx lde.install.Context
 ---@param alias string
 ---@param depInfo lde.Package.Config.Dependency
----@return lde.Package.Config.Dependency
 local function applyLock(ctx, alias, depInfo)
 	if ctx.rootLockfile then
 		local isLocked = ctx.rootLockfile:getDependency(alias)
@@ -315,16 +311,14 @@ end
 ---@field lock fun(node: lde.install.Node): lde.Lockfile.Dependency
 
 ---@type table<string, lde.install.Handler>
-local handlers = {}
+const handlers = {}
 
 ---@param node lde.install.Node
----@return lde.install.Handler
 local function h(node)
 	return handlers[node.kind]
 end
 
 ---@param node lde.install.Node
----@return lde.install.ContentPlan?
 local function content(node)
 	return h(node).content(node)
 end
@@ -355,7 +349,6 @@ end
 
 --- Open the node's package (requires content materialized).
 ---@param node lde.install.Node
----@return lde.Package
 local function open(node)
 	if node.pkg then return node.pkg end
 	h(node).open(node)
@@ -364,7 +357,6 @@ end
 
 --- Emit the lockfile entry for this node.
 ---@param node lde.install.Node
----@return lde.Lockfile.Dependency
 local function lock(node)
 	return h(node).lock(node)
 end
@@ -385,7 +377,7 @@ local function registerNode(node, ctx)
 	local pkg = open(node)
 	local lockEntry = lock(node)
 	lockEntry.name = node.depInfo.name
-	local existing = ctx.stack[node.alias]
+	const existing = ctx.stack[node.alias]
 	if existing then
 		local existingKey = sourceKey(existing.lock, existing.pkg)
 		local newKey = sourceKey(lockEntry, pkg)
@@ -421,7 +413,6 @@ end
 ---@param graph table<string, lde.install.Node>
 ---@param order lde.install.Node[]
 ---@param parent lde.install.Node? # the package these deps are declared by, nil for the root
----@return lde.install.Node[]
 local function addDeps(deps, relativeTo, ctx, graph, order, parent)
 	-- Which of the declaring package's optional deps are on: the platform's flag, plus
 	-- the feature flags its own dependency entries named. A node whose deps came from a
@@ -434,7 +425,7 @@ local function addDeps(deps, relativeTo, ctx, graph, order, parent)
 	end
 
 	---@type lde.install.Node[]
-	local newNodes = {}
+	const newNodes = {}
 	for alias, depInfo in pairs(deps) do
 		-- Optional and left off by every package that asks for it: not wanted, so
 		-- it is never materialized -- and, since only what lands in target/ is
@@ -467,7 +458,7 @@ end
 
 --- path: local directory, already on disk.
 handlers.path = {
-	content = function() return nil end,
+	content = || -> nil,
 	materialize = function() end,
 	---@param n lde.install.Node
 	open = function(n)
@@ -494,7 +485,7 @@ handlers.git = {
 	---@param n lde.install.Node
 	---@return lde.install.ContentPlan?
 	content = function(n)
-		local g = n.gitPlan --[[@as lde.install.GitPlan]]
+		const g = n.gitPlan --[[@as lde.install.GitPlan]]
 		if g.tarballUrl then
 			return { url = g.tarballUrl, file = g.archiveFile, dir = g.dir, kind = "git" }
 		elseif g.clone then
@@ -614,7 +605,7 @@ handlers.luarocks = {
 
 		-- No src rock for this version: fall back to the rockspec's source.
 		consume(n)
-		local source = n.spec and n.spec.source
+		const source = n.spec?.source
 		if not source or not source.url then
 			lde.error.raise("No source artifact for '" .. n.alias .. "'")
 		end ---@cast source { url: string, branch: string?, tag: string? }
@@ -699,7 +690,7 @@ handlers.luarocks = {
 		else
 			-- Rockspec-backed, or a git fallback whose repo dir was already
 			-- cached (content() returns nil in that case).
-			local pkgDir = c and c.dir or (n._fallbackGit and n._fallbackGit.dir or n.dir)
+			local pkgDir = c?.dir ?? (n._fallbackGit?.dir ?? n.dir)
 			pkg, err = lde.Package.openRockspec(pkgDir, n.rockspecUrl)
 		end
 		if not pkg then lde.error.raise("Failed to load '" .. n.name .. "': " .. (err or "")) end ---@cast pkg -nil
@@ -743,7 +734,7 @@ local function resolveDependencies(dependencies, ctx)
 	---@type lde.install.Node[]
 	local order = {} -- nodes in discovery order
 	---@type lde.install.Node[]
-	local failed = {} -- nodes whose download/extract failed (reported at the end)
+	const failed = {} -- nodes whose download/extract failed (reported at the end)
 
 	-- ── Phase 1: graph walk (metadata-only) ────────────────────────────────
 	---@type lde.install.Node[]
@@ -755,15 +746,15 @@ local function resolveDependencies(dependencies, ctx)
 	-- while the transitive rockspec fetches are still in flight. Phase 2
 	-- collects them instead of re-prefetching.
 	---@type table<string, lde.install.Node>
-	local backgroundByFile = {}
+	const backgroundByFile = {}
 
 	while #frontier > 0 do
 		---@type lde.install.Node[]
-		local nextFrontier = {}
+		const nextFrontier = {}
 		---@type lde.install.Node[]
-		local metaBatch = {}
+		const metaBatch = {}
 		---@type lde.install.Node[]
-		local contentBatch = {}
+		const contentBatch = {}
 
 		for _, node in ipairs(frontier) do
 			-- A dep nothing wants is not expanded: what it would bring in is wanted by
@@ -859,9 +850,9 @@ local function resolveDependencies(dependencies, ctx)
 
 	-- ── Phase 2: download all remaining content in one parallel batch ──────
 	---@type lde.install.Node[]
-	local contentNodes = {}
+	const contentNodes = {}
 	---@type table<string, lde.install.Node>
-	local contentByFile = {}
+	const contentByFile = {}
 	for _, node in ipairs(order) do
 		local c = content(node)
 		-- Skip nodes whose content the walk already materialized (git clones

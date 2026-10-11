@@ -1,19 +1,18 @@
-local sea = require("sea")
-local fs = require("fs")
-local path = require("path")
+const sea = require("sea")
+const fs = require("fs")
+const path = require("path")
 
-local features = require("lde-core.package.features")
+const features = require("lde-core.package.features")
 
-local lde = require("lde-core")
+const lde = require("lde-core")
 
 -- Build timings collection (no-op while inactive; no dependency on lde-core).
-local timings = require("lde-core.util.timings")
+const timings = require("lde-core.util.timings")
 
-local bundlePackage = require("lde-core.package.bundle")
+const bundlePackage = require("lde-core.package.bundle")
 
 ---@param fileName string
 ---@param exts string[]
----@return string?
 local function matchNativeExt(fileName, exts)
 	for _, ext in ipairs(exts) do
 		if fileName:match("%." .. ext .. "$") then
@@ -30,7 +29,7 @@ local function compilePackage(package, targetName)
 	-- build/install work. A target matching the host is a native build.
 	local target
 	if targetName then
-		local resolved, terr = sea.getTarget(targetName)
+		const resolved, terr = sea.getTarget(targetName)
 		if not resolved then
 			lde.error.raise(terr)
 		end ---@cast resolved -nil
@@ -61,9 +60,9 @@ local function compilePackage(package, targetName)
 			or (jit.os == "OSX" and { "so", "dylib" } or { "so" })
 	end
 
-	local ok, result = pcall(function()
-		local rootBuild = timings.active()
-			and timings.start("build " .. package:getName(), "build") or nil
+	const ok, result = pcall(function()
+		const rootBuild = timings.active()
+			? timings.start("build " .. package:getName(), "build") : nil
 		package:build()
 		if rootBuild then timings.finish(rootBuild) end
 		package:installDependencies()
@@ -71,8 +70,8 @@ local function compilePackage(package, targetName)
 		-- Raw bytecode: sea embeds the per-module bytecode as a raw blob (.incbin)
 		-- and registers lazy preload loaders over it, so startup only deserializes
 		-- the modules a command actually requires.
-		local bundleHandle = timings.active()
-			and timings.start("bundle " .. package:getName(), "bundle") or nil
+		const bundleHandle = timings.active()
+			? timings.start("bundle " .. package:getName(), "bundle") : nil
 		local source = bundlePackage(package, { raw = true })
 		if bundleHandle then timings.finish(bundleHandle) end
 
@@ -88,7 +87,7 @@ local function compilePackage(package, targetName)
 			if m.name == mainName then hasMain = true break end
 		end
 		if not hasMain then
-			local bin = package:readConfig().bin
+			const bin = package:readConfig().bin
 			lde.error.raise("Cannot compile: no entry module '" .. mainName .. "' in the bundle (is "
 				.. (bin and ("src/" .. bin) or "src/init.lua") .. " present?)")
 		end
@@ -98,7 +97,7 @@ local function compilePackage(package, targetName)
 
 		-- The same feature globs the Lua half of the bundle uses, so a feature
 		-- can drop a native backend as well as the Lua that drives it.
-		local excludesFor = features.resolverFor(package)
+		const excludesFor = features.resolverFor(package)
 
 		for entry in fs.readdir(modulesDir) do
 			local p = path.join(modulesDir, entry.name)
@@ -109,7 +108,7 @@ local function compilePackage(package, targetName)
 				goto continue
 			end
 
-			local excludes = excludesFor(entry.name)
+			const excludes = excludesFor(entry.name)
 
 			if not fs.isdir(p) then
 				local ext = matchNativeExt(entry.name, nativeExts)
@@ -125,7 +124,7 @@ local function compilePackage(package, targetName)
 			for _, relativePath in ipairs(fs.scan(p, "**")) do
 				local ext = matchNativeExt(relativePath, nativeExts)
 				if ext and not features.isExcluded(relativePath, excludes) then
-					local absPath = path.join(p, relativePath)
+					const absPath = path.join(p, relativePath)
 					local content = fs.read(absPath)
 					if not content then lde.error.raise("Could not read file: " .. absPath) end
 
@@ -141,8 +140,8 @@ local function compilePackage(package, targetName)
 		-- sea.compile raises plain strings (unknown target, missing cross
 		-- toolchain, compiler failure, dist download); they are surfaced as
 		-- clean user-facing errors below, not "lde crashed".
-		local seaHandle = timings.active() and timings.start("sea compile", "compile") or nil
-		local executable = sea.compile(mainName, source, sharedLibs, lde.global.getCCBin(), targetName)
+		const seaHandle = timings.active() ? timings.start("sea compile", "compile") : nil
+		const executable = sea.compile(mainName, source, sharedLibs, lde.global.getCCBin(), targetName)
 		if seaHandle then timings.finish(seaHandle) end
 		return executable
 	end)

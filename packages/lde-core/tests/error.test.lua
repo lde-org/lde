@@ -1,11 +1,10 @@
 -- Unit tests for lde-core.error: the error value, raise/classification, and
 -- the boundary renderer (clean message vs crash screen).
-local test = require("lde-test")
+const test = require("lde-test")
 
-local errorlib = require("lde-core.error")
+const errorlib = require("lde-core.error")
 
 ---@param s string
----@return string
 local function plain(s)
 	return ((s or ""):gsub("\27%[[0-9;]*m", ""))
 end
@@ -20,16 +19,16 @@ end
 ---@return string text
 ---@return integer? exitCode
 local function isCapture(fn)
-	local buf = {}
-	local prevStderr = io.stderr
-	local prevExit = os.exit
+	const buf = {}
+	const prevStderr = io.stderr
+	const prevExit = os.exit
 	io.stderr = {
 		write = function(_, ...)
 			for i = 1, select("#", ...) do buf[#buf + 1] = tostring(select(i, ...)) end
 			return true
 		end,
 		flush = function() end,
-	}
+	} --[[@as file*]]
 	os.exit = function(code)
 		error("CAPTURED-EXIT:" .. tostring(code), 0)
 	end
@@ -52,7 +51,7 @@ test.it("raise throws a known error with __tostring", function()
 end)
 
 test.it("raise re-raises an existing error unchanged", function()
-	local e = errorlib.new("original")
+	const e = errorlib.new("original")
 	local ok, err = pcall(errorlib.raise, e)
 	test.falsy(ok)
 	test.truthy(err == e)

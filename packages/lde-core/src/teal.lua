@@ -1,9 +1,9 @@
 --- Teal compiler, built on the shared compiler guest machinery.
-local fs = require("fs")
-local path = require("path")
+const fs = require("fs")
+const path = require("path")
 
 ---@type lde.Compiler
-local teal = require("lde-core.compiler").new({
+const teal = require("lde-core.compiler").new({
 	name = "Teal",
 	packageName = "tl",
 	loadExpr = 'return require("tl")',

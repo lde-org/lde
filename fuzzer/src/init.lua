@@ -88,7 +88,7 @@ fs.mkdirAll(home)
 env.set("HOME", home)
 env.set("NO_COLOR", "1")
 
----@param deps table<string, string>
+---@param deps table<string, table> # dependency name -> lde.json dependency entry
 ---@return string
 local function manifestJson(deps)
 	return json.encode({ name = "fuzz-base", version = "0.1.0", dependencies = deps })

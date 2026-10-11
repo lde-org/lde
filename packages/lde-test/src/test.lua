@@ -273,29 +273,26 @@ local SOURCE = [==[
 ---@param state    lua.State
 ---@param reporter lde.TestReporter?
 ---@param host     lde.testHost
----@return fun() runSuite
 local function setup(state, reporter, host)
 	-- Handles (e.g. progress spinners) live entirely host-side: onStart
 	-- stores one per test name, onPass/onFail retrieve it by name.
-	local handles = {}
+	const handles = {}
 
-	local onStart = reporter and reporter.onStart and function(name)
+	const onStart = reporter?.onStart and function(name)
 		handles[name] = reporter.onStart(name)
 		-- no return: a handle cannot cross back into the guest
-	end or nil
-	local onPass = reporter and reporter.onPass and function(name)
+	end
+	const onPass = reporter?.onPass and function(name)
 		reporter.onPass(name, handles[name])
 		handles[name] = nil
-	end or nil
-	local onFail = reporter and reporter.onFail and function(name, err)
+	end
+	const onFail = reporter?.onFail and function(name, err)
 		reporter.onFail(name, err, handles[name], host.file)
 		handles[name] = nil
-	end or nil
-	local onSkip = reporter and reporter.onSkip and function(name)
-		reporter.onSkip(name)
-	end or nil
+	end
+	const onSkip = reporter?.onSkip and |name| -> reporter.onSkip(name)
 
-	local runSuite = state:load(SOURCE, "@lde-test.test"):eval(host.onResult, onStart, onPass, onFail, onSkip) ---@cast runSuite fun()
+	const runSuite = state:load(SOURCE, "@lde-test.test"):eval(host.onResult, onStart, onPass, onFail, onSkip) ---@cast runSuite fun()
 	return runSuite
 end
 

@@ -1,14 +1,14 @@
 -- Tests for `lde bloat`: builds the project and reports what makes up the
 -- compiled bundle — a proportional bar, per-dependency/per-file sizes as a
 -- percentage of the total, and an optional JSON report.
-local test = require("lde-test")
+const test = require("lde-test")
 
-local fs = require("fs")
-local env = require("env")
+const fs = require("fs")
+const env = require("env")
 local path = require("path")
-local json = require("json")
+const json = require("json")
 
-local cli = require("tests.lib.ldecli")
+const cli = require("tests.lib.ldecli")
 
 -- Normalized so paths match the command's output: env.tmpdir() can end with a
 -- trailing slash (macOS), which a naive path.join would double up while the
@@ -22,7 +22,6 @@ fs.mkdir(tmpBase)
 -- path while the test's tmpBase keeps the logical /var form. Mirror the
 -- resolution so the expected string matches the output.
 ---@param p string
----@return string
 local function asCommandPath(p)
 	if jit.os == "OSX" and p:sub(1, 5) == "/var/" then
 		return "/private" .. p
@@ -32,7 +31,6 @@ end
 
 ---Strip ANSI escape sequences so output matches work with or without colors.
 ---@param s string
----@return string
 local function plain(s)
 	return ((s or ""):gsub("\27%[[0-9;]*m", ""))
 end
@@ -40,13 +38,12 @@ end
 ---@param name string
 ---@param deps table?
 ---@param extra table?
----@return string dir
 local function makeProject(name, deps, extra)
 	local dir = path.join(tmpBase, name)
 	fs.mkdir(dir)
 	fs.mkdir(path.join(dir, "src"))
 	fs.write(path.join(dir, "src", "init.lua"), 'return "' .. name .. '"')
-	local config = {
+	const config = {
 		name = name,
 		version = "0.1.0",
 		dependencies = deps or {}
@@ -90,7 +87,7 @@ test.it("lde bloat renders the header, bar, legend and sized dependency tree", f
 	test.falsy(text:find("bloat%-big%.sub%.x", 1, true))
 	test.falsy(text:find("bloat%-big%.a", 1, true))
 	-- The bigger dependency must sort above the smaller one.
-	local bigPos = text:find("bloat%-big")
+	const bigPos = text:find("bloat%-big")
 	local smallPos = text:find("bloat%-small")
 	test.truthy(bigPos and smallPos and bigPos < smallPos, "deps must sort by size descending")
 end)
@@ -103,8 +100,8 @@ test.it("lde bloat reports the exact embedded bytecode size", function()
 
 	-- bundlePackage compiles each module with the module name as its chunkname;
 	-- the same bytecode must appear verbatim in the report.
-	local fn = assert(loadstring('return "bloat-tiny"', "bloat-tiny"))
-	local expected = string.dump(fn)
+	const fn = assert(loadstring('return "bloat-tiny"', "bloat-tiny"))
+	const expected = string.dump(fn)
 	local ok, out = cli({ "bloat" }, dir)
 	test.truthy(ok, "lde bloat failed: " .. tostring(out))
 	test.includes(plain(out or ""), #expected .. " B")
@@ -126,7 +123,7 @@ test.it("lde bloat percentages sum to 100% of the embedded bundle", function()
 	local sum = 0
 	for line in (plain(out or "")):gmatch("[^\r\n]+") do
 		if not line:find(":", 1, true) then
-			local pct = line:match("^[%w%-_.]+%s+.*%s+%((%d+%.?%d*)%%%)")
+			const pct = line:match("^[%w%-_.]+%s+.*%s+%((%d+%.?%d*)%%%)")
 			if pct then sum = sum + tonumber(pct) end
 		end
 	end
@@ -138,7 +135,7 @@ test.it("lde bloat --binary reports the LuaJIT runtime share", function()
 	local binPath = path.join(dir, "bloat-bin")
 	if jit.os == "Windows" then binPath = binPath .. ".exe" end
 	-- A fake compiled binary at the default `lde compile` output path.
-	fs.write(binPath, string.rep("x", 10000))
+	fs.write(binPath, string.rep("x", 10_000))
 
 	local ok, out = cli({ "bloat", "--binary" }, dir)
 	test.truthy(ok, "lde bloat --binary failed: " .. tostring(out))
@@ -198,7 +195,7 @@ end)
 
 test.it("lde bloat --json <path> writes the report to a file", function()
 	local dir = makeProject("bloat-json-file")
-	local reportPath = path.join(dir, "bloat.json")
+	const reportPath = path.join(dir, "bloat.json")
 
 	local ok, out = cli({ "bloat", "--json", reportPath }, dir)
 	test.truthy(ok, "lde bloat --json <path> failed: " .. tostring(out))

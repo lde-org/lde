@@ -1,12 +1,12 @@
-local test = require("lde-test")
+const test = require("lde-test")
 
-local lde = require("lde-core")
-local fs = require("fs")
-local env = require("env")
+const lde = require("lde-core")
+const fs = require("fs")
+const env = require("env")
 local path = require("path")
-local json = require("json")
-local process = require("process")
-local sea = require("sea")
+const json = require("json")
+const process = require("process")
+const sea = require("sea")
 
 local tmpBase = path.join(env.tmpdir(), "lde-compile-tests")
 fs.rmdir(tmpBase)
@@ -16,7 +16,7 @@ fs.mkdir(tmpBase)
 --- host or an arch lde doesn't ship).
 ---@return string?
 local function hostTargetName()
-	local host = sea.getHostTarget()
+	const host = sea.getHostTarget()
 	for name, target in pairs(sea.targets) do
 		if target.platform == host.platform and target.arch == host.arch
 			and (target.libc or "") == (host.libc or "") then
@@ -36,7 +36,6 @@ local function crossTargetName()
 end
 
 ---@param name string
----@return string dir
 local function makeApp(name)
 	local dir = path.join(tmpBase, name)
 	fs.mkdir(dir)
@@ -54,7 +53,6 @@ end
 --- compile skips the download (sea only checks for that file). Returns the
 --- created dist dir for cleanup, or nil when a real dist was already cached.
 ---@param targetName string
----@return string?
 local function fakeDistCache(targetName)
 	local target = assert(sea.getTarget(targetName))
 	local distName = table.concat({ "libluajit", target.platform, target.arch, target.libc }, "-")
@@ -156,7 +154,7 @@ int luaopen_answer(lua_State *L) {
 		if jit.os ~= "Windows" then fs.chmod(binPath, tonumber("755", 8)) end
 		test.truthy(fs.exists(binPath), "compiled binary should exist")
 
-		local code, stdout, stderr = process.exec(binPath, {})
+		local _, stdout, stderr = process.exec(binPath, {})
 		test.equal(stdout and stdout:gsub("%s+$", ""), "ok", "binary output: " .. tostring(stderr))
 	end)
 
@@ -258,7 +256,7 @@ test.it("compile: X/init.lua is preloaded as both X and X.init", function()
 	if jit.os ~= "Windows" then fs.chmod(binPath, tonumber("755", 8)) end
 	test.truthy(fs.exists(binPath), "compiled binary should exist")
 
-	local code, stdout, stderr = process.exec(binPath, {})
+	local _, stdout, stderr = process.exec(binPath, {})
 	test.equal(stdout and stdout:gsub("%s+$", ""), "plain=init dotted=init",
 		"binary output: " .. tostring(stderr))
 end)
@@ -306,14 +304,14 @@ test.it("compile: X.lua forwarder next to X/init.lua neither loops nor drops a n
 	fs.move(binTmp, binPath)
 	if jit.os ~= "Windows" then fs.chmod(binPath, tonumber("755", 8)) end
 
-	local code, stdout, stderr = process.exec(binPath, {})
+	local _, stdout, stderr = process.exec(binPath, {})
 	test.equal(stdout and stdout:gsub("%s+$", ""), "forward=init", "binary output: " .. tostring(stderr))
 
 	-- The lua-source bundle (`lde bundle`) is where the alias loop showed up.
-	local bundle = app:bundle({}) ---@cast bundle string
+	const bundle = app:bundle({}) ---@cast bundle string
 	local chunk = load(bundle) ---@cast chunk -nil
 	test.truthy(chunk, "bundle must compile")
-	local realPrint = print
+	const realPrint = print
 	print = function() end
 	local ok, result = pcall(chunk)
 	print = realPrint
@@ -363,7 +361,7 @@ build:write("target-info.txt", build.target .. "\n" .. out)
 ]])
 
 	local app = lde.Package.open(dir) ---@cast app -nil
-	local crossName = crossTargetName()
+	const crossName = crossTargetName()
 	withFakeLdeHome("target-buildinfo", function()
 		fakeDistCache(crossName)
 		-- The compile may fail without a toolchain for the target — only the
@@ -391,12 +389,12 @@ build:write("target-info.txt", build.target)
 ]])
 
 	local app = lde.Package.open(dir) ---@cast app -nil
-	local firstTarget = crossTargetName()
+	const firstTarget = crossTargetName()
 	withFakeLdeHome("target-switch-1", function()
 		fakeDistCache(firstTarget)
 		pcall(function() app:compile(firstTarget) end)
 	end)
-	local info1 = assert(fs.read(path.join(dir, "target", "target-switch", "target-info.txt")))
+	const info1 = assert(fs.read(path.join(dir, "target", "target-switch", "target-info.txt")))
 
 	local secondTarget
 	for name, target in pairs(sea.targets) do
@@ -415,11 +413,11 @@ build:write("target-info.txt", build.target)
 end)
 
 test.it("compile: cross target context selects the cross compiler and flags", function()
-	local cross = assert(sea.getTarget(crossTargetName()))
+	const cross = assert(sea.getTarget(crossTargetName()))
 	lde.global.setTarget(cross)
 
 	local flag = lde.global.getTargetFlag()
-	local ccCommand = lde.global.getCCCommand()
+	const ccCommand = lde.global.getCCCommand()
 	local ok, cc = pcall(lde.global.getCCBin)
 
 	lde.global.setTarget(nil)
@@ -458,7 +456,7 @@ test.it("compile: the bundle entry module follows the manifest bin", function()
 	test.equal(raw.name, "bin-entry.cli", "the entry module must be the bin file")
 
 	---@type table<string, boolean>
-	local names = {}
+	const names = {}
 	for _, m in ipairs(raw.modules) do names[m.name] = true end
 	test.truthy(names["bin-entry.cli"], "the bin module must be in the bundle")
 	test.truthy(names["bin-entry"], "src/init.lua must still ship as the package module")
@@ -478,7 +476,7 @@ test.it("compile: sea targets match the LuaJIT dist release assets", function()
 	-- Each release target must resolve to the libluajit-* tarball that
 	-- lde-org/luajit actually publishes (verified against the release assets).
 	---@type table<string, string>
-	local expectedDists = {
+	const expectedDists = {
 		["linux-x86-64"]    = "libluajit-linux-x86-64-gnu",
 		["linux-aarch64"]   = "libluajit-linux-aarch64-gnu",
 		["windows-x86-64"]  = "libluajit-windows-x86-64-gnu",

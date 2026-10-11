@@ -1,16 +1,16 @@
-local test = require("lde-test")
+const test = require("lde-test")
 
-local lde = require("lde-core")
+const lde = require("lde-core")
 
-local fs = require("fs")
-local env = require("env")
-local path = require("path")
+const fs = require("fs")
+const env = require("env")
+const path = require("path")
 
 local tmpDir = path.join(env.tmpdir(), "lde-json5config-test")
 fs.rmdir(tmpDir)
 fs.mkdir(tmpDir)
 
-local json5Config = [[
+const json5Config = [[
 {
 	// Project hasMetadata
 	"name": "json5-sample",

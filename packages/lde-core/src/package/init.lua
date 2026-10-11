@@ -1,23 +1,24 @@
-local Lockfile = require("lde-core.lockfile")
+const Lockfile = require("lde-core.lockfile")
 
-local lde = require("lde-core")
+const lde = require("lde-core")
 
-local global = require("lde-core.global")
+const global = require("lde-core.global")
 
-local fs = require("fs")
-local env = require("env")
-local path = require("path")
-local process = require("process")
+const fs = require("fs")
+const env = require("env")
+const path = require("path")
+const process = require("process")
 
 ---@class lde.Package
 ---@field dir string
+---@field readConfig (fun(): table?)?
 ---@field cachedConfig lde.Package.Config?
 ---@field cachedConfigMtime number?
 ---@field buildfn (fun(pkg: lde.Package, outputDir: string): boolean?, string?, lde.install.DeferredBuild?)?
 ---@field hasBuildDeps boolean? # false = pure-Lua builtin install that never reads dependency build outputs
 ---@field isRockspec boolean? # true when opened from a *.rockspec (no lde.json)
 ---@field rockspecData rocked.raw.Output? # parsed rockspec, when isRockspec
-local Package = {}
+const Package = {}
 Package.__index = Package
 
 -- Add this since files in . will want access to the `Package` class.
@@ -27,7 +28,7 @@ Package.Config = require("lde-core.package.config")
 
 ---@param dir string
 local function configPathAtDir(dir)
-	local legacyPath = path.join(dir, "lpm.json")
+	const legacyPath = path.join(dir, "lpm.json")
 	if fs.exists(legacyPath) then
 		return legacyPath
 	end
@@ -94,22 +95,22 @@ local function defaultBuildFn(pkg, outputDir, captureLog)
 		fs.copy(pkg:getSrcDir(), outputDir)
 	end
 
-	local buildScriptPath = pkg:getBuildScriptPath()
+	const buildScriptPath = pkg:getBuildScriptPath()
 	if not fs.exists(buildScriptPath) then
 		return nil, "No build script found: " .. buildScriptPath
 	end
 
-	local source = fs.read(buildScriptPath)
+	const source = fs.read(buildScriptPath)
 	if not source then
 		return nil, "Could not read build script: " .. buildScriptPath
 	end
 
-	local lua = require("lua-sys")
-	local Instance = require("lde-build.build")
+	const lua = require("lua-sys")
+	const Instance = require("lde-build.build")
 
-	local luaPath, luaCPath = require("lde-core.package.run").getLuaPaths(pkg)
+	const luaPath, luaCPath = require("lde-core.package.run").getLuaPaths(pkg)
 	local state = lua.new()
-	local g     = state:globals() --[[@as { package: { path: string?, cpath: string? }, [any]: any }]]
+	const g     = state:globals() --[[@as { package: { path: string?, cpath: string? }, [any]: any }]]
 	g.package.path  = luaPath
 	g.package.cpath = luaCPath
 
@@ -135,11 +136,11 @@ local function defaultBuildFn(pkg, outputDir, captureLog)
 	-- var and build:cc() use the cross compiler so build.lua C code compiles
 	-- for the target platform.
 	local ccBin = global.getCCBin()
-	local ccCommand = global.getCCCommand()
-	local makeBin = global.getMakeBin()
-	local oldCC  = env.var("CC") or ""
-	local oldMAKE = env.var("MAKE") or ""
-	local oldPATH = env.var("PATH") or ""
+	const ccCommand = global.getCCCommand()
+	const makeBin = global.getMakeBin()
+	const oldCC  = env.var("CC") or ""
+	const oldMAKE = env.var("MAKE") or ""
+	const oldPATH = env.var("PATH") or ""
 	env.set("CC", ccCommand)
 	env.set("MAKE", makeBin)
 	if jit.os == "Windows" then
@@ -155,7 +156,7 @@ local function defaultBuildFn(pkg, outputDir, captureLog)
 	Instance.setup(state, outputDir, ccBin, global.getTargetTriple(), global.getTargetFlag(), captureLog, pkg:getFeatures())
 
 	local cwd = pkg:getDir()
-	local oldCwd = env.cwd()
+	const oldCwd = env.cwd()
 	env.chdir(cwd)
 
 	local ok, err = pcall(state.eval, state, source)
@@ -189,7 +190,7 @@ end
 function Package.openLDE(dir)
 	local resolved, err = resolveDir(dir)
 	if not resolved then return nil, err end
-	dir = resolved
+	local dir = resolved
 
 	local configPath = configPathAtDir(dir)
 	if not fs.exists(configPath) then
@@ -198,7 +199,7 @@ function Package.openLDE(dir)
 
 	-- Parse and validate up front so a corrupt or nameless manifest fails
 	-- cleanly at open instead of crashing later (getName, readConfig, ...).
-	local stat = fs.stat(configPath)
+	const stat = fs.stat(configPath)
 	local content = fs.read(configPath)
 	if not stat or not content then
 		return nil, "Could not read lde.json: " .. configPath
@@ -244,7 +245,7 @@ end
 function Package.open(dir, rockspec)
 	local resolved, err = resolveDir(dir)
 	if not resolved then return nil, err end
-	dir = resolved
+	local dir = resolved
 
 	if fs.exists(configPathAtDir(dir)) then
 		return Package.openLDE(dir)
@@ -257,7 +258,7 @@ function Package.open(dir, rockspec)
 		-- message, which makes a typo'd rockspec look like a missing one.
 		local hasRockspec = rockspec ~= nil
 		if not hasRockspec and fs.isdir(dir) then
-			local iter = fs.readdir(dir)
+			const iter = fs.readdir(dir)
 			if iter then
 				for entry in iter do
 					if entry.type == "file" and entry.name:match("%.rockspec$") then
@@ -280,7 +281,7 @@ end
 function Package:readConfig()
 	local configPath = self:getConfigPath()
 
-	local s = fs.stat(configPath)
+	const s = fs.stat(configPath)
 	if not s then
 		lde.error.raise("Could not read lde.json: " .. configPath)
 	end ---@cast s -nil
@@ -299,7 +300,7 @@ function Package:readConfig()
 		lde.error.raise("Failed to parse " .. configPath .. ": " .. derr)
 	end ---@cast decoded -nil
 
-	local newConfig = Package.Config.new(decoded)
+	const newConfig = Package.Config.new(decoded)
 	self.cachedConfig = newConfig
 	self.cachedConfigMtime = s.modifyTime
 
@@ -421,7 +422,6 @@ end
 --- received verbatim: POSIX sh single quotes, cmd.exe double quotes.
 ---@param arg string
 ---@param isCmd boolean? # cmd.exe escaping instead of POSIX
----@return string
 local function shellQuote(arg, isCmd)
 	if isCmd then
 		return '"' .. arg:gsub('"', '""') .. '"'
@@ -435,11 +435,11 @@ end
 ---@return boolean?
 ---@return string?
 function Package:runScript(name, isCapture, args)
-	local scripts = self:readConfig().scripts
+	const scripts = self:readConfig().scripts
 	if not scripts or not scripts[name] then
 		lde.error.raise("No script named '" .. name .. "' in lde.json")
 	end ---@cast scripts -nil
-	local opts = { cwd = self:getDir() }
+	const opts = { cwd = self:getDir() }
 	if not isCapture then
 		opts.stdout = "inherit"
 		opts.stderr = "inherit"
@@ -460,7 +460,7 @@ function Package:runScript(name, isCapture, args)
 		cmd = cmd .. " " .. table.concat(quoted, " ")
 	end
 
-	local code, stdout, stderr = process.exec(shellBin, { shellFlag, cmd }, opts)
+	const code, stdout, stderr = process.exec(shellBin, { shellFlag, cmd }, opts)
 	if code == 0 then return true, stdout or stderr end
 	-- process.exec returns empty strings (not nil) when the child wrote nothing;
 	-- treat those as absent so a silent failure reports its exit code.

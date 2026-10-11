@@ -1,17 +1,17 @@
-local ansi = require("ansi")
+const ansi = require("ansi")
 
-local lde = require("lde-core")
+const lde = require("lde-core")
 
 ---@param results table<string, { updated: boolean, message: string }>
 local function printResults(results)
-	local names = {}
+	const names = {}
 	for name in pairs(results) do
 		names[#names + 1] = name
 	end
 	table.sort(names)
 
 	for _, name in ipairs(names) do
-		local result = results[name]
+		const result = results[name]
 		if result.updated then
 			ansi.printf("{green}  %s: %s", name, result.message)
 		end
@@ -24,7 +24,7 @@ local function printSummary(results, elapsed)
 	local total = 0
 	local updated = 0
 	for _, result in pairs(results) do
-		total = total + 1
+		total += 1
 		if result.updated then updated = updated + 1 end
 	end
 
@@ -41,8 +41,8 @@ end
 
 ---@param args clap.Args
 local function update(args)
-	local startTime = ansi.now()
-	local pkg, err = lde.Package.open()
+	const startTime = ansi.now()
+	const pkg, err = lde.Package.open()
 	if not pkg then
 		lde.error.raise(err)
 	end ---@cast pkg -nil
@@ -50,9 +50,9 @@ local function update(args)
 	local name = args:pop()
 
 	if name then
-		local deps = pkg:getDependencies()
-		local devDeps = pkg:getDevDependencies()
-		local depInfo = deps[name] or devDeps[name]
+		const deps = pkg:getDependencies()
+		const devDeps = pkg:getDevDependencies()
+		const depInfo = deps[name] or devDeps[name]
 
 		if not depInfo then
 			lde.error.raise("Unknown dependency: " .. name)
@@ -63,7 +63,7 @@ local function update(args)
 		printSummary(results, ansi.now() - startTime)
 	else
 		local results = pkg:updateDependencies()
-		local devResults = pkg:updateDevDependencies()
+		const devResults = pkg:updateDevDependencies()
 
 		for k, v in pairs(devResults) do
 			results[k] = v

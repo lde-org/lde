@@ -3,11 +3,11 @@ if select("#", ...) == 0 then
 	return
 end
 
-local clap = require("clap")
-local usage = require("lde.commands.usage")
-local suggest = require("lde.util.suggest")
+const clap = require("clap")
+const usage = require("lde.commands.usage")
+const suggest = require("lde.util.suggest")
 
-local args = clap.parse({ ... })
+const args = clap.parse({ ... })
 
 	-- `--lua [args...]` runs the lde binary as a plain Lua interpreter: the
 	-- args form a `lua` command line (`-e <code>` chunks, then an optional
@@ -23,13 +23,13 @@ local args = clap.parse({ ... })
 -- --verbose is a global flag, consumed before the command name is popped so
 -- it works anywhere on the command line (`lde --verbose run` and
 -- `lde run --verbose` both enable it). Applied after lde-core loads below.
-local verboseRequested = args:flag("verbose")
+const verboseRequested = args:flag("verbose")
 
 -- Parse the overrides up front so --version is detected even when combined
 -- with -C/--tree (matching the historical behavior), but don't apply them
 -- until after the version check.
-local cwdOverride  = args:option("cwd") or args:short("C")
-local treeOverride = args:option("tree")
+const cwdOverride  = args:option("cwd") or args:short("C")
+const treeOverride = args:option("tree")
 
 -- Applies -C/--tree. Kept separate so the --version path below can apply
 -- them too, while the plain `lde --version` never pays for ansi/env/fs/path
@@ -37,7 +37,7 @@ local treeOverride = args:option("tree")
 -- plain `lde -e "…"` in a project-less cwd never touches ansi/fs/path here.
 local function applyOverrides()
 	if cwdOverride then
-		local ansi = require("ansi")
+		const ansi = require("ansi")
 		local env = require("env")
 		local fs = require("fs")
 		local path = require("path")
@@ -97,13 +97,13 @@ if versionRequested and args:count() == 0 then
 	return
 end
 
-local evalCode = args:short("e")
+const evalCode = args:short("e")
 
 	-- `--help` before a command shows that command's help; alone it shows the
 	-- main help. Handled inside the boundary (after applyOverrides) so unknown
 	-- targets render cleanly; help.lua lazy-loads lde-core, so plain `lde
 	-- --help` still pays nothing beyond ansi/env/fs/path.
-	local helpRequested = args:flag("help")
+	const helpRequested = args:flag("help")
 
 -- Hidden completion backend invoked by the generated shell scripts. Handled
 -- before the overrides and lde-core load so tab-completion stays fast.
@@ -167,7 +167,7 @@ end
 		f = io.open("lde.json", "rb")
 		if f then f:close() return true end
 		local fs = require("fs")
-		local iter = fs.readdir(".")
+		const iter = fs.readdir(".")
 		if iter then
 			for entry in iter do
 				if entry.type == "file" and entry.name:match("%.rockspec$") then
@@ -227,16 +227,16 @@ end
 	-- install scheduler can overlap independent native builds (see
 	-- lde-core/package/build.lua). Invoked as: lde __build-pkg <pkgDir> <outDir> [<target>].
 	if commandName == "__build-pkg" then
-		local pkgDir = args:pop()
+		const pkgDir = args:pop()
 		local outDir = args:pop()
-		local targetName = args:pop()
-		local buildLog = require("lde-core.util.build-log")
+		const targetName = args:pop()
+		const buildLog = require("lde-core.util.build-log")
 		-- Compact mode: capture the whole build output (build:sh subprocesses
 		-- and guest prints) and write it to a temp file on failure, then exit
 		-- silently — the parent renders the error and points at the log. The
 		-- path is deterministic (buildLog.pathFor), so parent and worker agree
 		-- on it without passing it over the wire.
-		local capture = (not lde.isVerbose) and buildLog.newCapture() or nil
+		const capture = (not lde.isVerbose) ? buildLog.newCapture() : nil
 		local ok, msg = pcall(function()
 			if not pkgDir or not outDir then
 				error("__build-pkg: missing package dir or output dir", 0)
@@ -254,7 +254,7 @@ end
 			if not pkg then
 				error("__build-pkg: " .. (perr or "failed to open package"), 0)
 			end ---@cast pkg -nil
-			local bok, berr = pkg:runBuildScript(outDir, capture)
+			const bok, berr = pkg:runBuildScript(outDir, capture)
 			if not bok then error(berr or "build failed", 0) end
 		end)
 		if not ok then
@@ -290,14 +290,14 @@ end
 	end
 
 	if luaCliArgs then
-		local lok, lerr = lde.runtime.executeLuaCLI(luaCliArgs, { cwd = require("env").cwd() })
+		const lok, lerr = lde.runtime.executeLuaCLI(luaCliArgs, { cwd = require("env").cwd() })
 		if not lok then
 			lde.error.raise(lerr)
 		end
 		return
 	end
 
-	local commandFiles = {
+	const commandFiles = {
 		help      = "lde.commands.help",
 		init      = "lde.commands.initialize",
 		new       = "lde.commands.new",
@@ -339,13 +339,13 @@ end
 	end
 
 	-- Commands that don't need the global cache dirs initialized
-	local noInitCommands = { help = true, completion = true }
+	const noInitCommands = { help = true, completion = true }
 
 	if not noInitCommands[commandName] and not treeOverride then
 		lde.global.init()
 	end
 
-	local commandFile = commandFiles[commandName]
+	const commandFile = commandFiles[commandName]
 	if commandFile then
 		require(commandFile)(args)
 	elseif require("fs").exists(commandName) then
@@ -355,13 +355,13 @@ end
 		require("lde.commands.run")(args)
 	else
 		local pkg = lde.Package.open()
-		local scripts = pkg and pkg:readConfig().scripts
+		const scripts = pkg and pkg:readConfig().scripts
 
 		if scripts and scripts[commandName] then ---@cast pkg -nil
 
 			-- npm-style: everything after `--` is passed to the script as its args.
 			local scriptArgs = {}
-			local isDash, dashPos = args:flag("")
+			const isDash, dashPos = args:flag("")
 			if isDash then
 				scriptArgs = args:drain(dashPos + 1)
 			end
@@ -369,7 +369,7 @@ end
 			pkg:build()
 			pkg:installDependencies()
 
-			local sok, serr = pkg:runScript(commandName, nil, scriptArgs)
+			const sok, serr = pkg:runScript(commandName, nil, scriptArgs)
 			if not sok then
 				lde.error.raise("Script '" .. commandName .. "' failed: " .. (serr or "exited with a non-zero exit code"))
 			end

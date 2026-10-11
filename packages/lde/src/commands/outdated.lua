@@ -1,16 +1,16 @@
-local ansi = require("ansi")
-local semver = require("semver")
-local luarocks = require("luarocks")
-local lde = require("lde-core")
+const ansi = require("ansi")
+const semver = require("semver")
+const luarocks = require("luarocks")
+const lde = require("lde-core")
 
 ---@param _args clap.Args
 local function outdated(_args)
-	local pkg, err = lde.Package.open()
+	const pkg, err = lde.Package.open()
 	if not pkg then
 		lde.error.raise(err)
 	end ---@cast pkg -nil
 
-	local deps = pkg:getDependencies()
+	const deps = pkg:getDependencies()
 	local found = false
 
 	for name, depInfo in pairs(deps) do
@@ -24,7 +24,7 @@ local function outdated(_args)
 				goto continue
 			end
 
-			local latestUrl, _ = luarocks.getRockspecUrl(manifest, depInfo.luarocks)
+			const latestUrl =  luarocks.getRockspecUrl(manifest --[[@as luarocks.Manifest]], depInfo.luarocks)
 			if not latestUrl then goto continue end
 
 			-- extract version from url: name-VERSION.rockspec
@@ -42,7 +42,7 @@ local function outdated(_args)
 		elseif depInfo.version then
 			-- lde registry dep
 			lde.global.syncRegistry()
-			local portfile, rerr = lde.global.lookupRegistryPackage(depInfo.name or name)
+			const portfile, rerr = lde.global.lookupRegistryPackage(depInfo.name or name)
 			if not portfile then
 				ansi.printf("{red}%s: %s", name, rerr)
 				goto continue

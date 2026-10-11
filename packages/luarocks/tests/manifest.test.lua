@@ -1,8 +1,8 @@
-local test = require("lde-test")
-local luarocks = require("luarocks")
-local Manifest = luarocks.Manifest
+const test = require("lde-test")
+const luarocks = require("luarocks")
+const Manifest = luarocks.Manifest
 
-local MANIFEST = [[
+const MANIFEST = [[
 modules = {}
 commands = {}
 repository = {
@@ -133,7 +133,7 @@ test.it("getSrcUrls excludes rockspec-only versions", function()
 end)
 
 test.it("getSrcUrls returns nil for package with no src entries", function()
-	local m = Manifest.new(MANIFEST)
+	local _ = Manifest.new(MANIFEST)
 	-- luafilesystem 1.7.0-2 only has rockspec, but we need a package with NO src at all
 	-- use a custom manifest snippet
 	local noSrcManifest = luarocks.Manifest.new([[

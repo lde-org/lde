@@ -1,9 +1,9 @@
 -- Tests for the git shorthand expansion (lde.util.gitShorthand): gh:/github:/
 -- gitlab:/codeberg: prefixes that expand to clone URLs in CLI name positions,
 -- including the gh:<pkg>@owner/repo monorepo form.
-local test = require("lde-test")
+const test = require("lde-test")
 
-local gitShorthand = require("lde.util.gitShorthand")
+const gitShorthand = require("lde.util.gitShorthand")
 
 test.it("gh: and github: expand to github.com URLs", function()
 	test.equal(gitShorthand.expand("gh:foo/bar"), "https://github.com/foo/bar")

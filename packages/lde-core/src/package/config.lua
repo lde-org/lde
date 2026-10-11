@@ -10,8 +10,8 @@
 ---@field scripts table<string, string>?
 ---@field dependencies lde.Package.Config.Dependencies?
 ---@field devDependencies lde.Package.Config.Dependencies?
----@field features lde.Package.Config.FeatureDefinitions?
-local Config = {}
+---@field features lde.Package.Config.FeatureDeclarations? # a flag and the entries it turns on, as the manifest writes them
+const Config = {}
 Config.__index = Config
 
 ---@param conf lde.Package.Config

@@ -1,11 +1,11 @@
-local test = require("lde-test")
+const test = require("lde-test")
 
-local fs   = require("fs")
-local env  = require("env")
-local path = require("path")
+const fs   = require("fs")
+const env  = require("env")
+const path = require("path")
 
-local lde = require("lde-core")
-local fg  = require("lde-core.flamegraph")
+const lde = require("lde-core")
+const fg  = require("lde-core.flamegraph")
 
 local tmpBase = path.join(env.tmpdir(), "lde-profile-tests")
 fs.rmdir(tmpBase)
@@ -36,7 +36,7 @@ test.it("buildTree: stacks with a shared prefix merge into the same parent", fun
 	test.equal(outer.v, 10)
 	test.equal(#outer.c, 2)
 	-- children may be in any order
-	local names = {}
+	const names = {}
 	for _, c in ipairs(outer.c) do names[c.n] = c.v end
 	test.equal(names["left"],  4)
 	test.equal(names["right"], 6)
@@ -140,12 +140,12 @@ test.it("executeFile with profile=true succeeds and returns ok", function()
 		for i = 1, 500000 do s = s + i end
 		return s
 	]])
-	local ok, err = lde.runtime.executeFile(scriptPath, { profile = true })
+	local ok, _ = lde.runtime.executeFile(scriptPath, { profile = true })
 	test.truthy(ok)
 end)
 
 test.it("executeString with profile=true succeeds", function()
-	local ok, err = lde.runtime.executeString([[
+	local ok, _ = lde.runtime.executeString([[
 		local s = 0
 		for i = 1, 300000 do s = s + i end
 	]], { profile = true })
@@ -162,7 +162,7 @@ test.it("executeFile with flamegraph path writes an HTML file", function()
 		for i = 1, 1000000 do s = s + i end
 		return s
 	]])
-	local ok, err = lde.runtime.executeFile(scriptPath, { flamegraph = outPath })
+	local ok, _ = lde.runtime.executeFile(scriptPath, { flamegraph = outPath })
 	test.truthy(ok)
 	-- File may or may not exist if no samples were collected (fast machine / CI);
 	-- if it does exist it must be valid HTML with no placeholders.
@@ -206,8 +206,8 @@ test.it("executeFile with profileJson writes decodable profile data", function()
 	test.truthy(ok)
 	test.truthy(fs.exists(outPath), "profile JSON not written")
 
-	local json = require("json")
-	local raw = fs.read(outPath) ---@cast raw -nil
+	const json = require("json")
+	const raw = fs.read(outPath) ---@cast raw -nil
 	local data = json.decode(raw) ---@cast data table
 	test.truthy(data, "profile JSON must decode")
 	test.equal(data.version, 1)
@@ -277,7 +277,7 @@ test.it("profiling stays silent while quiet, but still writes artifacts", functi
 
 	print, io.write = origPrint, origWrite
 
-	local text = table.concat(captured, "\n")
+	const text = table.concat(captured, "\n")
 	test.falsy(text:find("Profile", 1, true), "profile report must not print while quiet")
 	test.falsy(text:find("Flamegraph", 1, true), "flamegraph status must not print while quiet")
 	test.falsy(text:find("Profile JSON", 1, true), "profile JSON status must not print while quiet")

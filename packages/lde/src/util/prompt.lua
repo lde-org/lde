@@ -1,9 +1,9 @@
-local ansi = require("ansi")
-local ffi = require("ffi")
+const ansi = require("ansi")
+const ffi = require("ffi")
 
-local lde = require("lde-core")
+const lde = require("lde-core")
 
-local raw = jit.os == "Windows"
+const raw = jit.os == "Windows"
 	and require("readline.raw.windows")
 	or require("readline.raw.posix")
 
@@ -15,12 +15,12 @@ local prompt = {}
 local function fdIsTTY(fd)
 	if ffi.os == "Windows" then
 		pcall(ffi.cdef, "int _isatty(int fd);")
-		local ok, result = pcall(function() return ffi.C._isatty(fd) ~= 0 end)
-		return ok and result or false
+		local ok, result = pcall(|| -> ffi.C._isatty(fd) ~= 0)
+		return ok ? result : false
 	else
 		pcall(ffi.cdef, "int isatty(int fd);")
-		local ok, result = pcall(function() return ffi.C.isatty(fd) ~= 0 end)
-		return ok and result or false
+		local ok, result = pcall(|| -> ffi.C.isatty(fd) ~= 0)
+		return ok ? result : false
 	end
 end
 
@@ -28,7 +28,7 @@ end
 -- presses, so it only makes sense when both stdin and stdout are terminals.
 -- When either is redirected (CI, pipes, tests) scaffolding falls back to
 -- defaults instead of hanging or spewing escapes into a log file.
-local interactive = fdIsTTY(0) and fdIsTTY(1)
+const interactive = fdIsTTY(0) and fdIsTTY(1)
 prompt.interactive = interactive
 
 -- After an ESC byte (POSIX sends arrows byte-by-byte), check whether more of
@@ -67,14 +67,12 @@ prompt.escSequencePending = escSequencePending
 ---@class lde.prompt.Option
 ---@field key string
 ---@field desc string
----@field color ansi.Color
 
 ---Interactive arrow-key select. ↑/↓ (or j/k) move the cursor, a number jumps
 ---straight to that option, Enter confirms, Esc or Ctrl+C cancels.
 ---@param opts { prompt: string, options: lde.prompt.Option[], default: string }
----@return string? # selected key, or nil when cancelled (Esc / Ctrl+C)
 function prompt.select(opts)
-	local count = #opts.options
+	const count = #opts.options
 
 	local idx = 1
 	for i, opt in ipairs(opts.options) do
@@ -86,10 +84,9 @@ function prompt.select(opts)
 
 	---@param i integer
 	---@param selected boolean
-	---@return string
 	local function row(i, selected)
 		local opt = opts.options[i]
-		local marker = selected and ansi.colorize("green", "> ") or "  "
+		const marker = selected and ansi.colorize("green", "> ") or "  "
 		local name = ansi.colorize("bold", ansi.colorize(opt.color, opt.key))
 		if selected then
 			name = ansi.colorize("underline", name)
@@ -145,7 +142,7 @@ function prompt.select(opts)
 			elseif ch == "\x1b" then -- POSIX: escape byte, then [ then a letter
 				local a = raw.readByte()
 				if a == "[" then
-					local b = raw.readByte()
+					const b = raw.readByte()
 					if b == "A" then
 						idx = idx > 1 and idx - 1 or count; redraw()
 					elseif b == "B" then
@@ -160,7 +157,7 @@ function prompt.select(opts)
 			elseif ch == "j" then
 				idx = idx < count and idx + 1 or 1; redraw()
 			elseif ch >= "1" and ch <= "9" then
-				local n = tonumber(ch)
+				const n = tonumber(ch)
 				if n and n >= 1 and n <= count then
 					idx = n
 					redraw()
@@ -195,7 +192,7 @@ end
 ---@param opts { prompt: string, default: string? }
 ---@return string? # the entered value, or nil when cancelled
 function prompt.ask(opts)
-	local promptStr = opts.default
+	const promptStr = opts.default
 		and ansi.format("{cyan}?{reset} {bold}%s{reset} (%s): ", opts.prompt, opts.default)
 		or ansi.format("{cyan}?{reset} {bold}%s{reset}: ", opts.prompt)
 
@@ -271,7 +268,7 @@ end
 ---@param default string
 ---@return string
 function prompt.resolveName(args, default)
-	local nameFlag = args:option("name")
+	const nameFlag = args:option("name")
 	if nameFlag then
 		return nameFlag
 	end
@@ -308,11 +305,10 @@ end
 ---interactive prompts when stdin and stdout are terminals. Non-interactive
 ---runs with no flags keep the historical defaults (blank project, Lua).
 ---@param args clap.Args
----@return lde.Package.InitOptions
 function prompt.scaffoldOptions(args)
-	local opts = {} --[[@as lde.Package.InitOptions]]
+	const opts = {} --[[@as lde.Package.InitOptions]]
 
-	local typeFlag = args:option("type")
+	const typeFlag = args:option("type")
 	if typeFlag then
 		if typeFlag ~= "blank" and typeFlag ~= "library" then
 			lde.error.raise("Invalid --type '" .. typeFlag .. "' (expected 'blank' or 'library')")
@@ -320,7 +316,7 @@ function prompt.scaffoldOptions(args)
 		opts.type = typeFlag
 	end
 
-	local languageFlag = args:option("language")
+	const languageFlag = args:option("language")
 	if languageFlag then
 		if languageFlag ~= "lua" and languageFlag ~= "teal" and languageFlag ~= "moonscript" then
 			lde.error.raise("Invalid --language '" .. languageFlag .. "' (expected 'lua', 'teal', or 'moonscript')")

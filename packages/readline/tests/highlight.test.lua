@@ -1,5 +1,5 @@
-local test      = require("lde-test")
-local ansi      = require("ansi")
+const test      = require("lde-test")
+const ansi      = require("ansi")
 local highlight = require("readline.highlight")
 
 -- The codes ansi would emit in this environment (empty when colors are
@@ -71,19 +71,19 @@ test.it("operators are blue", function()
 end)
 
 test.it("mixed line preserves text content", function()
-	local line = "local x = 42 -- note"
+	const line = "local x = 42 -- note"
 	test.equal(strip(highlight(line)), line)
 end)
 
 test.it("highlight is passed through edit and does not corrupt result", function()
-	local readline = require("readline")
+	const readline = require("readline")
 	local i, out = 0, {}
 	local result = readline.edit({
 		prompt    = "> ",
 		history   = {},
 		highlight = highlight,
 		readByte  = function()
-			i = i + 1
+			i += 1
 			return ({ "l", "o", "c", "a", "l", " ", "x", "\r" })[i]
 		end,
 		write     = function(s) out[#out + 1] = s end

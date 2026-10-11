@@ -39,7 +39,7 @@ local function run(bin, args, opts)
 		stdout = "pipe",
 		stderr = "pipe",
 	})
-	if not child then
+	if type(child) ~= "table" then
 		return { exit = nil, timedOut = false, spawnError = serr, out = "" }
 	end
 
@@ -54,7 +54,8 @@ local function run(bin, args, opts)
 			return { exit = code, timedOut = false, out = (stdout or "") .. (stderr or "") }
 		end
 		if os.clock() > deadline then
-			child:kill(true)
+			const proc = child --[[@as process.Child]]
+			proc:kill(true)
 			-- Don't wait(): the killed process's grandchildren may still hold the
 			-- pipe write ends (e.g. a compiler or git spawned mid-build), which
 			-- would block the drain forever. Leak the fds instead — timeouts are
@@ -74,7 +75,6 @@ end
 ---@param kind "cmd" | "eval" | "lua"
 ---@param exit integer?
 ---@param out string
----@return string # "ok" | "clean_error" | "crash" | "raw_error"
 local function classify(kind, exit, out)
 	if out:find("lde crashed", 1, true) then return "crash" end
 	if out:find("stack traceback", 1, true) then return "raw_error" end
@@ -84,7 +84,6 @@ local function classify(kind, exit, out)
 end
 
 ---@param s string
----@return string
 local function csvField(s)
 	s = tostring(s)
 	if s:find('[,%"\n]') then

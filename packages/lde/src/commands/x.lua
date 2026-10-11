@@ -1,11 +1,11 @@
-local ansi = require("ansi")
-local env = require("env")
-local fs = require("fs")
-local path = require("path")
-local lde = require("lde-core")
+const ansi = require("ansi")
+const env = require("env")
+const fs = require("fs")
+const path = require("path")
+const lde = require("lde-core")
 
-local resolvePackage = require("lde.util.resolve")
-local errorsnippet = require("lde.util.errorsnippet")
+const resolvePackage = require("lde.util.resolve")
+const errorsnippet = require("lde.util.errorsnippet")
 
 ---@param pkg lde.Package
 ---@param scriptArgs string[]
@@ -14,16 +14,16 @@ local function executePackage(pkg, scriptArgs, cwd)
 	pkg:build()
 	pkg:installDependencies()
 
-	local ok, result = pkg:runFile(nil, scriptArgs, nil, cwd)
+	const ok, result = pkg:runFile(nil, scriptArgs, nil, cwd)
 	if not ok then
 		-- Map the built entry (target/<name>/X) back to its source (src/X) so
 		-- the snippet points at what the user wrote; fall back to the clean
 		-- error when there is no file position.
-		local targetPrefix = pkg:getTargetDir() .. path.separator
+		const targetPrefix = pkg:getTargetDir() .. path.separator
 		local srcDir = pkg:getSrcDir()
-		local remap = function(file)
+		const remap = function(file)
 			if file:sub(1, #targetPrefix) == targetPrefix then
-				local mapped = path.join(srcDir, file:sub(#targetPrefix + 1))
+				const mapped = path.join(srcDir, file:sub(#targetPrefix + 1))
 				if fs.exists(mapped) then return mapped end
 			end
 			return nil
@@ -45,7 +45,7 @@ end
 
 ---@param args clap.Args
 local function x(args)
-	local userCwd = env.cwd()
+	const userCwd = env.cwd()
 
 	if not args:peek() then
 		ansi.eprintf("{red}Usage: lde x <name>[@<version>] [--offline] [args...]")

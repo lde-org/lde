@@ -2,16 +2,16 @@
 -- git URL parsing, and git-repo planning (planGitRepo / getOrInitGitRepo with
 -- pinned commits never touch the network). Network-backed paths (registry
 -- sync, tarball downloads, cloneDir) are exercised elsewhere via the CLI.
-local test = require("lde-test")
+const test = require("lde-test")
 
-local lde = require("lde-core")
-local global = lde.global
+const lde = require("lde-core")
+const global = lde.global
 
-local fs = require("fs")
-local env = require("env")
-local git2 = require("git2-sys")
+const fs = require("fs")
+const env = require("env")
+const git2 = require("git2-sys")
 local path = require("path")
-local json = require("json")
+const json = require("json")
 
 local tmpBase = path.join(env.tmpdir(), "lde-global-tests")
 fs.rmdir(tmpBase)
@@ -91,11 +91,11 @@ test.it("planGitRepo pins a tarball plan for recognized hosts", function()
 end)
 
 test.it("planGitRepo builds tarball URLs for codeberg and bitbucket", function()
-	local codeberg = global.planGitRepo("mypkg", "https://codeberg.org/user/repo.git", nil, "codeberg123")
+	const codeberg = global.planGitRepo("mypkg", "https://codeberg.org/user/repo.git", nil, "codeberg123")
 	test.equal(codeberg.tarballUrl, "https://codeberg.org/user/repo/archive/codeberg123.tar.gz")
 	test.falsy(codeberg.clone)
 
-	local bitbucket = global.planGitRepo("mypkg", "https://bitbucket.org/user/repo", nil, "bitbucket123")
+	const bitbucket = global.planGitRepo("mypkg", "https://bitbucket.org/user/repo", nil, "bitbucket123")
 	test.equal(bitbucket.tarballUrl, "https://bitbucket.org/user/repo/get/bitbucket123.tar.gz")
 	test.falsy(bitbucket.clone)
 end)
@@ -163,12 +163,12 @@ end)
 
 test.it("openEnclosingRepo finds the repository enclosing a nested package dir", function()
 	local repoDir = path.join(tmpBase, "enclosing-repo")
-	local nested = path.join(repoDir, "packages", "pkg")
+	const nested = path.join(repoDir, "packages", "pkg")
 	fs.mkdirAll(nested)
-	local created = assert(git2.init(repoDir))
+	const created = assert(git2.init(repoDir))
 	created:free()
 
-	local direct = assert(git2.open(repoDir))
+	const direct = assert(git2.open(repoDir))
 	local expectedWorkdir = direct:workdir()
 	direct:free()
 	test.truthy(expectedWorkdir) ---@cast expectedWorkdir -nil
@@ -219,7 +219,7 @@ end)
 -- Dir resolution: --tree override vs LDE_HOME vs ~/.lde
 --
 
-local savedLdeHome = env.var("LDE_HOME")
+const savedLdeHome = env.var("LDE_HOME")
 
 test.afterEach(function()
 	env.set("LDE_HOME", savedLdeHome)

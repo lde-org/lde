@@ -3,13 +3,13 @@
 -- exit non-zero; unexpected failures print the "lde crashed" screen (unit
 -- tested in lde-core/tests/error.test.lua). This file is the black-box
 -- contract against the compiled binary.
-local test = require("lde-test")
+const test = require("lde-test")
 
-local fs = require("fs")
-local env = require("env")
+const fs = require("fs")
+const env = require("env")
 local path = require("path")
-local json = require("json")
-local process = require("process")
+const json = require("json")
+const process = require("process")
 
 local ldePath = assert(env.execPath())
 
@@ -18,7 +18,6 @@ fs.rmdir(tmpBase)
 fs.mkdir(tmpBase)
 
 ---@param s string
----@return string
 local function plain(s)
 	return ((s or ""):gsub("\27%[[0-9;]*m", ""))
 end
@@ -38,7 +37,7 @@ end
 ---@param cwd string?
 local function expectCleanError(args, fragment, cwd)
 	local code, out = run(args, cwd)
-	local label = table.concat(args, " ")
+	const label = table.concat(args, " ")
 	test.truthy(code ~= 0, "expected non-zero exit for: " .. label)
 	local text = plain(out)
 	test.includes(text, fragment)
@@ -58,12 +57,12 @@ test.it("unknown command suggests a close command", function()
 	-- A partial command lists every matching name.
 	code, out = run({ "com" })
 	test.truthy(code ~= 0, "partial command must exit non-zero")
-	test.includes(plain(out), "Did you mean one of: `compile`, `completion`?")
+	test.includes(plain(tostring(out)), "Did you mean one of: `compile`, `completion`?")
 
 	-- A command far from any real name gets no suggestion.
 	code, out = run({ "frobnicate" })
 	test.truthy(code ~= 0)
-	test.falsy(plain(out):find("Did you mean", 1, true), "garbage input must not get a suggestion")
+	test.falsy(plain(tostring(out)):find("Did you mean", 1, true), "garbage input must not get a suggestion")
 end)
 
 test.it("path-like unknown command reports the missing file", function()
@@ -106,7 +105,7 @@ test.it("run error caret sits directly under the failing line", function()
 	local incidentIdx, caretIdx
 	local i = 0
 	for line in text:gmatch("[^\n]+") do
-		i = i + 1
+		i += 1
 		if line:match("^3 | foo%(%)") then incidentIdx = i end
 		if line:match("^%s*%^%^%^") then caretIdx = i end
 	end

@@ -1,8 +1,8 @@
-local fs = require("fs")
+const fs = require("fs")
 local path = require("path")
-local util = require("util")
+const util = require("util")
 
-local curl = util.lazy(|| -> require("curl-sys"))
+const curl = util.lazy(|| -> require("curl-sys"))
 
 --- Parallel download session used during dependency installation.
 ---
@@ -21,7 +21,7 @@ local curl = util.lazy(|| -> require("curl-sys"))
 --- falls back to the plain synchronous `curl.*` calls, so non-install paths
 --- (e.g. `lde install --git`, bundling, `ensureMingw`) are unaffected.
 
-local download = {}
+const download = {}
 
 ---@class download.Batch
 ---@field add fun(self: download.Batch, url: string, opts?: table): integer
@@ -47,10 +47,10 @@ local session = nil
 function download.begin(opts)
 	assert(not session, "download session already active")
 	session = {
-		batch = curl().batch({ progress = opts and opts.progress or nil }) --[[@as download.Batch]],
+		batch = curl().batch({ progress = opts?.progress }) --[[@as download.Batch]],
 		pending = {},
 		background = {},
-		archiveCache = opts and opts.archiveCache,
+		archiveCache = opts?.archiveCache,
 	}
 end
 
@@ -69,7 +69,6 @@ function download.abort()
 	session = nil
 end
 
----@return boolean true while a download session is active
 function download.active()
 	return session ~= nil
 end
@@ -128,7 +127,7 @@ local function pumpUntil(waitFor)
 		elseif not pendingNonBackground() then
 			return
 		end
-		local running = session.batch:pump()
+		const running = session.batch:pump()
 		if running > 0 then session.batch:wait(10) end
 		-- Fire completion callbacks for transfers that finished this round.
 		if session.onTransfer then
@@ -153,7 +152,7 @@ end
 --- Total-time budget for each parallel transfer. A server that accepts the
 --- connection but never finishes the body would otherwise block the batch
 --- forever (curl-sys applies no default timeout).
-local DOWNLOAD_TIMEOUT = 120 -- seconds
+const DOWNLOAD_TIMEOUT = 120 -- seconds
 
 --- Seed `destPath` from the user-level archive cache when a copy exists
 --- (keyed by destPath basename, which is URL-derived). Returns true when
@@ -254,7 +253,7 @@ end
 function download.result(destPath)
 	if not session then return nil end
 	local res = session.pending[destPath]
-	return type(res) == "table" and res or nil
+	return type(res) == "table" ? res : nil
 end
 
 return download

@@ -1,17 +1,16 @@
-local fs             = require("fs")
-local path           = require("path")
+const fs             = require("fs")
+const path           = require("path")
 local env            = require("env")
-local ffi            = require("ffi")
-local json           = require("json")
-local util           = require("util")
+const ffi            = require("ffi")
+const json           = require("json")
+const util           = require("util")
 local lua            = require("lua-sys")
-local process        = require("process")
-local rocked         = require("rocked")
+const process        = require("process")
 local ansi           = require("ansi")
-local ldetest        = require("lde-test.test")
-local coverageModule = require("lde-core.coverage")
-local teal           = require("lde-core.teal")
-local moonscript     = require("lde-core.moonscript")
+const ldetest        = require("lde-test.test")
+const coverageModule = require("lde-core.coverage")
+const teal           = require("lde-core.teal")
+const moonscript     = require("lde-core.moonscript")
 local lde            = require("lde-core")
 
 ---@class lde.TestFileResult
@@ -49,17 +48,15 @@ local function quiet(fn)
 end
 
 ---@param pkg lde.Package
----@return string luaPath
----@return string luaCPath
 local function getLuaPathsForPackage(pkg)
 	local modulesDir = pkg:getModulesDir()
 	local luaPath =
 		path.join(modulesDir, "?.lua") .. ";"
 		.. path.join(modulesDir, "?", "init.lua") .. ";"
-	local luaCPath =
-		ffi.os == "Linux"    and path.join(modulesDir, "?.so")    .. ";"
-		or ffi.os == "Windows" and path.join(modulesDir, "?.dll")  .. ";"
-		or path.join(modulesDir, "?.so") .. ";" .. path.join(modulesDir, "?.dylib") .. ";"
+	const luaCPath =
+		ffi.os == "Linux" ? path.join(modulesDir, "?.so") .. ";" :
+		ffi.os == "Windows" ? path.join(modulesDir, "?.dll") .. ";" :
+		path.join(modulesDir, "?.so") .. ";" .. path.join(modulesDir, "?.dylib") .. ";"
 	return luaPath, luaCPath
 end
 
@@ -87,8 +84,8 @@ local function runTestFile(testFile, luaPath, luaCPath, reporter, coverage)
 	local results = {}
 
 	local state = lua.new()
-	local g     = state:globals() --[[@as { package: { path: string?, cpath: string? } }]]
-	local pkg   = g.package
+	const g     = state:globals() --[[@as { package: { path: string?, cpath: string? } }]]
+	const pkg   = g.package
 	pkg.path    = luaPath
 	pkg.cpath   = luaCPath
 
@@ -102,13 +99,18 @@ local function runTestFile(testFile, luaPath, luaCPath, reporter, coverage)
 
 	-- Inject lde-test into the guest (framework source + reporter wiring) and
 	-- grab the suite runner to invoke once the test file has been evaluated.
-	local runSuite = ldetest.setup(state, reporter, {
+	const runSuite = ldetest.setup(state, reporter, {
 		file = testFile,
 		onResult = function(name, ok, skipped, err)
+			-- Each record is written as the `lde.test.Result` member it is: the alias tells the
+			-- three apart by `ok`/`skipped`, so a record has to spell that field as the value
+			-- it holds rather than as the boolean the comparison gave.
 			if skipped then
 				results[#results + 1] = { name = name, ok = true,      skipped = true }
+			elseif ok == true then
+				results[#results + 1] = { name = name, ok = true,       error = err }
 			else
-				results[#results + 1] = { name = name, ok = ok == true, error  = err   }
+				results[#results + 1] = { name = name, ok = false,      error = err }
 			end
 		end,
 	})
@@ -155,8 +157,6 @@ end
 --- LuaJIT dev tree so C rocks the harness builds (e.g. cluacov) find headers
 --- and libs. LuaRocks' own test suite drives this via the rockspec test flags
 --- `-Xhelper lua=$(LUA) -Xhelper lua_dir=$(LUA_DIR)`.
----@return string luaDir
----@return string luaBin
 local function ensureMockLuaDir()
 	local lde = require("lde-core")
 	local luaDir = path.join(lde.global.getDir(), "lua")
@@ -168,7 +168,7 @@ local function ensureMockLuaDir()
 	-- script, `-i` REPL) in a plain state honoring LUA_PATH/LUA_CPATH env.
 	-- Remove the pre-0.11 driver file this replaced, if present.
 	fs.delete(path.join(luaDir, "run-e.lua"))
-	local wrapper = "#!/bin/sh\n"
+	const wrapper = "#!/bin/sh\n"
 		.. "exec '" .. luaBin .. "' --lua \"$@\"\n"
 	local wrapperPath = path.join(luaDir, "lua")
 	fs.write(wrapperPath, wrapper)
@@ -177,7 +177,7 @@ local function ensureMockLuaDir()
 	-- Headers/libs for native rocks the harness compiles.
 	local jitTree = require("sea").getLuajitPath()
 	for _, sub in ipairs({ "include", "lib" }) do
-		local link = path.join(luaDir, sub)
+		const link = path.join(luaDir, sub)
 		if fs.exists(link) and not fs.islink(link) then
 			fs.delete(link)
 		end
@@ -205,9 +205,9 @@ end
 ---@param coverage boolean? # --coverage: run busted under luacov, which prints its own report
 ---@return lde.TestResults
 local function runRockspecTests(package, filters, coverage)
-	local spec = package.rockspecData
-	local testSpec = spec and spec.test
-	local testType = testSpec and testSpec.type or "busted"
+	const spec = package.rockspecData
+	const testSpec = spec?.test
+	const testType = testSpec?.type ?? "busted"
 
 	if not spec or testType ~= "busted" then
 		return {
@@ -234,10 +234,10 @@ local function runRockspecTests(package, filters, coverage)
 	end)
 
 	-- Per-platform flags from the rockspec's test section.
-	local platform = ffi.os == "Windows" and "windows" or "unix"
+	const platform = ffi.os == "Windows" and "windows" or "unix"
 	local rawFlags
 	if testSpec then
-		local platSpec = testSpec.platforms and testSpec.platforms[platform]
+		const platSpec = testSpec.platforms?.[platform]
 		if platSpec and platSpec.flags then
 			rawFlags = platSpec.flags
 		elseif testSpec.flags then
@@ -268,7 +268,7 @@ local function runRockspecTests(package, filters, coverage)
 	-- the entry from outside that dir so the walk stops at the main chunk and
 	-- error traces resolve normally.
 	local cliEntry = bustedBin
-	local cliSource = fs.read(bustedBin)
+	const cliSource = fs.read(bustedBin)
 	if cliSource then
 		cliEntry = path.join(modulesDir, "busted-cli.lua")
 		if fs.read(cliEntry) ~= cliSource then
@@ -292,7 +292,7 @@ local function runRockspecTests(package, filters, coverage)
 	-- paths (incl. ./?.lua) so the package's own spec/ and src/ stay reachable
 	-- (e.g. spec.util.* helpers, modules busted's --lpath prefix doesn't cover).
 	local luaPath = path.join(modulesDir, "?.lua") .. ";" .. path.join(modulesDir, "?", "init.lua") .. ";;"
-	local soExt = ffi.os == "Windows" and "?.dll" or "?.so"
+	const soExt = ffi.os == "Windows" and "?.dll" or "?.so"
 	local luaCPath = path.join(modulesDir, soExt) .. ";;"
 
 	local exitCode = process.exec(luaBin, runArgs, {
@@ -306,7 +306,7 @@ local function runRockspecTests(package, filters, coverage)
 	-- (runreport defaults to false). Run the luacov CLI afterwards to turn
 	-- luacov.stats.out into a report, then print its summary table.
 	if coverage then
-		local luacovCli = path.join(modulesDir, "luacov", "luacov")
+		const luacovCli = path.join(modulesDir, "luacov", "luacov")
 		if fs.exists(luacovCli) then
 			process.exec(luaBin, { luacovCli }, {
 				cwd = package.dir,
@@ -314,10 +314,10 @@ local function runRockspecTests(package, filters, coverage)
 				stdout = "inherit",
 				stderr = "inherit",
 			})
-			local reportPath = path.join(package.dir, "luacov.report.out")
+			const reportPath = path.join(package.dir, "luacov.report.out")
 			local report = fs.read(reportPath)
 			if report then
-				local summaryAt = report:find("\nSummary", 1, true)
+				const summaryAt = report:find("\nSummary", 1, true)
 				if summaryAt then
 					print()
 					print("Coverage report: " .. reportPath)
@@ -329,12 +329,12 @@ local function runRockspecTests(package, filters, coverage)
 
 	-- busted reports counts in its own output; the summary here is derived from
 	-- its exit code. external marks results that came from an external runner.
-	local failed = exitCode ~= 0
+	const failed = exitCode ~= 0
 	return {
 		package  = package,
 		files    = {},
-		total    = failed and 1 or 0,
-		failures = failed and 1 or 0,
+		total    = failed ? 1 : 0,
+		failures = failed ? 1 : 0,
 		skipped  = 0,
 		external = true,
 		coverageRan = coverage,
@@ -351,7 +351,7 @@ end
 --- and rapidhash hash of every file under tests/ so the copy is only refreshed
 --- when the source actually changed — the same approach build.lua uses for
 --- build inputs.
-local TEST_STAMP_FILE = ".lde-tests-stamp"
+const TEST_STAMP_FILE = ".lde-tests-stamp"
 local TEST_STAMP_VERSION = 1
 
 ---@param stampPath string
@@ -377,15 +377,15 @@ local function checkTestsInputs(testDir, stored)
 	local current = {}
 	local hasChanged = false
 	for _, rel in ipairs(fs.scan(testDir, "**")) do
-		local relKey = rel:gsub("\\", "/")
-		local abs = path.join(testDir, rel)
-		local stat = fs.stat(abs)
+		const relKey = rel:gsub("\\", "/")
+		const abs = path.join(testDir, rel)
+		const stat = fs.stat(abs)
 		if not stat then
 			hasChanged = true
 			goto continue
 		end
 		local size, mtime = tonumber(stat.size) or 0, tonumber(stat.modifyTime) or 0
-		local prev = stored[relKey]
+		const prev = stored[relKey]
 		if prev and prev.size == size and prev.mtime == mtime then
 			-- Fast path: size + mtime unchanged, the stored hash is still valid.
 			current[relKey] = prev
@@ -460,7 +460,7 @@ local function runTests(package, reporter, filters, opts)
 	local targetTestsDir = path.join(package:getModulesDir(), "tests")
 	local testsDir = testDir -- where the runner scans and executes from
 	-- Teal takes precedence over Moonscript, matching build's src/ handling.
-	local compiler = teal:hasSource(testDir) and teal
+	const compiler = teal:hasSource(testDir) and teal
 		or moonscript:hasSource(testDir) and moonscript
 		or nil
 	if compiler then
@@ -498,7 +498,7 @@ local function runTests(package, reporter, filters, opts)
 		-- Normalize into a fresh list — runTests must never mutate the
 		-- caller's table: monorepo `lde test` runs every package with the
 		-- same filters, each resolved against that package's own tests/ dir.
-		local globs = {}
+		const globs = {}
 		-- Test files execute as compiled Lua; map any .tl/.moon filter (e.g.
 		-- `lde test -- tests/foo.test.tl`) onto the compiled .lua name.
 		for _, filter in ipairs(filters) do
@@ -506,20 +506,20 @@ local function runTests(package, reporter, filters, opts)
 		end
 
 		for i, filter in ipairs(globs) do
-			local first = filter:sub(1, 1)
+			const first = filter:sub(1, 1)
 			-- A filter is treated as a project-relative path when it is
 			-- explicitly rooted ("./", "/", "C:\") or when it points at a real
 			-- file (e.g. `lde test -- tests/foo.test.lua`); anything else
 			-- stays a glob matched against paths under tests/.
-			local resolved = path.resolve(env.cwd(), filter)
+			const resolved = path.resolve(env.cwd(), filter)
 			if first == "." or first == "/" or (ffi.os == "Windows" and filter:match("^%a:\\")) or fs.exists(resolved) then
-				local rel = path.relative(testDir, resolved)
+				const rel = path.relative(testDir, resolved)
 				if rel and not rel:match("^%.%.") then
 					globs[i] = rel == "." and "*" or rel
 				end
 			end
 		end
-		local filtered = {}
+		const filtered = {}
 		for _, relPath in ipairs(testFiles) do
 			for _, glob in ipairs(globs) do
 				if string.find(relPath, fs.globToPattern(glob)) then
@@ -541,7 +541,7 @@ local function runTests(package, reporter, filters, opts)
 
 		if reporter and reporter.onFileStart then reporter.onFileStart(relativePath) end
 
-		local fileResult = runTestFile(testFile, luaPath, luaCPath, reporter, coverage)
+		const fileResult = runTestFile(testFile, luaPath, luaCPath, reporter, coverage)
 		fileResult.file  = relativePath
 
 		local failCount = 0
@@ -553,12 +553,12 @@ local function runTests(package, reporter, filters, opts)
 		end
 
 		-- A file that fails to load ran no tests, but is itself a failure.
-		local fileFailed = fileResult.error and true or false
+		const fileFailed = fileResult.error ? true : false
 		if fileFailed then failCount += 1 end
 
 		totalTests    = totalTests    + #fileResult.results - skipCount + (fileFailed and 1 or 0)
-		totalFailures = totalFailures + failCount
-		totalSkipped  = totalSkipped  + skipCount
+		totalFailures += failCount
+		totalSkipped += skipCount
 
 		files[#files + 1] = fileResult
 

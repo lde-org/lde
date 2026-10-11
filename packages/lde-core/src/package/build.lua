@@ -1,34 +1,34 @@
-local fs = require("fs")
-local path = require("path")
-local ansi = require("ansi")
-local json = require("json")
-local util = require("util")
-local process = require("process")
+const fs = require("fs")
+const path = require("path")
+const ansi = require("ansi")
+const json = require("json")
+const util = require("util")
+const process = require("process")
 local env = require("env")
-local lde = require("lde-core")
-local teal = require("lde-core.teal")
-local moonscript = require("lde-core.moonscript")
-local asyncBuild = require("lde-core.util.async-build")
-local buildLog = require("lde-core.util.build-log")
+const lde = require("lde-core")
+const teal = require("lde-core.teal")
+const moonscript = require("lde-core.moonscript")
+const asyncBuild = require("lde-core.util.async-build")
+const buildLog = require("lde-core.util.build-log")
 
 ---@type table<lde.Package, boolean>
-local currentlyBuilding = setmetatable({}, { __mode = "k" })
+const currentlyBuilding = setmetatable({}, { __mode = "k" })
 ---@type table<string, boolean>
-local alreadyBuilt = {}
+const alreadyBuilt = {}
 
 -- Stamp file written inside the build output dir. It records the size, mtime,
 -- and rapidhash hash of every build input (everything under src/, plus lde.json and
 -- build.lua) so the build script can be skipped on the next run when none of
 -- the inputs changed. The compile target is part of the stamp: switching
 -- --target must rebuild native dependencies for the new target.
-local STAMP_FILE = ".lde-build-stamp"
+const STAMP_FILE = ".lde-build-stamp"
 local STAMP_VERSION = 1
 
 ---Build inputs for a package: everything under src/, plus the config and build.lua.
 ---@param package lde.Package
 ---@return table<string, string> relative path -> absolute path
 local function collectInputFiles(package)
-	local inputs = {}
+	const inputs = {}
 	local srcDir = package:getSrcDir()
 	if fs.isdir(srcDir) then
 		for _, rel in ipairs(fs.scan(srcDir, "**")) do
@@ -62,12 +62,12 @@ end
 ---@return boolean hasChanged
 ---@return table<string, { size: number, mtime: number, hash: string }> current
 local function checkInputs(package, stampPath)
-	local stored, storedTarget = readStamp(stampPath)
+	const stored, storedTarget = readStamp(stampPath)
 	local current = {}
 	local hasChanged = storedTarget ~= lde.global.getTargetKey()
 
 	for relPath, absPath in pairs(collectInputFiles(package)) do
-		local stat = fs.stat(absPath)
+		const stat = fs.stat(absPath)
 		if not stat then
 			hasChanged = true
 			goto continue
@@ -75,7 +75,7 @@ local function checkInputs(package, stampPath)
 
 		-- fs.stat returns ffi cdata for these fields; coerce to plain numbers.
 		local size, mtime = tonumber(stat.size), tonumber(stat.modifyTime)
-		local prev = stored[relPath]
+		const prev = stored[relPath]
 		if prev and prev.size == size and prev.mtime == mtime then
 			-- Fast path: size + mtime unchanged, the stored hash is still valid.
 			current[relPath] = prev
@@ -117,9 +117,11 @@ local function buildPackage(package, destinationPath)
 	-- success, so --hot reloads kept reading a stale target after one failed
 	-- compile.
 	local ok, hasBuilt, deferred = xpcall(function()
-		destinationPath = destinationPath or path.join(package:getModulesDir(), package:getName())
+		-- The default belongs to a local of the build's own: a parameter with a declared type is
+		-- not narrowed by assigning to it, so every use below read as `string?`.
+		const dest = destinationPath or path.join(package:getModulesDir(), package:getName())
 
-		local target = path.dirname(destinationPath)
+		local target = path.dirname(dest)
 		if not fs.isdir(target) then fs.mkdir(target) end
 
 		---@type lde.install.DeferredBuild?
@@ -133,32 +135,32 @@ local function buildPackage(package, destinationPath)
 		if package:hasBuildScript() then
 		-- If a symlink exists from a previous no-build-script run, remove it
 		-- before the build script tries to write into destinationPath as a dir.
-		if fs.islink(destinationPath) then fs.delete(destinationPath) end
+		if fs.islink(dest) then fs.delete(dest) end
 
 		-- Skip re-running the build script when none of its inputs changed.
 		-- Rockspec packages (buildfn) manage their own .lde-built stamp instead.
-		local stampPath = path.join(destinationPath, STAMP_FILE)
+		local stampPath = path.join(dest, STAMP_FILE)
 		local current = nil
 		if fs.exists(package:getBuildScriptPath()) then
 			inputsChanged, current = checkInputs(package, stampPath)
 		end
 
 		if inputsChanged then
-			if fs.isdir(destinationPath) then fs.rmdir(destinationPath) end
+			if fs.isdir(dest) then fs.rmdir(dest) end
 
 			-- Key the in-process cache by target too: a cross compile after a
 			-- native build in the same process must not skip the rebuild.
-			local buildKey = destinationPath .. "\n" .. lde.global.getTargetKey()
-			local alreadyDone = alreadyBuilt[buildKey] or fs.exists(path.join(destinationPath, ".lde-built"))
-			local p = (lde.isVerbose and not alreadyDone) ? ansi.progress("Building " .. package:getName()) : nil
+			const buildKey = dest .. "\n" .. lde.global.getTargetKey()
+			const alreadyDone = alreadyBuilt[buildKey] or fs.exists(path.join(dest, ".lde-built"))
+			const p = (lde.isVerbose and not alreadyDone) ? ansi.progress("Building " .. package:getName()) : nil
 			-- Compact mode: build.lua output is hidden by default and only
 			-- dumped to a temp file if the build fails (see util/build-log).
-			local capture = (not lde.isVerbose) and buildLog.newCapture() or nil
+			const capture = (not lde.isVerbose) ? buildLog.newCapture() : nil
 
 			-- Record the input state after a successful build (or a confirmed
 			-- no-change run) so the next build can skip. For the subprocess path
 			-- this runs in the finalizer after the child exits successfully.
-			local writeStamp = function()
+			const writeStamp = function()
 				if current then
 					fs.write(stampPath, json.encode({
 						version = STAMP_VERSION,
@@ -182,24 +184,24 @@ local function buildPackage(package, destinationPath)
 				-- this is usually the first build: the output dir is created
 				-- only once the worker runs its build script. Create it up
 				-- front so the spawn succeeds on every platform.
-				if not fs.isdir(destinationPath) then fs.mkdir(destinationPath) end
-				local buildTarget = lde.global.getTarget()
-				local targetName = buildTarget and buildTarget.name or ""
+				if not fs.isdir(dest) then fs.mkdir(dest) end
+				const buildTarget = lde.global.getTarget()
+				const targetName = buildTarget?.name ?? ""
 
 				-- The worker captures its own output (compact mode) or streams
 				-- it (verbose mode, via LDE_VERBOSE). stdout stays "inherit":
 				-- the worker prints nothing unless verbose, so there is no pipe
 				-- to deadlock on.
-				local child, serr = process.spawn(ldeBin,
-					{ "__build-pkg", package:getDir(), destinationPath, targetName },
+				const child, serr = process.spawn(ldeBin,
+					{ "__build-pkg", package:getDir(), dest, targetName },
 					-- cwd = destinationPath so the worker's os.execute calls
 					-- (build:sh) resolve relative paths against the output dir,
 					-- matching the write/read/exists API.
 					{
 						stdout = "inherit",
 						stderr = "inherit",
-						cwd = destinationPath,
-						env = lde.isVerbose and { LDE_VERBOSE = "1" } or nil,
+						cwd = dest,
+						env = lde.isVerbose ? { LDE_VERBOSE = "1" } : nil,
 					})
 				if not child then ---@cast child -nil
 				end
@@ -227,7 +229,7 @@ local function buildPackage(package, destinationPath)
 							-- deterministic log path before exiting; read it
 							-- back so the failure prints the full output.
 							local msg = "build worker exited with code " .. tostring(code)
-							local logPath = buildLog.pathFor(destinationPath)
+							local logPath = buildLog.pathFor(dest)
 							if fs.exists(logPath) then
 								local content = fs.read(logPath)
 								msg ..= "\n  Full build output at " .. logPath
@@ -241,13 +243,13 @@ local function buildPackage(package, destinationPath)
 					end,
 				}
 			else
-				local ok, err, asyncFinalizer = package:runBuildScript(destinationPath, capture)
+				local ok, err, asyncFinalizer = package:runBuildScript(dest, capture)
 				if not ok and not asyncFinalizer then
 					if p then p:fail("Building " .. package:getName()) end
 					local msg = "Build script failed for package '" .. package:getName() .. "': " .. lde.error.message(err)
-					local logPath = capture and capture:write(destinationPath) or nil
+					local logPath = capture ? (capture:write(dest)) : nil
 					if logPath then msg ..= "\n  Full build output at " .. logPath end
-					local content = capture and table.concat(capture.parts) or nil
+					local content = capture ? table.concat(capture.parts) : nil
 					if content and content ~= "" then msg ..= "\n\n" .. content end
 					lde.error.raise(msg)
 				end
@@ -261,24 +263,24 @@ local function buildPackage(package, destinationPath)
 	else
 		-- Clear any previous output (symlink from a no-build-script run, or a
 		-- real dir from a build-script/Teal run) before materializing fresh.
-		if fs.islink(destinationPath) then
-			fs.delete(destinationPath)
-		elseif fs.isdir(destinationPath) then
-			fs.rmdir(destinationPath)
+		if fs.islink(dest) then
+			fs.delete(dest)
+		elseif fs.isdir(dest) then
+			fs.rmdir(dest)
 		end
 		if teal:hasSource(package:getSrcDir()) then
 			-- Teal package: compile .tl sources to .lua instead of symlinking,
 			-- so the rest of the pipeline (run/test/compile/bundle) only sees Lua.
-			teal:compileDir(package:getSrcDir(), destinationPath)
+			teal:compileDir(package:getSrcDir(), dest)
 		elseif moonscript:hasSource(package:getSrcDir()) then
-			moonscript:compileDir(package:getSrcDir(), destinationPath)
+			moonscript:compileDir(package:getSrcDir(), dest)
 		else
-			fs.mklink(package:getSrcDir(), destinationPath)
+			fs.mklink(package:getSrcDir(), dest)
 		end
 	end
 
 		return hasBuilt, deferred
-	end, function(e) return e end)
+	end, e -> e)
 
 	currentlyBuilding[package] = nil
 	if not ok then
@@ -293,10 +295,9 @@ end
 --- so `lde sync`/`lde run` rebuild a path dep whose source changed even when
 --- the root .installed marker still matches.
 ---@param package lde.Package
----@param destinationPath string
----@return boolean stale
-local function isStale(package, destinationPath)
-	local stampPath = path.join(destinationPath, STAMP_FILE)
+---@param dest string
+local function isStale(package, dest)
+	local stampPath = path.join(dest, STAMP_FILE)
 	local hasChanged, _ = checkInputs(package, stampPath)
 	return hasChanged
 end

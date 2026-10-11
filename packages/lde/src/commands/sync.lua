@@ -1,10 +1,10 @@
-local ansi = require("ansi")
-local path = require("path")
-local lde = require("lde-core")
+const ansi = require("ansi")
+const path = require("path")
+const lde = require("lde-core")
 
 ---@param args clap.Args
 local function sync(args)
-	local pkg, err = lde.Package.open()
+	const pkg, err = lde.Package.open()
 	if not pkg then
 		lde.error.raise(err)
 	end ---@cast pkg -nil
@@ -13,7 +13,7 @@ local function sync(args)
 	-- report to target/timings.html; --json switches the report to JSON
 	-- (target/timings.json) for machine/LLM consumption. --json implies
 	-- collection, so it works standalone too.
-	local wantJSON = args:flag("json")
+	const wantJSON = args:flag("json")
 	local timings = nil
 	if args:flag("timings") or wantJSON then
 		timings = lde.timings
@@ -21,39 +21,39 @@ local function sync(args)
 		timings.begin({
 			command = "sync",
 			package = pkg:getName(),
-			version = ok and version or nil,
+			version = ok ? version : nil,
 		})
 	end
 
-	local start = ansi.now()
-	local opts = { summary = true, isLocked = args:flag("locked") }
+	const start = ansi.now()
+	const opts = { summary = true, isLocked = args:flag("locked") }
 
 	-- Errors propagate to the CLI boundary, which renders them cleanly.
-	local rootBuild = timings and timings.start("build " .. pkg:getName(), "build") or nil
+	const rootBuild = timings ? timings.start("build " .. pkg:getName(), "build") : nil
 	pkg:build()
 	if timings and rootBuild then timings.finish(rootBuild) end
-	local runtime = pkg:installDependencies(nil, nil, nil, opts)
-	local dev = not args:flag("production") and pkg:installDevDependencies(opts)
+	const runtime = pkg:installDependencies(nil, nil, nil, opts)
+	const dev = not args:flag("production") and pkg:installDevDependencies(opts)
 
 	if (runtime and runtime.hasChanged) or (dev and dev.hasChanged) then
 		ansi.printf("{green}All dependencies installed successfully.")
 	else
-		local installs = (runtime and runtime.installs or 0) + (dev and dev.installs or 0)
-		local checked = (runtime and runtime.checked or 0) + (dev and dev.checked or 0)
+		local installs = (runtime?.installs ?? 0) + (dev?.installs ?? 0)
+		local checked = (runtime?.checked ?? 0) + (dev?.checked ?? 0)
 		if checked > 0 then
-			local isCached = runtime and runtime.isCached
+			const isCached = runtime?.isCached
 			local format = isCached
 				and "{gray}No changes in %d %s across %d %s (cached) (%s)"
 				or "{gray}No changes in %d %s across %d %s (%s)"
 			ansi.printf(format,
-				installs, installs == 1 and "install" or "installs",
-				checked, checked == 1 and "package" or "packages",
+				installs, installs == 1 ? "install" : "installs",
+				checked, checked == 1 ? "package" : "packages",
 				ansi.formatElapsed(ansi.now() - start))
 		end
 	end
 
 	if timings then
-		local reportPath = path.join(pkg:getModulesDir(), wantJSON and "timings.json" or "timings.html")
+		const reportPath = path.join(pkg:getModulesDir(), wantJSON and "timings.json" or "timings.html")
 		local okWrite, werr
 		if wantJSON then
 			okWrite, werr = timings.writeJSON(reportPath)

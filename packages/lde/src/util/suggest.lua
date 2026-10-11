@@ -5,17 +5,17 @@
 ---@param b string
 ---@return integer
 local function levenshtein(a, b)
-	local la, lb = #a, #b
+	const la, lb = #a, #b
 	if la == 0 then return lb end
 	if lb == 0 then return la end
 
 	local prev = {}
 	for j = 0, lb do prev[j] = j end
 	for i = 1, la do
-		local cur = { [0] = i }
-		local ai = a:byte(i)
+		const cur = { [0] = i }
+		const ai = a:byte(i)
 		for j = 1, lb do
-			local cost = ai == b:byte(j) and 0 or 1
+			const cost = ai == b:byte(j) and 0 or 1
 			cur[j] = math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost)
 		end
 		prev = cur
@@ -46,7 +46,7 @@ local function suggestCommand(name, candidates)
 
 	local best, bestDist
 	for _, c in ipairs(candidates) do
-		local dist = levenshtein(name, c)
+		const dist = levenshtein(name, c)
 		if not bestDist or dist < bestDist then
 			best, bestDist = c, dist
 		end

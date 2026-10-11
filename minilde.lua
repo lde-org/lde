@@ -169,7 +169,6 @@ end
 
 ---@param a string
 ---@param b string
----@return integer # negative when a is older than b
 local function compareVersions(a, b)
 	return compareTuple({ parseVersion(a) }, { parseVersion(b) })
 end
@@ -276,7 +275,6 @@ end
 ---@param name string
 ---@param url string
 ---@param ref string
----@return string finalDir
 local function fetchGitRepo(name, url, ref)
 	url = url:gsub("%.git$", "")
 

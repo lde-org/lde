@@ -1,15 +1,15 @@
-local ansi = require("ansi")
-local util = require("util")
+const ansi = require("ansi")
+const util = require("util")
 
-local usage = require("lde.commands.usage")
-local suggest = require("lde.util.suggest")
+const usage = require("lde.commands.usage")
+const suggest = require("lde.util.suggest")
 
 local ok, currentVersion = pcall(require, "lde.version")
 currentVersion = ok and currentVersion or "0.11.0"
 
 -- lde-core is only needed to raise the unknown-command error; load it lazily
 -- so the fast help paths (bare `lde`, `lde --help`) never pay for it.
-local lde = util.lazy(|| -> require("lde-core"))
+const lde = util.lazy(|| -> require("lde-core"))
 
 --- Render a table of options as aligned rows: "  --flag <arg>  desc".
 ---@param opts table<string, { arg?: string, desc: string }>
@@ -19,7 +19,7 @@ local function printOptions(opts)
 		local left = flag .. (info.arg and (" <" .. info.arg .. ">") or "")
 		rows[#rows + 1] = { left = left, desc = info.desc }
 	end
-	table.sort(rows, function(a, b) return a.left < b.left end)
+	table.sort(rows, |a, b| -> a.left < b.left)
 
 	local width = 0
 	for _, row in ipairs(rows) do
@@ -34,8 +34,8 @@ end
 --- Print detailed help for a single command (`lde help <command>`).
 ---@param name string
 local function forCommand(name)
-	local canonical = usage.aliases[name] or name
-	local spec = usage.commands[canonical]
+	const canonical = usage.aliases[name] or name
+	const spec = usage.commands[canonical]
 	if not spec then
 		local hint = suggest.command(name, usage.names)
 			or "Run 'lde help' to see all commands."
@@ -73,7 +73,7 @@ end
 ---@param args? clap.Args
 local function main(args)
 	if args and args:count() > 0 then
-		local target = args:pop()
+		const target = args:pop()
 		if target then
 			forCommand(target)
 			return
@@ -88,7 +88,7 @@ local function main(args)
 	---@field desc string?
 
 	---@type lde.HelpCommand[]
-	local commands = {
+	const commands = {
 			{ cmd = "help",      ex = nil,           color = "green",   desc = "Show help for a command" },
 			{ cmd = "run",       ex = nil,           color = "green",   desc = "Execute a project" },
 			{ cmd = "x",         ex = "--git <url>", color = "green",   desc = "Run a package from a git repo or path" },
@@ -133,13 +133,13 @@ local function main(args)
 		end
 	end
 
-	exW = exW + 1
+	exW += 1
 
 	-- Breathing room between the command and example columns. The footer
 	-- links pad their labels to the same total width so they line up with
 	-- the descriptions.
-	local gap = 2
-	local linkW = cmdW + gap + exW
+	const gap = 2
+	const linkW = cmdW + gap + exW
 
 	for _, command in ipairs(commands) do
 		if not command.cmd then -- Separator
@@ -159,7 +159,7 @@ end
 ---@class lde.help
 ---@field main fun(args?: clap.Args)
 ---@field forCommand fun(name: string)
-local help = {
+const help = {
 	main = main,
 	forCommand = forCommand,
 }

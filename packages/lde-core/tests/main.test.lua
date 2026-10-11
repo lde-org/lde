@@ -1,11 +1,11 @@
-local test = require("lde-test")
+const test = require("lde-test")
 
-local fs = require("fs")
-local env = require("env")
+const fs = require("fs")
+const env = require("env")
 local path = require("path")
-local json = require("json")
+const json = require("json")
 
-local lde = require("lde-core")
+const lde = require("lde-core")
 
 local tmpBase = path.join(env.tmpdir(), "lde-main-tests")
 
@@ -21,7 +21,7 @@ test.it("runtime.executeFile runs a Lua script", function()
 	local scriptPath = path.join(tmpBase, "hello.lua")
 	fs.write(scriptPath, 'return 42')
 
-	local ok, err = lde.runtime.executeFile(scriptPath)
+	local ok, _ = lde.runtime.executeFile(scriptPath)
 	test.truthy(ok)
 end)
 
@@ -45,9 +45,9 @@ test.it("runtime.executeFile supports preloaded modules", function()
 		end
 	]])
 
-	local ok, err = lde.runtime.executeFile(scriptPath, {
+	local ok, _ = lde.runtime.executeFile(scriptPath, {
 		preload = {
-			["fake-mod"] = function() return { value = 123 } end
+			["fake-mod"] = || -> { value = 123 }
 		}
 	})
 	test.truthy(ok)
@@ -64,7 +64,7 @@ test.it("runtime.executeFile supports profiling", function()
 		return s
 	]])
 
-	local ok, err = lde.runtime.executeFile(scriptPath, {
+	local ok, _ = lde.runtime.executeFile(scriptPath, {
 		profile = true
 	})
 	test.truthy(ok)
@@ -140,7 +140,7 @@ test.it("runtime.executeFile isolates globals between runs", function()
 	]])
 
 	lde.runtime.executeFile(script1)
-	local ok, err = lde.runtime.executeFile(script2)
+	local ok, _ = lde.runtime.executeFile(script2)
 	test.truthy(ok)
 end)
 
@@ -186,7 +186,7 @@ test.it("runFile: cwd is the package directory", function()
 	]])
 
 	local pkg = assert(lde.Package.open(dir))
-	local ok, err = pkg:runFile(nil, {})
+	local ok, _ = pkg:runFile(nil, {})
 	test.truthy(ok)
 	-- sentinel file should be relative to the package dir, not cwd of the test runner
 	test.truthy(fs.exists(path.join(dir, "cwd-sentinel.txt")))
@@ -242,7 +242,7 @@ test.it("runFile: runs an explicit relative file path", function()
 	}))
 
 	local pkg = assert(lde.Package.open(dir))
-	local ok, err = pkg:runFile("./scripts/hello.lua")
+	local ok, _ = pkg:runFile("./scripts/hello.lua")
 	test.truthy(ok)
 	test.truthy(fs.exists(path.join(dir, "hello-sentinel.txt")))
 end)
@@ -269,7 +269,7 @@ test.it("runFile: uses bin as default entry point when set", function()
 	fs.write(path.join(srcDir, "cli.lua"), 'return true')
 
 	local pkg = assert(lde.Package.open(dir))
-	local ok, err = pkg:runFile(nil, {})
+	local ok, _ = pkg:runFile(nil, {})
 	test.truthy(ok)
 end)
 
@@ -289,7 +289,7 @@ test.it("runFile: falls back to init.lua when bin is not set", function()
 	fs.write(path.join(srcDir, "init.lua"), 'return true')
 
 	local pkg = assert(lde.Package.open(dir))
-	local ok, err = pkg:runFile(nil, {})
+	local ok, _ = pkg:runFile(nil, {})
 	test.truthy(ok)
 end)
 
@@ -349,7 +349,7 @@ test.it("git dep: installs root package, not a sub-package, when repo has lde.js
 	-- We pre-populate the real git cache dir so getOrInitGitRepo skips cloning.
 	-- Pinning a fake commit in the dep skips the getCommitHash call entirely,
 	-- keeping the test self-contained (no real git repo needed).
-	local fakeCommit = "abc1234567890abcdef1234567890abcdef123456"
+	const fakeCommit = "abc1234567890abcdef1234567890abcdef123456"
 	local repoDir = lde.global.getGitRepoDir("my-root-pkg", fakeCommit)
 	fs.rmdir(repoDir)
 	fs.mkdir(repoDir)
@@ -438,7 +438,7 @@ test.it("installDependencies: errors when two deps share a name but have differe
 
 	-- Two physically different packages both named "shared-lib"
 	local libDirA = path.join(tmpBase, "conflict-lib-a")
-	local libDirB = path.join(tmpBase, "conflict-lib-b")
+	const libDirB = path.join(tmpBase, "conflict-lib-b")
 	for _, dir in ipairs({ libDirA, libDirB }) do
 		fs.mkdir(dir)
 		fs.mkdir(path.join(dir, "src"))
@@ -597,7 +597,7 @@ end)
 -- It's undefined behavior for lde specifically to rely on transitive deps.
 -- But regardless need to ensure it works at runtime for the actual dependencies that will use it.
 test.it("transitive dep: util is resolvable as a dependency of lde-core", function()
-	local util = require("util")
+	const util = require("util")
 	test.truthy(util)
 	test.truthy(util.dedent)
 end)

@@ -1,14 +1,14 @@
-local ansi = require("ansi")
-local fs = require("fs")
-local path = require("path")
+const ansi = require("ansi")
+const fs = require("fs")
+const path = require("path")
 
-local lde = require("lde-core")
+const lde = require("lde-core")
 
 ---@param args clap.Args
 local function bundle(args)
 	local outFile = args:option("outfile")
 
-	local pkg, err = lde.Package.open()
+	const pkg, err = lde.Package.open()
 	if not pkg then
 		lde.error.raise(err)
 	end ---@cast pkg -nil
@@ -20,7 +20,7 @@ local function bundle(args)
 	pkg:build()
 	pkg:installDependencies()
 
-	local result = pkg:bundle({ bytecode = args:flag("bytecode") })
+	const result = pkg:bundle({ bytecode = args:flag("bytecode") })
 	fs.write(outFile, result --[[@as string]])
 	ansi.printf("{green}Bundled to %s", outFile)
 end

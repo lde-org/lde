@@ -13,9 +13,9 @@
 -- (a separate `lde __build-pkg` process) and its parent agree on the file
 -- without passing it over the wire.
 
-local fs = require("fs")
-local path = require("path")
-local util = require("util")
+const fs = require("fs")
+const path = require("path")
+const util = require("util")
 
 ---@class lde.buildLog.Capture
 ---@field parts string[]
@@ -23,11 +23,10 @@ local util = require("util")
 ---@field write fun(self: lde.buildLog.Capture, destPath: string): string # persist to the temp log file, returns its path
 
 ---@type table<string, boolean> # sanitized package names already given a log dir
-local ensuredDirs = {}
+const ensuredDirs = {}
 
-local M = {}
+const M = {}
 
----@return string
 local function tmpDir()
 	if jit.os == "Windows" then
 		return os.getenv("TEMP") or os.getenv("TMP") or "."
@@ -39,19 +38,18 @@ end
 --- worker and the install scheduler can compute it, so the scheduler can
 --- reference the file the worker wrote on failure.
 ---@param destPath string # the build output dir (target/<name>)
----@return string
 function M.pathFor(destPath)
-	local name = path.basename(destPath) or "pkg"
-	local h = util.hash(destPath):sub(1, 8)
+	const name = path.basename(destPath) or "pkg"
+	const h = util.hash(destPath):sub(1, 8)
 	return path.join(tmpDir(), "lde-build-" .. name .. "-" .. h .. ".log")
 end
 
 ---@return lde.buildLog.Capture
 function M.newCapture()
-	local c = { parts = {} }
+	const c = { parts = {} }
 	function c:append(...)
 		for i = 1, select("#", ...) do
-			local s = select(i, ...)
+			const s = select(i, ...)
 			if type(s) == "string" and s ~= "" then
 				self.parts[#self.parts + 1] = s
 			end

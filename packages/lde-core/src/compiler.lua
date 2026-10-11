@@ -22,17 +22,16 @@
 ---@field spec lde.CompilerSpec
 ---@field state lua.State?
 ---@field chunk lua.Chunk?
-local Compiler = {}
+const Compiler = {}
 Compiler.__index = Compiler
 
-local fs = require("fs")
-local path = require("path")
-local lua = require("lua-sys")
+const fs = require("fs")
+const path = require("path")
+const lua = require("lua-sys")
 
-local errorMod = require("lde-core.error")
+const errorMod = require("lde-core.error")
 
 ---@param spec lde.CompilerSpec
----@return lde.Compiler
 function Compiler.new(spec)
 	return setmetatable({ spec = spec }, Compiler)
 end
@@ -51,7 +50,7 @@ end
 function Compiler:ensure()
 	if self.state then return self.state end
 
-	local ldeUtil = require("lde-core.util")
+	const ldeUtil = require("lde-core.util")
 	for attempt = 1, 2 do
 		local pkg, _, err = ldeUtil.openLuarocksPackage(self.spec.packageName)
 		if not pkg then
@@ -62,9 +61,9 @@ function Compiler:ensure()
 		pkg:installDependencies()
 
 		-- Reuse the package path setup shared by the runner and build scripts.
-		local luaPath, luaCPath = require("lde-core.package.run").getLuaPaths(pkg)
+		const luaPath, luaCPath = require("lde-core.package.run").getLuaPaths(pkg)
 		local st = lua.new()
-		local g = st:globals() --[[@as { package: { path: string?, cpath: string? } }]]
+		const g = st:globals() --[[@as { package: { path: string?, cpath: string? } }]]
 		g.package.path = luaPath
 		g.package.cpath = luaCPath
 
@@ -79,9 +78,9 @@ function Compiler:ensure()
 			errorMod.raise("The " .. self.spec.name .. " compiler installed but failed to load")
 		end
 
-		local url = ldeUtil.resolveLuarocksSource(self.spec.packageName)
+		const url = ldeUtil.resolveLuarocksSource(self.spec.packageName)
 		if url then
-			local archiveDir = require("lde-core.global").getArchiveDir(url)
+			const archiveDir = require("lde-core.global").getArchiveDir(url)
 			fs.rmdir(archiveDir)
 			fs.delete(archiveDir .. ".archive")
 		end
@@ -110,7 +109,7 @@ end
 ---@return string? err
 function Compiler:compileSource(source, file)
 	self:ensure()
-	local ok, result = pcall(self.chunk.eval, self.chunk, source, file)
+	const ok, result = pcall(self.chunk.eval, self.chunk, source, file)
 	if not ok then return nil, tostring(result) end
 	if result.err then return nil, result.err end
 	return result.code
@@ -133,7 +132,7 @@ end
 function Compiler:compileDir(srcDir, outDir)
 	self:ensure()
 	for _, rel in ipairs(fs.scan(srcDir, "**")) do
-		local absSrc = path.join(srcDir, rel)
+		const absSrc = path.join(srcDir, rel)
 		if fs.isdir(absSrc) then
 			mkdirp(path.join(outDir, rel))
 		elseif self.spec.matchSource(rel) then
@@ -154,7 +153,7 @@ function Compiler:compileDir(srcDir, outDir)
 		else
 			local outPath = path.join(outDir, rel)
 			mkdirp(path.dirname(outPath))
-			local content = fs.read(absSrc)
+			const content = fs.read(absSrc)
 			if content then fs.write(outPath, content) end
 		end
 	end

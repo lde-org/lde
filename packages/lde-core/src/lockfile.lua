@@ -1,8 +1,8 @@
-local fs = require("fs")
-local json = require("json")
-local util = require("util")
+const fs = require("fs")
+const json = require("json")
+const util = require("util")
 
-local lde = require("lde-core")
+const lde = require("lde-core")
 
 ---@class lde.Lockfile.BaseDependency
 ---@field name string?
@@ -35,11 +35,10 @@ local lde = require("lde-core")
 ---@class lde.Lockfile
 ---@field path string
 ---@field raw lde.Lockfile.Raw
-local Lockfile = {}
+const Lockfile = {}
 Lockfile.__index = Lockfile
 
 ---@param p string
----@return lde.Lockfile?
 function Lockfile.open(p)
 	local content = fs.read(p)
 	if not content then
@@ -48,7 +47,7 @@ function Lockfile.open(p)
 
 	-- A corrupt lockfile is treated as absent: the next install regenerates
 	-- it, instead of crashing every command on the package.
-	local decoded = lde.util.decodeJson(content)
+	const decoded = lde.util.decodeJson(content)
 	if not decoded then
 		return nil
 	end
@@ -91,7 +90,6 @@ end
 --- sorts the keys of tables it hasn't decoded itself, so the hash is stable
 --- regardless of key order in the manifest file.
 ---@param config lde.Package.Config
----@return string
 function Lockfile.manifestHash(config)
 	return util.hash(json.encode({
 		dependencies = config.dependencies or {},

@@ -8,7 +8,7 @@
 --                             (≡ `--git <host>/owner/repo <pkg>`)
 
 ---@type table<string, string>
-local HOSTS = {
+const HOSTS = {
 	["gh:"] = "https://github.com/",
 	["github:"] = "https://github.com/",
 	["codeberg:"] = "https://codeberg.org/",

@@ -1,38 +1,38 @@
-local json = require("json")
-local ansi = require("ansi")
-local fs = require("fs")
-local path = require("path")
+const json = require("json")
+const ansi = require("ansi")
+const fs = require("fs")
+const path = require("path")
 
-local lde = require("lde-core")
+const lde = require("lde-core")
 
 ---@param args clap.Args
 local function remove(args)
-	local name = args:pop()
+	const name = args:pop()
 	if not name then
 		lde.error.raise("Usage: lde remove <name>")
 	end ---@cast name -nil
 
-	local pkg, err = lde.Package.open()
+	const pkg, err = lde.Package.open()
 	if not pkg then
 		lde.error.raise(err)
 	end ---@cast pkg -nil
 
 	local configPath = pkg:getConfigPath()
 
-	local configRaw = fs.read(configPath)
+	const configRaw = fs.read(configPath)
 	if not configRaw then
 		lde.error.raise("Failed to read config: " .. configPath)
 	end ---@cast configRaw -nil
 
-	local config, derr = lde.util.decodeJson(configRaw)
+	const config, derr = lde.util.decodeJson(configRaw)
 	if not config then
 		lde.error.raise("Failed to parse " .. configPath .. ": " .. derr)
 	end ---@cast config -nil
 
 	-- A dependency may live in either runtime `dependencies` or `devDependencies`;
 	-- remove the name from whichever table(s) hold it.
-	local inDeps = config.dependencies and config.dependencies[name] ~= nil
-	local inDevDeps = config.devDependencies and config.devDependencies[name] ~= nil
+	const inDeps = config.dependencies and config.dependencies[name] ~= nil
+	const inDevDeps = config.devDependencies and config.devDependencies[name] ~= nil
 
 	if not inDeps and not inDevDeps then
 		ansi.printf("{yellow}Dependency does not exist: %s", name)
@@ -44,7 +44,7 @@ local function remove(args)
 
 	fs.write(configPath, json.encode(config))
 
-	local lockfile = pkg:readLockfile()
+	const lockfile = pkg:readLockfile()
 	if lockfile then
 		lockfile.raw.dependencies = lockfile.raw.dependencies or {}
 		json.removeField(lockfile.raw.dependencies, name)

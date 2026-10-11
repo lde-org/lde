@@ -1,8 +1,8 @@
-local test = require("lde-test")
+const test = require("lde-test")
 
-local fs = require("fs")
-local env = require("env")
-local path = require("path")
+const fs = require("fs")
+const env = require("env")
+const path = require("path")
 
 local tmpBase = path.join(env.tmpdir(), "lde-fs-tests")
 
@@ -22,7 +22,7 @@ test.it("fs.scan does not follow directory symlinks", function()
 
 	-- Create a symlink inside the dir that points back to the parent dir.
 	-- Without the fix this causes fs.scan to recurse infinitely.
-	local linked = path.join(dir, "loop")
+	const linked = path.join(dir, "loop")
 	fs.mklink(dir, linked)
 
 	local results = fs.scan(dir, "**.lua")

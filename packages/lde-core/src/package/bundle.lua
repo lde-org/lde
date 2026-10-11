@@ -1,11 +1,11 @@
-local fs = require("fs")
-local path = require("path")
+const fs = require("fs")
+const path = require("path")
 
-local features = require("lde-core.package.features")
+const features = require("lde-core.package.features")
 
-local lde = require("lde-core")
+const lde = require("lde-core")
 
-local stringEscapes = {
+const stringEscapes = {
 	["\\"] = "\\\\",
 	['"'] = '\\"',
 	["\n"] = "\\n",
@@ -18,16 +18,14 @@ local stringEscapes = {
 }
 
 ---@param s string
----@return string
 local function escapeString(s)
 	return (string.gsub(s, '[\\\"\n\r\t\a\b\f\v]', stringEscapes))
 end
 
 ---@param s string
----@return string
 local function escapeBytes(s)
 	return (string.gsub(s, ".", function(c)
-		local b = string.byte(c)
+		const b = string.byte(c)
 		if b >= 32 and b < 127 and c ~= '"' and c ~= '\\' then
 			return c
 		end
@@ -36,16 +34,14 @@ local function escapeBytes(s)
 end
 
 ---@param relativePath string
----@return boolean
 local function isTestFile(relativePath)
 	return relativePath:match("%.test%.lua$") ~= nil
 end
 
 ---@param content string
 ---@param chunkName string
----@return string
 local function compileBytecode(content, chunkName)
-	local fn, err = loadstring(content, chunkName)
+	const fn, err = loadstring(content, chunkName)
 	if not fn then
 		lde.error.raise("Failed to compile " .. chunkName .. ": " .. err)
 	end ---@cast fn -nil
@@ -69,7 +65,7 @@ local function bundleDir(projectName, dir, out, excludes)
 		end ---@cast content -nil
 
 		local dotted   = relativePath:gsub(path.separator, "."):gsub("%.lua$", "")
-		local stripped = dotted:gsub("%.?init$", "")
+		const stripped = dotted:gsub("%.?init$", "")
 		---@type string[]
 		local names = {}
 		if stripped ~= dotted then
@@ -96,7 +92,7 @@ end
 ---@param package lde.Package
 local function entryModuleName(package)
 	local name = package:getName()
-	local bin = package:readConfig().bin
+	const bin = package:readConfig().bin
 	if not bin then return name end
 
 	local dotted = bin:gsub("%.lua$", ""):gsub("%.tl$", ""):gsub("%.moon$", "")
@@ -110,8 +106,8 @@ end
 ---@return string|{ name: string, modules: { name: string, code: string }[] }
 local function bundlePackage(package, opts)
 	opts = opts or {}
-	local useBytecode = opts.bytecode or opts.raw
-	local raw = opts.raw
+	const useBytecode = opts.bytecode or opts.raw
+	const raw = opts.raw
 
 	---@class lde.bundle.File
 	---@field names string[] # every name this file answers to, best first
@@ -123,7 +119,7 @@ local function bundlePackage(package, opts)
 	--- the plain file has to claim the plain name before the directory's
 	--- init.lua can.
 	---@type lde.bundle.File[]
-	local topFiles = {}
+	const topFiles = {}
 	---@type lde.bundle.File[]
 	local dirFiles = {}
 	local modulesDir = package:getModulesDir()
@@ -133,15 +129,15 @@ local function bundlePackage(package, opts)
 	-- globs its own features turn on, so a package can carry several platform
 	-- backends and still ship only the one that runs. target/<alias> resolves
 	-- through the lockfile and the dependency's own manifest.
-	local excludesFor = features.resolverFor(package, opts.features)
+	const excludesFor = features.resolverFor(package, opts.features)
 
 	-- Native modules (.so/.dll/.dylib): embedded as raw bytes and extracted
 	-- next to the bundle at load time, so `require("cmod.core")` resolves
 	-- through package.cpath like it does in a normal lde project.
-	local nativeExts = jit.os == "Windows" and { "dll" }
+	const nativeExts = jit.os == "Windows" and { "dll" }
 		or (jit.os == "OSX" and { "so", "dylib" } or { "so" })
 	---@type table<string, string> # cpath-relative path ("cmod/core.so") -> bytes
-	local nativeFiles = {}
+	const nativeFiles = {}
 
 	for entry in fs.readdir(modulesDir) do
 		local p = path.join(modulesDir, entry.name)
@@ -153,7 +149,7 @@ local function bundlePackage(package, opts)
 		end
 
 		if fs.isdir(p) then
-			local excludes = excludesFor(entry.name)
+			const excludes = excludesFor(entry.name)
 			bundleDir(entry.name, p, dirFiles, excludes)
 			-- Native modules are filtered by the same feature globs: a feature
 			-- may drop a backend .so as well as the Lua that drives it, so
@@ -168,7 +164,7 @@ local function bundlePackage(package, opts)
 					local absPath = path.join(p, relativePath)
 					local content = fs.read(absPath)
 					if content then
-						local relName = relativePath:gsub("%." .. ext .. "$", "")
+						const relName = relativePath:gsub("%." .. ext .. "$", "")
 						local moduleName = relName ~= "" and (entry.name .. "." .. relName) or entry.name
 						nativeFiles[moduleName:gsub("%.", "/") .. "." .. ext] = content
 					end
@@ -209,11 +205,11 @@ local function bundlePackage(package, opts)
 	-- would recurse the moment X.lua is a forwarder to X/init.lua, which is
 	-- exactly what lgi ships.
 	---@type table<string, string>
-	local files = {}
+	const files = {}
 	---@type table<string, string[]>
-	local fileAliases = {}
+	const fileAliases = {}
 	---@type table<string, boolean>
-	local claimed = {}
+	const claimed = {}
 	---@param rec lde.bundle.File
 	local function claim(rec)
 		local primary
@@ -321,7 +317,7 @@ local function bundlePackage(package, opts)
 		-- would recurse when a sibling X.lua owns that name.
 		local list = fileAliases[moduleName]
 		if list and #list > 0 then
-			local var = "__lde_load_" .. moduleName:gsub("%W", "_")
+			const var = "__lde_load_" .. moduleName:gsub("%W", "_")
 			parts[#parts + 1] = "local " .. var .. " = " .. loader
 			parts[#parts + 1] = string.format('package.preload["%s"] = %s', moduleName, var)
 			for _, alias in ipairs(list) do

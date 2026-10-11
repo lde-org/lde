@@ -4,9 +4,9 @@
 -- is printed to stdout. No output means "no suggestions" — the shell scripts
 -- fall back to file completion.
 
-local usage = require("lde.commands.usage")
-local fs = require("fs")
-local json = require("json")
+const usage = require("lde.commands.usage")
+const fs = require("fs")
+const json = require("json")
 
 ---@param flag string
 ---@return boolean
@@ -38,14 +38,14 @@ local function fileCandidates(cur)
 	if not dir then
 		dir, prefix = ".", cur
 	end
-	local entries = fs.readdir(dir)
+	const entries = fs.readdir(dir)
 	if not entries then return {} end
 	local out = {}
 	for entry in entries do
 		local name = entry.name
 		if prefix == "" or name:sub(1, #prefix) == prefix then
-			local candidate = dir == "." and name or (dir .. name)
-			out[#out + 1] = entry.type == "dir" and (candidate .. "/") or candidate
+			const candidate = dir == "." ? name : (dir .. name)
+			out[#out + 1] = entry.type == "dir" ? (candidate .. "/") : candidate
 		end
 	end
 	table.sort(out)
@@ -57,11 +57,11 @@ end
 --- there is no readable manifest.
 ---@return string[]?
 local function scriptNames()
-	local content = fs.read("lpm.json") or fs.read("lde.json")
+	const content = fs.read("lpm.json") or fs.read("lde.json")
 	if not content then return nil end
-	local ok, config = pcall(json.decode, content)
+	const ok, config = pcall(json.decode, content)
 	if not ok or type(config) ~= "table" then return nil end
-	local scripts = config.scripts
+	const scripts = config.scripts
 	if type(scripts) ~= "table" then return nil end
 	local out = {}
 	for name in pairs(scripts) do
@@ -97,8 +97,8 @@ end
 ---@param args clap.Args
 local function complete(args)
 	local words = args:drain()
-	local n = #words
-	local cur = n > 0 and words[n] or ""
+	const n = #words
+	const cur = n > 0 and words[n] or ""
 
 	-- `--` (as its own word) starts the positional args: nothing to complete.
 	for i = 1, n - 1 do
@@ -162,7 +162,7 @@ local function complete(args)
 	local command
 	local skipValue = false
 	for i = 1, n - 1 do
-		local w = words[i]
+		const w = words[i]
 		if skipValue then
 			skipValue = false
 		elseif isValueFlag(w) then
@@ -181,7 +181,7 @@ local function complete(args)
 		return
 	end
 
-	local spec = command and (usage.commands[command] or usage.commands[usage.aliases[command]])
+	const spec = command and (usage.commands[command] or usage.commands[usage.aliases[command]])
 	if spec and cur:sub(1, 1) == "-" then
 		local flags = {}
 		for flag in pairs(spec.options or {}) do

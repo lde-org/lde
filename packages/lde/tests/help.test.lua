@@ -1,6 +1,6 @@
-local test = require("lde-test")
+const test = require("lde-test")
 
-local ldecli = require("tests.lib.ldecli")
+const ldecli = require("tests.lib.ldecli")
 
 test.it("lde --help shows the main help", function()
 	local ok, out = ldecli { "--help" }

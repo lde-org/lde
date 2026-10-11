@@ -1,8 +1,8 @@
 -- Registry unit tests. Every dependency is injected through the constructor,
 -- so these tests run with in-memory fakes: no network, no real ~/.lde writes.
-local test = require("lde-test")
+const test = require("lde-test")
 
-local Registry = require("lde-registry")
+const Registry = require("lde-registry")
 
 local path = require("path")
 local semver = require("semver")
@@ -16,7 +16,6 @@ local semver = require("semver")
 local function fakeFs(files)
 	files = files or {}
 	---@param p string
-	---@return string
 	local function norm(p)
 		return (p:gsub("[\\/]", "/"))
 	end
@@ -27,7 +26,7 @@ local function fakeFs(files)
 		exists = function(p)
 			return files[norm(p)] ~= nil
 		end,
-		mkdir = function() return true end,
+		mkdir = || -> true,
 	}
 end
 
@@ -200,17 +199,17 @@ test.it("sync clones when the registry dir is missing", function()
 	local clones, opens = 0, 0
 	local registry = Registry.new({
 		dirFn = function() return "/fake/registry" end,
-		fs = { read = function() return nil end, exists = function() return false end },
+		fs = { read = || -> nil, exists = || -> false },
 		path = path,
 		semver = semver,
 		git = function()
 			return {
 				clone = function()
-					clones = clones + 1
+					clones += 1
 					return { updateSubmodules = function() end }, nil
 				end,
 				open = function()
-					opens = opens + 1
+					opens += 1
 					return { pull = function() end }
 				end,
 			}
@@ -226,17 +225,17 @@ test.it("sync pulls when the registry dir exists", function()
 	local clones, opens = 0, 0
 	local registry = Registry.new({
 		dirFn = function() return "/fake/registry" end,
-		fs = { read = function() return nil end, exists = function() return true end },
+		fs = { read = || -> nil, exists = || -> true },
 		path = path,
 		semver = semver,
 		git = function()
 			return {
 				clone = function()
-					clones = clones + 1
+					clones += 1
 					return { updateSubmodules = function() end }, nil
 				end,
 				open = function()
-					opens = opens + 1
+					opens += 1
 					return { pull = function() end }
 				end,
 			}
@@ -251,7 +250,7 @@ test.it("sync raises when the clone fails", function()
 	local raised
 	local registry = Registry.new({
 		dirFn = function() return "/fake/registry" end,
-		fs = { read = function() return nil end, exists = function() return false end },
+		fs = { read = || -> nil, exists = || -> false },
 		path = path,
 		semver = semver,
 		raise = function(msg) raised = msg; error(msg, 0) end,
@@ -259,7 +258,7 @@ test.it("sync raises when the clone fails", function()
 			return { clone = function() return nil, "network down" end }
 		end,
 	})
-	local ok, err = pcall(function() registry:sync() end)
+	local ok, _ = pcall(function() registry:sync() end)
 	test.falsy(ok)
 	test.truthy(raised and raised:find("Failed to clone lde registry", 1, true))
 end)
@@ -267,7 +266,7 @@ end)
 test.it("sync is a no-op without a git provider", function()
 	local registry = Registry.new({
 		dirFn = function() return "/fake/registry" end,
-		fs = { read = function() return nil end, exists = function() return false end },
+		fs = { read = || -> nil, exists = || -> false },
 		path = path,
 		semver = semver,
 	})

@@ -1,12 +1,12 @@
 -- JIT diagnostics (`lde run --jit`): trace aborts — code that could not be
 -- JIT-compiled — must be reported with the compiler's reason and a source
 -- location, plus an end-of-run summary.
-local test = require("lde-test")
+const test = require("lde-test")
 
-local fs = require("fs")
-local env = require("env")
-local path = require("path")
-local process = require("process")
+const fs = require("fs")
+const env = require("env")
+const path = require("path")
+const process = require("process")
 
 local ldePath = assert(env.execPath())
 
@@ -15,7 +15,6 @@ fs.rmdir(tmpBase)
 fs.mkdir(tmpBase)
 
 ---@param s string
----@return string
 local function plain(s)
 	return ((s or ""):gsub("\27%[[0-9;]*m", ""))
 end
@@ -25,7 +24,7 @@ end
 -- before the loop also exercises the snippet renderer (a splitter that
 -- miscounts blank lines would show the wrong line's content). Deterministic
 -- across LuaJIT builds.
-local FNEW_APP = [[
+const FNEW_APP = [[
 local x = function() end
 
 for i = 1, 100000 do

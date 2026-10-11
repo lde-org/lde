@@ -1,20 +1,20 @@
-local path = require("path")
-local fs = require("fs")
-local util = require("util")
-local ansi = require("ansi")
+const path = require("path")
+const fs = require("fs")
+const util = require("util")
+const ansi = require("ansi")
 
-local lde = require("lde-core")
+const lde = require("lde-core")
 
-local git2 = util.lazy(|| -> require("git2-sys"))
+const git2 = util.lazy(|| -> require("git2-sys"))
 
-local Package = require("lde-core.package")
+const Package = require("lde-core.package")
 
 local function hasGit()
 	return true
 end
 
 ---@type string
-local AGENT_TEMPLATE = util.dedent([[
+const AGENT_TEMPLATE = util.dedent([[
 # Using lde
 
 This project is built using lde. Read https://lde.sh/llms.txt for everything you need
@@ -27,18 +27,18 @@ to know about building, running, handling dependencies and running tests.
 --- `where`/`command` subprocesses per Package.init is needlessly slow.
 ---@param name string
 local function hasBinary(name)
-	local pathVar = os.getenv("PATH") or ""
-	local sep = jit.os == "Windows" and ";" or ":"
+	const pathVar = os.getenv("PATH") or ""
+	const sep = jit.os == "Windows" and ";" or ":"
 	for dir in pathVar:gmatch("[^" .. sep .. "]+") do
 		if dir ~= "" then
-			local base = path.join(dir, name)
+			const base = path.join(dir, name)
 			if jit.os == "Windows" then
 				if fs.exists(base) or fs.exists(base .. ".exe")
 					or fs.exists(base .. ".cmd") or fs.exists(base .. ".bat") then
 					return true
 				end
 			else
-				local stat = fs.stat(base)
+				const stat = fs.stat(base)
 				if stat and (stat.mode ?? 0) & 0x49 ~= 0 then -- any exec bit
 					return true
 				end
@@ -56,7 +56,7 @@ local function isInsideGitRepo(dir)
 		if repo then
 			if repo:workdir() ~= nil then return true end
 		end
-		local parent = path.dirname(current)
+		const parent = path.dirname(current)
 		if parent == current then break end
 		current = parent
 	end
@@ -145,7 +145,7 @@ local function initPackage(dir, opts)
 		lde.error.raise("Unknown project type: " .. projectType .. " (expected 'blank' or 'library')")
 	end
 
-	local language = opts.language or "lua"
+	const language = opts.language or "lua"
 	if language ~= "lua" and language ~= "teal" and language ~= "moonscript" then
 		lde.error.raise("Unknown language: " .. language .. " (expected 'lua', 'teal', or 'moonscript')")
 	end
@@ -186,7 +186,7 @@ local function initPackage(dir, opts)
 	configLines[#configLines + 1] = '}'
 	writeText(configPath, table.concat(configLines, "\n"))
 
-	local idealGitignore = util.dedent([[
+	const idealGitignore = util.dedent([[
 		/target/
 	]])
 
@@ -252,14 +252,14 @@ local function initPackage(dir, opts)
 		end
 	end
 
-	local package = Package.open(dir)
+	const package = Package.open(dir)
 	if not package then
 		lde.error.raise("Failed to initialize package at directory: " .. dir)
 	end ---@cast package -nil
 
 	local src = package:getSrcDir()
 	if not fs.exists(src) then
-		local entryFile = language == "teal" and "init.tl"
+		const entryFile = language == "teal" and "init.tl"
 			or language == "moonscript" and "init.moon"
 			or "init.lua"
 

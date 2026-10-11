@@ -1,12 +1,12 @@
-local test = require("lde-test")
+const test = require("lde-test")
 
-local fs = require("fs")
-local env = require("env")
+const fs = require("fs")
+const env = require("env")
 local path = require("path")
-local json = require("json")
-local process = require("process")
+const json = require("json")
+const process = require("process")
 
-local ldecli = require("tests.lib.ldecli")
+const ldecli = require("tests.lib.ldecli")
 
 local tmpBase = path.join(env.tmpdir(), "lde-add-tests")
 fs.rmdir(tmpBase)
@@ -29,7 +29,6 @@ end
 --- (lsRemote + clone both work on local paths). Returns the repo dir.
 ---@param name string # repo dir name
 ---@param pkgName string? # package name in the repo's lde.json (defaults to name)
----@return string
 local function makeGitRepo(name, pkgName)
 	local repoDir = path.join(tmpBase, name)
 	fs.rmdir(repoDir)
@@ -43,7 +42,7 @@ local function makeGitRepo(name, pkgName)
 	}))
 	assert(process.exec("git", { "init", "-q" }, { cwd = repoDir }), "git init failed")
 	process.exec("git", { "add", "-A" }, { cwd = repoDir })
-	local code = process.exec(
+	const code = process.exec(
 		"git", { "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "init" },
 		{ cwd = repoDir })
 	assert(code == 0, "git commit failed: " .. tostring(code))
@@ -135,7 +134,7 @@ test.it("lde add --dev --path adds to devDependencies not dependencies", functio
 	test.truthy(config.devDependencies, "devDependencies should exist")
 	test.truthy(config.devDependencies["mylib"], "mylib should be in devDependencies")
 	test.equal(config.devDependencies["mylib"].path, "../mylib")
-	test.falsy(config.dependencies and config.dependencies["mylib"], "mylib should not be in dependencies")
+	test.falsy(config.dependencies?.["mylib"], "mylib should not be in dependencies")
 end)
 
 test.it("lde add --dev creates devDependencies if not present in config", function()
@@ -148,7 +147,7 @@ test.it("lde add --dev creates devDependencies if not present in config", functi
 	ldecli({ "add", "mylib", "--dev", "--path", "../mylib" }, dir)
 
 	local raw = fs.read(path.join(dir, "lde.json")) ---@cast raw -nil
-	local updated = json.decode(raw) ---@cast updated table<string, any>
+	const updated = json.decode(raw) ---@cast updated table<string, any>
 	test.truthy(updated.devDependencies, "devDependencies should be created")
 	test.truthy(updated.devDependencies["mylib"], "mylib should be in devDependencies")
 end)
@@ -163,7 +162,7 @@ test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde add --dev --git adds git dep to
 	test.truthy(config.devDependencies, "devDependencies should exist")
 	test.truthy(config.devDependencies["mypkg"], "mypkg should be in devDependencies")
 	test.equal(config.devDependencies["mypkg"].git, repoDir)
-	test.falsy(config.dependencies and config.dependencies["mypkg"], "mypkg should not be in dependencies")
+	test.falsy(config.dependencies?.["mypkg"], "mypkg should not be in dependencies")
 end)
 
 test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde add --dev --git --branch stores branch in devDependencies", function()
@@ -248,7 +247,7 @@ test.it("lde add --dev <name> resolves a registry dep into devDependencies", fun
 	local dep = config.devDependencies["add-dev-reg"]
 	test.truthy(dep, "add-dev-reg should be in devDependencies")
 	test.equal(dep.version, "^2.0.0", "a bare add floats from the newest version")
-	test.falsy(config.dependencies and config.dependencies["add-dev-reg"], "add-dev-reg should not be in dependencies")
+	test.falsy(config.dependencies?.["add-dev-reg"], "add-dev-reg should not be in dependencies")
 	test.includes(out, "dev dependency")
 end)
 
@@ -289,20 +288,20 @@ test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde add --git pins the commit in th
 
 	-- The commit is auto-pinned by add itself (lsRemote at add time): the
 	-- lockfile is created immediately and carries the resolved HEAD sha.
-	local lockPath = path.join(dir, "lde.lock")
+	const lockPath = path.join(dir, "lde.lock")
 	test.truthy(fs.exists(lockPath), "lde add --git must create the lockfile")
 	local lockRaw = fs.read(lockPath) ---@cast lockRaw -nil
 	local lock = json.decode(lockRaw) ---@cast lock table<string, any>
 	local entry = lock.dependencies["addgit"]
-	test.truthy(entry and entry.commit, "add must pin the commit immediately")
+	test.truthy(entry?.commit, "add must pin the commit immediately")
 	test.truthy(entry.commit:match("^%x+$"), "expected a hex commit sha")
 	test.equal(entry.git, repoDir)
 
 	-- sync reuses the add-time pin (no re-resolution) and installs the dep.
 	local ok2, out2 = ldecli({ "sync" }, dir)
 	test.truthy(ok2, "sync failed: " .. tostring(out2))
-	local lockAfterRaw = fs.read(lockPath) ---@cast lockAfterRaw -nil
-	local lockAfter = json.decode(lockAfterRaw) ---@cast lockAfter table<string, any>
+	const lockAfterRaw = fs.read(lockPath) ---@cast lockAfterRaw -nil
+	const lockAfter = json.decode(lockAfterRaw) ---@cast lockAfter table<string, any>
 	test.equal(lockAfter.dependencies["addgit"].commit, entry.commit, "sync must keep the add-time pin")
 	test.truthy(fs.exists(path.join(dir, "target", "addgit", "init.lua")))
 end)

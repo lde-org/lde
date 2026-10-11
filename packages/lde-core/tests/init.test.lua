@@ -1,11 +1,11 @@
-local test = require("lde-test")
+const test = require("lde-test")
 
-local lde = require("lde-core")
+const lde = require("lde-core")
 
-local fs = require("fs")
-local env = require("env")
-local path = require("path")
-local git2 = require("git2-sys")
+const fs = require("fs")
+const env = require("env")
+const path = require("path")
+const git2 = require("git2-sys")
 
 local tmpBase = path.join(env.tmpdir(), "lde-init-tests")
 
@@ -161,7 +161,7 @@ test.it("Package.init teal projects write a .tl entry point, check script, and t
 
 	local pkg = assert(lde.Package.open(dir))
 	local config = pkg:readConfig()
-	local check = config.scripts and config.scripts.check
+	local check = config.scripts?.check
 	test.truthy(check)
 	if check then
 		test.includes(check, "ldx rocks:tl check -I target")
@@ -333,14 +333,14 @@ test.it("Package.init rejects unknown types and languages", function()
 	fs.mkdir(tmpBase)
 	local badType = path.join(tmpBase, "bad-type")
 	fs.mkdir(badType)
-	local badOpts = { type = "bogus" } ---@type any
+	const badOpts = { type = "bogus" } ---@type any
 	local ok, err = pcall(lde.Package.init, badType, badOpts)
 	test.falsy(ok)
 	test.truthy(err)
 
 	local badLang = path.join(tmpBase, "bad-lang")
 	fs.mkdir(badLang)
-	local badLangOpts = { language = "rust" } ---@type any
+	const badLangOpts = { language = "rust" } ---@type any
 	local ok2, err2 = pcall(lde.Package.init, badLang, badLangOpts)
 	test.falsy(ok2)
 	test.truthy(err2)
@@ -384,7 +384,7 @@ test.it("Package.init rejects the reserved 'tests' name", function()
 	end
 
 	-- The directory basename is checked too.
-	local testsDir = path.join(tmpBase, "tests")
+	const testsDir = path.join(tmpBase, "tests")
 	fs.mkdir(testsDir)
 	local ok2, err2 = pcall(lde.Package.init, testsDir)
 	test.falsy(ok2)

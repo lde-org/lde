@@ -1,17 +1,17 @@
-local ansi = require("ansi")
-local fs = require("fs")
-local path = require("path")
-local process = require("process")
+const ansi = require("ansi")
+const fs = require("fs")
+const path = require("path")
+const process = require("process")
 
-local lde = require("lde-core")
+const lde = require("lde-core")
 
 ---@param ldeDir string
 ---@param toolsDir string
 local function updatePath(ldeDir, toolsDir)
 	if jit.os == "Windows" then
 		-- Read current user PATH, append missing dirs, write back via PowerShell
-		local getCmd = '[Environment]::GetEnvironmentVariable("Path","User")'
-		local code, stdout, stderr = process.exec("powershell", { "-NoProfile", "-Command", getCmd })
+		const getCmd = '[Environment]::GetEnvironmentVariable("Path","User")'
+		const code, stdout =  process.exec("powershell", { "-NoProfile", "-Command", getCmd })
 		if code ~= 0 then
 			ansi.printf("{red}Failed to read user PATH from registry")
 			return
@@ -31,10 +31,10 @@ local function updatePath(ldeDir, toolsDir)
 			return
 		end
 
-		local sep = (currentPath ~= "" and not currentPath:match(";$")) and ";" or ""
-		local newPath = currentPath .. sep .. table.concat(dirsToAdd, ";")
-		local setCmd = string.format('[Environment]::SetEnvironmentVariable("Path","%s","User")', newPath)
-		local setChild, setErr = process.spawn("powershell", { "-NoProfile", "-Command", setCmd })
+		const sep = (currentPath ~= "" and not currentPath:match(";$")) and ";" or ""
+		const newPath = currentPath .. sep .. table.concat(dirsToAdd, ";")
+		const setCmd = string.format('[Environment]::SetEnvironmentVariable("Path","%s","User")', newPath)
+		const setChild, setErr = process.spawn("powershell", { "-NoProfile", "-Command", setCmd })
 		if not setChild then
 			ansi.printf("{red}Failed to update PATH: %s", setErr or "unknown error")
 			return
@@ -48,21 +48,21 @@ local function updatePath(ldeDir, toolsDir)
 		-- Unix: patch the first shell rc file that already mentions the lde
 		-- home, or the first that exists among the standard candidates.
 		local home = os.getenv("HOME") or ""
-		local ldeHome = os.getenv("LDE_HOME")
+		const ldeHome = os.getenv("LDE_HOME")
 		-- When LDE_HOME is set, tools live there rather than under ~/.lde, so
 		-- the PATH entry references $LDE_HOME (dynamic, like $HOME below) and
 		-- rc detection keys on the LDE_HOME marker — repeated setups must not
 		-- append duplicate lines.
-		local hasLdeHome = ldeHome ~= nil and ldeHome ~= ""
-		local homeRef = hasLdeHome and "$LDE_HOME" or "$HOME/.lde"
-		local marker = hasLdeHome and "LDE_HOME" or ".lde"
+		const hasLdeHome = ldeHome ~= nil and ldeHome ~= ""
+		const homeRef = hasLdeHome ? "$LDE_HOME" : "$HOME/.lde"
+		local marker = hasLdeHome ? "LDE_HOME" : ".lde"
 		-- gsub takes a pattern: the dot in ".lde" must be escaped there.
-		local patternMarker = hasLdeHome and "LDE_HOME" or "%.lde"
-		local pathLine = 'export PATH="' .. homeRef .. ':' .. homeRef .. '/tools:$PATH"'
+		const patternMarker = hasLdeHome ? "LDE_HOME" : "%.lde"
+		const pathLine = 'export PATH="' .. homeRef .. ':' .. homeRef .. '/tools:$PATH"'
 
-		local defaultRc = jit.os == "OSX" and (home .. "/.zshrc") or (home .. "/.profile")
+		const defaultRc = jit.os == "OSX" and (home .. "/.zshrc") or (home .. "/.profile")
 
-		local rcFiles = {
+		const rcFiles = {
 			home .. "/.zshrc",
 			home .. "/.zprofile",
 			home .. "/.bashrc",

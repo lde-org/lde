@@ -1,4 +1,4 @@
-local ffi = require("ffi")
+const ffi = require("ffi")
 
 -- Typed views over the ffi.cdef structs below (the LS can't see cdef fields).
 ---@class ansi.ffi.LARGE_INTEGER: ffi.cdata*
@@ -15,9 +15,9 @@ local now
 do
 	if ffi.os == "Windows" then
 		pcall(ffi.cdef, "int _isatty(int fd);")
-		local ok, result = pcall(function() return ffi.C._isatty(1) ~= 0 end)
+		local ok, result = pcall(|| -> ffi.C._isatty(1) ~= 0)
 		if ok then isTTY = result end
-		local okErr, resultErr = pcall(function() return ffi.C._isatty(2) ~= 0 end)
+		local okErr, resultErr = pcall(|| -> ffi.C._isatty(2) ~= 0)
 		if okErr then isStderrTTY = resultErr end
 
 		if isTTY or isStderrTTY then
@@ -36,10 +36,10 @@ do
 			---@param nStdHandle number # STD_OUTPUT_HANDLE (-11) or STD_ERROR_HANDLE (-12)
 			local function enableVirtualTerminal(nStdHandle)
 				pcall(function()
-					local kernel32 = ffi.load("kernel32")
-					local ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004
+					const kernel32 = ffi.load("kernel32")
+					const ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004
 					local hOut = kernel32.GetStdHandle(ffi.cast("DWORD", nStdHandle))
-					local mode = ffi.new("DWORD[1]")
+					const mode = ffi.new("DWORD[1]")
 					-- GetConsoleMode fails when the handle isn't a console (redirected),
 					-- in which case there's nothing to enable.
 					if kernel32.GetConsoleMode(hOut, mode) ~= 0 then
@@ -56,7 +56,7 @@ do
 			int QueryPerformanceCounter(LARGE_INTEGER *lpPerformanceCount);
 			int QueryPerformanceFrequency(LARGE_INTEGER *lpFrequency);
 		]])
-		local freqOk, freq = pcall(function()
+		const freqOk, freq = pcall(function()
 			local f = ffi.new("LARGE_INTEGER")
 			ffi.C.QueryPerformanceFrequency(f)
 			return tonumber(f --[[@as ansi.ffi.LARGE_INTEGER]].val)
@@ -70,9 +70,9 @@ do
 		end
 	else
 		pcall(ffi.cdef, "int isatty(int fd);")
-		local ok, result = pcall(function() return ffi.C.isatty(1) ~= 0 end)
+		local ok, result = pcall(|| -> ffi.C.isatty(1) ~= 0)
 		if ok then isTTY = result end
-		local okErr, resultErr = pcall(function() return ffi.C.isatty(2) ~= 0 end)
+		local okErr, resultErr = pcall(|| -> ffi.C.isatty(2) ~= 0)
 		if okErr then isStderrTTY = resultErr end
 
 		pcall(ffi.cdef, "typedef struct { long tv_sec; long tv_nsec; } timespec;")
@@ -85,7 +85,7 @@ do
 		local CLOCK_MONOTONIC = ffi.os == "OSX" and 6
 			or ffi.os == "BSD" and 4
 			or 1
-		local clockOk = pcall(function()
+		const clockOk = pcall(function()
 			local t = ffi.new("timespec")
 			-- Verify the clock id actually works (returns 0), not just that the
 			-- call doesn't crash: a wrong id would silently zero the struct.
@@ -95,7 +95,7 @@ do
 			now = function()
 				local t = ffi.new("timespec")
 				ffi.C.clock_gettime(CLOCK_MONOTONIC, t)
-				local ts = t --[[@as ansi.ffi.timespec]]
+				const ts = t --[[@as ansi.ffi.timespec]]
 				return tonumber(ts.tv_sec) + tonumber(ts.tv_nsec) * 1e-9
 			end
 		end
@@ -103,7 +103,7 @@ do
 	if not now then now = os.clock end
 end
 
-local ansi = {}
+const ansi = {}
 
 -- When true, ansi.progress() returns a silent handle. The test runner sets it
 -- while installing dependencies so compact install bars and one-off downloads
@@ -119,7 +119,7 @@ ansi.isQuiet = false
 ansi.isStderrTTY = isStderrTTY
 
 --- Shared no-op progress handle returned in quiet mode.
-local silentProgress = {
+const silentProgress = {
 	update = function() end,
 	setLabel = function() end,
 	done = function() end,
@@ -149,7 +149,7 @@ local silentProgress = {
 --- | "bg_gray"
 
 ---@type table<ansi.Color, string>
-local colors = {
+const colors = {
 	reset = "\27[0m",
 	red = "\27[31m",
 	green = "\27[32m",
@@ -184,12 +184,12 @@ if not colorEnabled and (os.getenv("GITHUB_ACTIONS") == "true" or os.getenv("GIT
 	colorEnabled = true
 end
 
-local noColor = os.getenv("NO_COLOR")
+const noColor = os.getenv("NO_COLOR")
 if noColor and noColor ~= "0" then
 	colorEnabled = false
 end
 
-local forceColor = os.getenv("CLICOLOR_FORCE")
+const forceColor = os.getenv("CLICOLOR_FORCE")
 if forceColor and forceColor ~= "0" then
 	colorEnabled = true
 end
@@ -217,7 +217,7 @@ function ansi.printf(f, ...)
 end
 
 -- ANSI escape helpers
-local ESC = "\27["
+const ESC = "\27["
 
 -- Terminal width in columns. Used by ansi.progress to clear live lines that
 -- wrapped to multiple physical rows (a long label/bar on a narrow terminal);
@@ -252,8 +252,8 @@ do
 		pcall(ffi.cdef, "int ioctl(int fd, unsigned long request, void* argp);")
 		pcall(function()
 			-- TIOCGWINSZ: Linux/Android = 0x5413, macOS/BSD = 0x40087468.
-			local TIOCGWINSZ = (jit.os == "OSX" or jit.os == "BSD") and 0x40087468 or 0x5413
-			local ws = ffi.new("uint16_t[4]") -- ws_row, ws_col, ws_xpixel, ws_ypixel
+			local TIOCGWINSZ = (jit.os == "OSX" or jit.os == "BSD") ? 0x40087468 : 0x5413
+			const ws = ffi.new("uint16_t[4]") -- ws_row, ws_col, ws_xpixel, ws_ypixel
 			if ffi.C.ioctl(1, TIOCGWINSZ, ws) == 0 and tonumber(ws[1]) > 0 then
 				columns = math.floor(tonumber(ws[1]) or 80)
 			end
@@ -282,7 +282,7 @@ end
 -- setLabel(msg) — swap the label shown by the spinner and used by done/fail.
 -- done(msg) / fail(msg) — finalize with checkmark or cross.
 
-local BAR_WIDTH = 20
+const BAR_WIDTH = 20
 
 ---@param seconds number
 local function formatElapsed(seconds)
@@ -294,7 +294,7 @@ local function formatElapsed(seconds)
 		return string.format("%.1fs", seconds)
 	else
 		local m = math.floor(seconds / 60)
-		local s = math.floor(seconds % 60)
+		const s = math.floor(seconds % 60)
 		return string.format("%dm%ds", m, s)
 	end
 end
@@ -310,19 +310,19 @@ local function renderBar(ratio)
 	if filled < 0 then filled = 0 end
 	if filled > BAR_WIDTH then filled = BAR_WIDTH end
 
-	local body = string.rep("=", filled)
-	local head = filled < BAR_WIDTH and ">" or ""
+	const body = string.rep("=", filled)
+	const head = filled < BAR_WIDTH ? ">" : ""
 	local colored = body .. head
 	if colored ~= "" then
 		-- colors[] entries are empty strings when colors are disabled, so this
 		-- is a no-op there.
-		local step = ratio < 0.25 and "red"
+		const step = ratio < 0.25 and "red"
 			or ratio < 0.5 and "orange"
 			or ratio < 0.75 and "yellow"
 			or "green"
 		colored = colors[step] .. colored .. colors.reset
 	end
-	local rest = string.rep(" ", BAR_WIDTH - filled - (head ~= "" and 1 or 0))
+	const rest = string.rep(" ", BAR_WIDTH - filled - (head ~= "" ? 1 : 0))
 	return colors.gray .. "[" .. colors.reset .. colored .. rest .. colors.gray .. "]" .. colors.reset
 end
 
@@ -342,7 +342,7 @@ end
 ---@return ansi.Progress
 function ansi.progress(label, opts)
 	if ansi.isQuiet then return silentProgress end
-	local stream = opts and opts.stream or "stderr"
+	const stream = opts?.stream ?? "stderr"
 	local out = stream == "stdout" ? io.stdout : io.stderr
 	local isTerminal = stream == "stdout" ? isTTY : ansi.isStderrTTY
 	local startTime = now()
@@ -392,7 +392,7 @@ function ansi.progress(label, opts)
 	local function render(ratio, info)
 		lastRatio, lastInfo = ratio, info
 		local barStr = renderBar(ratio)
-		local pct = ratio ? string.format("%3d%%", math.floor(ratio * 100)) : nil
+		const pct = ratio ? string.format("%3d%%", math.floor(ratio * 100)) : nil
 		local elapsed = formatElapsed(now() - startTime)
 
 		if pct == lastRendered then return end
@@ -412,7 +412,7 @@ function ansi.progress(label, opts)
 		out:flush()
 		-- Bytes == display columns for the ASCII frame; how many rows the next
 		-- clear must cover if the line wrapped.
-		local plain = line:gsub("\27%[[0-9;]*[A-Za-z]", "")
+		const plain = line:gsub("\27%[[0-9;]*[A-Za-z]", "")
 		lastLines = math.ceil(#plain / columns)
 	end
 
@@ -457,7 +457,7 @@ end
 -- summary.
 
 ---@type table<string, string> # row marker key -> emoji
-local INSTALL_EMOJI = {
+const INSTALL_EMOJI = {
 	wrench = "🔧", -- lde package (git/path): copied or symlinked
 	rock = "🪨", -- luarocks package
 	tools = "🛠️", -- package running a build.lua
@@ -482,11 +482,11 @@ function ansi.installProgress(fallbackLabel)
 	---@type string[] # active dependency labels, in build-start order
 	local rows = {}
 	---@type table<string, number> # label -> build start time
-	local rowStart = {}
+	const rowStart = {}
 	---@type table<string, "wrench"|"rock"|"tools"> # label -> work-kind marker
-	local rowKind = {}
+	const rowKind = {}
 	---@type table<string, { built: integer, total: integer }> # label -> per-dependency built/building count
-	local depCount = {}
+	const depCount = {}
 	local ratio, info = nil, nil
 	local lastRatio, lastInfo = nil, nil
 	local lastRowKey = ""
@@ -509,7 +509,7 @@ function ansi.installProgress(fallbackLabel)
 	--- counters can animate without spamming the terminal.
 	local function render()
 		if not isTerminal then return end
-		local nowT = now()
+		const nowT = now()
 		local rowKey = table.concat(rows, "\0")
 		if rowKey == lastRowKey and ratio == lastRatio and info == lastInfo and nowT - lastDraw < 0.1 then
 			return
@@ -521,11 +521,11 @@ function ansi.installProgress(fallbackLabel)
 			-- Each row: `marker label built/total elapsed`. The built/total
 			-- count is shown only when the dependency pulls in other packages
 			-- (a leaf's `0/1` is noise).
-			local c = depCount[label]
-			local count = c and c.total > 1 and (" " .. colors.gray .. c.built .. "/" .. c.total .. colors.reset) or ""
-			local marker = ansi.supportsEmoji() and INSTALL_EMOJI[rowKind[label] or "wrench"] or ""
+			const c = depCount[label]
+			const count = (c and c.total > 1) ? (" " .. colors.gray .. c.built .. "/" .. c.total .. colors.reset) : ""
+			const marker = ansi.supportsEmoji() ? INSTALL_EMOJI[rowKind[label] or "wrench"] : ""
 			lines[#lines + 1] = marker
-				.. (marker ~= "" and " " or "") .. label .. count
+				.. (marker ~= "" ? " " : "") .. label .. count
 				.. " " .. colors.gray .. formatElapsed(nowT - rowStart[label]) .. colors.reset
 		end
 
@@ -542,7 +542,7 @@ function ansi.installProgress(fallbackLabel)
 		lastLines = #lines
 	end
 
-	local progress = {}
+	const progress = {}
 
 	function progress:setCurrent(label, kind)
 		if not rowStart[label] then rows[#rows + 1] = label end
@@ -602,7 +602,6 @@ end
 
 -- Format a byte count for human display.
 ---@param bytes number
----@return string
 function ansi.formatBytes(bytes)
 	if bytes < 1024 then return string.format("%d B", bytes) end
 	if bytes < 1024 * 1024 then return string.format("%.1f KB", bytes / 1024) end
@@ -618,7 +617,6 @@ end
 
 -- Formats seconds as a compact human duration ("140ms", "1.25s", "1m05s").
 ---@param seconds number
----@return string
 function ansi.formatElapsed(seconds)
 	return formatElapsed(seconds)
 end
@@ -675,14 +673,14 @@ do
 	end
 
 	-- Non-UTF-8 locales can't even encode emoji.
-	local locale = os.getenv("LC_ALL") or os.getenv("LC_CTYPE") or os.getenv("LANG") or ""
-	local l = locale:lower()
+	const locale = os.getenv("LC_ALL") or os.getenv("LC_CTYPE") or os.getenv("LANG") or ""
+	const l = locale:lower()
 	if locale == "" or locale == "C" or locale == "POSIX"
 		or (not l:find("utf-8", 1, true) and not l:find("utf8", 1, true)) then
 		emojiSupported = false
 	end
 
-	local noEmoji = os.getenv("NO_EMOJI")
+	const noEmoji = os.getenv("NO_EMOJI")
 	if noEmoji and noEmoji ~= "0" then
 		emojiSupported = false
 	end

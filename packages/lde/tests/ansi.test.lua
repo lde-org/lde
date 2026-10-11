@@ -1,5 +1,5 @@
-local test = require("lde-test")
-local env = require("env")
+const test = require("lde-test")
+const env = require("env")
 
 --- Set an env var, reload ansi so its color detection re-runs, run fn, then
 --- restore the previous value and drop the module again.
@@ -7,7 +7,7 @@ local env = require("env")
 ---@param value string?
 ---@param fn fun()
 local function withEnv(name, value, fn)
-	local before = env.var(name)
+	const before = env.var(name)
 	env.set(name, value)
 	package.loaded["ansi"] = nil
 	local ok, err = pcall(fn)
@@ -20,12 +20,12 @@ end
 --- decides the outcome has to clear the others first: the suite may run under
 --- NO_COLOR=1 or TERM=dumb (any non-tty CI, or a dumb terminal), either of
 --- which otherwise decides the result before the signal under test is read.
-local COLOR_ENV = { "NO_COLOR", "CLICOLOR_FORCE", "GITHUB_ACTIONS", "GITLAB_CI", "TERM" }
+const COLOR_ENV = { "NO_COLOR", "CLICOLOR_FORCE", "GITHUB_ACTIONS", "GITLAB_CI", "TERM" }
 
 --- Run fn with every color-detection variable unset.
 ---@param fn fun()
 local function withCleanColorEnv(fn)
-	local saved = {}
+	const saved = {}
 	for _, name in ipairs(COLOR_ENV) do
 		saved[name] = env.var(name)
 		env.set(name, nil)
@@ -128,10 +128,8 @@ end)
 --- Both the io.write function and the stream handles are stubbed: ansi writes
 --- through the handle it picked.
 ---@param fn fun()
----@return string stdout
----@return string stderr
 local function captureStreams(fn)
-	local stdoutBuf, stderrBuf = {}, {}
+	const stdoutBuf, stderrBuf = {}, {}
 	local oldWrite, oldStdout, oldStderr = io.write, io.stdout, io.stderr
 
 	local function sink(buf)
@@ -147,7 +145,7 @@ local function captureStreams(fn)
 	io.write = function(...)
 		for i = 1, select("#", ...) do stdoutBuf[#stdoutBuf + 1] = tostring(select(i, ...)) end
 	end
-	io.stdout, io.stderr = sink(stdoutBuf), sink(stderrBuf)
+	io.stdout, io.stderr = sink(stdoutBuf) --[[@as file*]], sink(stderrBuf) --[[@as file*]]
 
 	local ok, err = pcall(fn)
 	io.write, io.stdout, io.stderr = oldWrite, oldStdout, oldStderr
@@ -208,7 +206,7 @@ end)
 
 test.it("ansi.isQuiet silences progress output entirely", function()
 	local ansi = require("ansi")
-	local wasQuiet = ansi.isQuiet
+	const wasQuiet = ansi.isQuiet
 	ansi.isQuiet = true
 
 	local stdout, stderr = captureStreams(function()
@@ -228,7 +226,7 @@ end)
 -- sleep, so elapsed times read ~0 and the build timings report collapses.
 test.it("now() advances during a sleep (wall clock, not CPU time)", function()
 	local ansi = require("ansi")
-	local ffi = require("ffi")
+	const ffi = require("ffi")
 	local sleepMs
 	if jit.os == "Windows" then
 		pcall(ffi.cdef, "void Sleep(unsigned long dwMilliseconds);")
@@ -238,8 +236,8 @@ test.it("now() advances during a sleep (wall clock, not CPU time)", function()
 		sleepMs = function(ms) ffi.C.usleep(ms * 1000) end
 	end
 
-	local start = ansi.now()
+	const start = ansi.now()
 	sleepMs(5)
-	local elapsed = ansi.now() - start
+	const elapsed = ansi.now() - start
 	test.truthy(elapsed >= 0.004, "expected ~5ms of wall time, got " .. tostring(elapsed) .. "s")
 end)

@@ -1,10 +1,10 @@
 -- Tests for lde.global.validatePackageName. The rules mirror what the lde
 -- registry enforces (schemas/registry.schema.json in lde-org/registry), so
 -- anything lde accepts can actually be published/looked up.
-local test = require("lde-test")
+const test = require("lde-test")
 
-local lde = require("lde-core")
-local validate = lde.global.validatePackageName
+const lde = require("lde-core")
+const validate = lde.global.validatePackageName
 
 ---@param name string
 local function isValid(name)

@@ -1,19 +1,18 @@
-local test = require("lde-test")
+const test = require("lde-test")
 
-local fs = require("fs")
-local env = require("env")
-local path = require("path")
-local json = require("json")
+const fs = require("fs")
+const env = require("env")
+const path = require("path")
+const json = require("json")
 
-local lde = require("lde-core")
-local timings = require("lde-core.util.timings")
+const timings = require("lde-core.util.timings")
 
 local tmpBase = path.join(env.tmpdir(), "lde-timings-tests")
 fs.rmdir(tmpBase)
 fs.mkdir(tmpBase)
 
 -- Blocking sleep for building deterministic overlap in unit timing tests.
-local ffi = require("ffi")
+const ffi = require("ffi")
 if jit.os == "Windows" then
 	pcall(ffi.cdef, "void Sleep(unsigned long dwMilliseconds);")
 else
@@ -33,7 +32,7 @@ end
 
 test.it("start returns nil while inactive", function()
 	timings.reset()
-	local handle = timings.start("nope", "build")
+	const handle = timings.start("nope", "build")
 	test.falsy(handle)
 end)
 
@@ -46,7 +45,7 @@ test.it("begin activates collection and start/finish record units", function()
 	sleepMs(5)
 	timings.finish(a)
 
-	local data = timings.data()
+	const data = timings.data()
 	test.equal(data.command, "test")
 	test.equal(data.package, "pkg")
 	test.equal(data.summary.units, 1)
@@ -121,7 +120,7 @@ test.it("data aggregates time by kind", function()
 	sleepMs(10)
 	timings.finish(b)
 
-	local byKind = timings.data().summary.byKind
+	const byKind = timings.data().summary.byKind
 	test.equal(byKind.build.count, 1)
 	test.truthy(byKind.build.time >= 0.009)
 	test.equal(byKind.download.count, 1)
@@ -142,7 +141,7 @@ test.it("writeJSON writes decodable JSON with the collected units", function()
 	test.falsy(err)
 	test.truthy(fs.exists(outPath))
 
-	local decoded = json.decode(fs.read(outPath) --[[@as string]]) ---@cast decoded table
+	const decoded = json.decode(fs.read(outPath) --[[@as string]]) ---@cast decoded table
 	test.equal(decoded.version, 1)
 	test.equal(decoded.command, "sync")
 	test.equal(decoded.package, "pkg")

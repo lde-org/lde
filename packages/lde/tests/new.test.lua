@@ -1,10 +1,10 @@
-local test = require("lde-test")
+const test = require("lde-test")
 
-local fs = require("fs")
-local env = require("env")
-local path = require("path")
-local json = require("json")
-local process = require("process")
+const fs = require("fs")
+const env = require("env")
+const path = require("path")
+const json = require("json")
+const process = require("process")
 
 local ldePath = assert(env.execPath())
 
@@ -19,12 +19,11 @@ fs.rmdir(tmpBase)
 ---@param cwd string?
 ---@return boolean, string
 local function ldecli(args, cwd)
-	local code, stdout, stderr = process.exec(ldePath, args, { cwd = cwd })
+	const code, stdout, stderr = process.exec(ldePath, args, { cwd = cwd })
 	return code == 0, (stdout or "") .. (stderr or "")
 end
 
 ---@param dir string
----@return lde.Package.Config
 local function readConfig(dir)
 	local content = fs.read(path.join(dir, "lde.json"))
 	assert(content, "no lde.json in " .. dir)
@@ -74,7 +73,7 @@ test.it("lde new --language teal writes .tl entry, check script, and tlconfig.lu
 	test.falsy(fs.exists(path.join(dir, "src", "init.lua")))
 
 	local config = readConfig(dir)
-	local check = config.scripts and config.scripts.check
+	local check = config.scripts?.check
 	test.truthy(check)
 	if check then
 		test.includes(check, "ldx rocks:tl check -I target")

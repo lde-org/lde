@@ -1,12 +1,12 @@
-local env = require("env")
-local fs = require("fs")
-local path = require("path")
-local ansi = require("ansi")
+const env = require("env")
+const fs = require("fs")
+const path = require("path")
+const ansi = require("ansi")
 
-local errorsnippet = require("lde.util.errorsnippet")
+const errorsnippet = require("lde.util.errorsnippet")
 
-local lde = require("lde-core")
-local runtime = require("lde-core.runtime")
+const lde = require("lde-core")
+const runtime = require("lde-core.runtime")
 
 --- Print a run error with a Bun-style source snippet when the file can be
 --- located; fall back to the clean error for errors without a file position.
@@ -70,7 +70,7 @@ local function runWithWatcher(pkg, pkgErr, name, scriptArgs, mode, jitDiag)
 	pkg:build()
 	pkg:installDependencies()
 
-	local config = pkg:readConfig()
+	const config = pkg:readConfig()
 	if name and config.scripts and config.scripts[name] then
 		if mode == "hot" then
 			ansi.printf("{red}--hot only applies to Lua entry points, not shell scripts ('%s')", name)
@@ -80,7 +80,7 @@ local function runWithWatcher(pkg, pkgErr, name, scriptArgs, mode, jitDiag)
 		-- --watch can still re-run shell scripts (they're child processes, so
 		-- the in-process driver's state/hook machinery doesn't apply).
 		local watchDir = pkg:getSrcDir()
-		local watcher = fs.watch(watchDir, function() end, { recursive = true })
+		const watcher = fs.watch(watchDir, function() end, { recursive = true })
 		if not watcher then
 			ansi.printf("{red}Failed to watch: %s", watchDir)
 			return
@@ -132,7 +132,7 @@ local function runWithWatcher(pkg, pkgErr, name, scriptArgs, mode, jitDiag)
 		-- Editing src/init.lua re-runs the whole package: report it as the
 		-- package, not as a module (it has no require() path of its own). A
 		-- named entry file is reported by its file name instead.
-		entryLabel = name and path.basename(entry) or config.name,
+		entryLabel = name ? path.basename(entry) : config.name,
 		args = args,
 		watchDirs = { { dir = srcDir, recursive = true } },
 		srcPrefix = srcDir .. sep,
@@ -142,13 +142,13 @@ local function runWithWatcher(pkg, pkgErr, name, scriptArgs, mode, jitDiag)
 		end,
 		-- Rebuild before each hot reload so target/ picks up the change (the
 		-- stamp check makes this a no-op when nothing changed).
-		preReload = mode == "hot" and function()
+		preReload = mode == "hot" ? function()
 			local ok, err = pcall(pkg.build, pkg)
 			if not ok then
 				ansi.printf("{red}Build failed: %s", tostring(err))
 			end
 			return ok
-		end or nil,
+		end : nil,
 		createState = function()
 			local st, g, cleanup = pkg:createState({ args = args, cwd = pkg:getDir() })
 			if jitDiag then
@@ -165,7 +165,7 @@ local function run(args)
 
 	local scriptArgs ---@type string[]
 	local name = nil ---@type string?
-	local hot = args:flag("hot")
+	const hot = args:flag("hot")
 	local watch = args:flag("watch")
 	local profile = args:flag("profile")
 	local flamegraph = args:option("flamegraph")
@@ -181,7 +181,7 @@ local function run(args)
 		return
 	end
 
-	local isDash, dashPos = args:flag("")
+	const isDash, dashPos = args:flag("")
 	if isDash then
 		if dashPos ~= 0 then
 			name = args:pop()
@@ -224,7 +224,7 @@ local function run(args)
 	pkg:build()
 	pkg:installDependencies()
 
-	local scripts = pkg:readConfig().scripts
+	const scripts = pkg:readConfig().scripts
 	local ok, err
 	if name and scripts and scripts[name] then
 		ok, err = pkg:runScript(name, nil, scriptArgs)

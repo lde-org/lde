@@ -1,10 +1,10 @@
-local ansi      = require("ansi")
-local readline  = require("readline")
+const ansi      = require("ansi")
+const readline  = require("readline")
 local highlight = require("readline.highlight")
 
-local lde     = require("lde-core")
-local runtime = require("lde-core.runtime")
-local prompt  = require("lde.util.prompt")
+const lde     = require("lde-core")
+const runtime = require("lde-core.runtime")
+const prompt  = require("lde.util.prompt")
 
 ---@param v any
 ---@return boolean
@@ -28,7 +28,7 @@ local function repl(_args)
 		exit = function(code) os.exit(code or 0) end,
 	}
 
-	local pkg = lde.Package.open()
+	const pkg = lde.Package.open()
 	local state, g, cleanup
 	if pkg then
 		-- Build + install + guest state with the package's target/ on the
@@ -36,7 +36,7 @@ local function repl(_args)
 		state, g, cleanup = pkg:createState({ args = { [0] = "repl" }, globals = globals })
 
 		if prompt.interactive then
-			local config = pkg:readConfig()
+			const config = pkg:readConfig()
 			ansi.printf("{gray}Project: {green}%s {gray}(%s)", config.name or "unknown", pkg:getDir())
 		end
 	else
@@ -50,19 +50,18 @@ local function repl(_args)
 	---@param indent number?
 	---@param seen table?
 	---@param depth number?
-	---@return string
 	local function pretty(val, indent, seen, depth)
 		indent = indent or 0
 		seen   = seen or {}
 		depth  = depth or 0
-		local t = type(val)
+		const t = type(val)
 		if t == "string" then
 			return ansi.format("{green}\"" .. val:gsub('"', '\\"') .. "\"")
 		elseif t ~= "table" then
 			return ansi.format("{yellow}" .. tostring(val))
 		end
 
-		local guest = isGuestValue(val)
+		const guest = isGuestValue(val)
 		if guest and val._type ~= "table" then
 			-- guest thread/userdata — nothing to walk
 			return ansi.format("{yellow}%s", tostring(val))
@@ -75,12 +74,12 @@ local function repl(_args)
 		end
 		seen[val] = true
 
-		local pad   = string.rep("  ", indent)
-		local inner = string.rep("  ", indent + 1)
+		const pad   = string.rep("  ", indent)
+		const inner = string.rep("  ", indent + 1)
 		local items = {}
-		local iter  = guest and val.pairs or pairs
+		const iter  = guest and val.pairs or pairs
 		for k, v in iter(val) do
-			local key = type(k) == "string"
+			const key = type(k) == "string"
 				and ansi.format("{cyan}" .. k .. "{reset}")
 				or ansi.format("{magenta}[" .. tostring(k) .. "]{reset}")
 			items[#items + 1] = inner .. key .. " = " .. pretty(v, indent + 1, seen, depth + 1)
@@ -96,7 +95,6 @@ local function repl(_args)
 	--   `const x, y = ...`         → `x, y = ...` (const is a soft keyword, so a
 	--                            global keeps the value across lines)
 	---@param s string
-	---@return string
 	local function delocal(s)
 		s = s:gsub("^%s*local%s+function%s+([%a_][%w_]*)%s*%(", "function %1(")
 		s = s:gsub("^%s*local%s+([%a_][%w_%s,]-)%s*=", "%1 =")
@@ -106,14 +104,14 @@ local function repl(_args)
 	---@param line string
 	---@param pos number
 	local function complete(line, pos)
-		local before = line:sub(1, pos)
-		local word   = before:match("[%a_][%w_%.]*$")
+		const before = line:sub(1, pos)
+		const word   = before:match("[%a_][%w_%.]*$")
 		if not word or word == "" then return nil end
 
 		local obj, prefix
-		local dot = word:find("%.[^%.]*$")
+		const dot = word:find("%.[^%.]*$")
 		if dot then
-			local obj_path = word:sub(1, dot - 1)
+			const obj_path = word:sub(1, dot - 1)
 			prefix = word:sub(dot + 1)
 			obj = g
 			for part in obj_path:gmatch("[%a_][%w_]*") do
@@ -175,8 +173,8 @@ local function repl(_args)
 
 		buffer = buffer == "" and delocal(line) or (buffer .. "\n" .. delocal(line))
 
-		local chunk = state:load(buffer, "repl")
-		local ok, result = chunk:pcall()
+		const chunk = state:load(buffer, "repl")
+		const ok, result = chunk:pcall()
 		if ok then
 			if result ~= nil then ansi.printf("{gray}={reset} %s", pretty(result)) end
 			buffer = ""

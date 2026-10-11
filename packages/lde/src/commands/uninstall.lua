@@ -1,12 +1,12 @@
-local ansi = require("ansi")
-local fs = require("fs")
-local path = require("path")
+const ansi = require("ansi")
+const fs = require("fs")
+const path = require("path")
 
-local lde = require("lde-core")
+const lde = require("lde-core")
 
 ---@param args clap.Args
 local function toolUninstall(args)
-	local toolName = args:pop()
+	const toolName = args:pop()
 	if not toolName then
 		lde.error.raise("Usage: lde uninstall <name>")
 	end

@@ -1,11 +1,11 @@
-local run = {}
+const run = {}
 package.loaded[(...)] = run
 
-local fs = require("fs")
-local path = require("path")
-local ffi = require("ffi")
-local process = require("process")
-local runtime = require("lde-core.runtime")
+const fs = require("fs")
+const path = require("path")
+const ffi = require("ffi")
+const process = require("process")
+const runtime = require("lde-core.runtime")
 
 ---@param package lde.Package
 local function getLuaPathsForPackage(package)
@@ -124,16 +124,16 @@ local function runFile(package, scriptPath, args, vars, cwd, profile, flamegraph
 			or path.join(package:getTargetDir(), "init.lua")
 	end
 
-	cwd = cwd or package:getDir()
+	local cwd = cwd or package:getDir()
 
 	local engine = config.engine or "lde"
 	if engine == "lde" or engine == "lpm" --[[ compat ]] then
-		return runFileWithLDE(package, scriptPath, args, vars, cwd, profile, flamegraph, preload, profileJson, jit)
+		return runFileWithLDE(package, scriptPath, args, vars, cwd --[[@as string]], profile, flamegraph, preload, profileJson, jit)
 	end
 	if profile or flamegraph or profileJson then
 		return nil, "Profiling is only supported when engine is 'lde'"
 	end
-	return runFileWithLuaCLI(package, scriptPath, args, vars, engine, cwd)
+	return runFileWithLuaCLI(package, scriptPath, args, vars, engine, cwd --[[@as string]])
 end
 
 ---@param package lde.Package
@@ -146,7 +146,7 @@ end
 local function runString(package, code, args, vars, cwd)
 	package:build()
 	local config = package:readConfig()
-	cwd = cwd or package:getDir()
+	local cwd = cwd or package:getDir()
 
 	local engine = config.engine or "lde"
 	if engine == "lde" or engine == "lpm" --[[ compat ]] then

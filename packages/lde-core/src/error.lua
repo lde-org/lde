@@ -19,14 +19,13 @@
 ---@field kind string? # error category ("usage", "network", "build", ...)
 ---@field code integer? # process exit code (default 1)
 ---@field hint string? # optional follow-up suggestion shown under the message
-local Error = {}
+const Error = {}
 Error.__index = Error
 
-local M = {}
+const M = {}
 
 ---@param message string
 ---@param opts { kind?: string, code?: integer, hint?: string }?
----@return lde.Error
 function M.new(message, opts)
 	opts = opts or {}
 	return setmetatable({
@@ -54,7 +53,6 @@ function M.raise(message, opts)
 end
 
 ---@param err any
----@return boolean
 function M.isKnown(err)
 	return type(err) == "table" and getmetatable(err) == Error
 end
@@ -75,14 +73,14 @@ end
 ---@param msg string
 ---@return string
 local function stripLoaderFrame(msg)
-	local chunked = msg:gsub("^%[string \"[^\"]*\"%]:%d+: %[", "%[", 1)
+	const chunked = msg:gsub("^%[string \"[^\"]*\"%]:%d+: %[", "%[", 1)
 	if chunked ~= msg then return chunked end
 
 	-- The nested frame can also be a real file loaded with an "@" chunk name,
 	-- which arrives as `[string "lua-sys"]:459: /p/init.lua:3: msg`. Require a
 	-- space-free location so a single-frame error that merely mentions one
 	-- (e.g. "bad argument #1 to 'x' (number:2: expected)") is left intact.
-	local rest = msg:match("^%[string \"[^\"]*\"%]:%d+: (.+)$")
+	const rest = msg:match("^%[string \"[^\"]*\"%]:%d+: (.+)$")
 	if rest and rest:match("^%S+:%d+: ") then return rest end
 
 	return msg
@@ -95,7 +93,7 @@ end
 ---@param err any # the value the boundary's xpcall caught
 ---@param trace string? # traceback string captured by the boundary
 function M.show(err, trace)
-	local ansi = require("ansi")
+	const ansi = require("ansi")
 
 	if M.isKnown(err) then
 		ansi.error("%s", stripLoaderFrame(err.message))
@@ -108,7 +106,7 @@ function M.show(err, trace)
 	-- Unexpected: an actual bug in lde (or an error() site that hasn't been
 	-- migrated to raise() yet).
 	local version = "unknown"
-	local ok, v = pcall(require, "lde.version")
+	const ok, v = pcall(require, "lde.version")
 	if ok and type(v) == "string" then version = v end
 
 	ansi.eprintf("{bold}{red}lde crashed.{reset}")

@@ -1,25 +1,25 @@
 -- Unit tests for lde-core.util's luarocks URL cache and its offline src-rock
 -- fallback. Both are hermetic: HOME is redirected to a throwaway dir so the
 -- real ~/.lde url cache and manifest are never read or written.
-local test = require("lde-test")
+const test = require("lde-test")
 
-local fs = require("fs")
-local env = require("env")
-local path = require("path")
-local json = require("json")
-local process = require("process")
+const fs = require("fs")
+const env = require("env")
+const path = require("path")
+const json = require("json")
+const process = require("process")
 
 local tmpBase = path.join(env.tmpdir(), "lde-util-tests")
 fs.rmdir(tmpBase)
 fs.mkdirAll(tmpBase)
 
-local realHome = env.var("HOME") or env.var("USERPROFILE")
+const realHome = env.var("HOME") or env.var("USERPROFILE")
 test.truthy(env.set("HOME", tmpBase), "could not redirect HOME for test isolation")
 test.afterAll(function()
 	env.set("HOME", realHome)
 end)
 
-local lde = require("lde-core")
+const lde = require("lde-core")
 
 local userDir = path.join(tmpBase, ".lde")
 fs.mkdirAll(userDir)
@@ -37,7 +37,7 @@ test.it("URL cache entries survive a manifest refresh and a later resolution", f
 		alpha = { url = "https://luarocks.org/alpha-1.0.0-1.src.rock", arch = "src" },
 		beta  = { url = "https://luarocks.org/beta-2.0.0-1.src.rock", arch = "src" },
 	}))
-	local touchCode = process.exec("touch", { "-t", "202001010000", cachePath })
+	const touchCode = process.exec("touch", { "-t", "202001010000", cachePath })
 	test.truthy(touchCode == 0, "touch url cache to an old mtime failed: " .. tostring(touchCode))
 
 	-- A freshly refreshed manifest (mtime = now), the state `lde search` or
@@ -54,7 +54,7 @@ test.it("URL cache entries survive a manifest refresh and a later resolution", f
 	-- newly resolved one. The regression this guards against rewrote the file
 	-- with only the package being resolved right now, breaking every other
 	-- cached rocks tool on the next offline run.
-	local persisted = json.decode(assert(fs.read(cachePath))) ---@cast persisted table<string, any>
+	const persisted = json.decode(assert(fs.read(cachePath))) ---@cast persisted table<string, any>
 	test.truthy(persisted.alpha, "stale url cache entries must survive a manifest refresh")
 	test.truthy(persisted.beta, "stale url cache entries must survive a manifest refresh")
 	test.truthy(persisted.gamma, "newly resolved entry must be persisted")

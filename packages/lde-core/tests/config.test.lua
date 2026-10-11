@@ -1,6 +1,6 @@
-local test = require("lde-test")
+const test = require("lde-test")
 
-local lde = require("lde-core")
+const lde = require("lde-core")
 
 test.it("Config.new wraps a table with the Config metatable", function()
 	local conf = lde.Package.Config.new({

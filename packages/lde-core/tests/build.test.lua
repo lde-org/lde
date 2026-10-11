@@ -1,12 +1,12 @@
 local test = require("lde-test")
 
-local lde = require("lde-core")
+const lde = require("lde-core")
 
-local fs = require("fs")
-local env = require("env")
+const fs = require("fs")
+const env = require("env")
 local path = require("path")
-local json = require("json")
-local util = require("util")
+const json = require("json")
+const util = require("util")
 
 local tmpBase = path.join(env.tmpdir(), "lde-build-tests")
 
@@ -17,7 +17,6 @@ fs.rmdir(tmpBase)
 ---@param name string # package name, used as the directory name under tmpBase
 ---@param srcFiles table<string, string> # relative path -> file content
 ---@param config table? # lde.json contents; defaults to a minimal manifest
----@return string # package directory
 local function makePackageWithSrc(name, srcFiles, config)
 	fs.mkdir(tmpBase)
 	local dir = path.join(tmpBase, name)
@@ -189,7 +188,7 @@ end)
 --
 
 test.it("installDependencies installs a local path dependency", function()
-	local depDir = makePackageWithSrc("install-dep", {
+	local _ = makePackageWithSrc("install-dep", {
 		["init.lua"] = 'return { name = "install-dep" }'
 	})
 
@@ -353,7 +352,6 @@ end)
 --- tests can count how many times the build actually ran.
 ---@param name string
 ---@param marker string
----@return string depDir
 local function makeBuildScriptDep(name, marker)
 	local depDir = makePackageWithSrc(name, {
 		["init.lua"] = 'return "' .. name .. '"'
@@ -441,7 +439,7 @@ test.it("installDependencies fast path detects a stale path dep build (src chang
 	test.equal(fs.read(path.join(depDir, "install-stale-count.txt")), "x")
 
 	-- Unchanged: the fast path reports cached.
-	local isCached = pkg:installDependencies()
+	const isCached = pkg:installDependencies()
 	test.truthy(isCached.isCached)
 	test.equal(fs.read(path.join(depDir, "install-stale-count.txt")), "x")
 
@@ -449,7 +447,7 @@ test.it("installDependencies fast path detects a stale path dep build (src chang
 	-- .installed marker alone can't see it, so the fast path must fall back to
 	-- a full install that re-runs the dep's build.
 	fs.write(path.join(depDir, "src", "init.lua"), 'return 123456789')
-	local stale = pkg:installDependencies()
+	const stale = pkg:installDependencies()
 	test.falsy(stale.isCached, "install must not report cached when a dep build is stale")
 	test.equal(fs.read(path.join(depDir, "install-stale-count.txt")), "xx",
 		"dep build.lua must re-run when its source changed")
@@ -630,10 +628,10 @@ test.it("installDependencies writes a lockfile with resolved path dependency", f
 	local pkg = assert(lde.Package.open(mainDir))
 	pkg:installDependencies()
 
-	local lockPath = path.join(mainDir, "lde.lock")
+	const lockPath = path.join(mainDir, "lde.lock")
 	test.truthy(fs.exists(lockPath))
 
-	local raw = fs.read(lockPath) ---@cast raw -nil
+	const raw = fs.read(lockPath) ---@cast raw -nil
 	local content = json.decode(raw) ---@cast content table
 	test.equal(content.version, "1")
 	test.equal(content.dependencies["lockfile-dep"].path, "../lockfile-dep")
@@ -989,8 +987,8 @@ end)
 -- runTests: target/tests setup
 --
 
-local testFixture = 'return { magic = 42 }'
-local testFile = [[
+const testFixture = 'return { magic = 42 }'
+const testFile = [[
 local t = require("lde-test")
 local fixture = require("tests.fixture")
 t.it("can require tests.fixture", function()
@@ -1035,7 +1033,6 @@ end)
 -- Package with a build.lua so target/tests is a copy (stamped sync) rather
 -- than a symlink.
 ---@param name string
----@return string dir
 local function makeBuildScriptPackage(name)
 	local dir = makePackageWithSrc(name, { ["init.lua"] = 'return true' })
 	fs.write(path.join(dir, "build.lua"), [[
@@ -1048,7 +1045,6 @@ end
 
 ---@param dir string
 ---@param file string
----@return string
 local function targetTestsFile(dir, file)
 	return path.join(dir, "target", "tests", file)
 end
@@ -1145,7 +1141,7 @@ end)
 -- runTests: file filter globs
 --
 
-local filterTestFile = [[
+const filterTestFile = [[
 local t = require("lde-test")
 t.it("runs", function() end)
 ]]
@@ -1223,8 +1219,8 @@ test.it("runTests with absolute path filter runs only that file", function()
 	fs.write(path.join(testsDir, "ohyes.test.lua"), filterTestFile)
 	fs.write(path.join(testsDir, "ohno.test.lua"), filterTestFile)
 
-	local absPath = path.join(testsDir, "ohyes.test.lua")
-	local filters = { absPath }
+	const absPath = path.join(testsDir, "ohyes.test.lua")
+	const filters = { absPath }
 	local pkg = assert(lde.Package.open(dir))
 	local results = pkg:runTests(nil, filters)
 
@@ -1246,7 +1242,7 @@ test.it("runTests with path-like filter containing glob resolves and matches", f
 	fs.write(path.join(testsDir, "one.test.lua"), filterTestFile)
 	fs.write(path.join(subDir, "two.test.lua"), filterTestFile)
 
-	local globPath = path.join(testsDir, "sub", "*.test.lua")
+	const globPath = path.join(testsDir, "sub", "*.test.lua")
 	local pkg = assert(lde.Package.open(dir))
 	local results = pkg:runTests(nil, { globPath })
 
@@ -1392,7 +1388,7 @@ int luaopen_greet(lua_State *L) {
 			dependencies = { greet = { path = "../array-sources-rock" } }
 		}))
 
-		local app = lde.Package.open(appDir) ---@cast app -nil
+		const app = lde.Package.open(appDir) ---@cast app -nil
 		app:installDependencies()
 		local ok, err = app:runFile()
 		if not ok then print(err) end
@@ -1654,7 +1650,7 @@ test.it("rockspec: string-valued native module fields are normalized to lists", 
 	test.equal("c", src.libraries[1])
 
 	-- Build-level defaults apply when a module omits a field.
-	local withDefaults = lde.Package.normalizeNativeModule({ sources = { "a.c" } }, {
+	const withDefaults = lde.Package.normalizeNativeModule({ sources = { "a.c" } }, {
 		libraries = "z",
 		defines = "FOO",
 	})
@@ -1664,9 +1660,9 @@ test.it("rockspec: string-valued native module fields are normalized to lists", 
 	-- The normalized fields are passed through to the compiler invocation.
 	-- Expected flags are built with path.join so the assertions match the
 	-- platform-native separators the code produces on Windows too.
-	local incFlag = "-I" .. path.join("/lj", "include")
-	local libFlag = "-L" .. path.join("/lj", "lib")
-	local srcPath = path.join("/pkg", "src/ztest.c")
+	const incFlag = "-I" .. path.join("/lj", "include")
+	const libFlag = "-L" .. path.join("/lj", "lib")
+	const srcPath = path.join("/pkg", "src/ztest.c")
 	local args = lde.Package.nativeGccArgs(src, {
 		packageDir = "/pkg",
 		modulesDir = "/pkg/target",
@@ -1682,7 +1678,7 @@ test.it("rockspec: string-valued native module fields are normalized to lists", 
 	test.truthy(hasArg(args, "/pkg/target/ztest.so"), "expected the output path to be passed")
 
 	-- Unknown $(VAR) placeholders are skipped rather than passed through raw.
-	local skipped = lde.Package.nativeGccArgs({ sources = { "a.c" }, libdirs = { "$(ZLIB_LIBDIR)" } }, {
+	const skipped = lde.Package.nativeGccArgs({ sources = { "a.c" }, libdirs = { "$(ZLIB_LIBDIR)" } }, {
 		packageDir = "/pkg",
 		modulesDir = "/pkg/target",
 		luajitPath = "/lj",
@@ -1755,7 +1751,7 @@ build:write("output.txt", "hello from lde-build")
 	local ok, err = pkg:runBuildScript(outputDir)
 	test.truthy(ok, err)
 
-	local writtenPath = path.join(outputDir, "output.txt")
+	const writtenPath = path.join(outputDir, "output.txt")
 	test.truthy(fs.exists(writtenPath))
 	test.equal(fs.read(writtenPath), "hello from lde-build")
 end)
@@ -1790,7 +1786,7 @@ build:write("target.txt", build.target .. "\n" .. out)
 	local triple = content:match("^([^\n]*)")
 	test.truthy(triple and triple ~= "", "build.target should be a non-empty triple")
 	-- The dumpmachine output should match the reported target.
-	test.includes(content, triple, "cc -dumpmachine should agree with build.target")
+	test.includes(content, triple or "", "cc -dumpmachine should agree with build.target")
 end)
 
 test.it("build script lde-build instance has correct outDir matching LDE_OUTPUT_DIR", function()
@@ -1942,17 +1938,17 @@ build:sh("echo last-line && exit 7")
 	test.includes(msg, "first-line")
 	test.includes(msg, "guest line")
 	test.includes(msg, "last-line")
-	local content = fs.read(logPath)
+	local content = fs.read(logPath --[[@as string]])
 	test.includes(content or "", "first-line")
 	test.includes(content or "", "guest line")
 	test.includes(content or "", "last-line")
-	fs.delete(logPath)
+	fs.delete(logPath --[[@as string]])
 end)
 
 test.it("buildLog.pathFor is deterministic and lives under the temp dir", function()
-	local buildLog = require("lde-core.util.build-log")
+	const buildLog = require("lde-core.util.build-log")
 	local p1 = buildLog.pathFor("/tmp/example/target/curl-sys")
-	local p2 = buildLog.pathFor("/tmp/example/target/curl-sys")
+	const p2 = buildLog.pathFor("/tmp/example/target/curl-sys")
 	test.equal(p1, p2)
 	test.truthy(p1:find("lde%-build%-curl%-sys%-"))
 	local tmp = jit.os == "Windows" and (os.getenv("TEMP") or os.getenv("TMP")) or (os.getenv("TMPDIR") or "/tmp")

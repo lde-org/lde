@@ -4,17 +4,17 @@
 --
 -- All cache-deletion scenarios are scoped with --tree so they never touch the
 -- shared ~/.lde cache other tests rely on.
-local test = require("lde-test")
+const test = require("lde-test")
 
-local lde = require("lde-core")
+const lde = require("lde-core")
 
-local fs = require("fs")
-local env = require("env")
+const fs = require("fs")
+const env = require("env")
 local path = require("path")
-local json = require("json")
-local process = require("process")
+const json = require("json")
+const process = require("process")
 
-local cli = require("tests.lib.ldecli")
+const cli = require("tests.lib.ldecli")
 
 local tmpBase = path.join(env.tmpdir(), "lde-sync-tests")
 fs.rmdir(tmpBase)
@@ -22,7 +22,6 @@ fs.mkdir(tmpBase)
 
 ---Strip ANSI escape sequences so output matches work with or without colors.
 ---@param s string
----@return string
 local function plain(s)
 	return ((s or ""):gsub("\27%[[0-9;]*m", ""))
 end
@@ -30,13 +29,12 @@ end
 ---@param name string
 ---@param deps table?
 ---@param extra table?
----@return string dir
 local function makeProject(name, deps, extra)
 	local dir = path.join(tmpBase, name)
 	fs.mkdir(dir)
 	fs.mkdir(path.join(dir, "src"))
 	fs.write(path.join(dir, "src", "init.lua"), 'return "' .. name .. '"')
-	local config = {
+	const config = {
 		name = name,
 		version = "0.1.0",
 		dependencies = deps or {}
@@ -49,7 +47,6 @@ local function makeProject(name, deps, extra)
 end
 
 ---@param name string
----@return string dir
 local function makeDep(name)
 	return makeProject(name)
 end
@@ -58,7 +55,6 @@ end
 --- lsRemote/clone both accept plain local paths). Returns the repo dir.
 ---@param name string
 ---@param packageName string? # lde.json name (defaults to the dir name)
----@return string repoDir
 local function makeLocalGitRepo(name, packageName)
 	local repoDir = path.join(tmpBase, name .. "-repo")
 	fs.rmdir(repoDir)
@@ -81,7 +77,6 @@ local function makeLocalGitRepo(name, packageName)
 end
 
 ---@param repoDir string
----@return string commit
 local function headCommit(repoDir)
 	local code, out = process.exec("git", { "rev-parse", "HEAD" }, { cwd = repoDir })
 	test.equal(code, 0, tostring(out))
@@ -279,7 +274,7 @@ test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde sync heals a partial git cache 
 end)
 
 test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde sync installs healthy deps and reports failed ones together", function()
-	local goodRepo = makeLocalGitRepo("sync-partial-good")
+	const goodRepo = makeLocalGitRepo("sync-partial-good")
 	local treeDir = path.join(tmpBase, "sync-partial-tree")
 	fs.rmdir(treeDir)
 	local dir = makeProject("sync-partial-app", {
@@ -376,7 +371,7 @@ end)
 local function writeFakeRegistry(treeDir, repoDir, commit, ns, pkgName)
 	pkgName = pkgName or "sync-reg-pkg"
 	local registryDir = path.join(treeDir, "registry")
-	local fullName = ns and (ns .. "/" .. pkgName) or pkgName
+	local fullName = ns ? (ns .. "/" .. pkgName) : pkgName
 	local pkgPath = ns
 		and path.join(registryDir, "packages", ns, pkgName .. ".json")
 		or path.join(registryDir, "packages", pkgName .. ".json")
@@ -437,7 +432,6 @@ test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde sync re-resolves a dev registry
 	fs.mkdir(path.join(repoDir, "src"))
 
 	---@param version string
-	---@return string commit
 	local function commit(version)
 		fs.write(path.join(repoDir, "src", "init.lua"), 'return "' .. pkgName .. " v" .. version .. '"')
 		fs.write(path.join(repoDir, "lde.json"), json.encode({
@@ -526,7 +520,7 @@ test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde sync heals a stale commit-only 
 	-- the entry carries a commit but no git field. Sync must re-resolve from
 	-- the manifest's version and rewrite the entry instead of erroring. The
 	-- manifest hash matches lde.json so the pins are still considered valid.
-	local manifestRaw = fs.read(path.join(dir, "lde.json")) ---@cast manifestRaw -nil
+	const manifestRaw = fs.read(path.join(dir, "lde.json")) ---@cast manifestRaw -nil
 	local manifest = json.decode(manifestRaw) --[[@as lde.Package.Config]]
 	fs.write(path.join(dir, "lde.lock"), json.encode({
 		version = "1",
@@ -582,8 +576,8 @@ end)
 
 test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde sync re-resolves a dep switched from git to registry in lde.json", function()
 	-- Phase 1: a git dependency, pinned in the lockfile.
-	local gitRepo = makeLocalGitRepo("sync-switch-git", "sync-switch-pkg")
-	local gitCommit = headCommit(gitRepo)
+	const gitRepo = makeLocalGitRepo("sync-switch-git", "sync-switch-pkg")
+	const gitCommit = headCommit(gitRepo)
 
 	-- The registry serves the same package name from a *different* repo, so a
 	-- stale lockfile pin would be observably wrong (wrong git URL and commit).
@@ -656,7 +650,6 @@ end)
 --- tests can count how many times it actually ran.
 ---@param name string
 ---@param marker string
----@return string dir
 local function makeBuildProject(name, marker)
 	local dir = makeProject(name)
 	fs.write(path.join(dir, "build.lua"), string.format([[
@@ -764,7 +757,7 @@ test.it("lde sync --timings writes an HTML report to target/timings.html", funct
 
 	local report = path.join(dir, "target", "timings.html")
 	test.truthy(fs.exists(report), "timings.html must be written")
-	local html = fs.read(report) ---@cast html -nil
+	const html = fs.read(report) ---@cast html -nil
 	test.truthy(html:find("<!DOCTYPE html>", 1, true))
 	test.truthy(html:find("sync-timings-html", 1, true), "report names the package")
 	test.truthy(html:find("Total time", 1, true))
@@ -779,8 +772,8 @@ test.it("lde sync --timings --json writes a JSON report to target/timings.json",
 
 	local report = path.join(dir, "target", "timings.json")
 	test.truthy(fs.exists(report), "timings.json must be written")
-	local raw = fs.read(report) ---@cast raw -nil
-	local decoded = json.decode(raw) ---@cast decoded table
+	const raw = fs.read(report) ---@cast raw -nil
+	const decoded = json.decode(raw) ---@cast decoded table
 	test.equal(decoded.version, 1)
 	test.equal(decoded.command, "sync")
 	test.equal(decoded.package, "sync-timings-json")

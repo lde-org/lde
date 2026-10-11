@@ -1,18 +1,18 @@
-local test = require("lde-test")
+const test = require("lde-test")
 
-local fs = require("fs")
+const fs = require("fs")
 local env = require("env")
 local path = require("path")
-local json = require("json")
-local process = require("process")
+const json = require("json")
+const process = require("process")
 
-local ldecli = require("tests.lib.ldecli")
+const ldecli = require("tests.lib.ldecli")
 
 local tmpBase = path.join(env.tmpdir(), "lde-install-tests")
 fs.rmdir(tmpBase)
 fs.mkdir(tmpBase)
 
-local ldeBinDir = path.dirname(assert(env.execPath()))
+const ldeBinDir = path.dirname(assert(env.execPath()))
 
 --- Run a tool wrapper with the lde binary dir prepended to PATH (the wrapper
 --- execs `lde x ...`), returning exit code + merged output. The wrapper is
@@ -23,7 +23,7 @@ local ldeBinDir = path.dirname(assert(env.execPath()))
 ---@param args string[]
 ---@return number?, string?
 local function runTool(wrapperPath, args)
-	local sep = jit.os == "Windows" and ";" or ":"
+	const sep = jit.os == "Windows" and ";" or ":"
 	local code, stdout, stderr = process.exec(wrapperPath, args, {
 		env = { PATH = ldeBinDir .. sep .. (os.getenv("PATH") or "") }
 	})
@@ -33,14 +33,12 @@ end
 --- Path of the wrapper writeWrapper produces for a tool: a .cmd on Windows.
 ---@param treeDir string
 ---@param toolName string
----@return string
 local function wrapperPath(treeDir, toolName)
 	return path.join(treeDir, "tools", jit.os == "Windows" and (toolName .. ".cmd") or toolName)
 end
 
 --- A local git repo usable as an offline `--git` install source.
 ---@param name string
----@return string repoDir
 local function makeLocalGitRepo(name)
 	local repoDir = path.join(tmpBase, name .. "-repo")
 	fs.rmdir(repoDir)
@@ -172,7 +170,7 @@ test.it("uninstall removes the tool wrapper", function()
 	test.falsy(fs.exists(wrapper), "wrapper should be removed")
 
 	-- Uninstalling again reports it as not installed.
-	local ok3, out3 = ldecli({ "--tree", treeDir, "uninstall", "rmtool" })
+	const ok3, out3 = ldecli({ "--tree", treeDir, "uninstall", "rmtool" })
 	test.truthy(ok3)
 	test.includes(out3 or "", "not installed")
 end)

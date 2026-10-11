@@ -3,14 +3,14 @@
 -- end-to-end --hot/--watch loops are covered by packages/lde/tests/hot.test.lua
 -- through child processes; here the bootstrap runs in-process in a real guest
 -- state so reload/checkKey are asserted directly.
-local test = require("lde-test")
+const test = require("lde-test")
 
-local lde = require("lde-core")
-local watchrun = require("lde-core.watchrun")
+const lde = require("lde-core")
+const watchrun = require("lde-core.watchrun")
 
-local fs = require("fs")
-local env = require("env")
-local path = require("path")
+const fs = require("fs")
+const env = require("env")
+const path = require("path")
 
 local tmpBase = path.normalize(path.join(env.tmpdir(), "lde-watchrun-tests"))
 -- Normalized: on macOS CI, TMPDIR has a trailing slash, so the raw join would
@@ -46,16 +46,16 @@ return b .. "+" .. c.tag
 ---@param mode "hot"|"watch"?
 ---@return table state, function reload, function checkKey, function beginEntry, function flushAccepts
 local function setup(mode)
-	local state, _, cleanup = lde.runtime.createState({
+	local state, _, _ = lde.runtime.createState({
 		packagePath = modDir .. "/?.lua;" .. modDir .. "/?/init.lua;",
 	})
-	local boot = state:load(watchrun.bootstrap, "@lde-watchrun")
+	const boot = state:load(watchrun.bootstrap, "@lde-watchrun")
 	local ok, hotState = boot:pcall({
-		abs = function(p) return path.resolve(env.cwd(), p) end,
+		abs = p -> path.resolve(env.cwd(), p),
 		-- Stands in for the driver's real watcher poll. What the real one does
 		-- (raise the reload marker when a tracked file changed) is covered
 		-- end-to-end in packages/lde/tests/hot.test.lua.
-		poll = function() return false end,
+		poll = || -> false,
 		mode = mode,
 		srcPrefix = nil,
 		targetPrefix = nil,
@@ -92,7 +92,7 @@ test.it("reload drops a changed module and its transitive dependents", function(
 	local dropped = reload(path.join(modDir, "a.lua"))
 	test.equal(dropped, 3)
 
-	local loaded = state:globals().package.loaded
+	const loaded = state:globals().package.loaded
 	test.falsy(loaded:get("a"), "a must be dropped")
 	test.falsy(loaded:get("b"), "b must be dropped (dependent of a)")
 	test.falsy(loaded:get("main"), "main must be dropped (transitive dependent)")
@@ -141,7 +141,7 @@ test.it("package.hot exists only in --hot mode", function()
 
 	-- --watch recreates the state on every run, so there is nothing to accept
 	-- and no live loop to poll from.
-	local watchState = setup("watch")
+	const watchState = setup("watch")
 	test.falsy(watchState:eval("return package.hot"))
 	watchState:close()
 end)

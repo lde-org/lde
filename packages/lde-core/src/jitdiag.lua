@@ -7,18 +7,18 @@
 -- traces. This is a trace-level diagnostic: it fires on every trace event,
 -- so it is opt-in and deliberately separate from the sampling --profile.
 
-local ansi = require("ansi")
-local path = require("path")
-local env = require("env")
-local highlight = require("ansi.highlight")
+const ansi = require("ansi")
+const path = require("path")
+const env = require("env")
+const highlight = require("ansi.highlight")
 
-local jitdiag = {}
+const jitdiag = {}
 
 -- Trace compiler error codes (TraceError enum), in order, from the bundled
 -- LuaJIT fork's src/lj_traceerr.h. The attach callback passes the code as an
 -- integer; %s/%d placeholders are filled from the event's errinfo.
 ---@type table<integer, string>
-local TRACE_ERRORS = {
+const TRACE_ERRORS = {
 	[0]  = "error thrown or hook called during recording",
 	[1]  = "trace too short",
 	[2]  = "trace too long",
@@ -60,7 +60,7 @@ local TRACE_ERRORS = {
 -- abort's errinfo is the opcode number ("NYI: bytecode <opcode>"), which we
 -- decode to a name here.
 ---@type string[]
-local BC_NAMES = {
+const BC_NAMES = {
 	"ISLT", "ISGE", "ISLE", "ISGT", "ISEQV", "ISNEV", "ISEQS", "ISNES",
 	"ISEQN", "ISNEN", "ISEQP", "ISNEP", "ISTC", "ISFC", "IST", "ISF",
 	"ISTYPE", "ISNUM", "MOV", "NOT", "UNM", "LEN", "ADDVN", "SUBVN",
@@ -79,15 +79,14 @@ local BC_NAMES = {
 --- Decode an abort reason code + errinfo into a human message.
 ---@param code integer
 ---@param errinfo string?
----@return string
 local function formatReason(code, errinfo)
 	local template = TRACE_ERRORS[code]
 	if not template then
 		return "unknown trace error " .. tostring(code)
 	end
 	if code == 7 then -- NYIBC: errinfo is the opcode number; report "FNEW is NYI"
-		local op = tonumber(errinfo or "")
-		local name = op and BC_NAMES[op + 1] or errinfo or "?"
+		const op = tonumber(errinfo or "")
+		const name = op and BC_NAMES[op + 1] or errinfo or "?"
 		return name .. " is NYI"
 	end
 	if template:find("%%") then
@@ -102,10 +101,9 @@ end
 ---@field compiled integer
 ---@field aborted integer
 ---@field sites table<string, { count: integer, reason: string, file: string, line: integer }>
-local Session = {}
+const Session = {}
 Session.__index = Session
 
----@return lde.jitdiag.Session
 local function newSession()
 	return setmetatable({
 		compiled = 0,
@@ -115,7 +113,6 @@ local function newSession()
 end
 
 ---@param file string
----@return string # path relativized against cwd when possible
 local function displayPath(file)
 	file = file:gsub("^@", "")
 	local cwd = env.cwd()
@@ -133,7 +130,7 @@ local function splitLines(src)
 	local lines = {}
 	local pos = 1
 	while true do
-		local nl = src:find("\n", pos, true)
+		const nl = src:find("\n", pos, true)
 		if nl then
 			lines[#lines + 1] = src:sub(pos, nl - 1)
 			pos = nl + 1
@@ -146,7 +143,6 @@ local function splitLines(src)
 end
 
 ---@param line string
----@return string
 local function expandTabs(line)
 	return (line:gsub("\t", "    "))
 end
@@ -194,7 +190,7 @@ end, "trace")
 -- Handles for reporting after a run: state -> session. The state is a lua-sys
 -- object; keys are weak so closed states drop out.
 ---@type table<lua.State, lde.jitdiag.Session>
-local sessions = setmetatable({}, { __mode = "k" })
+const sessions = setmetatable({}, { __mode = "k" })
 
 --- Install trace diagnostics into a guest state. The guest forwards every
 --- trace event; aborts print live (deduped per site) and are tallied for the
@@ -213,13 +209,13 @@ function jitdiag.install(state, opts)
 
 	---@param info { trace: integer, file: string, line: integer, reason: integer, errinfo: string }
 	local function onAbort(info)
-		session.aborted = session.aborted + 1
+		session.aborted += 1
 		local reason = formatReason(info.reason, info.errinfo)
 		local file = displayPath(info.file)
-		local key = file .. ":" .. tostring(info.line) .. " " .. reason
+		const key = file .. ":" .. tostring(info.line) .. " " .. reason
 		local site = session.sites[key]
 		if site then
-			site.count = site.count + 1
+			site.count += 1
 			return
 		end
 		site = {
@@ -234,8 +230,8 @@ function jitdiag.install(state, opts)
 			file .. ":" .. site.line, ansi.colorize("yellow", reason))
 	end
 
-	local boot = state:load(BOOTSTRAP, "@lde-jitdiag")
-	local ok, err = boot:pcall({
+	const boot = state:load(BOOTSTRAP, "@lde-jitdiag")
+	const ok, err = boot:pcall({
 		count = onCount,
 		abort = onAbort,
 	})
@@ -262,26 +258,26 @@ function jitdiag.report(session, cwd)
 	for _key, site in pairs(session.sites) do
 		sites[#sites + 1] = site
 	end
-	table.sort(sites, function(a, b) return a.count > b.count end)
+	table.sort(sites, |a, b| -> a.count > b.count)
 
 	ansi.printf("{yellow}jit{reset}: {gray}%d traces compiled, %d aborted (%d site%s){reset}",
-		session.compiled, session.aborted, #sites, #sites == 1 and "" or "s")
+		session.compiled, session.aborted, #sites, #sites == 1 ? "" : "s")
 	for _, site in ipairs(sites) do
 		-- Bun-style block: highlighted snippet with an underline under the
 		-- incident line and the reason beside it. Fall back to a one-liner
 		-- when the source file can't be read.
 		local rendered = false
 		if cwd and site.line > 0 then
-			local f = path.isAbsolute(site.file) and site.file or path.join(cwd, site.file)
-			local src = require("fs").read(f)
+			const f = (site.file and path.isAbsolute(site.file)) ? site.file : path.join(cwd, site.file)
+			const src = require("fs").read(f)
 			if src then
 				rendered = true
 				local lines = splitLines(src)
 				local startLine = math.max(1, site.line - 1)
-				local endLine = math.min(#lines, site.line + 1)
-				local width = #tostring(endLine)
+				const endLine = math.min(#lines, site.line + 1)
+				const width = #tostring(endLine)
 				local function gutter(ln)
-					local num = string.format("%" .. width .. "d | ", ln)
+					const num = string.format("%" .. width .. "d | ", ln)
 					return ansi.colorize("gray", num)
 				end
 				-- Caret directly under the incident line (mid-window), with the
@@ -289,9 +285,9 @@ function jitdiag.report(session, cwd)
 				for ln = startLine, site.line do
 					print(gutter(ln) .. highlight(expandTabs(lines[ln])))
 				end
-				local content = expandTabs(lines[site.line] or "")
-				local first = content:find("%S") or 1
-				local len = math.max(1, #content - first + 1)
+				const content = expandTabs(lines[site.line] or "")
+				const first = content:find("%S") or 1
+				const len = math.max(1, #content - first + 1)
 				print(ansi.colorize("gray", string.rep(" ", width) .. " | ") .. string.rep(" ", first - 1)
 					.. ansi.format("{yellow}{bold}%s{reset}", string.rep("^", len))
 					.. " " .. ansi.colorize("yellow", site.reason))

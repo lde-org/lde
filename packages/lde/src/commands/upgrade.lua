@@ -1,40 +1,39 @@
-local semver = require("semver")
-local json = require("json")
-local ansi = require("ansi")
-local path = require("path")
-local fs = require("fs")
-local env = require("env")
-local process = require("process")
-local curl = require("curl-sys")
-local Archive = require("archive")
+const semver = require("semver")
+const ansi = require("ansi")
+const path = require("path")
+const fs = require("fs")
+const env = require("env")
+const process = require("process")
+const curl = require("curl-sys")
+const Archive = require("archive")
 
-local lde = require("lde-core")
+const lde = require("lde-core")
 
-local releasesUrl = "https://api.github.com/repos/lde-org/lde/releases"
+const releasesUrl = "https://api.github.com/repos/lde-org/lde/releases"
 
 local arch = jit.arch == "arm64" and "aarch64" or "x86-64"
-local isAndroid = env.var("ANDROID_ROOT") ~= nil
+const isAndroid = env.var("ANDROID_ROOT") ~= nil
 
 -- musl systems (Alpine and other musl distros) ship the musl build under a
 -- -musl artifact name. Detect musl by its dynamic loader rather than ldd:
 -- musl's ldd has no --version, so a ldd-based probe can't tell it from glibc.
 local libc = ""
 if jit.os == "Linux" and not isAndroid then
-	local code = process.exec("sh", { "-c", "ls /lib/ld-musl-* >/dev/null 2>&1" })
+	const code = process.exec("sh", { "-c", "ls /lib/ld-musl-* >/dev/null 2>&1" })
 	if code == 0 then libc = "-musl" end
 end
 
-local artifactNames = {
+const artifactNames = {
 	Windows = "lde-windows-" .. arch .. ".zip",
-	Linux = isAndroid and "lde-android-" .. arch .. ".zip" or "lde-linux-" .. arch .. libc .. ".zip",
+	Linux = isAndroid ? "lde-android-" .. arch .. ".zip" : "lde-linux-" .. arch .. libc .. ".zip",
 	OSX = "lde-macos-" .. arch .. ".zip",
 	BSD = "lde-freebsd-" .. arch .. ".zip"
 }
 
 -- Name of the binary inside the release archive.
-local innerNames = {
+const innerNames = {
 	Windows = "lde-windows-" .. arch .. ".exe",
-	Linux = isAndroid and "lde-android-" .. arch or "lde-linux-" .. arch .. libc,
+	Linux = isAndroid ? "lde-android-" .. arch : "lde-linux-" .. arch .. libc,
 	OSX = "lde-macos-" .. arch,
 	BSD = "lde-freebsd-" .. arch
 }
@@ -46,9 +45,9 @@ local function upgrade(args)
 		return
 	end
 
-	local shouldForce = args:flag("force")
-	local shouldNightly = args:flag("nightly")
-	local desiredVersion = args:option("version")
+	const shouldForce = args:flag("force")
+	const shouldNightly = args:flag("nightly")
+	const desiredVersion = args:option("version")
 
 	local releaseUrl
 	if shouldNightly then
@@ -59,7 +58,7 @@ local function upgrade(args)
 		releaseUrl = releasesUrl .. "/tags/v" .. desiredVersion
 	end
 
-	local res, err = curl.get(releaseUrl, { url = releaseUrl, headers = { ["User-Agent"] = "lde-upgrade" } })
+	const res, err = curl.get(releaseUrl, { url = releaseUrl, headers = { ["User-Agent"] = "lde-upgrade" } })
 	if not res then
 		ansi.printf("{red}Failed to fetch latest release: %s", err)
 		return
@@ -70,7 +69,7 @@ local function upgrade(args)
 		return
 	end
 
-	local releaseInfo, derr = lde.util.decodeJson(res.body)
+	const releaseInfo, derr = lde.util.decodeJson(res.body)
 	if not releaseInfo or not releaseInfo.tag_name or not releaseInfo.assets then
 		ansi.printf("{red}Invalid release information received: %s", derr or "missing fields")
 		return
@@ -84,7 +83,7 @@ local function upgrade(args)
 			return
 		end
 
-		local runningVersion = lde.global.currentVersion
+		const runningVersion = lde.global.currentVersion
 		if not shouldForce and not desiredVersion and semver.compare(latestVersion, runningVersion) <= 0 then
 			ansi.printf("{green}You are already running the latest version (%s)", runningVersion)
 			return
@@ -103,7 +102,7 @@ local function upgrade(args)
 		return
 	end
 
-	local innerName = innerNames[jit.os]
+	const innerName = innerNames[jit.os]
 
 	local downloadUrl = nil
 	for _, asset in ipairs(releaseInfo.assets) do
@@ -119,20 +118,20 @@ local function upgrade(args)
 	end
 
 	local binDir = path.dirname(binLocation)
-	local binName = path.basename(binLocation)
+	const binName = path.basename(binLocation)
 	local tempNewLocation = path.join(binDir, binName .. ".new")
 	local tempOldLocation = path.join(binDir, binName .. ".old")
 	local tempZipLocation = path.join(binDir, binName .. ".zip")
 	local tempExtractDir = path.join(binDir, binName .. ".tmp")
 
-	local bar = ansi.progress("Downloading " .. artifactName, { indent = false })
+	const bar = ansi.progress("Downloading " .. artifactName, { indent = false })
 
 	-- Download the archive directly to file
-	local dlOk, dlErr = curl.download(downloadUrl, tempZipLocation, {
+	const dlOk, dlErr = curl.download(downloadUrl, tempZipLocation, {
 		url = downloadUrl,
 		progress = function(dltotal, dlnow)
-			local ratio = dltotal > 0 and (dlnow / dltotal) or nil
-			local info = dltotal > 0
+			local ratio = dltotal > 0 ? (dlnow / dltotal) : nil
+			const info = dltotal > 0
 				and (ansi.formatBytes(dlnow) .. " / " .. ansi.formatBytes(dltotal))
 				or ansi.formatBytes(dlnow)
 			bar:update(ratio, info)
@@ -152,7 +151,7 @@ local function upgrade(args)
 	end
 
 	-- Extract the binary from the archive
-	local extractOk, extractErr = Archive.new(tempZipLocation):extract(tempExtractDir)
+	const extractOk, extractErr = Archive.new(tempZipLocation):extract(tempExtractDir)
 	if not extractOk then
 		fs.delete(tempZipLocation)
 		ansi.printf("{red}Failed to extract archive: %s", extractErr)
@@ -167,7 +166,7 @@ local function upgrade(args)
 		return
 	end
 
-	local stageOk, stageErr = fs.move(extractedBinary, tempNewLocation)
+	const stageOk, stageErr = fs.move(extractedBinary, tempNewLocation)
 	fs.delete(tempZipLocation)
 	if not stageOk then
 		fs.rmdir(tempExtractDir)
@@ -182,7 +181,7 @@ local function upgrade(args)
 	end
 
 	-- Move current executable to tmp (allows replacement even if running)
-	local moveOldSuccess, moveOldErr = fs.move(binLocation, tempOldLocation)
+	const moveOldSuccess, moveOldErr = fs.move(binLocation, tempOldLocation)
 	if not moveOldSuccess then
 		fs.delete(tempNewLocation)
 		ansi.printf("{red}Failed to move current binary: %s", moveOldErr)
@@ -190,7 +189,7 @@ local function upgrade(args)
 	end
 
 	-- Move new executable to original location
-	local moveNewSuccess, moveNewErr = fs.move(tempNewLocation, binLocation)
+	const moveNewSuccess, moveNewErr = fs.move(tempNewLocation, binLocation)
 	if not moveNewSuccess then
 		-- Try to restore the old binary
 		fs.move(tempOldLocation, binLocation)

@@ -1,4 +1,4 @@
-local ffi = require("ffi")
+const ffi = require("ffi")
 
 ffi.cdef [[
 	void* memchr(const void* s, int c, size_t n);
@@ -6,7 +6,7 @@ ffi.cdef [[
 
 local ROCKSPEC_BASE = "https://luarocks.org"
 
-local luarocks = {}
+const luarocks = {}
 
 ---@class luarocks.Manifest.Entry
 ---@field arch "rockspec" | "src" | string
@@ -16,7 +16,6 @@ local luarocks = {}
 --- multi-megabyte manifest).
 
 ---@param b integer?
----@return boolean
 local function isWordByte(b)
 	return b ~= nil and ((b >= 48 and b <= 57) or (b >= 65 and b <= 90) or (b >= 97 and b <= 122) or b == 95)
 end
@@ -24,11 +23,10 @@ end
 --- Skip whitespace (space, tab, newline, CR) starting at 1-based index i.
 ---@param raw string
 ---@param i integer
----@return integer
 local function skipWS(raw, i)
 	local c = string.byte(raw, i)
 	while c == 32 or c == 9 or c == 10 or c == 13 do
-		i = i + 1
+		i += 1
 		c = string.byte(raw, i)
 	end
 	return i
@@ -39,7 +37,6 @@ end
 --- index of "{" or nil.
 ---@param raw string
 ---@param i integer
----@return integer?
 local function keyEqBrace(raw, i)
 	i = skipWS(raw, i)
 	if string.byte(raw, i) ~= 61 then return nil end -- "="
@@ -51,10 +48,9 @@ end
 --- Find an unquoted identifier key: `name = {`.
 ---@param raw string
 ---@param name string
----@return integer? bracePos
 local function findIdentKey(raw, name)
 	local pos = 1
-	local nlen = #name
+	const nlen = #name
 	while true do
 		local start = raw:find(name, pos, true)
 		if not start then return nil end
@@ -70,7 +66,6 @@ end
 --- Find a quoted key: `["name"] = {`.
 ---@param raw string
 ---@param name string
----@return integer? bracePos
 local function findQuotedKey(raw, name)
 	local lit = '["' .. name .. '"]'
 	local pos = 1
@@ -85,17 +80,18 @@ end
 
 ---@class luarocks.Manifest
 ---@field _raw string
-local Manifest = {}
+const Manifest = {}
 Manifest.__index = Manifest
 
 ---@param raw string
----@return luarocks.Manifest
 function Manifest.new(raw)
 	return setmetatable({ _raw = raw }, Manifest)
 end
 
 ---@param name string
 ---@return table<string, luarocks.Manifest.Entry[]>? entries
+---@return string? rockspecUrl
+---@return string? srcUrl
 ---@return string? err
 function Manifest:package(name)
 	if not self._cache then self._cache = {} end
@@ -112,8 +108,8 @@ function Manifest:package(name)
 	end
 
 	-- Use memchr to scan for { and } to find the matching close brace
-	local ptr = ffi.cast("const char*", raw)
-	local rawlen = #raw
+	const ptr = ffi.cast("const char*", raw)
+	const rawlen = #raw
 	local openByte = string.byte('{')
 	local closeByte = string.byte('}')
 	local depth = 0
@@ -121,19 +117,19 @@ function Manifest:package(name)
 	local blockEnd = braceStart
 
 	while i < rawlen do
-		local nextOpen  = ffi.C.memchr(ptr + i, openByte, rawlen - i)
-		local nextClose = ffi.C.memchr(ptr + i, closeByte, rawlen - i)
-		local openPos   = nextOpen ~= nil and tonumber(ffi.cast("size_t", nextOpen) - ffi.cast("size_t", ptr)) or rawlen
-		local closePos  = nextClose ~= nil and tonumber(ffi.cast("size_t", nextClose) - ffi.cast("size_t", ptr)) or
+		const nextOpen  = ffi.C.memchr(ptr + i, openByte, rawlen - i)
+		const nextClose = ffi.C.memchr(ptr + i, closeByte, rawlen - i)
+		const openPos   = nextOpen ~= nil ? tonumber(ffi.cast("size_t", nextOpen) - ffi.cast("size_t", ptr)) : rawlen
+		const closePos  = nextClose ~= nil and tonumber(ffi.cast("size_t", nextClose) - ffi.cast("size_t", ptr)) or
 			rawlen
 
 		if openPos >= rawlen and closePos >= rawlen then break end
 
 		if openPos < closePos then
-			depth = depth + 1
+			depth += 1
 			i = openPos + 1
 		else
-			depth = depth - 1
+			depth -= 1
 			if depth == 0 then
 				blockEnd = closePos + 1 -- 1-based
 				break
@@ -142,7 +138,7 @@ function Manifest:package(name)
 		end
 	end
 
-	local block = raw:sub(braceStart, blockEnd)
+	const block = raw:sub(braceStart, blockEnd)
 
 	local versions = {}
 	for verKey, verBody in block:gmatch('%["([^"]+)"%]%s*=%s*(%b{})') do
@@ -232,10 +228,12 @@ local function parseVer(v)
 	-- dropped, leaving equal versions to be ordered nondeterministically by
 	-- table.sort). A missing revision compares as 0, matching LuaRocks (so
 	-- "0.5-0" satisfies ">= 0.5", e.g. the http rock's lpeg_patterns dep).
-	local base, rev = v:match("^([^%-]+)%-(%d+)$")
-	local parts = {}
+	const base, rev = v:match("^([^%-]+)%-(%d+)$")
+	const parts = {}
 	for n in (base or v):gmatch("%d+") do
-		parts[#parts + 1] = tonumber(n)
+		-- The pattern only hands digits over, so the conversion cannot fail: `or 0` keeps the
+		-- element a number rather than the `number?` `tonumber` hands back.
+		parts[#parts + 1] = tonumber(n) or 0
 	end
 	parts[#parts + 1] = tonumber(rev) or 0
 	return parts
@@ -246,7 +244,7 @@ end
 ---@return number
 local function cmpVer(a, b)
 	for i = 1, math.max(#a, #b) do
-		local d = (a[i] or 0) - (b[i] or 0)
+		const d = (a[i] or 0) - (b[i] or 0)
 		if d ~= 0 then return d end
 	end
 	return 0
@@ -257,14 +255,13 @@ end
 --- matches every 1.8.x). Returns nil when nothing matches.
 ---@param versions table<string, any> # manifest version -> entries
 ---@param constraint string
----@return string? version
 local function matchExactOrPrefix(versions, constraint)
 	if versions[constraint] then return constraint end
 
 	-- parseVer appends a synthetic 0 for a missing revision; drop it so the
 	-- constraint's remaining parts prefix the candidate's (revision included).
-	local cparts = parseVer(constraint)
-	local prefix = {}
+	const cparts = parseVer(constraint)
+	const prefix = {}
 	for i = 1, #cparts - 1 do prefix[i] = cparts[i] end
 
 	local best, bestParts ---@type string?, number[]?
@@ -305,8 +302,8 @@ function luarocks.satisfies(ver, op, constraint)
 		-- Pessimistic constraint: >= ver and < ver with last segment dropped + penultimate incremented
 		-- e.g. ~> 1.2 means >= 1.2 and < 1.3; ~> 1 means >= 1 and < 2
 		if c < 0 then return false end
-		local cv = parseVer(constraint)
-		local upper = {}
+		const cv = parseVer(constraint)
+		const upper = {}
 		for i = 1, #cv - 1 do upper[i] = cv[i] end
 		upper[math.max(#cv - 1, 1)] = (upper[math.max(#cv - 1, 1)] or cv[1]) + 1
 		return cmpVer(parseVer(ver), upper) < 0
@@ -318,15 +315,13 @@ end
 ---@param manifest luarocks.Manifest
 ---@param name string
 ---@param constraint string?
----@return string? rockspecUrl
----@return string? err
 function luarocks.getRockspecUrl(manifest, name, constraint)
 	local urls, err = luarocks.getRockspecUrls(manifest, name)
 	if not urls then return nil, err end
 
 	local sorted = {}
 	for v in pairs(urls) do sorted[#sorted + 1] = v end
-	table.sort(sorted, function(a, b) return cmpVer(parseVer(a), parseVer(b)) > 0 end)
+	table.sort(sorted, |a, b| -> cmpVer(parseVer(a), parseVer(b)) > 0)
 
 	if not constraint or constraint == "" then
 		return urls[sorted[1]]
@@ -339,7 +334,7 @@ function luarocks.getRockspecUrl(manifest, name, constraint)
 
 	if #constraints == 0 then
 		-- Exact version ("1.8.0-1") or a bare version prefix ("1.8.0", "1.8")
-		local v = matchExactOrPrefix(urls, constraint)
+		local v = matchExactOrPrefix(urls, constraint --[[@as string]])
 		if v then return urls[v] end
 		return nil, "Version '" .. constraint .. "' not found for: " .. name
 	end
@@ -361,12 +356,10 @@ end
 ---@param urlMap table<string, string>
 ---@param name string
 ---@param constraint string?
----@return string? url
----@return string? err
 local function pickUrl(urlMap, name, constraint)
 	local sorted = {}
 	for v in pairs(urlMap) do sorted[#sorted + 1] = v end
-	table.sort(sorted, function(a, b) return cmpVer(parseVer(a), parseVer(b)) > 0 end)
+	table.sort(sorted, |a, b| -> cmpVer(parseVer(a), parseVer(b)) > 0)
 
 	if not constraint or constraint == "" then
 		return urlMap[sorted[1]]
@@ -378,7 +371,7 @@ local function pickUrl(urlMap, name, constraint)
 	end
 
 	if #constraints == 0 then
-		local v = matchExactOrPrefix(urlMap, constraint)
+		local v = matchExactOrPrefix(urlMap, constraint --[[@as string]])
 		if v then return urlMap[v] end
 		return nil, "Version '" .. constraint .. "' not found for: " .. name
 	end
@@ -397,8 +390,6 @@ end
 ---@param manifest luarocks.Manifest
 ---@param name string
 ---@param constraint string?
----@return string? srcUrl
----@return string? err
 function luarocks.getSrcUrl(manifest, name, constraint)
 	local urls, err = luarocks.getSrcUrls(manifest, name)
 	if not urls then return nil, err end
@@ -438,7 +429,7 @@ function luarocks.getBest(manifest, name, constraint)
 	-- Collect all versions that satisfy the constraint
 	local sorted = {}
 	for v in pairs(versions) do sorted[#sorted + 1] = v end
-	table.sort(sorted, function(a, b) return cmpVer(parseVer(a), parseVer(b)) > 0 end)
+	table.sort(sorted, |a, b| -> cmpVer(parseVer(a), parseVer(b)) > 0)
 
 	local constraints = {}
 	if constraint and constraint ~= "" then
@@ -469,8 +460,8 @@ function luarocks.getBest(manifest, name, constraint)
 				if entry.arch == "rockspec" then hasRockspec = true end
 			end
 
-			local rockspecUrl = hasRockspec and string.format("%s/%s-%s.rockspec", ROCKSPEC_BASE, name, v) or nil
-			local srcUrl = hasSrc and string.format("%s/%s-%s.src.rock", ROCKSPEC_BASE, name, v) or nil
+			local rockspecUrl = hasRockspec ? string.format("%s/%s-%s.rockspec", ROCKSPEC_BASE, name, v) : nil
+			local srcUrl = hasSrc ? string.format("%s/%s-%s.src.rock", ROCKSPEC_BASE, name, v) : nil
 			if rockspecUrl or srcUrl then
 				return v, rockspecUrl, srcUrl, nil
 			end
@@ -491,12 +482,12 @@ end
 ---@param constraint string?
 ---@return { version: string, rockspecUrl: string?, srcUrl: string? }[]
 function luarocks.listBest(manifest, name, constraint)
-	local versions, err = manifest:package(name)
+	local versions, _ = manifest:package(name)
 	if not versions then return {} end
 
 	local sorted = {}
 	for v in pairs(versions) do sorted[#sorted + 1] = v end
-	table.sort(sorted, function(a, b) return cmpVer(parseVer(a), parseVer(b)) > 0 end)
+	table.sort(sorted, |a, b| -> cmpVer(parseVer(a), parseVer(b)) > 0)
 
 	local constraints = {}
 	if constraint and constraint ~= "" then
@@ -510,7 +501,7 @@ function luarocks.listBest(manifest, name, constraint)
 		end
 	end
 
-	local out = {}
+	const out = {}
 	for _, v in ipairs(sorted) do
 		if #constraints > 0 then
 			local ok = true
@@ -529,8 +520,8 @@ function luarocks.listBest(manifest, name, constraint)
 			end
 			out[#out + 1] = {
 				version = v,
-				rockspecUrl = hasRockspec and string.format("%s/%s-%s.rockspec", ROCKSPEC_BASE, name, v) or nil,
-				srcUrl = hasSrc and string.format("%s/%s-%s.src.rock", ROCKSPEC_BASE, name, v) or nil,
+				rockspecUrl = hasRockspec ? string.format("%s/%s-%s.rockspec", ROCKSPEC_BASE, name, v) : nil,
+				srcUrl = hasSrc ? string.format("%s/%s-%s.src.rock", ROCKSPEC_BASE, name, v) : nil,
 			}
 		end
 		::continue::

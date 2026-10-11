@@ -35,7 +35,7 @@ end
 -- `lde.global.getDir()` behave exactly as before — the module just loads on
 -- first use instead of at lde-core load time.
 ---@type table<string, string>
-local lazyModules = {
+const lazyModules = {
 	timings    = "lde-core.util.timings",
 	Registry   = "lde-registry",
 	Package    = "lde-core.package",
@@ -49,9 +49,9 @@ local lazyModules = {
 
 setmetatable(lde, {
 	__index = function(t, k)
-		local name = lazyModules[k]
+		const name = lazyModules[k]
 		if not name then return nil end
-		local m = require(name)
+		const m = require(name)
 		rawset(t, k, m)
 		return m
 	end,

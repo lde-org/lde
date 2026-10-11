@@ -1,15 +1,15 @@
-local fs = require("fs")
-local ansi = require("ansi")
-local path = require("path")
-local env = require("env")
+const fs = require("fs")
+const ansi = require("ansi")
+const path = require("path")
+const env = require("env")
 
-local lde = require("lde-core")
+const lde = require("lde-core")
 local prompt = require("lde.util.prompt")
 
 ---@param args clap.Args
 local function new(args)
-	local opts = prompt.scaffoldOptions(args)
-	local nameFlag = args:option("name")
+	const opts = prompt.scaffoldOptions(args)
+	const nameFlag = args:option("name")
 
 	local name = args:pop()
 	if not name then
@@ -18,7 +18,7 @@ local function new(args)
 		end
 
 		-- No name given: ask for it — it names both the directory and the package.
-		local asked = prompt.ask({ prompt = "Project name" })
+		const asked = prompt.ask({ prompt = "Project name" })
 		if not asked then
 			os.exit(1)
 		end
@@ -34,7 +34,7 @@ local function new(args)
 	-- The tests/ fixtures are exposed as target/tests during lde test, so a
 	-- package named 'tests' would collide with them. Fail before creating
 	-- anything.
-	local manifestName = opts.name or path.basename(name)
+	const manifestName = opts.name or path.basename(name)
 	if manifestName == "tests" then
 		lde.error.raise("The name 'tests' is reserved for the test fixtures directory; choose another project name")
 	end
@@ -43,7 +43,7 @@ local function new(args)
 		lde.error.raise("Directory " .. name .. " already exists")
 	end
 
-	local parent = path.dirname(name)
+	const parent = path.dirname(name)
 	if parent ~= "" and parent ~= "." and not fs.isdir(parent) then
 		lde.error.raise("Cannot create '" .. name .. "': parent directory does not exist")
 	end
@@ -51,7 +51,7 @@ local function new(args)
 	fs.mkdir(name)
 	ansi.printf("{green}Created directory: %s", name)
 
-	local package = lde.Package.init(path.resolve(env.cwd(), name), opts)
+	const package = lde.Package.init(path.resolve(env.cwd(), name), opts)
 	if package and opts.language then
 		prompt.ensureCompiler(opts.language)
 	end

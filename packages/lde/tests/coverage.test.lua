@@ -1,11 +1,11 @@
 local test = require("lde-test")
 
-local fs = require("fs")
-local env = require("env")
-local path = require("path")
-local json = require("json")
+const fs = require("fs")
+const env = require("env")
+const path = require("path")
+const json = require("json")
 
-local ldecli = require("tests.lib.ldecli")
+const ldecli = require("tests.lib.ldecli")
 
 test.it("lde test --coverage reports per-file line coverage", function()
 	local tmpDir = path.join(env.tmpdir(), "lde-coverage-test")
@@ -81,7 +81,7 @@ return M
 	local col
 	local aligned = true
 	for line in report:gmatch("[^\r\n]+") do
-		local at = line:find(" lines", 1, true)
+		const at = line:find(" lines", 1, true)
 		if at then
 			if col and at ~= col then aligned = false end
 			col = col or at
@@ -119,14 +119,14 @@ t.it("uses part of the module", function()
 end)
 ]])
 
-	local jsonPath = path.join(tmpDir, "cov.json")
+	const jsonPath = path.join(tmpDir, "cov.json")
 	fs.delete(jsonPath)
 
 	local ok, out = ldecli({ "test", "--coverage", "--json", jsonPath }, tmpDir)
 	test.truthy(ok, "lde test --coverage --json failed: " .. tostring(out))
 	test.truthy(fs.exists(jsonPath), "coverage JSON not written")
 
-	local dataRaw = fs.read(jsonPath) ---@cast dataRaw -nil
+	const dataRaw = fs.read(jsonPath) ---@cast dataRaw -nil
 	local data = json.decode(dataRaw) ---@cast data table<string, any>
 	test.truthy(data, "coverage JSON must decode")
 	test.equal(data.version, 1)
@@ -134,7 +134,7 @@ end)
 	test.equal(data.packages[1].package, "covjson")
 
 	-- The fixture has 6 executable lines; only the used() body is hit.
-	local pkg = data.packages[1]
+	const pkg = data.packages[1]
 	test.truthy(pkg.totalExecutable > 0)
 	test.truthy(pkg.totalCovered > 0)
 	test.truthy(pkg.totalCovered < pkg.totalExecutable, "expected partial coverage")

@@ -1,15 +1,20 @@
-local ffi = require("ffi")
+const ffi = require("ffi")
 
 ffi.cdef([[
 	typedef void*    HANDLE;
 	typedef uint32_t DWORD;
 	typedef int      BOOL;
 	typedef uint16_t WORD;
+	typedef int16_t  SHORT;
 	typedef wchar_t  WCHAR;
 
 	typedef struct {
 		WORD X; WORD Y;
 	} COORD;
+
+	typedef struct {
+		SHORT Left; SHORT Top; SHORT Right; SHORT Bottom;
+	} SMALL_RECT;
 
 	typedef struct {
 		BOOL bKeyDown;
@@ -25,57 +30,64 @@ ffi.cdef([[
 		union { KEY_EVENT_RECORD KeyEvent; } Event;
 	} INPUT_RECORD;
 
+	typedef struct {
+		COORD      dwSize;
+		COORD      dwCursorPosition;
+		WORD       wAttributes;
+		SMALL_RECT srWindow;
+		COORD      dwMaximumWindowSize;
+	} CONSOLE_SCREEN_BUFFER_INFO;
+
 	HANDLE GetStdHandle(DWORD nStdHandle);
 	BOOL   GetConsoleMode(HANDLE h, DWORD* mode);
 	BOOL   SetConsoleMode(HANDLE h, DWORD mode);
 	BOOL   ReadConsoleInputW(HANDLE h, INPUT_RECORD* buf, DWORD len, DWORD* read);
-	BOOL   GetConsoleScreenBufferInfo(HANDLE h, void* info);
+	BOOL   GetConsoleScreenBufferInfo(HANDLE h, CONSOLE_SCREEN_BUFFER_INFO* info);
 ]])
 
-local kernel32               = ffi.load("kernel32")
+const kernel32 = ffi.load("kernel32")
 
-local STD_INPUT_HANDLE       = ffi.cast("DWORD", -10)
-local STD_OUTPUT_HANDLE      = ffi.cast("DWORD", -11)
-local ENABLE_ECHO_INPUT      = 0x0004
-local ENABLE_LINE_INPUT      = 0x0002
-local ENABLE_PROCESSED_INPUT = 0x0001
-local KEY_EVENT              = 0x0001
--- virtual key codes
-local VK_LEFT                = 0x25
-local VK_RIGHT               = 0x26 -- actually 0x27, see below
-local VK_UP                  = 0x26
-local VK_DOWN                = 0x28
-local VK_HOME                = 0x24
-local VK_END                 = 0x23
-local VK_BACK                = 0x08
-local VK_DELETE              = 0x2E
-local VK_RETURN              = 0x0D
+const STD_INPUT_HANDLE       = ffi.cast("DWORD", -10)
+const STD_OUTPUT_HANDLE      = ffi.cast("DWORD", -11)
+const ENABLE_ECHO_INPUT      = 0x0004
+const ENABLE_LINE_INPUT      = 0x0002
+const ENABLE_PROCESSED_INPUT = 0x0001
+const KEY_EVENT              = 0x0001
 
--- correct VK codes
-VK_LEFT                      = 0x25
-VK_UP                        = 0x26
-VK_RIGHT                     = 0x27
-VK_DOWN                      = 0x28
+-- What a key arrives as. The console hands over virtual key codes, and the editor above reads the
+-- same escape sequences a terminal sends, so this is where the two are made to agree.
+---@type table<integer, string>
+const KEY = {
+	[0x25] = "\x1b[D",   -- left
+	[0x26] = "\x1b[A",   -- up
+	[0x27] = "\x1b[C",   -- right
+	[0x28] = "\x1b[B",   -- down
+	[0x24] = "\x1b[H",   -- home
+	[0x23] = "\x1b[F",   -- end
+	[0x08] = "\x7f",     -- backspace
+	[0x2E] = "\x1b[3~",  -- delete
+	[0x0D] = "\r",       -- enter
+}
 
-local DwordBox               = ffi.typeof("DWORD[1]")
-local InputRecord            = ffi.typeof("INPUT_RECORD[1]")
+-- Held rather than made per call: `readByte` runs once per keystroke, and a record made there is
+-- garbage on every one of them.
+local record = ffi.new("INPUT_RECORD[1]")
+const read   = ffi.new("DWORD[1]")
+const screen = ffi.new("CONSOLE_SCREEN_BUFFER_INFO")
 
 ---@class readline.raw.windows
-local readline               = {}
+const readline = {}
 
-local hIn, hOut
-local savedMode              = nil
+local hIn, hOut, savedMode
 
 function readline.enterRaw()
 	hIn        = kernel32.GetStdHandle(STD_INPUT_HANDLE)
 	hOut       = kernel32.GetStdHandle(STD_OUTPUT_HANDLE)
-	local mode = DwordBox()
+	const mode = ffi.new("DWORD[1]")
 	kernel32.GetConsoleMode(hIn, mode)
-	savedMode = tonumber(mode[0])
-	local newMode = savedMode & ~(
-		ENABLE_ECHO_INPUT | ENABLE_LINE_INPUT | ENABLE_PROCESSED_INPUT
-	)
-	kernel32.SetConsoleMode(hIn, newMode)
+	savedMode = mode[0]
+	kernel32.SetConsoleMode(hIn, savedMode
+		& ~(ENABLE_ECHO_INPUT | ENABLE_LINE_INPUT | ENABLE_PROCESSED_INPUT))
 end
 
 function readline.exitRaw()
@@ -86,13 +98,8 @@ function readline.exitRaw()
 end
 
 function readline.getCols()
-	-- CONSOLE_SCREEN_BUFFER_INFO is 22 bytes
-	local info = ffi.new("uint8_t[22]")
-	if kernel32.GetConsoleScreenBufferInfo(hOut, info) ~= 0 then
-		-- dwSize is first field: COORD (2x WORD), srWindow at offset 10: LEFT,TOP,RIGHT,BOTTOM (4x SHORT)
-		local right = ffi.cast("int16_t*", info + 14)[0]
-		local left  = ffi.cast("int16_t*", info + 10)[0]
-		return tonumber(right - left + 1)
+	if kernel32.GetConsoleScreenBufferInfo(hOut, screen) ~= 0 then
+		return screen.srWindow.Right - screen.srWindow.Left + 1
 	end
 	return 80
 end
@@ -100,36 +107,14 @@ end
 -- Returns a key descriptor string: printable char, or one of:
 -- "up","down","left","right","home","end","backspace","delete","enter", nil on EOF
 function readline.readByte()
-	local rec   = InputRecord()
-	local nread = DwordBox()
 	while true do
-		if kernel32.ReadConsoleInputW(hIn, rec, 1, nread) == 0 then return nil end
-		local r = rec[0]
-		if r.EventType == KEY_EVENT and r.Event.KeyEvent.bKeyDown ~= 0 and r.Event.KeyEvent.wVirtualKeyCode ~= 0 then
-			local vk = tonumber(r.Event.KeyEvent.wVirtualKeyCode)
-
-			local ch = r.Event.KeyEvent.uChar.AsciiChar
-			if vk == VK_LEFT then
-				return "\x1b[D"
-			elseif vk == VK_RIGHT then
-				return "\x1b[C"
-			elseif vk == VK_UP then
-				return "\x1b[A"
-			elseif vk == VK_DOWN then
-				return "\x1b[B"
-			elseif vk == VK_HOME then
-				return "\x1b[H"
-			elseif vk == VK_END then
-				return "\x1b[F"
-			elseif vk == VK_BACK then
-				return "\x7f"
-			elseif vk == VK_DELETE then
-				return "\x1b[3~"
-			elseif vk == VK_RETURN then
-				return "\r"
-			elseif ch ~= 0 then
-				return string.char(ch)
-			end
+		if kernel32.ReadConsoleInputW(hIn, record, 1, read) == 0 then return nil end
+		const event = record[0].Event.KeyEvent
+		if record[0].EventType == KEY_EVENT and event.bKeyDown ~= 0 and event.wVirtualKeyCode ~= 0 then
+			const key = KEY[event.wVirtualKeyCode]
+			if key then return key end
+			const ch = event.uChar.AsciiChar
+			if ch ~= 0 then return string.char(ch) end
 		end
 	end
 end

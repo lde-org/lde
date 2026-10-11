@@ -2,15 +2,15 @@
 -- `lde update` flow is covered in packages/lde/tests/commands.test.lua; these
 -- exercise updateDependencies directly, including the git re-pin path (offline
 -- via a local repo) and the path-dep skip.
-local test = require("lde-test")
+const test = require("lde-test")
 
-local lde = require("lde-core")
+const lde = require("lde-core")
 
-local fs = require("fs")
-local env = require("env")
+const fs = require("fs")
+const env = require("env")
 local path = require("path")
-local json = require("json")
-local process = require("process")
+const json = require("json")
+const process = require("process")
 
 local tmpBase = path.join(env.tmpdir(), "lde-update-tests")
 fs.rmdir(tmpBase)
@@ -18,7 +18,6 @@ fs.mkdir(tmpBase)
 
 ---@param name string
 ---@param deps table?
----@return string dir
 local function makeApp(name, deps)
 	local dir = path.join(tmpBase, name)
 	fs.mkdir(dir)
@@ -33,7 +32,6 @@ local function makeApp(name, deps)
 end
 
 ---@param name string
----@return string repoDir
 local function makeLocalGitRepo(name)
 	local repoDir = path.join(tmpBase, name .. "-repo")
 	fs.rmdir(repoDir)
@@ -57,9 +55,8 @@ end
 
 --- The commit a repo's HEAD points at, trailing newline trimmed.
 ---@param repoDir string
----@return string
 local function gitHead(repoDir)
-	local _, stdout = process.exec("git", { "rev-parse", "HEAD" }, { cwd = repoDir })
+	const _, stdout =  process.exec("git", { "rev-parse", "HEAD" }, { cwd = repoDir })
 	return ((stdout or ""):gsub("%s+$", ""))
 end
 
@@ -122,7 +119,7 @@ test.skipIf(env.var("ANDROID_ROOT") ~= nil)("updateDependencies re-pins a git de
 	test.equal(results["update-move"].updated, true)
 	test.includes(results["update-move"].message, "->")
 
-	local after = pkg:readLockfile():getDependency("update-move").commit
+	const after = pkg:readLockfile():getDependency("update-move").commit
 	test.truthy(after ~= before, "lockfile commit must move to the new HEAD")
 
 	-- A fresh install from the updated lockfile materializes the new content.
@@ -169,7 +166,7 @@ test.skipIf(env.var("ANDROID_ROOT") ~= nil)("install re-pins a git dep whose loc
 	-- A lockfile left behind by an older lde (or an older lde update): it pins
 	-- a newer commit than lde.json declares.
 	commitMore(repoDir, "src/v2.lua", 'return "v2"')
-	local moved = gitHead(repoDir)
+	const moved = gitHead(repoDir)
 	local lockfile = assert(pkg:readLockfile())
 	lockfile:getDependency("update-heal").commit = moved
 	lockfile:save()

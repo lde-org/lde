@@ -3,13 +3,13 @@
 -- The CLI-level equivalents are covered through child processes in
 -- packages/lde/tests; these drive the code directly so the coverage instrument
 -- sees it.
-local test = require("lde-test")
+const test = require("lde-test")
 
-local lde = require("lde-core")
+const lde = require("lde-core")
 
-local fs = require("fs")
-local env = require("env")
-local path = require("path")
+const fs = require("fs")
+const env = require("env")
+const path = require("path")
 
 local tmpBase = path.join(env.tmpdir(), "lde-runtime-tests")
 fs.rmdir(tmpBase)
@@ -95,9 +95,9 @@ test.it("profile report prints VM state and hotspot sections", function()
 	]])
 
 	local oldIsVerbose, oldIsQuiet, oldWrite = lde.isVerbose, lde.isQuiet, io.write
-	local buf = {}
+	const buf = {}
 	io.write = function(...)
-		local parts = { ... }
+		const parts = { ... }
 		for i, p in ipairs(parts) do buf[#buf + 1] = tostring(p) end
 	end
 	-- The report is suppressed while quiet (the suite runs quiet); flip quiet

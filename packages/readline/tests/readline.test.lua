@@ -1,23 +1,22 @@
-local test     = require("lde-test")
-local readline = require("readline")
-local ffi      = require("ffi")
+const test     = require("lde-test")
+const readline = require("readline")
+const ffi      = require("ffi")
 
 -- raw mode (posix only)
 
 if jit.os ~= "Windows" then
-	local raw = require("readline.raw.posix")
+	const raw = require("readline.raw.posix")
 
 	test.it("enterRaw sets VMIN=1 VTIME=0 and exitRaw restores", function()
 		-- only meaningful on a real TTY; skip if fd 0 is not a tty
 		ffi.cdef("int isatty(int fd);")
 		if ffi.C.isatty(0) == 0 then return end
 
-		local VMIN    = jit.os == "OSX" and 16 or 6
-		local VTIME   = jit.os == "OSX" and 17 or 5
+		local VMIN    = jit.os == "OSX" ? 16 : 6
+		local VTIME   = jit.os == "OSX" ? 17 : 5
 
 		-- capture termios after enterRaw
-		local Termios = ffi.typeof("struct termios")
-		local t       = Termios() --[[@as readline.ffi.termios]]
+		local t = ffi.new("struct termios")
 		raw.enterRaw()
 		ffi.C.tcgetattr(0, t)
 		local vmin  = tonumber(t.c_cc[VMIN])
@@ -36,21 +35,19 @@ if jit.os ~= "Windows" then
 		-- Per-platform values (<sys/termios.h> vs asm/termbits.h): the Linux
 		-- bits on macOS clear ECHOE/ECHOKE instead, leaving the terminal
 		-- canonical, so no keystroke is ever delivered before Enter.
-		local bit    = require("bit")
-		local ICANON = jit.os == "OSX" and 0x100 or 0x2
-		local ISIG   = jit.os == "OSX" and 0x80 or 0x1
+		local ICANON = jit.os == "OSX" ? 0x100 : 0x2
+		local ISIG   = jit.os == "OSX" ? 0x80 : 0x1
 		local ECHO   = 0x8
 
-		local Termios = ffi.typeof("struct termios")
-		local t       = Termios() --[[@as readline.ffi.termios]]
+		local t = ffi.new("struct termios")
 		raw.enterRaw()
 		ffi.C.tcgetattr(0, t)
-		local lflag = tonumber(t.c_lflag)
+		const lflag = tonumber(t.c_lflag)
 		raw.exitRaw()
 
-		test.equal(bit.band(lflag, ICANON), 0, "ICANON must be cleared")
-		test.equal(bit.band(lflag, ECHO), 0, "ECHO must be cleared")
-		test.equal(bit.band(lflag, ISIG), 0, "ISIG must be cleared")
+		test.equal(lflag & ICANON, 0, "ICANON must be cleared")
+		test.equal(lflag & ECHO, 0, "ECHO must be cleared")
+		test.equal(lflag & ISIG, 0, "ISIG must be cleared")
 	end)
 end
 
@@ -62,7 +59,7 @@ local function run(bytes, hist)
 		prompt   = "> ",
 		history  = hist or {},
 		readByte = function()
-			i = i + 1
+			i += 1
 			return bytes[i]
 		end,
 		write    = function(s) out[#out + 1] = s end
@@ -251,7 +248,7 @@ end)
 
 -- completion / ghost text
 
-local dim = "\27[2m"
+const dim = "\27[2m"
 
 ---@param bytes string[]
 ---@param complete_fn fun(line: string, pos: integer): string?
@@ -263,7 +260,7 @@ local function runComplete(bytes, complete_fn)
 		history  = {},
 		complete = complete_fn,
 		readByte = function()
-			i = i + 1
+			i += 1
 			return bytes[i]
 		end,
 		write    = function(s) out[#out + 1] = s end
@@ -290,7 +287,7 @@ end)
 
 test.it("Tab accepts the ghost completion and extends the line", function()
 	local result = runComplete(keys("i", "n", "\x09", "\r"), function(line, pos)
-		return line:sub(1, pos) == "in" and "sert" or nil
+		return line:sub(1, pos) == "in" ? "sert" : nil
 	end)
 	test.equal(result, "insert")
 end)
@@ -305,7 +302,7 @@ end)
 test.it("Tab does nothing when cursor is not at end of line", function()
 	-- type "ab", move left (cursor between a and b) then Tab
 	local result = runComplete(keys("a", "b", LEFT, "\x09", "\r"), function(line, pos)
-		return pos == #line and "GHOST" or nil
+		return pos == #line ? "GHOST" : nil
 	end)
 	test.equal(result, "ab")
 end)

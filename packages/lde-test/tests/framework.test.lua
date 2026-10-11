@@ -1,6 +1,6 @@
 -- Tests for lde-test itself: the errors() assertion and the optional context
 -- message accepted by every assertion.
-local test = require("lde-test")
+const test = require("lde-test")
 
 test.it("errors passes when the function throws", function()
 	test.errors(function() error("boom") end)
@@ -13,7 +13,7 @@ test.it("errors matches string error messages without position prefixes", functi
 end)
 
 test.it("errors matches non-string errors by identity", function()
-	local e = { code = 42 }
+	const e = { code = 42 }
 	test.errors(function() error(e) end, e)
 end)
 
@@ -54,11 +54,11 @@ test.it("context messages surface in assertion failures", function()
 	test.falsy(ok)
 	test.includes(tostring(err), "should equal each other")
 
-	local ok2, err2 = pcall(test.match, { x = 1 }, { x = 2 }, "mismatch context")
+	const ok2, err2 = pcall(test.match, { x = 1 }, { x = 2 }, "mismatch context")
 	test.falsy(ok2)
 	test.includes(tostring(err2), "mismatch context")
 
-	local ok3, err3 = pcall(test.includes, "abc", "zzz", "substring context")
+	const ok3, err3 = pcall(test.includes, "abc", "zzz", "substring context")
 	test.falsy(ok3)
 	test.includes(tostring(err3), "substring context")
 end)

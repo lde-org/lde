@@ -18,7 +18,7 @@
 ---
 --- Prerelease and build suffixes ("1.2.3-rc.1", "1.2.3+deadbeef") never take
 --- part in a comparison, matching how the rest of lde ignores them.
-local semver = {}
+const semver = {}
 
 ---@class semver.Version
 ---@field major number
@@ -36,7 +36,6 @@ local semver = {}
 ---@param major number
 ---@param minor number
 ---@param patch number
----@return string
 local function format(major, minor, patch)
 	return string.format("%d.%d.%d", major, minor, patch)
 end
@@ -60,10 +59,9 @@ end
 
 ---@param v1 string
 ---@param v2 string
----@return number # negative if v1 < v2, 0 if equal, positive if v1 > v2
 function semver.compare(v1, v2)
-	local a = semver.parse(v1)
-	local b = semver.parse(v2)
+	const a = semver.parse(v1)
+	const b = semver.parse(v2)
 
 	if a.major ~= b.major then return a.major - b.major end
 	if a.minor ~= b.minor then return a.minor - b.minor end
@@ -74,10 +72,9 @@ end
 --- same major version, and candidate > current (minor or patch bump).
 ---@param current string
 ---@param candidate string
----@return boolean
 function semver.isCompatibleUpdate(current, candidate)
-	local c = semver.parse(current)
-	local n = semver.parse(candidate)
+	const c = semver.parse(current)
+	const n = semver.parse(candidate)
 	return n.major == c.major and semver.compare(candidate, current) > 0
 end
 
@@ -86,7 +83,6 @@ end
 --- resolving to a nearby version: "1.0.1" is exact (and must exist), while
 --- "1.0" is a range (and resolves to the newest 1.0.x).
 ---@param constraint string
----@return boolean
 function semver.isExact(constraint)
 	return constraint:find("^%d+%.%d+%.%d+") ~= nil
 end
@@ -131,7 +127,7 @@ local function expand(op, spec)
 	if parts == 0 then return {} end -- wildcard: no bounds at all
 
 	local lower = format(major, minor, patch)
-	local isExactVersion = parts == 3
+	const isExactVersion = parts == 3
 	-- The version that opens the next prefix: "0.1" -> "0.2.0". Only the
 	-- prefix forms below read it; an exact version has no next prefix.
 	local nextPrefix = format(major + 1, 0, 0)
@@ -188,7 +184,7 @@ local function expand(op, spec)
 	if op == "~" or op == "~>" then
 		-- Tilde allows patch-only changes, or the whole major when only the
 		-- major is spelled out.
-		local upper = parts == 1 and format(major + 1, 0, 0) or format(major, minor + 1, 0)
+		const upper = parts == 1 ? format(major + 1, 0, 0) : format(major, minor + 1, 0)
 		return { lower = lower, lowerInc = true, upper = upper, upperInc = false }
 	end
 
@@ -198,7 +194,6 @@ end
 --- Splits a constraint into its OR alternatives, each a list of AND-ed
 --- bounds. Returns nil when any comparator is malformed.
 ---@param constraint string
----@return semver.Bound[][]?
 local function compile(constraint)
 	local alternatives = {}
 	if constraint == "" then
@@ -214,7 +209,7 @@ local function compile(constraint)
 		for token in alternative:gmatch("%S+") do
 			local op, spec = token:match("^([<>=~^]*)(.*)$")
 			if spec == "latest" then spec = "*" end
-			local bound = expand(op, spec)
+			const bound = expand(op, spec)
 			if not bound then return nil end
 			bounds[#bounds + 1] = bound
 		end

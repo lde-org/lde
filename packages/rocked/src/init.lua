@@ -1,7 +1,7 @@
-local lua = require("lua-sys")
-local luarocks = require("rocked.luarocks")
+const lua = require("lua-sys")
+const luarocks = require("rocked.luarocks")
 
-local rocked = {}
+const rocked = {}
 
 ---@class rocked.raw.Description
 ---@field summary string
@@ -61,9 +61,9 @@ local rocked = {}
 -- ─── Host side of the sandbox ─────────────────────────────────────────────
 
 -- Instruction budget for a rockspec chunk before it is killed.
-local DEFAULT_INSTRUCTION_LIMIT = 1e7
-local DEFAULT_MEMORY_LIMIT = 64 * 1024 * 1024
-local BYTECODE_SIGNATURE = 27
+const DEFAULT_INSTRUCTION_LIMIT = 1e7
+const DEFAULT_MEMORY_LIMIT = 64 * 1024 * 1024
+const BYTECODE_SIGNATURE = 27
 
 ---@class rocked.Permissions
 ---@field execute? fun(command: string): boolean # allow running `command`; default: allow
@@ -84,7 +84,6 @@ local ROCKSPEC_ENV = {}
 --- data, recursively. Guest functions are rejected: rockspecs and backends
 --- hand data across the boundary, not executable values.
 ---@param v any
----@return any
 local function materialize(v)
 	if type(v) == "function" then
 		error("rockspec contains executable values (functions); only data is supported", 0)
@@ -106,7 +105,7 @@ end
 ---@param allowed table<string, boolean>
 ---@param keep? fun(name: string): boolean # extra names to spare (a backend's polyfills)
 local function stripUnwhitelisted(tbl, allowed, keep)
-	local drop = {}
+	const drop = {}
 	for name in tbl:pairs() do
 		if type(name) == "string" and not allowed[name] and not (keep and keep(name)) then
 			drop[#drop + 1] = name
@@ -119,8 +118,8 @@ end
 local function detachStringMetatable(state)
 	local L = state.L
 	if L == nil then return end
-	local lraw = lua.raw
-	local top = lraw.gettop(L)
+	const lraw = lua.raw
+	const top = lraw.gettop(L)
 	lraw.pushstring(L, "")
 	if lraw.getmetatable(L, -1) then
 		lraw.pushnil(L)
@@ -155,7 +154,7 @@ local function sandbox(opts, env, fn)
 	-- Reach `package` before the globals are stripped: with an empty rockspec
 	-- environment the name is gone from `_G` afterwards, but a backend still
 	-- needs its path and cpath set.
-	local packageTable = g:get("package") --[[@as lua.Table?]]
+	const packageTable = g:get("package") --[[@as lua.Table?]]
 
 	stripUnwhitelisted(g, env)
 
@@ -178,7 +177,7 @@ local function sandbox(opts, env, fn)
 		-- the other table require() consults — is emptied so a stale loader
 		-- cannot reintroduce one. For a rockspec the whitelist is empty and no
 		-- extras are passed, so this clears the cache outright.
-		local extraModules = opts.extraModules
+		const extraModules = opts.extraModules
 		stripUnwhitelisted(packageTable:get("loaded") --[[@as lua.Table]], env, extraModules)
 		stripUnwhitelisted(packageTable:get("preload") --[[@as lua.Table]], env, extraModules)
 	end
@@ -206,9 +205,9 @@ end
 --- require time rather than on the first package install. When raising the
 --- lua-sys floor here, update the version in lde.json too.
 local function checkSandboxSupport()
-	local probe = lua.new()
-	local hasMemoryLimit = type(probe.setMemoryLimit) == "function"
-	local hasChunkMode   = type(probe:load("", "probe").setMode) == "function"
+	const probe = lua.new()
+	const hasMemoryLimit = type(probe.setMemoryLimit) == "function"
+	const hasChunkMode   = type(probe:load("", "probe").setMode) == "function"
 	probe:close()
 
 	local missing = {}
@@ -239,7 +238,7 @@ end
 -- ─── Rockspec parsing ─────────────────────────────────────────────────────
 
 ---@type string[]
-local ROCKSPEC_FIELDS = {
+const ROCKSPEC_FIELDS = {
 	"package", "version", "rockspec_format", "description", "source",
 	"dependencies", "build_dependencies", "test_dependencies",
 	"external_dependencies", "build", "test", "variables",
@@ -256,7 +255,7 @@ function rocked.parse(spec, permissions)
 
 		local out = {}
 		for _, field in ipairs(ROCKSPEC_FIELDS) do
-			local v = g:get(field)
+			const v = g:get(field)
 			if v ~= nil then out[field] = materialize(v) end
 		end
 
@@ -265,8 +264,8 @@ function rocked.parse(spec, permissions)
 			-- Rockspec format 3.0+ makes the build table optional: it defaults
 			-- to a builtin build (modules are autodetected from the source
 			-- tree). Older formats require an explicit build table.
-			local format = out.rockspec_format
-			local major = format and tonumber(tostring(format):match("^(%d+)"))
+			const format = out.rockspec_format
+			const major = format and tonumber(tostring(format):match("^(%d+)"))
 			if major and major >= 3 then
 				build = { type = "builtin" }
 				out.build = build
@@ -292,7 +291,7 @@ end
 function rocked.parseDependency(depStr)
 	local name, rest = depStr:match("^([%w%.%-_]+)%s*(.*)")
 	if not name then return nil, nil end
-	return name, (rest ~= "" and rest or nil)
+	return name, rest ~= "" ? rest : nil
 end
 
 --- Detects a git dependency in a rockspec dependency string (e.g.
@@ -301,7 +300,7 @@ end
 ---@param depStr string
 ---@return string? gitUrl
 function rocked.gitDependency(depStr)
-	local url = depStr:match("^%s*(git%+?%w+://%S+)%s*$")
+	const url = depStr:match("^%s*(git%+?%w+://%S+)%s*$")
 		or depStr:match("^%s*(git://%S+)%s*$")
 		or depStr:match("^%s*(https?://%S+%.git)%s*$")
 	return url

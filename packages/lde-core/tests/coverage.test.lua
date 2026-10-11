@@ -1,13 +1,13 @@
 -- Unit tests for the coverage collector itself (lde-core.coverage): the line
 -- hook's filtering rules and the report computation. The CLI-level format test
 -- lives in packages/lde/tests/coverage.test.lua; this covers the internals.
-local test = require("lde-test")
+const test = require("lde-test")
 
-local fs = require("fs")
-local env = require("env")
-local path = require("path")
+const fs = require("fs")
+const env = require("env")
+const path = require("path")
 
-local Coverage = require("lde-core.coverage")
+const Coverage = require("lde-core.coverage")
 
 local tmpBase = path.join(env.tmpdir(), "lde-coverage-unit-tests")
 fs.rmdir(tmpBase)
@@ -172,7 +172,7 @@ test.it("compute skips a leading shebang line", function()
 	local cov = Coverage.new({ srcDir .. path.separator }, tmpBase)
 	cov:hook("line", { source = "@" .. file, currentline = 2 })
 
-	local files, totalExec, totalCovered = cov:compute()
+	local _, totalExec, totalCovered = cov:compute()
 	test.equal(totalExec, 1)
 	test.equal(totalCovered, 1)
 end)

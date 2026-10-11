@@ -1,11 +1,11 @@
-local ansi = require("ansi")
-local curl = require("curl-sys")
-local json = require("json")
-local process = require("process")
+const ansi = require("ansi")
+const curl = require("curl-sys")
+const json = require("json")
+const process = require("process")
 
-local lde = require("lde-core")
+const lde = require("lde-core")
 
-local REGISTRY_REPO = "https://github.com/lde-org/registry"
+const REGISTRY_REPO = "https://github.com/lde-org/registry"
 
 ---@param s string
 local function urlEncode(s)
@@ -25,12 +25,12 @@ end
 ---@return string
 local function toHttpsUrl(url)
 	-- scp-like syntax: git@host:user/repo.git
-	local host, path = url:match("^git@([^:]+):(.+)$")
+	const host, path = url:match("^git@([^:]+):(.+)$")
 	if host and path then
 		return "https://" .. host .. "/" .. path
 	end
 	-- ssh:// protocol: ssh://git@host/user/repo.git
-	local protoHost, protoPath = url:match("^ssh://git@([^/]+)/(.+)$")
+	const protoHost, protoPath = url:match("^ssh://git@([^/]+)/(.+)$")
 	if protoHost and protoPath then
 		return "https://" .. protoHost .. "/" .. protoPath
 	end
@@ -45,7 +45,7 @@ end
 local function fetchExistingPortfile(name)
 	local url = registryRawBase() .. "/master/packages/" .. name .. ".json"
 
-	local res, getErr = curl.get(url)
+	const res, getErr = curl.get(url)
 	if not res then
 		return nil, getErr or ("failed to fetch " .. url)
 	end
@@ -80,42 +80,42 @@ end
 
 ---@param args clap.Args
 local function publish(args)
-	local pkg, err = lde.Package.open()
+	const pkg, err = lde.Package.open()
 	if not pkg then
 		lde.error.raise(err)
 	end ---@cast pkg -nil
 
-	local config = pkg:readConfig()
-	local pkgDir = pkg:getDir()
+	const config = pkg:readConfig()
+	const pkgDir = pkg:getDir()
 
 	-- The registry enforces strict naming rules; fail here instead of letting
 	-- the browser submit an issue that the bot would reject.
-	local nameErr = lde.global.validatePackageName(config.name)
+	const nameErr = lde.global.validatePackageName(config.name)
 	if nameErr then
 		lde.error.raise("Cannot publish: " .. nameErr)
 	end
 
-	local repo, repoErr = lde.global.openEnclosingRepo(pkgDir)
+	const repo, repoErr = lde.global.openEnclosingRepo(pkgDir)
 	if not repo then
 		lde.error.raise("Could not find a git repository for this package: " .. (repoErr or "unknown error"))
 	end ---@cast repo -nil
 
-	local gitUrl, urlErr = repo:remoteUrl("origin")
+	const gitUrl =  repo:remoteUrl("origin")
 	if not gitUrl then
 		lde.error.raise("Could not get git remote URL. Is this a git repo with an 'origin' remote?")
 	end ---@cast gitUrl -nil
 
-	local commit, commitErr = repo:revparse("HEAD")
+	const commit =  repo:revparse("HEAD")
 	if not commit then
 		lde.error.raise("Could not get current commit. Does this repo have any commits?")
 	end
 
-	local branch = repo:currentBranch() or "master"
+	const branch = repo:currentBranch() or "master"
 
 	-- Preserve previously published version commits: fetch the live portfile
 	-- (if any) and merge its versions with the new one. All other fields are
 	-- rebuilt fresh from the current package below.
-	local existing, fetchErr = fetchExistingPortfile(config.name)
+	const existing, fetchErr = fetchExistingPortfile(config.name)
 	if fetchErr then
 		ansi.printf("{yellow}Could not check registry for existing versions: %s", fetchErr)
 	end
@@ -136,12 +136,12 @@ local function publish(args)
 	json.addField(portfile, "branch", branch)
 	json.addField(portfile, "versions", versions)
 
-	local portfileJson = json.encode(portfile)
+	const portfileJson = json.encode(portfile)
 	local filename = "packages/" .. config.name .. ".json"
 	-- Keep the "/" of namespaced names (packages/ns/pkg.json) unencoded so
 	-- GitHub's file-create page creates the nested directory instead of a
 	-- single file whose name contains a literal %2F.
-	local encodedFilename = urlEncode(filename):gsub("%%2F", "/")
+	const encodedFilename = urlEncode(filename):gsub("%%2F", "/")
 	local url = REGISTRY_REPO .. "/new/master"
 		.. "?filename=" .. encodedFilename
 		.. "&value=" .. urlEncode(portfileJson)

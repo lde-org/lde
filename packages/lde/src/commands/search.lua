@@ -1,16 +1,16 @@
-local ansi = require("ansi")
-local clap = require("clap")
-local fs = require("fs")
-local path = require("path")
-local json = require("json")
-local semver = require("semver")
+const ansi = require("ansi")
+const clap = require("clap")
+const fs = require("fs")
+const path = require("path")
+const json = require("json")
+const semver = require("semver")
 
-local lde = require("lde-core")
-local luarocks = require("luarocks")
-local prompt = require("lde.util.prompt")
+const lde = require("lde-core")
+const luarocks = require("luarocks")
+const prompt = require("lde.util.prompt")
 
 --- Default cap on how many results are shown at once.
-local DEFAULT_LIMIT = 10
+const DEFAULT_LIMIT = 10
 
 ---@class lde.search.Result
 ---@field name string
@@ -21,9 +21,8 @@ local DEFAULT_LIMIT = 10
 
 ---@param query string # already lowercased
 ---@param s string?
----@return boolean
 local function matches(query, s)
-	return (s or ""):lower():find(query, 1, true) ~= nil
+	return s?.:lower():find(query, 1, true) ~= nil
 end
 
 --- Sort rank: exact name match, then name prefix, then name substring, and
@@ -33,7 +32,7 @@ end
 ---@param description string?
 ---@return number
 local function rank(query, name, description)
-	local lname = name:lower()
+	const lname = name:lower()
 	if lname == query then return 0 end
 	if lname:sub(1, #query) == query then return 1 end
 	if lname:find(query, 1, true) then return 2 end
@@ -41,7 +40,6 @@ local function rank(query, name, description)
 end
 
 ---@param versions table<string, string>?
----@return string? latest
 local function latestVersion(versions)
 	local latest ---@type string?
 	for v in pairs(versions or {}) do
@@ -51,15 +49,14 @@ local function latestVersion(versions)
 end
 
 ---@param query string
----@return lde.search.Result[]
 local function searchRegistry(query)
 	---@type lde.search.Result[]
 	local results = {}
 	local packagesDir = path.join(lde.global.getRegistryDir(), "packages")
 	if fs.isdir(packagesDir) then
 		for _, rel in ipairs(fs.scan(packagesDir, "**" .. path.separator .. "*.json")) do
-			local content = fs.read(path.join(packagesDir, rel))
-			local ok, portfile = pcall(json.decode, content or "")
+			const content = fs.read(path.join(packagesDir, rel))
+			const ok, portfile = pcall(json.decode, content or "")
 			if ok and type(portfile) == "table" and type(portfile.name) == "string"
 				and (matches(query, portfile.name) or matches(query, portfile.description)) then
 				results[#results + 1] = {
@@ -78,7 +75,6 @@ end
 --- keys are excluded by requiring a package block to start with a version
 --- block (`["name"] = { ["version"] = {`).
 ---@param query string
----@return lde.search.Result[]
 local function searchRocks(query)
 	local manifest = lde.util.getManifest()
 	if not manifest then return {} end
@@ -100,31 +96,29 @@ local function ensureLatest(r)
 	if r.latest ~= nil then return end
 	local manifest = lde.util.getManifest()
 	if manifest then
-		local best = luarocks.listBest(manifest, r.name)
-		r.latest = best[1] and best[1].version or nil
+		const best = luarocks.listBest(manifest, r.name)
+		r.latest = best[1] ? best[1].version : nil
 	end
 end
 
 ---@param r lde.search.Result
----@return string
 local function formatRow(r)
 	-- Rocks get a rock emoji before the name (a plain "R" when the terminal
 	-- can't render emoji); the luarocks manifest has no descriptions, so rock
 	-- rows are just the marker + name + version.
 	local prefix = ""
 	if r.kind == "rocks" then
-		prefix = ansi.supportsEmoji() and "🪨 " or "R "
+		prefix = ansi.supportsEmoji() ? "🪨 " : "R "
 	end
-	local desc = r.description and ("  " .. r.description) or ""
-	local ver = r.latest and (" (" .. r.latest .. ")") or ""
+	local desc = r.description ? ("  " .. r.description) : ""
+	const ver = r.latest ? (" (" .. r.latest .. ")") : ""
 	return ansi.format("{green}%s%s{reset}%s{gray}%s{reset}", prefix, r.name, desc, ver)
 end
 
 --- The command verb the selector's Enter action runs.
 ---@param inPackage boolean
----@return string
 local function actionVerb(inPackage)
-	return inPackage and "lde add" or "lde install"
+	return inPackage ? "lde add" : "lde install"
 end
 
 --- Run the action for a picked result in-process.
@@ -132,7 +126,7 @@ end
 ---@param inPackage boolean
 local function runAction(r, inPackage)
 	local name = r.kind == "rocks" and ("rocks:" .. r.name) or r.name
-	local command = inPackage and "lde.commands.add" or "lde.commands.install"
+	const command = inPackage ? "lde.commands.add" : "lde.commands.install"
 	require(command)(clap.parse({ name }))
 end
 
@@ -142,23 +136,22 @@ end
 ---@param results lde.search.Result[]
 ---@param limit number
 ---@param inPackage boolean
----@return lde.search.Result? # nil when cancelled
 local function selectResult(results, limit, inPackage)
-	local raw = jit.os == "Windows" and require("readline.raw.windows") or require("readline.raw.posix")
+	const raw = jit.os == "Windows" ? require("readline.raw.windows") : require("readline.raw.posix")
 	local total = #results
-	local window = math.min(limit, total)
+	const window = math.min(limit, total)
 	local cursor = 1 -- 1-based result index
 	local offset = 0 -- 0-based index of the first visible result
 
 	local function rowText(r, isSelected)
-		local marker = isSelected and "{green}>{reset} " or "  "
+		const marker = isSelected ? "{green}>{reset} " : "  "
 		local text = formatRow(r)
 		if isSelected then text = ansi.format("{underline}%s{reset}", text) end
 		return ansi.format(marker .. "%s", text)
 	end
 
 	local function visible()
-		local out = {}
+		const out = {}
 		for i = offset + 1, offset + window do
 			ensureLatest(results[i])
 			out[#out + 1] = rowText(results[i], i == cursor)
@@ -167,7 +160,7 @@ local function selectResult(results, limit, inPackage)
 	end
 
 	local function footer()
-		local hidden = total - (offset + window)
+		const hidden = total - (offset + window)
 		local verb = actionVerb(inPackage)
 		if hidden > 0 then
 			return ansi.format("{gray}Enter to {reset}{yellow}%s{reset}{gray} · %d more below · ↑/↓ select · q/esc cancel{reset}", verb, hidden)
@@ -209,7 +202,7 @@ local function selectResult(results, limit, inPackage)
 	local done = false
 	local picked ---@type lde.search.Result?
 	while not done do
-		local ch = raw.readByte()
+		const ch = raw.readByte()
 		if ch == nil or ch == "\x03" or ch == "q" or ch == "Q" then
 			done = true
 		elseif ch == "\r" or ch == "\n" then
@@ -225,7 +218,7 @@ local function selectResult(results, limit, inPackage)
 		elseif ch == "\x1b" then -- POSIX: escape byte, then [, then a letter
 			local a = raw.readByte()
 			if a == "[" then
-				local b = raw.readByte()
+				const b = raw.readByte()
 				if b == "A" then move(-1)
 				elseif b == "B" then move(1) end
 			else
@@ -251,9 +244,9 @@ end
 
 ---@param args clap.Args
 local function search(args)
-	local showAll = args:flag("all")
+	const showAll = args:flag("all")
 	args:flag("rocks") -- accepted for compatibility; rocks are included by default now
-	local rawQuery = args:pop()
+	const rawQuery = args:pop()
 	if not rawQuery then
 		lde.error.raise("Usage: lde search <query> [--all]", {
 			hint = "Searches the lde registry and luarocks; rocks:<query> searches luarocks only.",
@@ -277,7 +270,7 @@ local function search(args)
 	---@type lde.search.Result[]
 	local results = {}
 	if not rocksOnly then
-		local regOk = pcall(lde.global.syncRegistry)
+		const regOk = pcall(lde.global.syncRegistry)
 		if regOk then
 			for _, r in ipairs(searchRegistry(query)) do results[#results + 1] = r end
 		end
@@ -303,9 +296,9 @@ local function search(args)
 
 	-- "Found N packages matching 'q':" — N green, query yellow, colon gray.
 	ansi.printf("Found {green}%d{reset} package%s matching {yellow}'%s'{reset}{gray}:{reset}",
-		total, total == 1 and "" or "s", query)
+		total, total == 1 ? "" : "s", query)
 
-	local inPackage = lde.Package.open() ~= nil
+	const inPackage = lde.Package.open() ~= nil
 	local limit = showAll and total or DEFAULT_LIMIT
 
 	if prompt.interactive then
@@ -323,7 +316,7 @@ local function search(args)
 		if shown >= limit then break end
 		ensureLatest(r)
 		print(formatRow(r))
-		shown = shown + 1
+		shown += 1
 	end
 	if total > limit then
 		print("  " .. ansi.format("{gray}… and %d more (run in a terminal to browse and select){reset}", total - limit))

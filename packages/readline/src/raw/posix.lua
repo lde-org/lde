@@ -1,6 +1,7 @@
-local ffi = require("ffi")
+const ffi = require("ffi")
 
--- termios layout differs between Linux and macOS
+-- termios layout differs between Linux and macOS. Both blocks are read for their types, so the
+-- fields below name a member of the struct rather than an offset into one.
 if jit.os == "OSX" then
 	ffi.cdef([[
 		struct termios {
@@ -28,10 +29,8 @@ else
 	]])
 end
 
--- read is declared with the same prototype as process.raw.posix (which
--- normally loads first and declares it), so re-declaring it here is a no-op
--- in lde and keeps readByte working when this module is loaded on its own
--- (tests, tooling, anything that doesn't pull the process package in first).
+-- `read` is declared with the same prototype as the process package's, so re-declaring it is a
+-- no-op where that already ran and keeps this module working on its own.
 ffi.cdef([[
 	int tcgetattr(int fd, struct termios *t);
 	int tcsetattr(int fd, int action, const struct termios *t);
@@ -41,77 +40,60 @@ ffi.cdef([[
 	long read(int fd, void* buf, size_t count);
 ]])
 
-local TCSANOW    = 0
-local ECHO       = 0x8
-local ICANON     = jit.os == "OSX" and 0x100 or 0x2
-local ISIG       = jit.os == "OSX" and 0x80  or 0x1
-local IXON       = jit.os == "OSX" and 0x200 or 0x400
-local IEXTEN     = jit.os == "OSX" and 0x400 or 0x8000
-local ICRNL      = 0x100
-local OPOST      = 0x1
--- TIOCGWINSZ: Linux=0x5413, macOS=0x40087468
-local TIOCGWINSZ = jit.os == "OSX" and 0x40087468 or 0x5413
--- c_cc indices: Linux VTIME=5 VMIN=6, macOS VTIME=17 VMIN=16
-local VTIME      = jit.os == "OSX" and 17 or 5
-local VMIN       = jit.os == "OSX" and 16 or 6
+const OSX = jit.os == "OSX"
 
--- The LS can't see ffi.cdef structs; declare the fields used here.
----@class readline.ffi.termios: ffi.cdata*
----@field c_iflag integer
----@field c_oflag integer
----@field c_lflag integer
----@field c_cc integer[]
+-- The flags and control characters the two platforms do not agree on, in one place: the Linux bits
+-- are <asm/termbits.h>, the macOS ones <sys/termios.h>, and clearing the Linux ECHOE/ECHOKE there
+-- leaves the terminal canonical, so no keystroke arrives before Enter.
+---@type table<string, integer>
+const TC = OSX
+	? { ICANON = 0x100, ISIG = 0x80, IXON = 0x200, IEXTEN = 0x400, VTIME = 17, VMIN = 16, TIOCGWINSZ = 0x40087468 }
+	: { ICANON = 0x2, ISIG = 0x1, IXON = 0x400, IEXTEN = 0x8000, VTIME = 5, VMIN = 6, TIOCGWINSZ = 0x5413 }
 
----@class readline.ffi.winsize: ffi.cdata*
----@field ws_col integer
----@field ws_row integer
+local TCSANOW = 0
+const ECHO    = 0x8
+const ICRNL   = 0x100
+const OPOST   = 0x1
 
-local Termios    = ffi.typeof("struct termios")
-local Winsize    = ffi.typeof("struct winsize")
-local TERMIOS_SIZE = ffi.sizeof("struct termios") --[[@as integer]]
+-- Held rather than made per call: `readByte` runs once per keystroke, and a buffer made there is
+-- garbage on every one of them. The two termios are filled by the calls that read the terminal, so
+-- nothing has to be sized or copied by hand.
+const saved   = ffi.new("struct termios")
+const current = ffi.new("struct termios")
+const size    = ffi.new("struct winsize")
+local byte    = ffi.new("uint8_t[1]")
+local inRaw   = false
 
----@class readline.raw.posix
-local readline   = {}
-
-local saved      = nil
+const readline = {}
 
 function readline.enterRaw()
-	local t = Termios() --[[@as readline.ffi.termios]]
-	ffi.C.tcgetattr(0, t)
-	saved = Termios() --[[@as readline.ffi.termios]]
-	ffi.copy(saved, t, TERMIOS_SIZE)
-
-	t.c_iflag     &= ~(IXON | ICRNL)
-	t.c_oflag     &= ~OPOST
-	t.c_lflag     &= ~(ECHO | ICANON | ISIG | IEXTEN)
-	t.c_cc[VMIN]  = 1
-	t.c_cc[VTIME] = 0
-	ffi.C.tcsetattr(0, TCSANOW, t)
+	ffi.C.tcgetattr(0, saved)
+	ffi.C.tcgetattr(0, current)
+	current.c_iflag &= ~(TC.IXON | ICRNL)
+	current.c_oflag &= ~OPOST
+	current.c_lflag &= ~(ECHO | TC.ICANON | TC.ISIG | TC.IEXTEN)
+	current.c_cc[TC.VMIN] = 1
+	current.c_cc[TC.VTIME] = 0
+	ffi.C.tcsetattr(0, TCSANOW, current)
+	inRaw = true
 end
 
 function readline.exitRaw()
-	if saved then
-		ffi.C.tcflush(0, 0) -- TCIFLUSH = 0, discard unread input
-		ffi.C.tcsetattr(0, TCSANOW, saved)
-		saved = nil
-	end
+	if not inRaw then return end
+	ffi.C.tcflush(0, 0) -- TCIFLUSH: drop what was typed and never read
+	ffi.C.tcsetattr(0, TCSANOW, saved)
+	inRaw = false
 end
 
----@return number cols
 function readline.getCols()
-	local ws = Winsize() --[[@as readline.ffi.winsize]]
-	if ffi.C.ioctl(1, TIOCGWINSZ, ws) == 0 then
-		return tonumber(ws.ws_col) --[[@as number]]
-	end
+	if ffi.C.ioctl(1, TC.TIOCGWINSZ, size) == 0 then return size.ws_col end
 	return 80
 end
 
----@return string? # byte, or nil on EOF
 function readline.readByte()
-	local buf = ffi.new("uint8_t[1]")
-	local n = ffi.C.read(0, buf, 1)
+	const n = ffi.C.read(0, byte, 1)
 	if n <= 0 then return nil end
-	return string.char(buf[0])
+	return string.char(byte[0])
 end
 
 return readline

@@ -4,7 +4,6 @@
 -- surface (commands, flags, hidden backends) mixed with garbage values, and
 -- runs each against the binary under test.
 
-local rngLib = require("fuzzer.rng")
 local runner = require("fuzzer.runner")
 local ansi = require("ansi")
 

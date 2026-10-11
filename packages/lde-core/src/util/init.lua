@@ -1,22 +1,22 @@
-local util = {}
+const util = {}
 
-local fs = require("fs")
-local path = require("path")
-local json = require("json")
-local rocked = require("rocked")
-local ansi = require("ansi")
+const fs = require("fs")
+const path = require("path")
+const json = require("json")
+const rocked = require("rocked")
+const ansi = require("ansi")
 local lde = require("lde-core")
 local luarocks = require("luarocks")
 
-local curl = require("util").lazy(function() return require("curl-sys") end)
-local Archive = require("util").lazy(function() return require("archive") end)
+const curl = require("util").lazy(function() return require("curl-sys") end)
+const Archive = require("util").lazy(function() return require("archive") end)
 
 -- luarocks.org publishes per-Lua-version manifests that already exclude
 -- versions incompatible with the running engine, so resolution needs no
 -- per-candidate rockspec engine checks. LuaJIT is Lua 5.1.
-local MANIFEST_URL = "https://luarocks.org/manifest-5.1.zip"
-local MANIFEST_ENTRY = MANIFEST_URL:match("([^/]+)%.zip$") -- the file inside the zip
-local MANIFEST_TTL = 60 * 60 * 24 -- 24 hours
+const MANIFEST_URL = "https://luarocks.org/manifest-5.1.zip"
+const MANIFEST_ENTRY = MANIFEST_URL:match("([^/]+)%.zip$") -- the file inside the zip
+const MANIFEST_TTL = 60 * 60 * 24 -- 24 hours
 
 ---@type luarocks.Manifest?
 local cachedManifest
@@ -30,7 +30,7 @@ local function getManifest()
 	-- one manifest instead of re-downloading it for every tree.
 	local cacheFile = path.join(lde.global.getUserDir(), "luarocks-manifest.raw")
 
-	local stat = fs.stat(cacheFile)
+	const stat = fs.stat(cacheFile)
 	if stat and (os.time() - stat.modifyTime) < MANIFEST_TTL then
 		local raw = fs.read(cacheFile)
 		if raw then
@@ -39,7 +39,7 @@ local function getManifest()
 		end
 	end
 
-	local p = lde.isVerbose and ansi.progress("Fetching luarocks manifest") or nil
+	const p = lde.isVerbose ? ansi.progress("Fetching luarocks manifest") : nil
 
 	-- luarocks.org serves the ~4.2MB raw manifest as a ~130KB zip; download the
 	-- zip and decode the single "manifest-5.1" file it contains, all in memory.
@@ -109,7 +109,7 @@ local function saveUrlCache()
 		-- Encode a fresh copy of the table: the json decoder attaches per-table
 		-- key-order metadata, which makes encode() silently drop any key added
 		-- after decode (e.g. a newly resolved package URL).
-		local fresh = {}
+		const fresh = {}
 		for k, v in pairs(urlCache) do fresh[k] = v end
 		fs.write(getUrlCachePath(), json.encode(fresh))
 	end
@@ -144,7 +144,6 @@ local function collectManifestNames(raw)
 	local i, n = 1, #raw
 
 	---@param b integer?
-	---@return boolean
 	local function isWordByte(b)
 		return b ~= nil and ((b >= 48 and b <= 57) or (b >= 65 and b <= 90)
 			or (b >= 97 and b <= 122) or b == 46 or b == 45 or b == 95)
@@ -154,14 +153,14 @@ local function collectManifestNames(raw)
 		local c = raw:byte(i)
 		if c == 123 then -- {
 			depth = depth + 1
-			i = i + 1
+			i += 1
 		elseif c == 125 then -- }
 			depth = depth - 1
-			i = i + 1
+			i += 1
 		elseif depth == 1 and (c == 91 or (c >= 97 and c <= 122) or c == 95) then
 			if c == 91 then
 				-- ["name"] = { ...
-				local close = raw:find('"] = {', i, true)
+				const close = raw:find('"] = {', i, true)
 				if not close then break end
 				local name = raw:sub(i + 2, close - 1)
 				i = close + 1
@@ -185,7 +184,7 @@ local function collectManifestNames(raw)
 				end
 			end
 		else
-			i = i + 1
+			i += 1
 		end
 	end
 	return names
@@ -194,7 +193,6 @@ end
 --- All package names in the luarocks manifest, from a derived cache rebuilt
 --- when the manifest file changes. Searching filters the ~5k names with plain
 --- string.find (memchr) instead of re-parsing the 4.2MB manifest every time.
----@return string[]
 function util.getManifestNames()
 	local userDir = lde.global.getUserDir()
 	local manifestPath = path.join(userDir, "luarocks-manifest.raw")
@@ -212,7 +210,7 @@ function util.getManifestNames()
 	end
 
 	local content = fs.read(manifestPath)
-	local names = content and collectManifestNames(content) or {}
+	const names = content ? collectManifestNames(content) : {}
 	fs.mkdirAll(userDir)
 	fs.write(cachePath, json.encode(names))
 	return names
@@ -220,7 +218,6 @@ end
 
 --- Normalises various git URL formats to a plain https:// URL.
 ---@param url string
----@return string
 function util.normalizeGitUrl(url)
 	url = url:gsub("^git%+", "")       -- git+https:// -> https://
 	url = url:gsub("^git://", "https://") -- git:// -> https://
@@ -294,8 +291,8 @@ end
 function util.resolveLuarocksSource(name, version, isOffline)
 	-- For unversioned lookups, check the URL cache first to skip manifest scan
 	local cache = loadUrlCache(isOffline)
-	local cacheKey = name .. (version and ("@" .. version) or "")
-	local cachedEntry = (not version) and isCacheFresh and cache[cacheKey] or nil
+	const cacheKey = name .. (version and ("@" .. version) or "")
+	local cachedEntry = ((not version) and isCacheFresh) ? cache[cacheKey] : nil
 
 	local url, arch
 	if cachedEntry then
@@ -348,12 +345,11 @@ end
 --- luarocks rock (and vice versa); otherwise point at `lde search`.
 ---@param name string
 ---@param wasRocks boolean # true when the luarocks lookup failed
----@return string hint
 function util.suggestPackage(name, wasRocks)
 	if wasRocks then
 		local ok = pcall(lde.global.syncRegistry)
 		if ok then
-			local portfile = lde.global.lookupRegistryPackage(name)
+			const portfile = lde.global.lookupRegistryPackage(name)
 			if portfile then
 				return "This package exists in the lde registry: `lde add " .. name .. "`"
 			end
@@ -361,7 +357,7 @@ function util.suggestPackage(name, wasRocks)
 	else
 		local manifest = getManifest()
 		if manifest then
-			local urls = luarocks.getRockspecUrls(manifest, name)
+			const urls = luarocks.getRockspecUrls(manifest, name)
 			if urls and next(urls) then
 				return "This package exists on luarocks: `lde add rocks:" .. name .. "`"
 			end
@@ -389,16 +385,16 @@ function util.resolveLuarocksBest(name, constraint)
 	-- "@latest" always re-checks the manifest for the newest version; it must
 	-- not reuse the cached resolution (which pins whatever was latest at the
 	-- time it was recorded).
-	local isLatest = constraint == "latest"
+	const isLatest = constraint == "latest"
 	if isLatest then constraint = nil end
 
 	-- URL cache fast path (unversioned lookups only)
 	local cache = loadUrlCache()
-	local cachedEntry = (not constraint) and not isLatest and isCacheFresh and cache[name] or nil
+	local cachedEntry = ((not constraint) and not isLatest and isCacheFresh) ? cache[name] : nil
 	if cachedEntry then
 		local url = type(cachedEntry) == "table" and cachedEntry.url or cachedEntry ---@cast url string
 		local arch = type(cachedEntry) == "table" and cachedEntry.arch or "rockspec"
-		local suffix = arch == "src" ? "%.src%.rock$" : "%.rockspec$"
+		const suffix = arch == "src" ? "%.src%.rock$" : "%.rockspec$"
 		local version = url:match("^.*/" .. name:gsub("([%-%.%+%*%?%[%]%^%$%(%)%%])", "%%%1") .. "%-([^/]+)" .. suffix)
 		if version then
 			local rockspecUrl = url:gsub("%.src%.rock$", ".rockspec")
@@ -412,7 +408,7 @@ function util.resolveLuarocksBest(name, constraint)
 	local manifest, err = getManifest()
 	if not manifest then return nil, nil, nil, err end
 
-	local candidates = luarocks.listBest(manifest, name, constraint)
+	const candidates = luarocks.listBest(manifest, name, constraint)
 	local c = candidates[1]
 	if not c then
 		return nil, nil, nil, "No version of '" .. name .. "'" ..
@@ -435,13 +431,12 @@ end
 --- package name must appear followed by "-" — and not as the tail of a longer
 --- name (lua-cjson vs cjson) — which is what the boundary check enforces.
 ---@param name string
----@return string? dir
 local function findCachedSrcRock(name)
 	local iter = fs.readdir(lde.global.getTarCacheDir())
 	if not iter then return nil end
 	for entry in iter do
 		if entry.type == "dir" then
-			local start = entry.name:find(name .. "-", 1, true)
+			const start = entry.name:find(name .. "-", 1, true)
 			if start and start > 1 and not entry.name:sub(start - 1, start - 1):match("[%w%-]") then
 				return path.join(lde.global.getTarCacheDir(), entry.name)
 			end
@@ -476,21 +471,21 @@ function util.openLuarocksPackage(name, version, isOffline)
 	end
 
 	if arch == "src" then
-		local archiveDir = lde.global.getOrInitArchive(url, isOffline)
+		local archiveDir = lde.global.getOrInitArchive(url --[[@as string]], isOffline)
 		-- .src.rock extracts with the rockspec at root; the source is either a
 		-- subdir next to the rockspec or the nested archive (materialized by
 		-- openSrcRock).
-		local pkg, err = util.openSrcRock(archiveDir, url)
+		local pkg, err = util.openSrcRock(archiveDir --[[@as string]], url --[[@as string]])
 		if not pkg then
 			return nil, nil, "Failed to load src rock '" .. name .. "': " .. (err or "")
 		end
 
 		---@type lde.Lockfile.ArchiveDependency
-		local lockEntry = { archive = url }
+		const lockEntry = { archive = url } --[[@as lde.Lockfile.ArchiveDependency]]
 		return pkg, lockEntry
 	end
 
-	return util.openRockspecUrl(name, url, nil, nil, isOffline)
+	return util.openRockspecUrl(name, url --[[@as string]], nil, nil, isOffline)
 end
 
 ---@return luarocks.Manifest?, string?
@@ -500,7 +495,6 @@ end
 
 --- Cache file path for a rockspec URL.
 ---@param url string
----@return string
 function util.rockspecCacheFile(url)
 	return path.join(lde.global.getRockspecCacheDir(), (url:gsub("[^%w]", "_")))
 end
@@ -564,7 +558,7 @@ function util.materializeSrcRock(archiveDir)
 		local dir = nestedArchive:gsub("%.tar%.[gbx]z2?$", ""):gsub("%.zip$", "")
 		if not fs.isdir(dir) then
 			fs.mkdir(dir)
-			local ok2, err2 = Archive().new(nestedArchive):extract(dir, { stripComponents = true })
+			const ok2, err2 = Archive().new(nestedArchive):extract(dir, { stripComponents = true })
 			if not ok2 then
 				return nil, nil, "Failed to extract nested archive in src rock: " .. (err2 or "")
 			end
