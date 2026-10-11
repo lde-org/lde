@@ -33,7 +33,7 @@ local function sync(args)
 	pkg:build()
 	if timings and rootBuild then timings.finish(rootBuild) end
 	const runtime = pkg:installDependencies(nil, nil, nil, opts)
-	const dev = not args:flag("production") and pkg:installDevDependencies(opts)
+	const dev = args:flag("production") ? nil : pkg:installDevDependencies(opts)
 
 	if (runtime and runtime.hasChanged) or (dev and dev.hasChanged) then
 		ansi.printf("{green}All dependencies installed successfully.")

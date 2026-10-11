@@ -211,9 +211,12 @@ end
 ---@param args clap.Args
 local function install(args)
 	-- The option() calls consume their values; capture them up front so the
-	-- project-install check and resolvePackage can both see them.
+	-- project-install check and resolvePackage can both see them. --production
+	-- must be consumed here too: left in the stream, peek() below would read
+	-- it as a package name.
 	local gitUrl = args:option("git")
 	const pathDir = args:option("path")
+	const isProduction = args:flag("production")
 
 	-- No flags and no name = install deps for current project
 	if not gitUrl and not pathDir and not args:peek() then
@@ -226,8 +229,8 @@ local function install(args)
 		const opts = { summary = true }
 
 		-- Errors propagate to the CLI boundary, which renders them cleanly.
-		local runtime = pkg:installDependencies(nil, nil, nil, opts)
-		const dev = not args:flag("production") and pkg:installDevDependencies(opts)
+		const runtime = pkg:installDependencies(nil, nil, nil, opts)
+		const dev = isProduction ? nil : pkg:installDevDependencies(opts)
 
 		if (runtime and runtime.hasChanged) or (dev and dev.hasChanged) then
 			ansi.printf("{green}All dependencies installed successfully.")

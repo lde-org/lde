@@ -283,3 +283,45 @@ build:write("init.lua", "return {}")
 	test.truthy(ok2, "lde run --verbose failed: " .. tostring(out2))
 	test.includes(out2 or "", "NOISY-MARKER", "--verbose must stream build.lua output")
 end)
+
+test.it("install --production skips dev dependencies", function()
+	-- Regression: the flag was never consumed before the project-install
+	-- branch, so args:peek() saw "--production" and treated it as a package
+	-- name; and the dev result was `false` (not nil), crashing the summary
+	-- when the dev pass was skipped.
+	local runtimeDep = makeProject("install-prod-runtime")
+	fs.write(path.join(runtimeDep, "lde.json"), json.encode({
+		name = "install-prod-runtime",
+		version = "0.1.0",
+		dependencies = {}
+	}))
+	local devDep = makeProject("install-prod-dev")
+	fs.write(path.join(devDep, "lde.json"), json.encode({
+		name = "install-prod-dev",
+		version = "0.1.0",
+		dependencies = {}
+	}))
+
+	local dir = makeProject("install-prod-app")
+	fs.write(path.join(dir, "lde.json"), json.encode({
+		name = "install-prod-app",
+		version = "0.1.0",
+		dependencies = {
+			["install-prod-runtime"] = { path = "../install-prod-runtime" }
+		},
+		devDependencies = {
+			["install-prod-dev"] = { path = "../install-prod-dev" }
+		}
+	}))
+
+	local ok, out = ldecli({ "install", "--production" }, dir)
+	test.truthy(ok, "install --production failed: " .. tostring(out))
+	test.truthy(fs.exists(path.join(dir, "target", "install-prod-runtime", "init.lua")),
+		"runtime dep must be installed")
+	test.falsy(fs.exists(path.join(dir, "target", "install-prod-dev")),
+		"dev dep must not be installed with --production")
+
+	const lockRaw = fs.read(path.join(dir, "lde.lock")) ---@cast lockRaw -nil
+	const lock = json.decode(lockRaw) ---@cast lock table<string, any>
+	test.falsy(lock.dependencies["install-prod-dev"], "dev dep must not be pinned with --production")
+end)
