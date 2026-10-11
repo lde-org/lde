@@ -1719,6 +1719,42 @@ test.it("rockspec: native module compile args carry the cross -target flag", fun
 	})
 	test.falsy(native[1]:find("^%-%-target"), "no -target flag for native builds")
 	test.truthy(hasArg(native, "-shared"))
+	if jit.os ~= "Windows" then
+		test.truthy(hasArg(native, "-fPIC"), "POSIX shared libraries need -fPIC")
+	end
+end)
+
+test.it("rockspec: -fPIC is only passed for non-Windows targets", function()
+	local function hasArg(args, want)
+		for _, arg in ipairs(args) do
+			if arg == want then return true end
+		end
+		return false
+	end
+
+	local function argsFor(ctx)
+		return lde.Package.nativeGccArgs({ sources = { "a.c" } }, {
+			packageDir = "/pkg",
+			modulesDir = "/pkg/target",
+			luajitPath = "/lj",
+			destAbs = "/pkg/target/a.so",
+			jitOS = ctx.jitOS,
+			targetFlag = ctx.targetFlag,
+		})
+	end
+
+	test.falsy(hasArg(argsFor({ jitOS = "Windows" }), "-fPIC"), "Windows host must not get -fPIC")
+	test.falsy(
+		hasArg(argsFor({ jitOS = "Linux", targetFlag = "--target=x86_64-w64-windows-gnu" }), "-fPIC"),
+		"Windows GNU cross target must not get -fPIC")
+	test.falsy(
+		hasArg(argsFor({ jitOS = "Linux", targetFlag = "--target=i686-pc-windows-msvc" }), "-fPIC"),
+		"Windows MSVC cross target must not get -fPIC")
+	test.truthy(hasArg(argsFor({ jitOS = "Linux" }), "-fPIC"), "ELF host keeps -fPIC")
+	test.truthy(
+		hasArg(argsFor({ jitOS = "Linux", targetFlag = "--target=aarch64-linux-gnu" }), "-fPIC"),
+		"ELF cross target keeps -fPIC")
+	test.truthy(hasArg(argsFor({ jitOS = "OSX" }), "-fPIC"), "MachO host keeps -fPIC")
 end)
 
 --
@@ -2088,7 +2124,8 @@ build = { type = "make" }
 	-- The standard variable still reaches make (as an environment default)...
 	test.includes(out, "include", "LUA_INCDIR must still resolve for the Makefile")
 	-- ...and the Makefile's own `CFLAGS +=` still applies on top of lde's value.
-	test.includes(out, "cflags=-fPIC -DFROM_MAKEFILE", "Makefile CFLAGS += must not be suppressed")
+	const expectedCFlags = jit.os == "Windows" and "cflags=-DFROM_MAKEFILE" or "cflags=-fPIC -DFROM_MAKEFILE"
+	test.includes(out, expectedCFlags, "Makefile CFLAGS += must not be suppressed")
 end)
 
 test.it("rockspec: command build exports resolved vars even when the rockspec never references them", function()
@@ -2106,13 +2143,22 @@ test.it("rockspec: command build exports resolved vars even when the rockspec ne
 	-- the environment. The lde-specific vars (CFLAGS=-fPIC, OBJ_EXTENSION=o,
 	-- a luajit include dir) can't come from the ambient environment, so the
 	-- assertions only pass when lde actually exports them.
+	fs.write(path.join(dir, "check-env.lua"), [[
+local cc, cflags, obj = os.getenv("CC"), os.getenv("CFLAGS"), os.getenv("OBJ_EXTENSION")
+local lua = os.getenv("LUA_INCDIR")
+local ok = cc ~= nil and cc ~= "" and obj == "o" and lua ~= nil and lua:find("include$") ~= nil
+local f = assert(io.open("cmd-env-vars.txt", "w"))
+f:write("cc=[", cc, "]\ncflags=[", cflags, "]\nobj=[", obj, "]\n")
+f:close()
+assert(ok, "not all environment variables were exported")
+]])
 	fs.write(path.join(dir, "cmd-env-vars-1.0-1.rockspec"), [[
 package = "cmd-env-vars"
 version = "1.0-1"
 source = { url = "https://example.com" }
 build = {
   type = "command",
-  build_command = '$(LUA) -e "assert(os.getenv(\'CC\') ~= nil and os.getenv(\'CC\') ~= \'\', \'CC not exported\'); assert(os.getenv(\'CFLAGS\') == \'-fPIC\', \'CFLAGS not exported\'); assert(os.getenv(\'OBJ_EXTENSION\') == \'o\', \'OBJ_EXTENSION not exported\'); assert(os.getenv(\'LUA_INCDIR\') ~= nil and os.getenv(\'LUA_INCDIR\'):find(\'include$\') ~= nil, \'LUA_INCDIR not exported\')"',
+  build_command = '$(LUA) check-env.lua',
   install_command = '$(LUA) -e "assert(os.getenv(\'CC\') ~= nil and os.getenv(\'CC\') ~= \'\', \'CC not exported at install\')"',
 }
 ]])
@@ -2123,6 +2169,13 @@ build = {
 	local outputDir = path.join(dir, "target", "cmd-env-vars")
 	local ok, berr = pkg:runBuildScript(outputDir)
 	test.truthy(ok, berr)
+
+	-- Assert the exported values directly: Windows exports no -fPIC (MSVC clang
+	-- rejects it, MinGW ignores it) while POSIX needs it for shared objects.
+	const out = fs.read(path.join(dir, "cmd-env-vars.txt")) or ""
+	test.includes(out, "cc=[", "CC must be exported")
+	test.includes(out, "obj=[o]", "OBJ_EXTENSION must be exported")
+	test.includes(out, jit.os == "Windows" and "cflags=[]" or "cflags=[-fPIC]", "CFLAGS must be exported")
 end)
 
 test.it("rockspec: make bin guess skips modules and dotfiles", function()

@@ -316,6 +316,19 @@ end
 ---@field targetFlag? string # clang -target flag, prepended when cross-compiling
 ---@field extVars? table<string, string> # resolved rockspec external_dependencies
 
+---@param ctx lde.rockspec.NativeGccContext
+---@return boolean
+local function isWindowsBuild(ctx)
+	const target = ctx.targetFlag or lde.global.getTargetTriple()
+	return target ~= nil and target:lower():find("windows", 1, true) ~= nil
+end
+
+---@param ctx lde.rockspec.NativeGccContext
+local function shouldUseFPIC(ctx)
+	const hostOS = ctx.jitOS or jit.os
+	return hostOS ~= "Windows" and not isWindowsBuild(ctx)
+end
+
 ---@param src lde.rockspec.NativeModuleSpec | lde.rockspec.NormalizedNativeModule
 ---@param ctx lde.rockspec.NativeGccContext
 ---@return string[]
@@ -338,7 +351,9 @@ local function nativeGccArgs(src, ctx)
 		args[#args + 1] = ctx.targetFlag
 	end
 	args[#args + 1] = "-shared"
-	args[#args + 1] = "-fPIC"
+	if shouldUseFPIC(ctx) then
+		args[#args + 1] = "-fPIC"
+	end
 	args[#args + 1] = "-DLUAJIT_VERSION=LuaJIT 2.1.0-beta3"
 	args[#args + 1] = "-DLUA_VERSION_NUM=501"
 	args[#args + 1] = "-I" .. path.join(ljPath, "include")
@@ -642,7 +657,6 @@ local function openRockspec(dir, rockspecPath)
 			LUA_INCDIR  = makePath(path.join(luajitPath, "include")),
 			LUA_LIBDIR  = makePath(path.join(luajitPath, "lib")),
 			LUALIB      = "libluajit.a",
-			CFLAGS      = "-fPIC",
 			-- Rocks that auto-detect the Lua toolchain (cqueues' luapath)
 			-- scan CPPFLAGS for -I dirs; without this they fall back to the
 			-- system Lua headers (e.g. 5.4) and link against APIs LuaJIT
@@ -659,6 +673,9 @@ local function openRockspec(dir, rockspecPath)
 			LUA         = makePath(env.execPath() or "")
 		}
 		for k, v in pairs(extVars) do stdVars[k] = v end
+
+		const exportFPic = (jit.os ~= "Windows" and lde.global.getTarget()?.platform ~= "windows")
+		if exportFPic then stdVars.CFLAGS = "-fPIC" end
 
 		---@param s string
 		---@return string
@@ -848,6 +865,7 @@ local function openRockspec(dir, rockspecPath)
 					jitOS = jit.os,
 					makePath = makePath,
 					targetFlag = lde.global.getTargetFlag(),
+					jitOS = jit.os,
 					extVars = extVars,
 				})
 
@@ -979,7 +997,6 @@ local function openRockspec(dir, rockspecPath)
 				CC            = lde.global.getCCCommand(),
 				LD            = lde.global.getCCCommand(),
 				MAKE          = lde.global.getMakeBin(),
-				CFLAGS        = "-fPIC",
 				LIBFLAG       = jit.os == "OSX" and "-shared -undefined dynamic_lookup" or "-shared",
 				-- LuaJIT modules are .so on every platform; rockspecs that pass
 				-- $(LIB_EXTENSION) to their build (e.g. luaposix's luke) assume .so
@@ -989,6 +1006,7 @@ local function openRockspec(dir, rockspecPath)
 				OBJ_EXTENSION = "o"
 			}
 			for k, v in pairs(extVars) do vars[k] = v end
+			if exportFPic then vars.CFLAGS = "-fPIC" end
 
 			const cmdEnv = {}
 			for k, v in pairs(vars) do cmdEnv[k] = v end
