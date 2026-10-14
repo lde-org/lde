@@ -84,3 +84,8 @@ lde check
 
 > [!TIP]
 > Only the compiled .lua files are stored in `lde bundle` / `lde compile` outputs, so they won't waste space in your bundle.
+
+## Quirks of type checking
+
+- Types do not update immediately, if you are getting unexpected errors, run `lde sync` and try again
+- The `tlconfig.lua` is only read by the tl compiler, not lde. Use it exclusively for type-checking configurations.
