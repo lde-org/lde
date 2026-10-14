@@ -126,6 +126,18 @@ local function defaultBuildFn(pkg, outputDir, captureLog)
 		end
 	end
 
+	-- Capture the environment values this function overrides, raw (nil when
+	-- unset), so the restore below puts back exactly what was there. Restoring
+	-- an unset variable to "" leaves an empty-but-defined variable behind, and
+	-- an empty MAKE makes every later cmake/make child in this process fail
+	-- silently: `cmake --build` on a perfectly fine build dir prints
+	-- "gmake: s: No such file or directory" and exits 0 without building.
+	const oldOutputDir = env.var("LDE_OUTPUT_DIR")
+	const oldLpmOutputDir = env.var("LPM_OUTPUT_DIR")
+	const oldCC = env.var("CC")
+	const oldMAKE = env.var("MAKE")
+	const oldPATH = env.var("PATH")
+
 	-- Set LDE_OUTPUT_DIR so build scripts can read it via os.getenv
 	env.set("LDE_OUTPUT_DIR", outputDir)
 	env.set("LPM_OUTPUT_DIR", outputDir)
@@ -138,14 +150,11 @@ local function defaultBuildFn(pkg, outputDir, captureLog)
 	local ccBin = global.getCCBin()
 	const ccCommand = global.getCCCommand()
 	const makeBin = global.getMakeBin()
-	const oldCC  = env.var("CC") or ""
-	const oldMAKE = env.var("MAKE") or ""
-	const oldPATH = env.var("PATH") or ""
 	env.set("CC", ccCommand)
 	env.set("MAKE", makeBin)
 	if jit.os == "Windows" then
 		local mingwBinDir = path.dirname(ccBin)
-		if not oldPATH:find(mingwBinDir, 1, true) then
+		if oldPATH and not oldPATH:find(mingwBinDir, 1, true) then
 			env.set("PATH", mingwBinDir .. ";" .. oldPATH)
 		end
 	end
@@ -162,8 +171,8 @@ local function defaultBuildFn(pkg, outputDir, captureLog)
 	local ok, err = pcall(state.eval, state, source)
 
 	env.chdir(oldCwd)
-	env.set("LDE_OUTPUT_DIR", "")
-	env.set("LPM_OUTPUT_DIR", "")
+	env.set("LDE_OUTPUT_DIR", oldOutputDir)
+	env.set("LPM_OUTPUT_DIR", oldLpmOutputDir)
 	env.set("CC", oldCC)
 	env.set("MAKE", oldMAKE)
 	if jit.os == "Windows" then env.set("PATH", oldPATH) end

@@ -272,7 +272,7 @@ local function autodetectModules(pkgDir, packageName)
 
 	for _, rel in ipairs(fs.scan(base, "**")) do
 		const first = rel:match("^([^/\\]+)")
-		if first == "target" or first == ".git" or first == "build.lde" or first == "install.lde" then
+		if first == "target" or first == ".git" or first == "build.luarocks" or first == "install.lde" then
 			goto continue
 		end
 		local ext = path.extension(rel)
@@ -407,6 +407,69 @@ local function nativeGccArgs(src, ctx)
 	return args
 end
 
+--- Copies the files a rockspec's build.install table declares, mirroring
+--- LuaRocks' install_files pass: a numeric key installs the file under its own
+--- basename, a string key names the module (lib/lua, dots become directories,
+--- a .lua source is renamed after the module) or the destination path inside
+--- the directory (bin). LuaRocks runs this after every build backend and rocks
+--- rely on it: yuescript's CMakeLists ends with install(CODE "") — both its
+--- yue.so module and its yue CLI reach the tree purely through
+--- build.install.lib/bin.
+---
+--- A declared file the build never produced is an error (LuaRocks: "Failed
+--- copying <file>"). Skipping it silently let `lde add` report success for a
+--- package that installed nothing at all. A file the backend already
+--- materialized at the destination counts as produced: make rocks install into
+--- the module dir LuaRocks points INST_LIBDIR/bin at and still list the file
+--- under its build-tree path.
+---@param files table<integer|string, string> # build.install.lib/.lua/.bin
+---@param destRoot string # module dir (lib/lua) or the package's target dir (bin)
+---@param rockDir string # rock source dir the entries are relative to
+---@param isModulePath boolean # whether a string key names a module
+---@return boolean?
+---@return string?
+local function installDeclaredFiles(files, destRoot, rockDir, isModulePath)
+	if next(files) == nil then return true end
+
+	for key, src in pairs(files) do
+		local destDir = destRoot
+		local destName = path.basename(src)
+		if type(key) == "string" then
+			if isModulePath then
+				destDir = path.join(destRoot, key:gsub("%.", path.separator))
+				if destName:match("%.lua$") then
+					destName = key:match("([^.]+)$") .. ".lua"
+				end
+			else
+				const keyDir = path.dirname(key)
+				destDir = keyDir ~= "." ? path.join(destRoot, keyDir) : destRoot
+				destName = path.basename(key)
+			end
+		end
+
+		const srcAbs = path.join(rockDir, src)
+		const destAbs = path.join(destDir, destName)
+		if fs.isfile(destAbs) and not fs.isfile(srcAbs) then
+			goto continue
+		end
+		if not fs.isdir(destDir) then fs.mkdirAll(destDir) end
+		-- fs.copy can report success without writing (see the builtin branch),
+		-- so verify the file actually landed.
+		if not fs.copy(srcAbs, destAbs) or not fs.isfile(destAbs) then
+			return nil, "Failed to install '" .. src .. "' from '" .. srcAbs .. "'"
+		end
+		-- LuaRocks installs bin entries with exec permissions; a build that
+		-- wrote its program 0644 would otherwise install a tool that cannot be
+		-- run (module entries only have to be readable).
+		if not isModulePath and jit.os ~= "Windows" then
+			fs.chmod(destAbs, tonumber("755", 8))
+		end
+		::continue::
+	end
+
+	return true
+end
+
 ---@param dir string?
 ---@param rockspecPath string? # Path to the rockspec file; if nil, scanned from dir
 ---@return lde.Package?, string?
@@ -487,7 +550,7 @@ local function openRockspec(dir, rockspecPath)
 
 	local modules = {}
 	local nativeModules = {}
-	const binScripts, installLuaFiles = {}, {}
+	const binScripts, installLuaFiles, installLibFiles = {}, {}, {}
 
 	-- Only builtin/module builds interpret build.modules as lua/native module
 	-- sources; other backends (make, cmake, custom like rust-mlua) consume the
@@ -532,11 +595,9 @@ local function openRockspec(dir, rockspecPath)
 			if platBuild then break end
 		end
 
-		if spec.build.platforms and not platBuild and lde.isVerbose then
-			io.stderr:write("warning: " ..
-				(spec.package or "?") .. ": no platform config for '" .. jitPlatform .. "'\n")
-		end
-
+		-- No platform entry means the base build table applies as-is: a partial
+		-- platforms table (yuescript's windows-only install override, say) is
+		-- not a problem to report.
 		const platformModules = platBuild?.modules ?? {} ---@cast platformModules table<string, rocked.raw.BuildSource>
 		for modname, src in pairs(platformModules) do
 			if type(src) == "string" then
@@ -555,10 +616,12 @@ local function openRockspec(dir, rockspecPath)
 		if spec.build.install then
 			for k, v in pairs(spec.build.install.bin or {}) do binScripts[k] = v end
 			for k, v in pairs(spec.build.install.lua or {}) do installLuaFiles[k] = v end
+			for k, v in pairs(spec.build.install.lib or {}) do installLibFiles[k] = v end
 		end
 		if platBuild and platBuild.install then
 			for k, v in pairs(platBuild.install.bin or {}) do binScripts[k] = v end
 			for k, v in pairs(platBuild.install.lua or {}) do installLuaFiles[k] = v end
+			for k, v in pairs(platBuild.install.lib or {}) do installLibFiles[k] = v end
 		end
 	end
 
@@ -612,6 +675,7 @@ local function openRockspec(dir, rockspecPath)
 	end
 	for _, src in pairs(binScripts) do stampSource(src) end
 	for _, src in pairs(installLuaFiles) do stampSource(src) end
+	for _, src in pairs(installLibFiles) do stampSource(src) end
 	for _, copyDir in ipairs(spec.build and spec.build.copy_directories or {}) do stampSource(copyDir) end
 	table.sort(sourceHash)
 	-- The stamp covers the compile target so a --target switch rebuilds the
@@ -757,10 +821,25 @@ local function openRockspec(dir, rockspecPath)
 				end
 			end
 
+			-- build.install.{lib,lua,bin} entries, the same post-build copy
+			-- LuaRocks performs for make rocks (a Makefile that installs into the
+			-- module dir satisfies an entry whose build-tree path never existed).
+			local installOk, installErr = installDeclaredFiles(installLibFiles, modulesDir, dir, true)
+			if not installOk then return nil, installErr end
+			installOk, installErr = installDeclaredFiles(installLuaFiles, modulesDir, dir, true)
+			if not installOk then return nil, installErr end
+			installOk, installErr = installDeclaredFiles(binScripts, outputDir, dir, false)
+			if not installOk then return nil, installErr end
+
 			fs.write(stampFile, buildStamp)
 			return true
 		elseif buildType == "cmake" then
-			local buildDir = path.join(dir, "build.lde")
+			-- LuaRocks' cmake backend hardcodes the build dir name, and rockspecs
+			-- reference their artifacts through it: yuescript declares
+			-- install.lib = { "build.luarocks/yue.so" } and
+			-- install.bin = { "build.luarocks/yue" }. The directory name is part
+			-- of that contract, so the install pass below finds the entries.
+			local buildDir = path.join(dir, "build.luarocks")
 			local installDir = path.join(dir, "install.lde")
 			if not fs.isdir(buildDir) then fs.mkdir(buildDir) end
 			if not fs.isdir(installDir) then fs.mkdir(installDir) end
@@ -797,6 +876,33 @@ local function openRockspec(dir, rockspecPath)
 			for _, rel in ipairs(fs.scan(installDir, soExt)) do
 				fs.copy(path.join(installDir, rel), path.join(modulesDir, path.basename(rel)))
 			end
+
+			-- A CMakeLists that installs programs (with the install prefix above)
+			-- drops them into install.lde/bin; the package's target dir is where
+			-- the bin guess and `lde run`/`lde x` look, same as the make branch
+			-- promotes Makefile installs out of the module dir's bin/.
+			const installBinDir = path.join(installDir, "bin")
+			if fs.isdir(installBinDir) then
+				local iter = fs.readdir(installBinDir)
+				if iter then
+					for entry in iter do
+						if entry.type == "file" then
+							fs.copy(path.join(installBinDir, entry.name), path.join(outputDir, entry.name))
+						end
+					end
+				end
+			end
+
+			-- build.install.{lib,lua,bin} entries: LuaRocks copies them after the
+			-- backend ran, which is all yuescript has (its CMakeLists installs
+			-- nothing on its own) and what keeps a declared-but-missing artifact
+			-- from passing as a successful install.
+			local installOk, installErr = installDeclaredFiles(installLibFiles, modulesDir, dir, true)
+			if not installOk then return nil, installErr end
+			installOk, installErr = installDeclaredFiles(installLuaFiles, modulesDir, dir, true)
+			if not installOk then return nil, installErr end
+			installOk, installErr = installDeclaredFiles(binScripts, outputDir, dir, false)
+			if not installOk then return nil, installErr end
 
 			fs.write(stampFile, buildStamp)
 			return true
@@ -910,16 +1016,11 @@ local function openRockspec(dir, rockspecPath)
 					end
 				end
 
-				for k, v in pairs(binScripts) do
-					const binName = type(k) == "number" and path.basename(v) or k
-					const binDest = path.join(outputDir, binName)
-					const binDestDir = path.dirname(binDest)
-					if not fs.isdir(binDestDir) then fs.mkdirAll(binDestDir) end
-					local binSrc = path.join(dir, v)
-					if not fs.copy(binSrc, binDest) or not fs.isfile(binDest) then
-						return nil, "Failed to install bin '" .. binName .. "' from '" .. v .. "'"
-					end
-				end
+				-- build.install.bin entries: the package's target dir is where
+				-- readConfig (and with it `lde run`/`lde x`) looks for the bin, and
+				-- where the exec bit LuaRocks gives bins is applied.
+				local installOk, installErr = installDeclaredFiles(binScripts, outputDir, dir, false)
+				if not installOk then return nil, installErr end
 
 				for modname, src in pairs(installLuaFiles) do
 					-- LuaRocks installs the files build.install.lua lists into the Lua
@@ -949,6 +1050,11 @@ local function openRockspec(dir, rockspecPath)
 					fs.copy(path.join(dir, src), destAbs)
 					::continue_install_lua::
 				end
+
+				-- build.install.lib entries (prebuilt modules a builtin rock ships
+				-- alongside its own sources) land in the module dir like LuaRocks'.
+				installOk, installErr = installDeclaredFiles(installLibFiles, modulesDir, dir, true)
+				if not installOk then return nil, installErr end
 
 				-- copy_directories: ship non-module assets (e.g. luacov's HTML
 				-- reporter static files) preserving their relative layout.

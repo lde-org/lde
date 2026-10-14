@@ -14,3 +14,4 @@ fuzzer/.fuzz
 .check*
 /minilde.sh
 /minilde.cmd
+.lye

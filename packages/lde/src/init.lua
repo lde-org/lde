@@ -9,16 +9,16 @@ const suggest = require("lde.util.suggest")
 
 const args = clap.parse({ ... })
 
-	-- `--lua [args...]` runs the lde binary as a plain Lua interpreter: the
-	-- args form a `lua` command line (`-e <code>` chunks, then an optional
-	-- script with its args). Everything after the flag belongs to the
-	-- interpreter — scripts may pass their own lde-looking options (e.g.
-	-- `luarocks install --tree=...` shelled out through the lde binary) — so
-	-- it's split off before any lde option parsing.
-	local luaCliArgs
-	if args:flag("lua") then
-		luaCliArgs = args:drain()
-	end
+-- `--lua [args...]` runs the lde binary as a plain Lua interpreter: the
+-- args form a `lua` command line (`-e <code>` chunks, then an optional
+-- script with its args). Everything after the flag belongs to the
+-- interpreter — scripts may pass their own lde-looking options (e.g.
+-- `luarocks install --tree=...` shelled out through the lde binary) — so
+-- it's split off before any lde option parsing.
+local luaCliArgs
+if args:flag("lua") then
+	luaCliArgs = args:drain()
+end
 
 -- --verbose is a global flag, consumed before the command name is popped so
 -- it works anywhere on the command line (`lde --verbose run` and

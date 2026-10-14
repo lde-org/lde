@@ -293,6 +293,68 @@ test.it("runFile: falls back to init.lua when bin is not set", function()
 	test.truthy(ok)
 end)
 
+test.it("runFile: a rock bin that is not Lua is executed instead of interpreted", function()
+	-- LuaRocks executes every build.install.bin entry; for Lua scripts it makes
+	-- that work by rewriting the shebang and exporting LUA_PATH through a
+	-- generated wrapper. lde runs Lua entries on its own runtime instead, so a
+	-- bin that is a native program (yuescript's yue) or a wrapper script for
+	-- another interpreter has to be spawned as-is: reading it as Lua source only
+	-- fails with a syntax error inside the file.
+	local dir = path.join(tmpBase, "bin-run-shell")
+	fs.mkdir(tmpBase)
+	fs.mkdir(dir)
+	fs.write(path.join(dir, "tool.sh"), "#!/bin/sh\n[ \"$1\" = ok ]\n")
+	fs.write(path.join(dir, "shell-bin-1.0-1.rockspec"), [[
+package = "shell-bin"
+version = "1.0-1"
+source = { url = "https://example.com" }
+build = {
+  type = "none",
+  install = {
+    bin = { "tool.sh" }
+  }
+}
+]])
+
+	local pkg, err = lde.Package.openRockspec(dir)
+	test.truthy(pkg, err) ---@cast pkg -nil
+	local ok, berr = pkg:runBuildScript(path.join(dir, "target", "shell-bin"))
+	test.truthy(ok, berr)
+
+	if jit.os ~= "Windows" then
+		-- installed bins are executable (LuaRocks' exec perms), so the spawned
+		-- script's exit status decides the run result.
+		test.truthy(pkg:runFile(nil, { "ok" }), "the script must run and exit 0")
+		test.falsy(pkg:runFile(nil, { "fail" }), "a non-zero exit must fail the run")
+	end
+end)
+
+test.it("runFile: an extensionless Lua bin still runs on the lde runtime", function()
+	-- moonscript's bin/moon, tl's bin/tl and luacheck are Lua scripts whose
+	-- names carry no .lua extension; they must keep running in-process, where
+	-- the package's dependencies resolve (spawning them would hand the file to
+	-- whichever interpreter happens to be on PATH — or to nothing at all on
+	-- Windows).
+	fs.mkdir(tmpBase)
+	local dir = path.join(tmpBase, "bin-run-extensionless")
+	fs.mkdir(dir)
+
+	fs.write(path.join(dir, "lde.json"), json.encode({
+		name = "bin-run-extensionless",
+		version = "0.1.0",
+		bin = "tool",
+		dependencies = {}
+	}))
+
+	local srcDir = path.join(dir, "src")
+	fs.mkdir(srcDir)
+	fs.write(path.join(srcDir, "tool"), "return true")
+
+	local pkg = assert(lde.Package.open(dir))
+	const ok, runErr = pkg:runFile(nil, {})
+	test.truthy(ok, runErr)
+end)
+
 --
 -- pkg:runScript named script resolution
 --

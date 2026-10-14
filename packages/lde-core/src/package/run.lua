@@ -96,6 +96,41 @@ local function runStringWithLuaCLI(package, code, args, vars, engine, cwd)
 	return exitCode == 0, stderr or "Script exited with a non-zero exit code"
 end
 
+--- Whether an entry point has to be executed rather than interpreted: a native
+--- executable (ELF, PE, Mach-O) or a script for another runtime (a rock whose
+--- build installs a shell/python/… CLI wrapper). Rockspec builds produce both —
+--- yuescript's CMake build yields the yue C++ binary, luasocket's make build a
+--- shell wrapper — and reading either as Lua source only fails with a syntax
+--- error partway through the file. A Lua script that carries a shebang
+--- (moonscript's bin/moon starts with `#!/usr/bin/env lua`) stays on the lde
+--- runtime, so it runs against the package's dependency tree rather than
+--- whatever interpreter happens to be on PATH.
+---@param scriptPath string
+local function isForeignEntry(scriptPath)
+	local file = io.open(scriptPath, "rb")
+	if not file then return false end
+	local head = file:read(128) or ""
+	file:close()
+
+	if head:sub(1, 4) == "\127ELF" or head:sub(1, 2) == "MZ" then return true end
+	-- Mach-O: 32/64-bit (FEEDFACE/FEEDFACF) and their byte-swapped forms.
+	const b1, b2, b3, b4 = head:byte(1), head:byte(2), head:byte(3), head:byte(4)
+	if b1 == 0xFE and b2 == 0xED and b3 == 0xFA and (b4 == 0xCE or b4 == 0xCF) then return true end
+	if b1 == 0xCE and b2 == 0xFA and b3 == 0xED and b4 == 0xFE then return true end
+	if b1 == 0xCF and b2 == 0xFA and b3 == 0xED and b4 == 0xFE then return true end
+	if b1 == 0xCA and b2 == 0xFE and b3 == 0xBA and b4 == 0xBE then return true end
+
+	const shebang = head:match("^#!([^\r\n]*)")
+	if shebang then
+		-- The interpreter name decides: `env lua`, `/usr/bin/lua5.1`, `luajit`
+		-- and friends keep the lde runtime (moonscript's bin/moon), while a
+		-- shell/python/node wrapper is a foreign script.
+		const interpreter = shebang:match("([^/%s]+)%s*$") or shebang
+		return interpreter:match("^lua") == nil
+	end
+	return false
+end
+
 ---@param package lde.Package
 ---@param scriptPath string?
 ---@param args string[]?
@@ -125,6 +160,23 @@ local function runFile(package, scriptPath, args, vars, cwd, profile, flamegraph
 	end
 
 	local cwd = cwd or package:getDir()
+
+	if fs.isfile(scriptPath) and isForeignEntry(scriptPath) then
+		-- Profiling, JIT diagnostics and hot reload all live in the lde runtime;
+		-- a spawned program has none of them.
+		if profile or flamegraph or profileJson or jit or preload then
+			return nil, "Profiling, JIT diagnostics and hot reload are only supported for Lua entry points"
+		end
+		local luaPath, luaCPath = getLuaPathsForPackage(package)
+		const env = { LUA_PATH = luaPath, LUA_CPATH = luaCPath }
+		if vars then for k, v in pairs(vars) do env[k] = v end end
+		const code, _, stderr = process.exec(scriptPath, args or {}, { cwd = cwd, env = env, stdout = "inherit", stderr = "inherit" })
+		if not code or code ~= 0 then
+			return nil, (stderr ~= "" and stderr)
+				or ("Failed to execute '" .. scriptPath .. "' (it is not executable?)")
+		end
+		return true
+	end
 
 	local engine = config.engine or "lde"
 	if engine == "lde" or engine == "lpm" --[[ compat ]] then

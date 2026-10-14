@@ -7,6 +7,7 @@ const env = require("env")
 local path = require("path")
 const json = require("json")
 const util = require("util")
+const process = require("process")
 
 local tmpBase = path.join(env.tmpdir(), "lde-build-tests")
 
@@ -1492,6 +1493,114 @@ build = {
 	test.equal(cfg.bin, "myscript")
 end)
 
+--
+-- Regression: build.install.lib/bin entries are copied after the build ran
+-- (LuaRocks' install_files pass), including entries naming artifacts inside
+-- the cmake build dir.
+--
+
+test.it("rockspec: cmake install.lib/bin entries resolve below build.luarocks", function()
+	-- yuescript's rockspec declares install.lib = { "build.luarocks/yue.so" }
+	-- and install.bin = { "build.luarocks/yue" } while its CMakeLists ends with
+	-- install(CODE "") — the build produces both artifacts, but only the
+	-- install table puts them in the tree. lde configured cmake into build.lde
+	-- and copied neither, so `lde add rocks:yuescript` reported success after
+	-- installing nothing at all.
+	if not process.exec("cmake", { "--version" }) then return end -- cmake backend test
+
+	local dir = path.join(tmpBase, "cmake-install-rock")
+	fs.mkdir(dir)
+	fs.write(path.join(dir, "yue.so.in"), "not really a module")
+	fs.write(path.join(dir, "yuetool.in"), "#!/bin/sh\necho yue\n")
+	fs.write(path.join(dir, "CMakeLists.txt"), [[
+cmake_minimum_required(VERSION 3.10)
+project(fakeyue NONE)
+add_custom_target(artifacts ALL
+  COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_CURRENT_SOURCE_DIR}/yue.so.in" "${CMAKE_BINARY_DIR}/yue.so"
+  COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_CURRENT_SOURCE_DIR}/yuetool.in" "${CMAKE_BINARY_DIR}/yuetool")
+install(CODE "")
+]])
+	fs.write(path.join(dir, "cmake-install-1.0-1.rockspec"), [[
+package = "cmake-install"
+version = "1.0-1"
+source = { url = "https://example.com" }
+build = {
+  type = "cmake",
+  install = {
+    lib = { "build.luarocks/yue.so" },
+    bin = { "build.luarocks/yuetool" },
+  }
+}
+]])
+
+	local pkg, err = lde.Package.openRockspec(dir)
+	test.truthy(pkg, err) ---@cast pkg -nil
+
+	local outputDir = path.join(dir, "target", "cmake-install")
+	local ok, berr = pkg:runBuildScript(outputDir)
+	test.truthy(ok, berr)
+
+	-- lib entries land in the module dir (target/?<ext> is on cpath)...
+	test.truthy(fs.exists(path.join(dir, "target", "yue.so")), "install.lib must land in the module dir")
+	-- ...and bin entries in the package target dir, where readConfig looks.
+	test.truthy(fs.exists(path.join(outputDir, "yuetool")), "install.bin must land in the target dir")
+	test.equal(pkg:readConfig().bin, "yuetool")
+end)
+
+test.it("rockspec: a declared install file the build never produced fails the install", function()
+	-- The copy used to be a silent no-op, so the package installed zero files
+	-- and reported success; every later require()/`lde x` then failed with an
+	-- unrelated error.
+	local dir = path.join(tmpBase, "missing-install-lib-rock")
+	fs.mkdir(dir)
+	fs.write(path.join(dir, "missing-lib-1.0-1.rockspec"), [[
+package = "missing-lib"
+version = "1.0-1"
+source = { url = "https://example.com" }
+build = {
+  type = "none",
+  install = {
+    lib = { "nonexistent.so" }
+  }
+}
+]])
+
+	local pkg, err = lde.Package.openRockspec(dir)
+	test.truthy(pkg, err) ---@cast pkg -nil
+
+	local ok, berr = pkg:runBuildScript(path.join(dir, "target", "missing-lib"))
+	test.falsy(ok, "a missing install.lib file must fail the build")
+	test.includes(berr or "", "nonexistent.so")
+end)
+
+test.it("rockspec: make install entries are copied when the Makefile installs nothing", function()
+	-- LuaRocks copies build.install after the backend ran, so the rockspec's
+	-- declared artifacts land even when the Makefile has no install target of
+	-- its own.
+	local dir = path.join(tmpBase, "make-install-files-rock")
+	fs.mkdir(dir)
+	fs.write(path.join(dir, "prebuilt.so"), "not really a module")
+	fs.write(path.join(dir, "Makefile"), "build:\n\t@true\n\ninstall:\n\t@true\n")
+	fs.write(path.join(dir, "make-install-files-1.0-1.rockspec"), [[
+package = "make-install-files"
+version = "1.0-1"
+source = { url = "https://example.com" }
+build = {
+  type = "make",
+  install = {
+    lib = { "prebuilt.so" },
+  }
+}
+]])
+
+	local pkg, err = lde.Package.openRockspec(dir)
+	test.truthy(pkg, err) ---@cast pkg -nil
+
+	local ok, berr = pkg:runBuildScript(path.join(dir, "target", "make-install-files"))
+	test.truthy(ok, berr)
+	test.truthy(fs.exists(path.join(dir, "target", "prebuilt.so")))
+end)
+
 test.it("rockspec: array install.lua entries install under their basename (semver pattern)", function()
 	-- A type="none" rock (e.g. luarocks semver) lists its module in
 	-- build.install.lua as a bare array entry. The basename-derived module name
@@ -1764,6 +1873,40 @@ end)
 --
 -- lde-build exposed to build scripts via preload
 --
+
+test.it("build script env: overrides are restored, not left empty", function()
+	-- Restoring an unset variable with "" left MAKE/CC/LDE_OUTPUT_DIR defined
+	-- but empty for the rest of the process. An empty MAKE makes any later
+	-- `cmake --build` do nothing while exiting 0 ("gmake: s: No such file or
+	-- directory"), so a cmake rock installed after a build script silently
+	-- skipped its build.
+	local dir = path.join(tmpBase, "build-script-env")
+	fs.mkdir(dir)
+	fs.mkdir(path.join(dir, "src"))
+	fs.write(path.join(dir, "src", "init.lua"), "return true")
+	fs.write(path.join(dir, "lde.json"), json.encode({
+		name = "build-script-env",
+		version = "0.1.0",
+		dependencies = {}
+	}))
+	fs.write(path.join(dir, "build.lua"), [[
+assert(os.getenv("MAKE") and os.getenv("MAKE") ~= "", "MAKE must be exported during the build")
+assert(os.getenv("CC") and os.getenv("CC") ~= "", "CC must be exported during the build")
+assert(os.getenv("LDE_OUTPUT_DIR") and os.getenv("LDE_OUTPUT_DIR") ~= "", "LDE_OUTPUT_DIR must be exported during the build")
+]])
+
+	local pkg = assert(lde.Package.open(dir))
+	const beforeMAKE = env.var("MAKE")
+	const beforeCC = env.var("CC")
+	const beforeOutputDir = env.var("LDE_OUTPUT_DIR")
+
+	local ok, err = pkg:runBuildScript(path.join(dir, "target", pkg:getName()))
+	test.truthy(ok, err)
+
+	test.equal(env.var("MAKE"), beforeMAKE, "MAKE must be restored to its previous value")
+	test.equal(env.var("CC"), beforeCC, "CC must be restored to its previous value")
+	test.equal(env.var("LDE_OUTPUT_DIR"), beforeOutputDir, "LDE_OUTPUT_DIR must be restored to its previous value")
+end)
 
 test.it("build script can require('lde-build') and uses correct outDir", function()
 	local dir = path.join(tmpBase, "ldebuild-exposed")
