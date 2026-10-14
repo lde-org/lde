@@ -236,10 +236,12 @@ local EXPECTED_FAIL = {
 	["luasql-mysql"] = "needs mysql.h (libmysqlclient-devel)",
 	["lua-geoip"] = "needs GeoIP.h (geoip-devel)",
 	["lrexlib-pcre"] = "needs pcre.h (pcre-devel); only pcre2 present",
-	["lyaml"] = "needs libyaml dev headers (YAML_DIR)",
 	["luaipc"] = "rock bug: NAME_MAX undefined on modern glibc",
 	["luacrypto"] = "does not compile against OpenSSL 3 (2010-era rock)",
-	["luaexpat"] = "needs expat.h (expat-devel)",
+	-- Layout limitation, not a rock problem: the dependency's build directory is
+	-- `target/<alias>`, so a rock whose *name* contains a dot (`json.lua`) shadows
+	-- its own module file `<module>.lua` in the flat target tree.
+	["json.lua"] = "rock name contains a dot and collides with its module path",
 }
 
 --- Why a rock is skipped without an install attempt: it is bound to a runtime
@@ -275,7 +277,7 @@ local EXCLUDE_MODULES = {
 --- luasocket ships samples/ and test/ via copy_directories; the files open
 --- sockets and loop forever when required (e.g. samples.mcsend). json.lua ships
 --- bench/ — benchmark scripts that run (and crash) when required.
-local EXCLUDE_PREFIXES = { "samples.", "test.", "bench." }
+local EXCLUDE_PREFIXES = { "samples.", "test.", "tests.", "bench." }
 
 --- Functional checks for well-known APIs. Values are Lua expressions over the
 --- module value `m`; they are spliced into the generated smoke script. Failures

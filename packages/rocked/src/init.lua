@@ -45,17 +45,37 @@ const rocked = {}
 ---@field build_command string?
 ---@field install_command string?
 
+--- The rockspec `test` section: `type` selects the backend, `script`/`command` are
+--- the command backend's payload, `flags` are prepended to the runner's args.
+---@class rocked.raw.Test
+---@field type string?
+---@field script string?
+---@field command string?
+---@field flags string[]?
+---@field busted_executable string?
+---@field platforms table<string, { flags: string[]? , script: string?, command: string? }>?
+
+--- The rockspec `source` section. `dir` names the source directory inside an
+--- archive, `file` the archive's own name, `md5` its expected digest.
+---@class rocked.raw.Source
+---@field url string
+---@field branch string?
+---@field tag string?
+---@field dir string?
+---@field file string?
+---@field md5 string?
+
 ---@class rocked.raw.Output
 ---@field version string
 ---@field package string
 ---@field rockspec_format string?
 ---@field description rocked.raw.Description?
----@field source { url: string, branch: string?, tag: string? }
+---@field source rocked.raw.Source
 ---@field dependencies string[]?
 ---@field build_dependencies string[]?
 ---@field test_dependencies string[]?
 ---@field external_dependencies table<string, { library?: string|string[], header?: string|string[], program?: string|string[] }>?
----@field test { type: string?, flags: string[]?, platforms: table<string, { flags: string[]? }>? }?
+---@field test rocked.raw.Test?
 ---@field build rocked.raw.Build
 
 const DEFAULT_INSTRUCTION_LIMIT = 1e7
@@ -74,6 +94,11 @@ const BYTECODE_SIGNATURE = 27
 ---@field memoryLimit number? # bytes the guest state may hold; 0 removes the cap
 ---@field extraModules? fun(name: string): boolean # module names this sandbox will install itself (backend polyfills)
 ---@field permissions rocked.Permissions? # per-action gates; unlisted actions default to allow
+---@field luaBin string? # interpreter path backends see as cfg.variables.LUA
+---@field luaDir string? # mock Lua install dir backends see as cfg.variables.LUA_DIR
+---@field luaIncDir string?
+---@field luaLibDir string?
+---@field variables table<string, string>? # extra cfg.variables entries (overrides)
 
 --- A rockspec runs with an empty environment. The shared string metatable stays
 --- intact: rockspecs compute versions from strings (`("1.0"):gsub(...)`) and
@@ -254,7 +279,40 @@ local BACKEND_DRIVER = [[
 	end
 ]]
 
+--- LuaRocks' test-backend contract: `require("luarocks.test.<type>")` and call
+--- `run_tests(rockspec.test, args)`. Returns nil+err instead of raising, since a
+--- failing suite is a normal outcome.
+local TEST_BACKEND_DRIVER = [[
+	local test_type, rockspec, args = ...
+	local loaded, driver = pcall(require, "luarocks.test." .. test_type)
+	if not loaded then
+		error("failed loading test execution module luarocks.test." .. test_type, 0)
+	end
+	local ok, err = driver.run_tests(rockspec.test, args)
+	if ok == nil then
+		error(tostring(err or "test backend returned false"), 0)
+	end
+]]
+
 --- The one sandbox that gets the luarocks.* polyfills, spared from the module-cache strip.
+---@param testType string
+---@param rockspec table # Host-side rockspec data (coerced into the guest)
+---@param args string[] # flags + CLI args, as LuaRocks passes them
+---@param opts rocked.SandboxOpts?
+---@return boolean ok
+---@return string? err
+function rocked.runTestBackend(testType, rockspec, args, opts)
+	local backendOpts = opts or {}
+	backendOpts.extraModules = luarocks.isPolyfill
+	return sandbox(backendOpts, luarocks.backendEnv(), function(state, g)
+		luarocks.setup(state, backendOpts)
+		local ok, err = loadSpec(state, TEST_BACKEND_DRIVER, "@lde-test-backend"):pcall(testType, state:table(rockspec),
+			state:table(args))
+		if ok then return true end
+		return false, err --[[@as string?]]
+	end)
+end
+
 ---@param buildType string
 ---@param rockspec table # Host-side rockspec data (coerced into the guest)
 ---@param opts rocked.SandboxOpts?

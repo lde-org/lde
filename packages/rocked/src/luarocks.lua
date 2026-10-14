@@ -187,6 +187,21 @@ function luarocks.setup(state, opts)
 		lua_dir     = |_name, _version| -> libDir,
 		install_dir = |_name, _version| -> libDir,
 	}
+	-- `variables` mirrors LuaRocks' cfg.variables: backends read LUA/LUA_INCDIR/
+	-- LUA_LIBDIR/LIBDIR/LUADIR from it (the `command` backend runs $(LUA)).
+	---@type table<string, string>
+	const variables = {
+		LUA = opts.luaBin or "lua",
+		LUA_INCDIR = opts.luaIncDir or "",
+		LUA_LIBDIR = opts.luaLibDir or "",
+		LUA_DIR = opts.luaDir or "",
+		LIBDIR = libDir,
+		LUADIR = libDir,
+	}
+	if opts.variables then
+		for k, v in pairs(opts.variables) do variables[k] = v end
+	end
+
 	loaded["luarocks.core.cfg"] = {
 		lua_version            = "5.1",
 		luajit_version         = jit.version,
@@ -194,6 +209,7 @@ function luarocks.setup(state, opts)
 		is_platform            = function(os) return os == platform end,
 		external_lib_extension = ext,
 		lib_extension          = ext,
+		variables              = variables,
 	}
 	loaded["luarocks.util"] = {
 		get_luajit_version = || -> jit.version,

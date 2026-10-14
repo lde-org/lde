@@ -63,6 +63,7 @@ end
 ---@field url string?  # download source (nil for the git-clone fallback)
 ---@field file string? # local cache file to download into (nil for clone)
 ---@field dir string?  # extraction target (nil for clone / isCached git)
+---@field srcDir string? # dir inside `dir` holding the source (source.dir, or the single root)
 
 ---@class lde.install.GitPlan
 ---@field dir string

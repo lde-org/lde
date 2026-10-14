@@ -242,7 +242,12 @@ function util.openRockspecUrl(name, url, branch, commit, isOffline)
 		dir, commit = lde.global.getOrInitGitRepo(name, sourceUrl, branch or sourceTag, commit, isOffline)
 		lockEntry = { git = sourceUrl, commit = commit, rockspec = url }
 	elseif sourceUrl:match("^https?://") then
-		dir = lde.global.getOrInitArchive(sourceUrl, isOffline)
+		-- The package lives in the archive's source directory (source.dir, or the
+		-- single top-level directory), not at the extraction root.
+		---@type string?
+		local sourceDir
+		dir, sourceDir = lde.global.getOrInitArchive(sourceUrl, isOffline, spec.source)
+		dir = sourceDir
 		lockEntry = { archive = sourceUrl, rockspec = url }
 	else
 		return nil, nil, "Unsupported source for '" .. name .. "': " .. sourceUrl

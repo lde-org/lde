@@ -438,6 +438,13 @@ local function shellQuote(arg, isCmd)
 	return "'" .. arg:gsub("'", "'\\''") .. "'"
 end
 
+--- Quotes one argument for the shell `getScriptShell` returned (cmd.exe doubles
+--- quotes; POSIX single-quotes).
+---@param arg string
+---@param isCmd boolean?
+---@return string
+function Package.quoteShellArg(arg, isCmd) return shellQuote(arg, isCmd) end
+
 ---@param name string # Name of a script defined in lde.json scripts table
 ---@param isCapture boolean? # If true, isCapture stdout/stderr instead of inheriting them
 ---@param args string[]? # Extra args appended to the script command (e.g. from `-- <args>`)

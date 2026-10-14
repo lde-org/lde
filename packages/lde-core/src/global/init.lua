@@ -59,6 +59,7 @@ global.findNamedPackageIn = git.findNamedPackageIn
 
 global.getOrInitArchive = archive.getOrInitArchive
 global.getArchiveDir = archive.getArchiveDir
+global.sourceDirFor = archive.sourceDirFor
 global.extractArchive = archive.extractArchive
 
 global.getRegistryDir = registry.getRegistryDir

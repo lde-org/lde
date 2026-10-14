@@ -12,6 +12,7 @@ const coverageModule = require("lde-core.coverage")
 const teal           = require("lde-core.teal")
 const moonscript     = require("lde-core.moonscript")
 local lde            = require("lde-core")
+const rocked         = require("rocked")
 
 -- Poll interval for the sharded scheduler (the children do the waiting).
 local sleep
@@ -159,46 +160,208 @@ local function ensureMockLuaDir()
 	return luaDir, wrapperPath
 end
 
---- rockspec packages: tests come from the rockspec's `test`/`test_dependencies`, run by busted from the package root; lde's binary doubles as `$(LUA)`.
+--- The test backend a rockspec uses: `test.type` when named, else LuaRocks'
+--- detection order (a `.busted` file, then `test.lua`).
+---@param spec rocked.raw.Output
+---@param dir string
+---@return string? testType
+---@return string? err
+local function detectTestType(spec, dir)
+	const declared = spec.test?.type
+	if declared then return declared end
+	if fs.exists(path.join(dir, ".busted")) then return "busted" end
+	if fs.exists(path.join(dir, "test.lua")) then return "command" end
+	return nil, "could not detect test type -- no test suite for " .. (spec.package or "?")
+end
+
+--- Per-platform test flags override the base list; `$(LUA)`/`$(LUA_DIR)` point at
+--- the mock Lua install so harnesses that shell out to the interpreter work.
+---@param testSpec rocked.raw.Test?
+---@param luaBin string
+---@param luaDir string
+---@return string[]
+local function testFlags(testSpec, luaBin, luaDir)
+	const platform = ffi.os == "Windows" and "windows" or "unix"
+	local raw
+	if testSpec then
+		const platSpec = testSpec.platforms?.[platform]
+		if platSpec and platSpec.flags then raw = platSpec.flags
+		elseif testSpec.flags then raw = testSpec.flags end
+	end
+	const flags = {}
+	for _, flag in ipairs(raw or {}) do
+		flags[#flags + 1] = flag:gsub("%$%(LUA%)", luaBin):gsub("%$%(LUA_DIR%)", luaDir)
+	end
+	return flags
+end
+
+--- LuaRocks' built-in `command` backend: run `test.script` through the
+--- interpreter, or `test.command` as a shell command line, with the rockspec's
+--- flags appended (LuaRocks inserts flags ahead of the CLI args).
+---@param package lde.Package
+---@param testSpec rocked.raw.Test?
+---@param flags string[]
+---@param luaBin string
+---@param luaDir string
+---@param luaPath string
+---@param luaCPath string
+---@return lde.TestResults
+local function runCommandTests(package, testSpec, flags, luaBin, luaDir, luaPath, luaCPath)
+	---@param message string
+	local function failure(message)
+		return {
+			package = package, files = {}, total = 1, failures = 1, skipped = 0, error = message,
+		}
+	end
+
+	-- Harnesses spell the interpreter either as $(LUA) or as a bare `lua`; both
+	-- must point at the mock install, which is also put on PATH for the latter.
+	---@param text string
+	local function subst(text)
+		local out = text:gsub("%$%(LUA%)", luaBin):gsub("%$%(LUA_DIR%)", luaDir)
+		for key, value in pairs(package.rockspecData?.variables or {}) do
+			if type(value) == "string" then
+				out = out:gsub("%$%(" .. key .. "%)", value)
+			end
+		end
+		return out
+	end
+
+	const childEnv = { LUA_PATH = luaPath, LUA_CPATH = luaCPath }
+	if luaDir ~= "" then
+		childEnv.PATH = luaDir .. path.separator .. (env.var("PATH") or "")
+	end
+	local exitCode
+	local script = testSpec?.script
+	const command = testSpec?.command
+	if script == nil and command == nil then
+		-- Detected from test.lua, or an empty test section.
+		script = "test.lua"
+	end
+
+	if script ~= nil then
+		if type(script) ~= "string" then return failure("Malformed rockspec: 'script' expects a string") end
+		script = subst(script)
+		if not fs.exists(path.join(package.dir, script)) then
+			return failure("Test script " .. script .. " does not exist")
+		end
+		local argv = { script }
+		for _, flag in ipairs(flags) do argv[#argv + 1] = flag end
+		exitCode = process.exec(luaBin, argv, { cwd = package.dir, env = childEnv, stdout = "inherit", stderr = "inherit" })
+	else
+		if type(command) ~= "string" then return failure("Malformed rockspec: 'command' expects a string") end
+		const shellBin, shellFlag, isCmd = lde.global.getScriptShell()
+		const opts = { cwd = package.dir, env = childEnv, stdout = "inherit", stderr = "inherit" }
+		-- cmd.exe re-parses the line with its own quote rules: pass it verbatim.
+		if isCmd then opts.unsafe = true end
+		local cmdLine = subst(command)
+		for _, flag in ipairs(flags) do
+			cmdLine = cmdLine .. " " .. lde.Package.quoteShellArg(flag, isCmd)
+		end
+		exitCode = process.exec(shellBin, { shellFlag, cmdLine }, opts)
+	end
+
+	const failed = exitCode ~= 0
+	return {
+		package  = package,
+		files    = {},
+		total    = failed and 1 or 0,
+		failures = failed and 1 or 0,
+		skipped  = 0,
+		external = true,
+		exitCode = exitCode,
+	}
+end
+
+--- A `luarocks.test.<type>` backend from its `luarocks-test-<type>` rock, run in
+--- the isolated sandbox with the luarocks.* polyfills.
+---@param package lde.Package
+---@param spec rocked.raw.Output
+---@param testType string
+---@param filters string[]?
+---@param flags string[]
+---@param luaBin string
+---@param luaDir string
+---@param luaPath string
+---@param luaCPath string
+---@return lde.TestResults
+local function runCustomTests(package, spec, testType, filters, flags, luaBin, luaDir, luaPath, luaCPath)
+	local args = {}
+	for _, flag in ipairs(flags) do args[#args + 1] = flag end
+	for _, filter in ipairs(filters or {}) do args[#args + 1] = filter end
+
+	const prevDir = env.cwd()
+	env.chdir(package.dir)
+	const ok, err = rocked.runTestBackend(testType, spec, args, {
+		cwd = package.dir,
+		libDir = package:getModulesDir(),
+		packagePath = luaPath,
+		cpath = luaCPath,
+		luaBin = luaBin,
+		luaDir = luaDir,
+	})
+	env.chdir(prevDir)
+
+	return {
+		package  = package,
+		files    = {},
+		total    = ok and 0 or 1,
+		failures = ok and 0 or 1,
+		skipped  = 0,
+		external = true,
+		exitCode = ok and 0 or 1,
+		error    = ok and nil or ("test backend 'luarocks.test." .. testType .. "' failed: " .. tostring(err)),
+	}
+end
+
+--- Runs a rockspec package's suite. The rockspec's `test` section picks a backend:
+--- `busted` and `command` are built in, anything else is `luarocks.test.<type>` from
+--- its `luarocks-test-<type>` rock (the same shape as custom build backends).
 ---@param package  lde.Package
 ---@param filters  string[]? # extra args passed through to the test runner
 ---@param coverage boolean? # --coverage: run busted under luacov, which prints its own report
 ---@return lde.TestResults
 local function runRockspecTests(package, filters, coverage)
 	const spec = package.rockspecData
-	const testSpec = spec?.test
-	const testType = testSpec?.type ?? "busted"
-
-	if not spec or testType ~= "busted" then
-		return {
-			package = package, files = {}, total = 0, failures = 0, skipped = 0,
-			error = "Unsupported rockspec test type: " .. tostring(testType) .. " (only 'busted' is supported)",
-		}
+	if not spec then
+		return { package = package, files = {}, total = 0, failures = 0, skipped = 0, error = "no rockspec data" }
 	end
+	const testSpec = spec.test
 
-	local testDeps = { busted = { luarocks = "busted" } }
-	if coverage then
-		testDeps.luacov = { luarocks = "luacov" }
-	end
+	local testType, typeErr = detectTestType(spec, package.dir)
+	if not testType then
+		return { package = package, files = {}, total = 0, failures = 0, skipped = 0, error = typeErr }
+	end ---@cast testType string
+
+	-- test_dependencies plus whatever the backend itself needs: busted/luacov are
+	-- rocks, and a custom type is provided by luarocks-test-<type>.
+	local testDeps = {}
+	if testType == "busted" then testDeps.busted = { luarocks = "busted" } end
+	if coverage then testDeps.luacov = { luarocks = "luacov" } end
+	-- A custom backend arrives through the rockspec's test_dependencies (its
+	-- luarocks-test-<type> rock), exactly as LuaRocks expects.
 	lde.util.addRockspecDeps(testDeps, spec.test_dependencies or {})
 	local luaDir, luaBin
 	quiet(function()
 		package:installDependencies(testDeps, package.dir)
 		luaDir, luaBin = ensureMockLuaDir()
 	end)
+	const flags = testFlags(testSpec, luaBin, luaDir)
 
-	const platform = ffi.os == "Windows" and "windows" or "unix"
-	local rawFlags
-	if testSpec then
-		const platSpec = testSpec.platforms?.[platform]
-		if platSpec and platSpec.flags then
-			rawFlags = platSpec.flags
-		elseif testSpec.flags then
-			rawFlags = testSpec.flags
-		end
+	const modulesDir = package:getModulesDir()
+	const soExt = ffi.os == "Windows" and "?.dll" or "?.so"
+	-- cwd=package root (busted reads `.busted`, harnesses use relative paths);
+	-- `;;` keeps the default paths so src/ and spec/ stay reachable.
+	const luaPath = path.join(modulesDir, "?.lua") .. ";" .. path.join(modulesDir, "?", "init.lua") .. ";;"
+	const luaCPath = path.join(modulesDir, soExt) .. ";;"
+
+	if testType == "command" then
+		return runCommandTests(package, testSpec, flags, luaBin, luaDir, luaPath, luaCPath)
+	end
+	if testType ~= "busted" then
+		return runCustomTests(package, spec, testType, filters, flags, luaBin, luaDir, luaPath, luaCPath)
 	end
 
-	local modulesDir = package:getModulesDir()
 	local bustedBin = path.join(modulesDir, "busted", "busted")
 	if not fs.exists(bustedBin) then
 		return {
@@ -221,17 +384,12 @@ local function runRockspecTests(package, filters, coverage)
 	if coverage then
 		runArgs[#runArgs + 1] = "--coverage"
 	end
-	for _, flag in ipairs(rawFlags or {}) do
-		runArgs[#runArgs + 1] = (flag:gsub("%$%(LUA%)", luaBin):gsub("%$%(LUA_DIR%)", luaDir))
+	for _, flag in ipairs(flags) do
+		runArgs[#runArgs + 1] = flag
 	end
 	for _, filter in ipairs(filters or {}) do
 		runArgs[#runArgs + 1] = filter
 	end
-
-	-- cwd=package root so busted reads `.busted`; `;;` keeps default paths so spec/ and src/ stay reachable (e.g. spec.util.*).
-	local luaPath = path.join(modulesDir, "?.lua") .. ";" .. path.join(modulesDir, "?", "init.lua") .. ";;"
-	const soExt = ffi.os == "Windows" and "?.dll" or "?.so"
-	local luaCPath = path.join(modulesDir, soExt) .. ";;"
 
 	local exitCode = process.exec(luaBin, runArgs, {
 		cwd = package.dir,

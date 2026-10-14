@@ -3,5 +3,9 @@
 	"version": "0.1.0",
 	"dependencies": {
 		"ansi": { "path": "../ansi" }
+	},
+	"features": {
+		"windows": ["readline.raw.posix"],
+		"unix": ["readline.raw.windows"]
 	}
 }

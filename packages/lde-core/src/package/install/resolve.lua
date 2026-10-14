@@ -6,6 +6,7 @@
 
 const fs = require("fs")
 const rocked = require("rocked")
+const md5 = require("lde-core.util.md5")
 local download = require("lde-core.util.download")
 
 local features = require("lde-core.package.features")
@@ -23,6 +24,40 @@ local applyLock = nodeModel.applyLock
 local makeNode = nodeModel.makeNode
 
 -- ── Per-kind behavior ─────────────────────────────────────────────────────
+
+--- rockspec `source.md5` covers the archive its `source.url` points at; LuaRocks
+--- checks it before unpacking, and a mismatch must not stay in the download cache.
+---@param n lde.install.Node
+---@param c lde.install.ContentPlan
+local function verifyMd5(n, c)
+	const source = n.spec?.source
+	const expected = source?.md5
+	if not expected or expected == "" then return end
+	-- `source.md5` covers the artifact at `source.url`, not the .src.rock (which
+	-- carries the already-published tree) nor a git tarball.
+	if c.kind ~= "archive" or c.url ~= source?.url then return end
+	const content = fs.read(c.file --[[@as string]])
+	if content and md5.sumhexa(content) ~= expected:lower() then
+		download.invalidateUserCache(c.file --[[@as string]])
+		lde.error.raise("MD5 check for " .. (c.url or c.file or "?") .. " has failed.")
+	end
+end
+
+--- The package directory inside a content plan: the source dir (source.dir, or the
+--- archive's single top-level directory) when the plan extracted a plain archive,
+--- else the plan's own directory. Resolved lazily so a plan reused from cache —
+--- extraction skipped because the dir was already there — still opens correctly.
+---@param n lde.install.Node
+---@param c lde.install.ContentPlan
+---@return string?
+local function packageDirOf(n, c)
+	if not c.dir then return nil end
+	if c.kind ~= "src" and not c.srcDir then
+		const source = n.spec?.source
+		c.srcDir = lde.global.sourceDirFor(c.dir, source?.dir, source?.file)
+	end
+	return c.kind == "src" and c.dir or (c.srcDir or c.dir)
+end
 
 ---@type table<string, lde.install.Handler>
 const handlers = {}
@@ -258,11 +293,14 @@ handlers.archive = {
 	materialize = function(n, c)
 		local res = download.result(c.file --[[@as string]])
 		if res and not res.ok then lde.error.raise("Failed to download archive '" .. c.url .. "': " .. (res.err or "")) end
+		verifyMd5(n, c)
 		local ok, err = lde.global.extractArchive(c.url --[[@as string]], c.file --[[@as string]], c.dir --[[@as string]])
 		if not ok then
 			download.invalidateUserCache(c.file --[[@as string]])
 			lde.error.raise("Failed to extract archive '" .. c.url .. "': " .. (err or ""))
 		end
+		local source = n.spec?.source
+		c.srcDir = lde.global.sourceDirFor(c.dir --[[@as string]], source?.dir, source?.file)
 	end,
 	---@param n lde.install.Node
 	open = function(n)
@@ -270,6 +308,9 @@ handlers.archive = {
 		-- .src.rock archives contain a rockspec + the source tree; the source
 		-- is either a subdir next to the rockspec or the nested archive.
 		local pkgDir, rockspecPath = c.dir, n.depInfo.rockspec
+		if not n.depInfo.rockspec or not n.depInfo.archive:match("%.src%.rock$") then
+			pkgDir = packageDirOf(n, c)
+		end
 		if n.depInfo.archive:match("%.src%.rock$") and not n.depInfo.rockspec then
 			local srcDir, srcRockspec, merr = lde.util.materializeSrcRock(c.dir --[[@as string]])
 			if not srcDir then
@@ -352,15 +393,26 @@ handlers.luarocks = {
 		end
 		local res = download.result(c.file --[[@as string]])
 		if res and not res.ok then lde.error.raise("Failed to download " .. c.url .. ": " .. (res.err or "")) end
-		local ok, err = lde.global.extractArchive(c.url --[[@as string]], c.file --[[@as string]], c.dir --[[@as string]])
+		verifyMd5(n, c)
+		-- A git tarball lands in the git cache, whose layout is the repository
+		-- root (the wrapper directory stripped); plain archives keep the published
+		-- layout and resolve their source directory afterwards.
+		local ok, err
+		if c.kind == "git" then
+			ok, err = lde.global.extractGitTarball(c.file --[[@as string]], c.dir --[[@as string]])
+		else
+			ok, err = lde.global.extractArchive(c.url --[[@as string]], c.file --[[@as string]], c.dir --[[@as string]])
+		end
 		if not ok then
 			download.invalidateUserCache(c.file --[[@as string]])
 			lde.error.raise("Failed to extract '" .. (c.url or c.dir) .. "': " .. (err or ""))
 		end
-		-- Git-fallback content lands in the git cache: mark it complete like
-		-- extractGitTarball does, or the next run treats it as partial.
-		if c.kind == "git" then
-			lde.global.markGitRepoCached(c.dir --[[@as string]])
+		if c.kind ~= "git" then
+			-- Rockspec source.url archive: the package lives in the source
+			-- directory inside the extraction root (source.dir, or the single
+			-- top-level directory), not at the root itself.
+			const source = n.spec?.source
+			c.srcDir = lde.global.sourceDirFor(c.dir --[[@as string]], source?.dir, source?.file)
 		end
 	end,
 	---@param n lde.install.Node
@@ -394,7 +446,7 @@ handlers.luarocks = {
 		else
 			-- Rockspec-backed, or a git fallback whose repo dir was already
 			-- cached (content() returns nil in that case).
-			local pkgDir = c?.dir ?? (n._fallbackGit?.dir ?? n.dir)
+			const pkgDir = (c and packageDirOf(n, c)) ?? n._fallbackGit?.dir ?? n.dir
 			pkg, err = lde.Package.openRockspec(pkgDir, n.rockspecUrl)
 		end
 		if not pkg then lde.error.raise("Failed to load '" .. n.name .. "': " .. (err or "")) end ---@cast pkg -nil
