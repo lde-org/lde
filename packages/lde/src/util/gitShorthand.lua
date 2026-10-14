@@ -1,11 +1,4 @@
--- Git host shorthands for CLI name positions: `gh:foo/bar` is sugar for
--- `--git https://github.com/foo/bar`, etc. Mirrors the hosts lde-core already
--- recognizes for tarball downloads (github/gitlab/codeberg).
---
--- Two forms exist:
---   gh:owner/repo            → the repo root package
---   gh:<pkg>@owner/repo      → the package named <pkg> inside the monorepo
---                             (≡ `--git <host>/owner/repo <pkg>`)
+-- Git host shorthands for CLI name positions: `gh:owner/repo` is sugar for `--git https://github.com/owner/repo`, and `gh:<pkg>@owner/repo` selects a package inside a monorepo.
 
 ---@type table<string, string>
 const HOSTS = {
@@ -15,9 +8,7 @@ const HOSTS = {
 	["gitlab:"] = "https://gitlab.com/",
 }
 
---- Expands a git shorthand to a clone URL, or nil when the name isn't one.
---- Valid forms: gh:owner/repo (trailing .git allowed), or
---- gh:<package>@owner/repo for a package inside a monorepo.
+--- Valid forms: gh:owner/repo (trailing .git allowed) or gh:<package>@owner/repo.
 ---@param name string
 ---@return string? url
 ---@return string? subPackage # sub-package name inside the repo (monorepo form)

@@ -17,7 +17,6 @@ local function new(args)
 			lde.error.raise("Usage: lde new <name>")
 		end
 
-		-- No name given: ask for it — it names both the directory and the package.
 		const asked = prompt.ask({ prompt = "Project name" })
 		if not asked then
 			os.exit(1)
@@ -31,9 +30,7 @@ local function new(args)
 		opts.name = nameFlag or prompt.resolveName(args, path.basename(name))
 	end
 
-	-- The tests/ fixtures are exposed as target/tests during lde test, so a
-	-- package named 'tests' would collide with them. Fail before creating
-	-- anything.
+	-- A package named 'tests' would collide with the target/tests fixtures.
 	const manifestName = opts.name or path.basename(name)
 	if manifestName == "tests" then
 		lde.error.raise("The name 'tests' is reserved for the test fixtures directory; choose another project name")

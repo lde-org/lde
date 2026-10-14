@@ -29,8 +29,7 @@ local function remove(args)
 		lde.error.raise("Failed to parse " .. configPath .. ": " .. derr)
 	end ---@cast config -nil
 
-	-- A dependency may live in either runtime `dependencies` or `devDependencies`;
-	-- remove the name from whichever table(s) hold it.
+	-- The name may be in either dependencies or devDependencies; remove from whichever holds it.
 	const inDeps = config.dependencies and config.dependencies[name] ~= nil
 	const inDevDeps = config.devDependencies and config.devDependencies[name] ~= nil
 

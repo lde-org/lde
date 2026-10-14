@@ -7,10 +7,6 @@ const sea = require("sea")
 
 ---@param args clap.Args
 local function compile(args)
-	-- --timings collects wall-clock units for the whole pipeline (build,
-	-- install/resolve, per-dependency builds, bundle, sea link) and writes an
-	-- HTML report to target/timings.html; --json switches to JSON
-	-- (target/timings.json). --json implies collection on its own.
 	const wantJSON = args:flag("json")
 	local timings = nil
 	if args:flag("timings") or wantJSON then
@@ -20,8 +16,7 @@ local function compile(args)
 	local outFile = args:option("outfile")
 	const targetName = args:option("target")
 
-	-- Validate the target before opening the package / building, so a typo
-	-- fails instantly and the default output name can carry the target.
+	-- Validate the target first so a typo fails before any build work.
 	local target
 	if targetName then
 		const resolved, terr = sea.getTarget(targetName)
@@ -45,8 +40,7 @@ local function compile(args)
 		})
 	end
 
-	-- A --target matching the host is a native build (same naming); only a
-	-- genuine cross compile gets the target in the default output name.
+	-- Only a genuine cross compile gets the target in the default output name.
 	local isCross = false
 	if target and not sea.isHostTarget(target) then
 		isCross = true
@@ -57,9 +51,7 @@ local function compile(args)
 		if isCross then outFile = outFile .. "-" .. targetName end
 	end
 
-	-- Windows targets get .exe, whether native (host Windows) or cross. A
-	-- host-matching target has the host platform, so either way the target's
-	-- platform is the one the binary runs on.
+	-- Windows targets get .exe whether native or cross.
 	const hostPlatform = jit.os == "Windows" and "windows"
 		or jit.os == "OSX" and "macos"
 		or jit.os == "BSD" and "freebsd"
@@ -76,10 +68,7 @@ local function compile(args)
 
 	local executable = pkg:compile(targetName)
 
-	-- sea compiles into the temp dir, often a different filesystem than the
-	-- destination — the cross-device copy fallback then can't overwrite the
-	-- running binary (ETXTBSY) when rebuilding the binary with itself. Stage
-	-- beside the destination so the final move is a same-device rename.
+	-- Stage beside the destination so the final move is a same-device rename (a cross-device copy would fail with ETXTBSY).
 	local staged = outFile .. ".tmp"
 	local ok, moveErr = fs.move(executable, staged)
 	if not ok then

@@ -1,26 +1,13 @@
---- Host side of the lde-test framework.
----
---- The framework itself runs inside each test file's guest state, so its
---- implementation is embedded below as a string — the single source of
---- truth for how lde-test behaves. The host side only crosses primitives
---- (test names, booleans, error strings) across the state boundary: the
---- reporter is adapted here into primitive-only host callbacks, which are
---- passed into the guest as varargs when the framework is injected.
+--- Host side; the implementation below is embedded as a string (single source of
+--- truth) because it runs guest-side and only primitives cross the boundary.
 
--- Minimal lua-sys surface used here (the full classes live in the lua-sys
--- package, which is a dependency of the caller, not of lde-test).
+-- Minimal lua-sys surface; the full classes live in the lua-sys package dependency.
 ---@class lua.State
 ---@field load fun(self: lua.State, code: string, name?: string): lua.Chunk
 ---@class lua.Chunk
 ---@field eval fun(self: lua.Chunk, ...: any): any
 
---- The guest-side framework. Receives the host reporter callbacks as varargs
---- (primitives only), exposes itself via package.preload so require("lde-test")
---- and require("lpm-test") resolve to a fresh instance, and returns the suite
---- runner the host invokes once the test file has been evaluated.
----
---- The assertion and runner logic stays guest-side: tests register guest
---- closures and compare guest tables, and neither can cross to the host.
+--- Embedded as a string because guest closures and tables cannot cross to the host.
 local SOURCE = [==[
 	local onResult, onStart, onPass, onFail, onSkip = ...
 
@@ -263,19 +250,12 @@ local SOURCE = [==[
 ---@field file string? # test file path, forwarded to reporter.onFail for error snippets
 ---@field onResult fun(name: string, ok: boolean, skipped: boolean, err: string)
 
---- Inject lde-test into a guest state.
----
---- Sets up package.preload["lde-test"] / ["lpm-test"] inside the guest and
---- returns the suite runner: call it once the test file source has been
---- evaluated (state:eval). The reporter is adapted to primitive-only host
---- callbacks — no compound values cross the state boundary.
----
+--- Returns the suite runner to call after the test file is evaluated.
 ---@param state    lua.State
 ---@param reporter lde.TestReporter?
 ---@param host     lde.testHost
 local function setup(state, reporter, host)
-	-- Handles (e.g. progress spinners) live entirely host-side: onStart
-	-- stores one per test name, onPass/onFail retrieve it by name.
+	-- Handles live host-side: onStart stores one per name, onPass/onFail retrieve it.
 	const handles = {}
 
 	const onStart = reporter?.onStart and function(name)

@@ -135,9 +135,16 @@ local function failureMsg(code, err)
 	return "unknown error"
 end
 
+--- Child handle shape, declared locally: the `process` class is only reachable
+--- through a symlinked target dir here, which the checker cannot resolve.
+---@class bench.Child
+---@field kill fun(self: bench.Child, force: boolean?)
+---@field wait fun(self: bench.Child): number?, string?, string?
+---@field poll fun(self: bench.Child): number?
+
 ---@class bench.Options
 ---@field tool string
----@field spawn fun(): process.Child?, string? # spawn the command to time
+---@field spawn fun(): bench.Child?, string? # spawn the command to time
 ---@field prepare fun()?
 ---@field warmup integer?
 ---@field runs integer?

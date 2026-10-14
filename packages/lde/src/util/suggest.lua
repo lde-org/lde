@@ -1,6 +1,3 @@
---- Typo suggestions for command names.
-
---- Classic Levenshtein edit distance between two strings.
 ---@param a string
 ---@param b string
 ---@return integer
@@ -23,11 +20,7 @@ local function levenshtein(a, b)
 	return prev[lb]
 end
 
---- Suggests the closest command for a typo'd (or partially typed) name.
---- Exact prefixes win (e.g. `lde com` -> compile/completion); otherwise the
---- nearest candidate by edit distance, only when the distance is small enough
---- to plausibly be a typo (at most 2 edits, and never more edits than the
---- input has characters).
+--- Prefix matches win; otherwise the nearest candidate by edit distance within the typo threshold (at most 2 edits, never more than the input length).
 ---@param name string
 ---@param candidates string[]
 ---@return string? hint # "Did you mean `test`?", or a list for ambiguous prefixes

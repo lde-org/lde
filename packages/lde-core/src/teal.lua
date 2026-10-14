@@ -1,4 +1,3 @@
---- Teal compiler, built on the shared compiler guest machinery.
 const fs = require("fs")
 const path = require("path")
 
@@ -9,11 +8,7 @@ const teal = require("lde-core.compiler").new({
 	loadExpr = 'return require("tl")',
 	extension = ".tl",
 	hasSourceFilter = function(rel) return not rel:match("%.d%.tl$") end,
-	-- Runs inside the compiler guest: the tl module stays loaded in that state
-	-- across compiles, but the env is created fresh per compile — reusing one
-	-- env makes tl.process_string return the previous result (stale output).
-	-- Type errors never block codegen (only syntax errors do); `tl check`
-	-- remains the strict tool.
+	-- tl stays loaded in the guest, but init_env must be fresh per compile (reuse returns the previous result).
 	driver = [[
 		local source, filename = ...
 		local tl = require("tl")
@@ -31,12 +26,9 @@ const teal = require("lde-core.compiler").new({
 	matchSource = function(rel)
 		return rel:match("%.tl$") ~= nil and not rel:match("%.d%.tl$")
 	end,
-	-- Parenthesized: gsub returns a second (count) value that would leak into
-	-- path.join's varargs.
+	-- Parenthesized: gsub's count would leak into path.join's varargs.
 	outRel = function(rel) return (rel:gsub("%.tl$", ".lua")) end,
 	writeExtras = function(outDir, rel, source)
-		-- Keep the .tl source alongside the compiled .lua so `tl check` can
-		-- resolve this package's modules with full type info (see compileDir).
 		fs.write(path.join(outDir, rel), source)
 	end,
 })

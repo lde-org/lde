@@ -3,28 +3,16 @@ local path = require("path")
 local process = require("process")
 const env = require("env")
 
--- The fs module exposes rawfs fields (chmod) through its copy loop; declare
--- the ones used here so the language server sees them.
+-- Declared so the language server sees the rawfs fields (chmod) fs.copy uses.
 ---@class fs
 ---@field chmod fun(p: string, mode: number): boolean
 
---- Polyfills for the subset of the LuaRocks runtime API that custom build
---- backends expect (luarocks.fs, luarocks.dir, luarocks.path,
---- luarocks.core.cfg, luarocks.util), implemented on lde's own fs/path/process
---- deps and injected into a rocked sandbox guest state.
----
---- This is the *only* place the luarocks.* surface exists, and only
---- rocked.runBackend installs it. A rockspec runs in a state with an empty
---- environment and never sees these modules.
+--- LuaRocks API polyfills for backend sandboxes, built on lde's fs/path/process.
 
--- Shell prefix for fs.execute: cmd.exe on Windows, sh elsewhere. Allocated
--- once at module load rather than per command.
+-- Shell prefix for fs.execute, allocated once at module load.
 const SHELL = jit.os == "Windows" and { "cmd", "/c" } or { "sh", "-c" }
 
---- Permission gate for sandbox side effects. `permissions` maps an action
---- name (e.g. "execute") to a callback that receives the detail (e.g. the
---- command string) and returns whether it may proceed; actions with no
---- callback default to allow. A future interactive prompt plugs in here.
+--- Maps an action name to a callback receiving the detail and returning whether it may proceed.
 ---@param permissions rocked.Permissions?
 ---@param action string
 ---@param detail string
@@ -42,9 +30,7 @@ end
 ---@return boolean
 local function runCommand(cmd, cwd, permissions)
 	if not checkPermission(permissions, "execute", cmd) then return false end
-	-- cmd.exe re-parses the command line with its own quote rules, so pass the
-	-- already-quoted script string through verbatim (unsafe) instead of the
-	-- MSVCRT-style per-arg escaping process applies on Windows.
+	-- cmd.exe re-parses with its own quote rules, so pass the string verbatim (unsafe) on Windows.
 	local opts = jit.os == "Windows" and { unsafe = true } or nil
 	if cwd then opts = opts or {}; opts.cwd = cwd end
 	const code = process.exec(SHELL[1], { SHELL[2], cmd }, opts)
@@ -57,7 +43,7 @@ local function toolAvailable(tool)
 	const sep = jit.os == "Windows" and ";" or ":"
 	const exe = jit.os == "Windows" and (tool .. ".exe") or tool
 	for dir in (os.getenv("PATH") or ""):gmatch("[^" .. sep .. "]+") do
-		if dir ~= "" and fs.exists(path.join(dir, exe)) then return true end
+		if dir ~= "" and fs.exists(path.join(tostring(dir), exe)) then return true end
 	end
 	return false
 end
@@ -85,7 +71,6 @@ local function absoluteName(p, relativeTo)
 	return path.normalize(path.join(relativeTo, p))
 end
 
---- Create a directory under the system temp dir and return its path.
 ---@param name string
 local function makeTempDir(name)
 	local p = path.join(env.tmpdir(), name)
@@ -93,9 +78,7 @@ local function makeTempDir(name)
 	return p
 end
 
---- List the immediate entries of a directory. Returns the names as multiple
---- string values — host callbacks can only return primitives, so the guest
---- assembles them into a table.
+--- Multiple values because host callbacks return only primitives; the guest assembles them.
 ---@param dir string
 local function listDirNames(dir)
 	const names = {}
@@ -106,8 +89,7 @@ local function listDirNames(dir)
 	return unpack(names)
 end
 
---- Recursively list the files under a directory (relative paths), as multiple
---- string values for the guest to assemble.
+--- Relative paths, as multiple values for the guest to assemble.
 ---@param dir string
 local function findFiles(dir)
 	const files = {}
@@ -119,12 +101,7 @@ end
 
 const luarocks = {}
 
--- ─── Backend environment ──────────────────────────────────────────────────
-
--- Globals a custom build backend runs with. `luarocks.build.<type>` is an
--- executable driver installed as a build dependency and `require` is the only
--- way to obtain it, so a backend needs `package` and the standard data
--- libraries. It still gets no I/O, process, debug, or FFI access.
+-- A backend needs `package` and the data libraries to require its driver, no I/O/process/debug/FFI.
 local BACKEND_LIBS = { "string", "table", "math", "package" }
 const BACKEND_FUNCS = {
 	"assert", "error", "getmetatable", "ipairs", "next", "pairs",
@@ -144,10 +121,7 @@ end
 
 const BACKEND_ENV = allowSet(BACKEND_LIBS, BACKEND_FUNCS)
 
--- The module names setup installs, spared when the sandbox strips
--- package.loaded so a backend's require() can still find them. A rockspec's
--- environment is empty, so its cache is cleared whole and these never survive
--- into it.
+-- Spared when the sandbox strips package.loaded so a backend's require() finds them.
 const POLYFILL_MODULES = {
 	"luarocks.fs",
 	"luarocks.dir",
@@ -158,28 +132,18 @@ const POLYFILL_MODULES = {
 const POLYFILL_SET = {}
 for _, name in ipairs(POLYFILL_MODULES) do POLYFILL_SET[name] = true end
 
---- True for a module name provided by these polyfills rather than by the
---- standard library, so the sandbox keeps it reachable for build backends.
+--- True for a module name these polyfills provide, so the sandbox keeps it.
 ---@param name string
 ---@return boolean
 function luarocks.isPolyfill(name)
 	return POLYFILL_SET[name] == true
 end
 
---- The environment a sandbox state runs a build backend in.
 function luarocks.backendEnv()
 	return BACKEND_ENV
 end
 
--- ─── Polyfill installation ────────────────────────────────────────────────
-
---- Inject the polyfills into a guest state. The modules are plain host tables
---- (functions become callbacks); assigning them through the package.loaded
---- proxy coerces them into the guest by value, so require() returns them
---- directly. package.preload can't hold them — preload entries are loader
---- functions, and require() calls them.
----
---- Only rocked.runBackend calls this: a backend state, never a rockspec state.
+--- The package.loaded proxy coerces the modules into the guest by value, so require() returns them.
 ---@param state lua.State
 ---@param opts rocked.SandboxOpts?
 function luarocks.setup(state, opts)
@@ -237,11 +201,7 @@ function luarocks.setup(state, opts)
 		printerr           = function(s) io.stderr:write(tostring(s) .. "\n") end,
 	}
 
-	-- fs.execute_env receives a guest env table, which the bridge cannot pass
-	-- to a host callback, so the flattening lives guest-side on top of
-	-- fs.execute. list_dir/find likewise can't get a table back from a host
-	-- callback, so their host helpers return entries variadically and the
-	-- guest assembles them.
+	-- The bridge can't pass a guest env table to a host callback, so flattening happens guest-side.
 	local ok, err = state:load([[
 		local fs_list, fs_find = ...
 		local fs = package.loaded["luarocks.fs"]

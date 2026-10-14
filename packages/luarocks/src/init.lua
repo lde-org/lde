@@ -11,16 +11,13 @@ const luarocks = {}
 ---@class luarocks.Manifest.Entry
 ---@field arch "rockspec" | "src" | string
 
---- Byte helpers for locating package blocks in the manifest without invoking
---- the Lua pattern engine (which is ~100x slower than a plain search over the
---- multi-megabyte manifest).
+--- Plain byte search, not the Lua pattern engine (~100x slower over the manifest).
 
 ---@param b integer?
 local function isWordByte(b)
 	return b ~= nil and ((b >= 48 and b <= 57) or (b >= 65 and b <= 90) or (b >= 97 and b <= 122) or b == 95)
 end
 
---- Skip whitespace (space, tab, newline, CR) starting at 1-based index i.
 ---@param raw string
 ---@param i integer
 local function skipWS(raw, i)
@@ -32,9 +29,6 @@ local function skipWS(raw, i)
 	return i
 end
 
---- Given a position right after a key literal, verify it is followed by
---- optional whitespace, "=", optional whitespace, "{". Returns the 1-based
---- index of "{" or nil.
 ---@param raw string
 ---@param i integer
 local function keyEqBrace(raw, i)
@@ -45,7 +39,6 @@ local function keyEqBrace(raw, i)
 	return i
 end
 
---- Find an unquoted identifier key: `name = {`.
 ---@param raw string
 ---@param name string
 local function findIdentKey(raw, name)
@@ -63,7 +56,6 @@ local function findIdentKey(raw, name)
 	end
 end
 
---- Find a quoted key: `["name"] = {`.
 ---@param raw string
 ---@param name string
 local function findQuotedKey(raw, name)
@@ -98,16 +90,13 @@ function Manifest:package(name)
 	if self._cache[name] ~= nil then return self._cache[name] or nil end
 
 	local raw = self._raw
-	-- Find the package block with a plain (non-pattern) search. The published
-	-- manifest uses unquoted identifier keys ("busted = {"); a quoted form is
-	-- kept as a fallback for other serializers.
+	-- The published manifest uses unquoted identifier keys; the quoted form is a fallback.
 	local braceStart = findIdentKey(raw, name) or findQuotedKey(raw, name)
 	if not braceStart then
 		self._cache[name] = false
 		return nil, "Package not found in luarocks registry: " .. name
 	end
 
-	-- Use memchr to scan for { and } to find the matching close brace
 	const ptr = ffi.cast("const char*", raw)
 	const rawlen = #raw
 	local openByte = string.byte('{')
@@ -207,7 +196,6 @@ function luarocks.getSrcUrls(manifest, name)
 	return urls
 end
 
---- Returns all entries (both src and rockspec) for a package, keyed by version.
 ---@param manifest luarocks.Manifest
 ---@param name string
 ---@return table<string, luarocks.Manifest.Entry[]>? # version -> entries
@@ -223,16 +211,11 @@ end
 ---@param v string
 ---@return number[]
 local function parseVer(v)
-	-- LuaRocks version_revision: the revision ("-N") is part of the version and
-	-- must sort too, so "1.0.0-2" beats "1.0.0-1" (previously the revision was
-	-- dropped, leaving equal versions to be ordered nondeterministically by
-	-- table.sort). A missing revision compares as 0, matching LuaRocks (so
-	-- "0.5-0" satisfies ">= 0.5", e.g. the http rock's lpeg_patterns dep).
+	-- Revision ("-N") sorts ("1.0.0-2" beats "1.0.0-1"); missing compares as 0, as LuaRocks does.
 	const base, rev = v:match("^([^%-]+)%-(%d+)$")
 	const parts = {}
 	for n in (base or v):gmatch("%d+") do
-		-- The pattern only hands digits over, so the conversion cannot fail: `or 0` keeps the
-		-- element a number rather than the `number?` `tonumber` hands back.
+		-- Only digits arrive, so `or 0` just keeps the element a number.
 		parts[#parts + 1] = tonumber(n) or 0
 	end
 	parts[#parts + 1] = tonumber(rev) or 0
@@ -250,16 +233,13 @@ local function cmpVer(a, b)
 	return 0
 end
 
---- Best version matching an exact-version constraint ("1.8.0-1") or a bare
---- version without the luarocks revision suffix ("1.8.0" → "1.8.0-1"; "1.8"
---- matches every 1.8.x). Returns nil when nothing matches.
+--- "1.8.0" matches "1.8.0-1"; "1.8" matches every 1.8.x.
 ---@param versions table<string, any> # manifest version -> entries
 ---@param constraint string
 local function matchExactOrPrefix(versions, constraint)
 	if versions[constraint] then return constraint end
 
-	-- parseVer appends a synthetic 0 for a missing revision; drop it so the
-	-- constraint's remaining parts prefix the candidate's (revision included).
+	-- Drop the synthetic revision 0 so the constraint's parts prefix the candidate's.
 	const cparts = parseVer(constraint)
 	const prefix = {}
 	for i = 1, #cparts - 1 do prefix[i] = cparts[i] end
@@ -271,8 +251,7 @@ local function matchExactOrPrefix(versions, constraint)
 		for i = 1, #prefix do
 			if vparts[i] ~= prefix[i] then ok = false break end
 		end
-		-- best and bestParts are set together, so bestParts is non-nil
-		-- whenever the `not best` short-circuit lets cmpVer run.
+		-- best and bestParts are set together, so bestParts is non-nil here.
 		if ok and (not best or cmpVer(vparts, bestParts or {}) > 0) then
 			best, bestParts = v, vparts
 		end
@@ -299,8 +278,7 @@ function luarocks.satisfies(ver, op, constraint)
 	elseif op == "~=" then
 		return c ~= 0
 	elseif op == "~>" then
-		-- Pessimistic constraint: >= ver and < ver with last segment dropped + penultimate incremented
-		-- e.g. ~> 1.2 means >= 1.2 and < 1.3; ~> 1 means >= 1 and < 2
+		-- Pessimistic: ~> 1.2 means >= 1.2 and < 1.3; ~> 1 means >= 1 and < 2
 		if c < 0 then return false end
 		const cv = parseVer(constraint)
 		const upper = {}
@@ -327,13 +305,13 @@ function luarocks.getRockspecUrl(manifest, name, constraint)
 		return urls[sorted[1]]
 	end
 
+	---@type { op: string, ver: string }[]
 	local constraints = {}
 	for op, ver in constraint:gmatch("([><=~!]+)%s*([%d%.%-]+)") do
-		constraints[#constraints + 1] = { op = op, ver = ver }
+		constraints[#constraints + 1] = { op = tostring(op), ver = tostring(ver) }
 	end
 
 	if #constraints == 0 then
-		-- Exact version ("1.8.0-1") or a bare version prefix ("1.8.0", "1.8")
 		local v = matchExactOrPrefix(urls, constraint --[[@as string]])
 		if v then return urls[v] end
 		return nil, "Version '" .. constraint .. "' not found for: " .. name
@@ -365,9 +343,10 @@ local function pickUrl(urlMap, name, constraint)
 		return urlMap[sorted[1]]
 	end
 
+	---@type { op: string, ver: string }[]
 	local constraints = {}
 	for op, ver in constraint:gmatch("([><=~!]+)%s*([%d%.%-]+)") do
-		constraints[#constraints + 1] = { op = op, ver = ver }
+		constraints[#constraints + 1] = { op = tostring(op), ver = tostring(ver) }
 	end
 
 	if #constraints == 0 then
@@ -396,8 +375,6 @@ function luarocks.getSrcUrl(manifest, name, constraint)
 	return pickUrl(urls, name, constraint)
 end
 
---- Returns a URL preferring src arch over rockspec.
---- Picks the latest (constraint-satisfying) version first, then prefers src over rockspec for that version.
 ---@param manifest luarocks.Manifest
 ---@param name string
 ---@param constraint string?
@@ -411,10 +388,7 @@ function luarocks.getUrl(manifest, name, constraint)
 	return rockspecUrl, "rockspec"
 end
 
---- Resolves the best (constraint-satisfying) version of a package and the
---- metadata + content artifacts to fetch for it. Both URLs belong to the same
---- version, so graph resolution (rockspec) and content download (.src.rock)
---- can never disagree on which version they target.
+--- Both URLs belong to one version, so graph resolution and content download can't disagree.
 ---@param manifest luarocks.Manifest
 ---@param name string
 ---@param constraint string?
@@ -426,18 +400,17 @@ function luarocks.getBest(manifest, name, constraint)
 	local versions, err = manifest:package(name)
 	if not versions then return nil, nil, nil, err end
 
-	-- Collect all versions that satisfy the constraint
 	local sorted = {}
 	for v in pairs(versions) do sorted[#sorted + 1] = v end
 	table.sort(sorted, |a, b| -> cmpVer(parseVer(a), parseVer(b)) > 0)
 
+	---@type { op: string, ver: string }[]
 	local constraints = {}
 	if constraint and constraint ~= "" then
 		for op, ver in constraint:gmatch("([><=~!]+)%s*([%d%.%-]+)") do
-			constraints[#constraints + 1] = { op = op, ver = ver }
+			constraints[#constraints + 1] = { op = tostring(op), ver = tostring(ver) }
 		end
 		if #constraints == 0 then
-			-- Exact version ("1.8.0-1") or a bare version prefix ("1.8.0", "1.8")
 			local v = matchExactOrPrefix(versions, constraint)
 			if v then sorted = { v } else sorted = {} end
 		end
@@ -473,10 +446,7 @@ function luarocks.getBest(manifest, name, constraint)
 	return nil, nil, nil, "No version of '" .. name .. "'" .. (constraint and (" satisfies: " .. constraint) or " found")
 end
 
---- Returns every (constraint-satisfying) version of a package, newest first,
---- with the metadata (rockspec) and content (.src.rock) artifact URLs for each.
---- Callers can walk the list to skip versions the running engine can't use
---- (e.g. cqueues-…-54 declares "lua == 5.4" and must be skipped on LuaJIT).
+--- Newest first, so callers can skip versions the engine can't use.
 ---@param manifest luarocks.Manifest
 ---@param name string
 ---@param constraint string?
@@ -489,13 +459,13 @@ function luarocks.listBest(manifest, name, constraint)
 	for v in pairs(versions) do sorted[#sorted + 1] = v end
 	table.sort(sorted, |a, b| -> cmpVer(parseVer(a), parseVer(b)) > 0)
 
+	---@type { op: string, ver: string }[]
 	local constraints = {}
 	if constraint and constraint ~= "" then
 		for op, ver in constraint:gmatch("([><=~!]+)%s*([%d%.%-]+)") do
-			constraints[#constraints + 1] = { op = op, ver = ver }
+			constraints[#constraints + 1] = { op = tostring(op), ver = tostring(ver) }
 		end
 		if #constraints == 0 then
-			-- Exact version ("1.8.0-1") or a bare version prefix ("1.8.0", "1.8")
 			local v = matchExactOrPrefix(versions, constraint)
 			if v then sorted = { v } else sorted = {} end
 		end

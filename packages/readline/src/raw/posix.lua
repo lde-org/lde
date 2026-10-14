@@ -1,7 +1,6 @@
 const ffi = require("ffi")
 
--- termios layout differs between Linux and macOS. Both blocks are read for their types, so the
--- fields below name a member of the struct rather than an offset into one.
+-- termios layout differs by OS; fields below name a struct member, not an offset.
 if jit.os == "OSX" then
 	ffi.cdef([[
 		struct termios {
@@ -29,8 +28,7 @@ else
 	]])
 end
 
--- `read` is declared with the same prototype as the process package's, so re-declaring it is a
--- no-op where that already ran and keeps this module working on its own.
+-- Same prototype as the process package's; re-declaring is a no-op there.
 ffi.cdef([[
 	int tcgetattr(int fd, struct termios *t);
 	int tcsetattr(int fd, int action, const struct termios *t);
@@ -42,9 +40,7 @@ ffi.cdef([[
 
 const OSX = jit.os == "OSX"
 
--- The flags and control characters the two platforms do not agree on, in one place: the Linux bits
--- are <asm/termbits.h>, the macOS ones <sys/termios.h>, and clearing the Linux ECHOE/ECHOKE there
--- leaves the terminal canonical, so no keystroke arrives before Enter.
+-- Platform-disagreeing flags/chars; clearing Linux ECHOE/ECHOKE keeps the terminal canonical.
 ---@type table<string, integer>
 const TC = OSX
 	? { ICANON = 0x100, ISIG = 0x80, IXON = 0x200, IEXTEN = 0x400, VTIME = 17, VMIN = 16, TIOCGWINSZ = 0x40087468 }
@@ -55,9 +51,7 @@ const ECHO    = 0x8
 const ICRNL   = 0x100
 const OPOST   = 0x1
 
--- Held rather than made per call: `readByte` runs once per keystroke, and a buffer made there is
--- garbage on every one of them. The two termios are filled by the calls that read the terminal, so
--- nothing has to be sized or copied by hand.
+-- Held, not made per call: readByte runs per keystroke and would garbage a fresh buffer.
 const saved   = ffi.new("struct termios")
 const current = ffi.new("struct termios")
 const size    = ffi.new("struct winsize")

@@ -11,12 +11,10 @@ local luarocks = require("luarocks")
 const curl = require("util").lazy(function() return require("curl-sys") end)
 const Archive = require("util").lazy(function() return require("archive") end)
 
--- luarocks.org publishes per-Lua-version manifests that already exclude
--- versions incompatible with the running engine, so resolution needs no
--- per-candidate rockspec engine checks. LuaJIT is Lua 5.1.
+-- luarocks.org's per-Lua-version manifests already exclude incompatible versions, so no per-candidate engine checks are needed; LuaJIT is Lua 5.1.
 const MANIFEST_URL = "https://luarocks.org/manifest-5.1.zip"
-const MANIFEST_ENTRY = MANIFEST_URL:match("([^/]+)%.zip$") -- the file inside the zip
-const MANIFEST_TTL = 60 * 60 * 24 -- 24 hours
+const MANIFEST_ENTRY = MANIFEST_URL:match("([^/]+)%.zip$")
+const MANIFEST_TTL = 60 * 60 * 24
 
 ---@type luarocks.Manifest?
 local cachedManifest
@@ -25,9 +23,7 @@ local cachedManifest
 local function getManifest()
 	if cachedManifest then return cachedManifest end
 
-	-- The manifest is global registry metadata: cache it in the user-level lde
-	-- directory, not the (possibly per-tree) global dir, so --tree installs share
-	-- one manifest instead of re-downloading it for every tree.
+	-- User-level (not per-tree) so --tree installs share one manifest instead of re-downloading.
 	local cacheFile = path.join(lde.global.getUserDir(), "luarocks-manifest.raw")
 
 	const stat = fs.stat(cacheFile)
@@ -41,8 +37,7 @@ local function getManifest()
 
 	const p = lde.isVerbose ? ansi.progress("Fetching luarocks manifest") : nil
 
-	-- luarocks.org serves the ~4.2MB raw manifest as a ~130KB zip; download the
-	-- zip and decode the single "manifest-5.1" file it contains, all in memory.
+	-- The 4.2MB raw manifest is served as a ~130KB zip; download and decode it in memory.
 	local res, err = curl().get(MANIFEST_URL)
 	if not res then
 		if p then p:fail() end
@@ -62,9 +57,7 @@ local function getManifest()
 	return cachedManifest
 end
 
---- Cache of resolved rockspec URLs: name -> url, persisted alongside the manifest.
---- Entries survive manifest refreshes (see loadUrlCache); only the unversioned
---- fast path is skipped while the cache is older than the manifest.
+--- Resolved-rockspec-URL cache (name -> url), persisted alongside the manifest; entries survive manifest refreshes, only the unversioned fast path is skipped while stale.
 ---@type table<string, any>?
 local urlCache
 
@@ -85,11 +78,7 @@ local function loadUrlCache(isOffline)
 	local manifestPath = path.join(lde.global.getUserDir(), "luarocks-manifest.raw")
 	local cstat = fs.stat(cachePath)
 	local mstat = fs.stat(manifestPath)
-	-- A manifest refresh means newer versions may exist, so the fast path is
-	-- skipped (isCacheFresh) — but the persisted entries are always loaded,
-	-- never dropped: they are still valid pointers for offline resolution, and
-	-- saveUrlCache rewrites the file with whatever is in memory, so dropping
-	-- them here would permanently lose every cached URL.
+	-- Persisted entries are always loaded though the fast path is skipped: saveUrlCache rewrites from memory, so dropping them would lose cached URLs permanently.
 	isCacheFresh = isOffline or not (cstat and mstat and cstat.modifyTime < mstat.modifyTime)
 	urlCache = {}
 	if cstat then
@@ -106,19 +95,14 @@ end
 
 local function saveUrlCache()
 	if urlCache then
-		-- Encode a fresh copy of the table: the json decoder attaches per-table
-		-- key-order metadata, which makes encode() silently drop any key added
-		-- after decode (e.g. a newly resolved package URL).
+		-- Fresh copy: the json decoder's per-table key-order metadata makes encode() silently drop keys added after decode.
 		const fresh = {}
 		for k, v in pairs(urlCache) do fresh[k] = v end
 		fs.write(getUrlCachePath(), json.encode(fresh))
 	end
 end
 
---- Safe JSON decode: returns nil + message instead of raising on malformed
---- input (the json parser crashes on some inputs, e.g. \uXXXX escapes in
---- strings) and rejects non-object documents. Package contents must never
---- be able to crash lde, so every manifest/lockfile decode goes through this.
+--- Returns nil+message instead of raising (the json parser crashes on some inputs, e.g. \uXXXX escapes) and rejects non-objects; package contents must never crash lde.
 ---@param content string
 ---@return table?, string?
 function util.decodeJson(content)
@@ -132,10 +116,7 @@ function util.decodeJson(content)
 	return decoded, nil
 end
 
---- Extract every package name from the luarocks manifest. A single
---- depth-tracking scan: string patterns over the 4.2MB repository block cost
---- ~250ms (Lua patterns match byte-by-byte), this reads the key at each
---- package block in ~8ms.
+--- Single depth-tracking scan of the manifest: string patterns over the 4.2MB block cost ~250ms, this reads each package key in ~8ms.
 ---@param raw string
 ---@return string[]
 local function collectManifestNames(raw)
@@ -151,15 +132,14 @@ local function collectManifestNames(raw)
 
 	while i <= n do
 		local c = raw:byte(i)
-		if c == 123 then -- {
+		if c == 123 then
 			depth = depth + 1
 			i += 1
-		elseif c == 125 then -- }
+		elseif c == 125 then
 			depth = depth - 1
 			i += 1
 		elseif depth == 1 and (c == 91 or (c >= 97 and c <= 122) or c == 95) then
 			if c == 91 then
-				-- ["name"] = { ...
 				const close = raw:find('"] = {', i, true)
 				if not close then break end
 				local name = raw:sub(i + 2, close - 1)
@@ -169,12 +149,11 @@ local function collectManifestNames(raw)
 					names[#names + 1] = name
 				end
 			else
-				-- bare name = { ...
 				local s = i
 				while i <= n and isWordByte(raw:byte(i)) do i = i + 1 end
 				local name = raw:sub(s, i - 1)
 				while i <= n and (raw:byte(i) == 32 or raw:byte(i) == 9) do i = i + 1 end
-				if raw:byte(i) == 61 then -- =
+				if raw:byte(i) == 61 then
 					i = i + 1
 					while i <= n and (raw:byte(i) == 32 or raw:byte(i) == 9) do i = i + 1 end
 					if raw:byte(i) == 123 and not seen[name] then
@@ -190,17 +169,14 @@ local function collectManifestNames(raw)
 	return names
 end
 
---- All package names in the luarocks manifest, from a derived cache rebuilt
---- when the manifest file changes. Searching filters the ~5k names with plain
---- string.find (memchr) instead of re-parsing the 4.2MB manifest every time.
+--- Names come from a cache rebuilt when the manifest changes; searching then filters ~5k names with memchr instead of re-parsing 4.2MB.
 function util.getManifestNames()
 	local userDir = lde.global.getUserDir()
 	local manifestPath = path.join(userDir, "luarocks-manifest.raw")
 	local cachePath = path.join(userDir, "luarocks-names-5.1.json")
 	local mstat = fs.stat(manifestPath)
 	local cstat = fs.stat(cachePath)
-	-- Strictly newer: same-second writes (refresh + rebuild in one second) must
-	-- not be mistaken for a fresh cache.
+	-- Strictly newer: same-second writes must not be mistaken for a fresh cache.
 	if mstat and cstat and cstat.modifyTime > mstat.modifyTime then
 		local raw = fs.read(cachePath)
 		if raw then
@@ -216,11 +192,10 @@ function util.getManifestNames()
 	return names
 end
 
---- Normalises various git URL formats to a plain https:// URL.
 ---@param url string
 function util.normalizeGitUrl(url)
-	url = url:gsub("^git%+", "")       -- git+https:// -> https://
-	url = url:gsub("^git://", "https://") -- git:// -> https://
+	url = url:gsub("^git%+", "")
+	url = url:gsub("^git://", "https://")
 	if not url:match("%.git$") then
 		url = url .. ".git"
 	end
@@ -234,7 +209,6 @@ end
 ---@param isOffline boolean?
 ---@return lde.Package?, lde.Lockfile.Dependency?, string?
 function util.openRockspecUrl(name, url, branch, commit, isOffline)
-	-- Cache rockspec content by URL to avoid re-fetching on every warm run
 	local rockspecCacheFile = path.join(lde.global.getRockspecCacheDir(), (url:gsub("[^%w]", "_")))
 	local content
 	if fs.exists(rockspecCacheFile) then
@@ -278,10 +252,7 @@ function util.openRockspecUrl(name, url, branch, commit, isOffline)
 	return pkg, lockEntry, err
 end
 
---- Resolves a luarocks package name/version to its source URL + arch without
---- downloading anything. Uses the persisted URL cache when possible.
---- With `offline`, only the URL cache is consulted — a miss errors instead of
---- fetching the manifest.
+--- Source URL + arch without downloading; offline consults only the URL cache and errors on a miss instead of fetching the manifest.
 ---@param name string
 ---@param version string?
 ---@param isOffline boolean?
@@ -289,7 +260,6 @@ end
 ---@return "src"|"rockspec"|nil arch
 ---@return string? err
 function util.resolveLuarocksSource(name, version, isOffline)
-	-- For unversioned lookups, check the URL cache first to skip manifest scan
 	local cache = loadUrlCache(isOffline)
 	const cacheKey = name .. (version and ("@" .. version) or "")
 	local cachedEntry = ((not version) and isCacheFresh) ? cache[cacheKey] : nil
@@ -308,7 +278,6 @@ function util.resolveLuarocksSource(name, version, isOffline)
 		url, arch, uerr = luarocks.getUrl(manifest, name, version)
 		if not url then return nil, nil, uerr end ---@cast url string
 
-		-- Cache the resolved URL for future invocations
 		if not version then
 			cache[cacheKey] = { url = url, arch = arch }
 			saveUrlCache()
@@ -320,9 +289,6 @@ function util.resolveLuarocksSource(name, version, isOffline)
 	return url, arch
 end
 
---- Populates a dependencies table from rockspec dependency strings, routing
---- git URLs ("git+https://", "git://", "*.git") to git deps and everything
---- else to luarocks deps (skipping the "lua"/"luajit" pseudo-deps).
 ---@param deps table<string, lde.Package.Config.Dependency>
 ---@param depStrs string[]
 function util.addRockspecDeps(deps, depStrs)
@@ -340,14 +306,12 @@ function util.addRockspecDeps(deps, depStrs)
 	end
 end
 
---- Suggests where a package that wasn't found might actually live, for
---- "not found" error hints: a name missing from the lde registry may be a
---- luarocks rock (and vice versa); otherwise point at `lde search`.
+--- "not found" hint: a name missing from one registry may exist in the other, else point at `lde search`.
 ---@param name string
 ---@param wasRocks boolean # true when the luarocks lookup failed
 function util.suggestPackage(name, wasRocks)
 	if wasRocks then
-		local ok = pcall(lde.global.syncRegistry)
+		local ok = pcall(require("lde-core.global").syncRegistry)
 		if ok then
 			const portfile = lde.global.lookupRegistryPackage(name)
 			if portfile then
@@ -367,14 +331,7 @@ function util.suggestPackage(name, wasRocks)
 	return "Search available packages with: `lde search " .. name .. "`"
 end
 
---- Resolves the best version of a luarocks package plus the rockspec (metadata)
---- and .src.rock (content) URLs for that exact version. Uses the persisted URL
---- cache when possible; falls back to a manifest scan otherwise.
----
---- The manifest is the Lua-version-filtered one (manifest-5.1 for LuaJIT), so
---- every version it lists is engine-compatible by construction: the newest
---- satisfying the constraint is picked directly, with no per-candidate rockspec
---- fetches.
+--- Best version with rockspec/src URLs; the Lua-version-filtered manifest makes every listed version engine-compatible, so the newest satisfying the constraint is picked with no per-candidate fetches.
 ---@param name string
 ---@param constraint string?
 ---@return string? version
@@ -382,13 +339,10 @@ end
 ---@return string? srcUrl
 ---@return string? err
 function util.resolveLuarocksBest(name, constraint)
-	-- "@latest" always re-checks the manifest for the newest version; it must
-	-- not reuse the cached resolution (which pins whatever was latest at the
-	-- time it was recorded).
+	-- "@latest" must re-check the manifest: the cache pins whatever was latest when recorded.
 	const isLatest = constraint == "latest"
 	if isLatest then constraint = nil end
 
-	-- URL cache fast path (unversioned lookups only)
 	local cache = loadUrlCache()
 	local cachedEntry = ((not constraint) and not isLatest and isCacheFresh) ? cache[name] : nil
 	if cachedEntry then
@@ -415,7 +369,6 @@ function util.resolveLuarocksBest(name, constraint)
 			(constraint and (" satisfies: " .. constraint) or " found")
 	end
 
-	-- Cache unversioned resolutions for future invocations
 	if not constraint then
 		cache[name] = { url = c.srcUrl or c.rockspecUrl, arch = c.srcUrl and "src" or "rockspec" }
 		saveUrlCache()
@@ -424,12 +377,7 @@ function util.resolveLuarocksBest(name, constraint)
 	return c.version, c.rockspecUrl, c.srcUrl, nil
 end
 
---- Finds a materialized .src.rock archive dir for a package by scanning the tar
---- cache, for when the URL cache can't resolve the name (offline runs, or the
---- URL cache entry was lost when the manifest refreshed). Cache dirs are named
---- by the sanitized download URL (<name>-<version>-<revision>.src.rock), so the
---- package name must appear followed by "-" — and not as the tail of a longer
---- name (lua-cjson vs cjson) — which is what the boundary check enforces.
+--- Scans the tar cache (dirs named <name>-<version>-<revision>.src.rock) for when the URL cache can't resolve; the boundary check keeps `cjson` from matching `lua-cjson`.
 ---@param name string
 local function findCachedSrcRock(name)
 	local iter = fs.readdir(lde.global.getTarCacheDir())
@@ -445,7 +393,6 @@ local function findCachedSrcRock(name)
 	return nil
 end
 
---- Resolves a luarocks package name/version to a Package via the luarocks registry.
 ---@param name string
 ---@param version string?
 ---@param isOffline boolean?
@@ -453,8 +400,7 @@ end
 function util.openLuarocksPackage(name, version, isOffline)
 	local url, arch, uerr = util.resolveLuarocksSource(name, version, isOffline)
 	if not url then
-		-- Offline URL-cache miss: the archive may still be materialized in the
-		-- tar cache even though the URL cache entry was lost.
+		-- Offline URL-cache miss: the archive may still be in the tar cache.
 		if isOffline then
 			local dir = findCachedSrcRock(name)
 			if dir then
@@ -472,9 +418,7 @@ function util.openLuarocksPackage(name, version, isOffline)
 
 	if arch == "src" then
 		local archiveDir = lde.global.getOrInitArchive(url --[[@as string]], isOffline)
-		-- .src.rock extracts with the rockspec at root; the source is either a
-		-- subdir next to the rockspec or the nested archive (materialized by
-		-- openSrcRock).
+		-- .src.rock extracts with the rockspec at root; source is a subdir or the nested archive.
 		local pkg, err = util.openSrcRock(archiveDir --[[@as string]], url --[[@as string]])
 		if not pkg then
 			return nil, nil, "Failed to load src rock '" .. name .. "': " .. (err or "")
@@ -493,15 +437,12 @@ function util.getManifest()
 	return getManifest()
 end
 
---- Cache file path for a rockspec URL.
 ---@param url string
 function util.rockspecCacheFile(url)
 	return path.join(lde.global.getRockspecCacheDir(), (url:gsub("[^%w]", "_")))
 end
 
---- Finds a named package inside a directory (monorepo support: lde.json can
---- live anywhere in the tree). Checks the directory itself, then scans for
---- lde.json / lpm.json config files.
+--- Monorepo support: lde.json can live anywhere in the tree.
 ---@param dir string
 ---@param packageName string
 ---@param rockspec string?
@@ -525,13 +466,7 @@ function util.findNamedPackage(dir, packageName, rockspec)
 	return nil, "No lde.json with name '" .. packageName .. "' found in: " .. dir
 end
 
---- Materializes the source tree inside an extracted .src.rock cache dir and
---- returns where the package should be opened from. A .src.rock is a zip of the
---- rockspec plus the source: either an unpacked tree (a subdir next to the
---- rockspec, e.g. tl) or the original source archive (a nested .zip/.tar.gz,
---- e.g. cerulean). When a nested archive is present it is authoritative — it is
---- extracted (once) over any stray subdirs, which may be artifacts of earlier
---- installs (e.g. a package dir left behind by an interrupted run).
+--- A .src.rock holds the rockspec plus either an unpacked tree or a nested archive; the nested archive is authoritative and extracted over stray subdirs from interrupted runs.
 ---@param archiveDir string # extracted .src.rock directory
 ---@return string? srcDir # directory to open the package from
 ---@return string? rockspecPath
@@ -556,12 +491,28 @@ function util.materializeSrcRock(archiveDir)
 
 	if nestedArchive then
 		local dir = nestedArchive:gsub("%.tar%.[gbx]z2?$", ""):gsub("%.zip$", "")
+		-- Extract into a temp dir and move it in: an interrupted extract must not
+		-- leave a tree that later runs trust (same rule as the archive cache).
+		const marker = path.join(dir, ".lde-complete")
+		-- Extract into a temp dir and move it in: an interrupted extract must not
+		-- leave a tree that later runs trust. A dir already in place is adopted
+		-- (same rule as the archive cache) rather than deleted, which would race
+		-- with a process extracting it right now.
+		if fs.isdir(dir) and not fs.exists(marker) then fs.write(marker, "") end
 		if not fs.isdir(dir) then
-			fs.mkdir(dir)
-			const ok2, err2 = Archive().new(nestedArchive):extract(dir, { stripComponents = true })
+			const tmpDir = dir .. ".tmp" .. tostring({}):match("0x(%x+)$")
+			const ok2, err2 = Archive().new(nestedArchive):extract(tmpDir, { stripComponents = true })
 			if not ok2 then
+				fs.rmdir(tmpDir)
 				return nil, nil, "Failed to extract nested archive in src rock: " .. (err2 or "")
 			end
+			if not fs.move(tmpDir, dir) then
+				fs.rmdir(tmpDir)
+				if not fs.isdir(dir) then
+					return nil, nil, "Failed to move nested archive into " .. dir
+				end
+			end
+			fs.write(marker, "")
 		end
 		srcDir = dir
 	end
@@ -569,9 +520,6 @@ function util.materializeSrcRock(archiveDir)
 	return srcDir or archiveDir, rockspecPath, nil
 end
 
---- Opens the package inside an extracted .src.rock archive: finds the rockspec
---- and materializes the source tree (a source subdir, or the nested archive
---- extracted alongside the rockspec when the rock ships one).
 ---@param archiveDir string
 ---@param url string
 ---@return lde.Package?, string?

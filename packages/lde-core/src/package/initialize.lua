@@ -9,10 +9,6 @@ const git2 = util.lazy(|| -> require("git2-sys"))
 
 const Package = require("lde-core.package")
 
-local function hasGit()
-	return true
-end
-
 ---@type string
 const AGENT_TEMPLATE = util.dedent([[
 # Using lde
@@ -21,17 +17,14 @@ This project is built using lde. Read https://lde.sh/llms.txt for everything you
 to know about building, running, handling dependencies and running tests.
 ]])
 
---- Check whether a binary exists on PATH. Scans PATH directly instead of
---- spawning a subprocess: `command -v` is a shell builtin, so execvp can't
---- find it on minimal systems (CI runners), and checking seven agents with
---- `where`/`command` subprocesses per Package.init is needlessly slow.
+--- Scans PATH directly: `command -v` is a shell builtin execvp can't find on minimal systems, and spawning seven agent subprocesses per init is slow.
 ---@param name string
 local function hasBinary(name)
 	const pathVar = os.getenv("PATH") or ""
 	const sep = jit.os == "Windows" and ";" or ":"
 	for dir in pathVar:gmatch("[^" .. sep .. "]+") do
 		if dir ~= "" then
-			const base = path.join(dir, name)
+			const base = path.join(tostring(dir), name)
 			if jit.os == "Windows" then
 				if fs.exists(base) or fs.exists(base .. ".exe")
 					or fs.exists(base .. ".cmd") or fs.exists(base .. ".bat") then
@@ -124,8 +117,7 @@ local function entryContent(projectType, language)
 	return "print('Hello, world!')"
 end
 
---- Write a scaffold file as a proper POSIX text file: guaranteed trailing
---- newline (a missing one trips `git diff --check` and other tooling).
+--- Guarantee a trailing newline: a missing one trips `git diff --check` and other tooling.
 ---@param p string
 ---@param content string
 local function writeText(p, content)
@@ -133,8 +125,6 @@ local function writeText(p, content)
 	fs.write(p, content)
 end
 
---- Initializes a package at the given directory.
---- If the directory already contains an lde.json, this will throw an error to avoid overwriting existing packages.
 ---@param dir string
 ---@param opts lde.Package.InitOptions?
 local function initPackage(dir, opts)
@@ -170,8 +160,6 @@ local function initPackage(dir, opts)
 		fs.mkdir(dir)
 	end
 
-	-- One tab of indentation per JSON nesting level, root brace unindented —
-	-- the same shape the json encoder produces (see lde add rewriting lde.json).
 	local configLines = {
 		"{",
 		'\t"name": "' .. packageName .. '",',
@@ -193,7 +181,7 @@ local function initPackage(dir, opts)
 	local gitignorePath = path.join(dir, ".gitignore")
 	if not fs.exists(gitignorePath) then
 		writeText(gitignorePath, idealGitignore)
-	else -- Try to append to it
+	else
 		local content = fs.read(gitignorePath)
 		if not content then
 			lde.error.raise("Failed to read existing .gitignore at: " .. gitignorePath)
@@ -216,9 +204,7 @@ local function initPackage(dir, opts)
 		end
 	end
 
-	-- .luarc.json configures lua-language-server, which only understands Lua
-	-- sources — skip it for Teal and Moonscript projects. Never touch an
-	-- existing file.
+	-- lua-language-server only understands Lua sources, so skip .luarc.json for Teal/Moonscript; never touch an existing file.
 	if language == "lua" then
 		local luarcPath = path.join(dir, ".luarc.json")
 		if not fs.exists(luarcPath) then
@@ -245,7 +231,7 @@ local function initPackage(dir, opts)
 		end
 	end
 
-	if hasGit() and not isInsideGitRepo(dir) then
+	if not isInsideGitRepo(dir) then
 		local repo = git2().init(dir)
 		if not repo then
 			ansi.printf("{yellow}Warning: failed to initialize git repository")
@@ -267,9 +253,7 @@ local function initPackage(dir, opts)
 		writeText(path.join(src, entryFile), entryContent(projectType, language))
 	end
 
-	-- Write agent instructions if a known coding agent is present. claude reads
-	-- CLAUDE.md; every other supported harness reads AGENTS.md, which is
-	-- preferred when several agents are installed.
+	-- claude reads CLAUDE.md; every other supported harness reads AGENTS.md, preferred when several agents are installed.
 	local agentFile
 	for _, agent in ipairs({ "opencode", "dsh", "pi", "zed", "gemini", "codex", "reasonix" }) do
 		if hasBinary(agent) then

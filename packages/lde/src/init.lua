@@ -9,32 +9,21 @@ const suggest = require("lde.util.suggest")
 
 const args = clap.parse({ ... })
 
--- `--lua [args...]` runs the lde binary as a plain Lua interpreter: the
--- args form a `lua` command line (`-e <code>` chunks, then an optional
--- script with its args). Everything after the flag belongs to the
--- interpreter — scripts may pass their own lde-looking options (e.g.
--- `luarocks install --tree=...` shelled out through the lde binary) — so
--- it's split off before any lde option parsing.
+-- Everything after `--lua` is the interpreter's, so split it off before any lde
+-- option parsing.
 local luaCliArgs
 if args:flag("lua") then
 	luaCliArgs = args:drain()
 end
 
--- --verbose is a global flag, consumed before the command name is popped so
--- it works anywhere on the command line (`lde --verbose run` and
--- `lde run --verbose` both enable it). Applied after lde-core loads below.
+-- Global flag consumed before the command name is popped so it works anywhere.
 const verboseRequested = args:flag("verbose")
 
--- Parse the overrides up front so --version is detected even when combined
--- with -C/--tree (matching the historical behavior), but don't apply them
--- until after the version check.
+-- Parsed up front so --version is seen even with -C/--tree, applied after the check.
 const cwdOverride  = args:option("cwd") or args:short("C")
 const treeOverride = args:option("tree")
 
--- Applies -C/--tree. Kept separate so the --version path below can apply
--- them too, while the plain `lde --version` never pays for ansi/env/fs/path
--- or lde-core. Modules load only when an override actually needs them — a
--- plain `lde -e "…"` in a project-less cwd never touches ansi/fs/path here.
+-- Separate so the --version path can apply -C/--tree; heavy modules load lazily.
 local function applyOverrides()
 	if cwdOverride then
 		const ansi = require("ansi")
@@ -44,9 +33,7 @@ local function applyOverrides()
 		local cwd = env.cwd()
 		local requestedCwd
 		if not cwd then
-			-- env.cwd() returns nil when the process's cwd no longer exists
-			-- (deleted while the shell was open). Only an absolute -C can
-			-- still get us somewhere useful in that state.
+			-- nil cwd = the process's cwd was deleted; only an absolute -C still works.
 			if not path.isAbsolute(cwdOverride) then
 				ansi.printf("{red}error{gray}:{reset} Current working directory no longer exists (it may have been deleted); use an absolute path with -C or cd to an existing directory")
 				os.exit(1)
@@ -72,16 +59,9 @@ local function applyOverrides()
 	end
 end
 
--- Fast paths that avoid loading lde-core (whose module graph pulls in
--- git2-sys, curl-sys, json, etc.) — this is what dominates CLI startup.
--- `-v` is the single-dash alias for `--version` and shares its fast path and
--- override-combination semantics (`lde -v --tree <dir>` applies the override
--- before printing).
--- A top-level `--version`/`-v` prints the version, but only when it is the
--- first remaining argument (the cwd/tree overrides above are consumed first).
--- A command's own `--version <value>` option — e.g. `lde add x --version
--- 1.0` — must not be intercepted here: clap's flag() would consume it and the
--- command would silently never see its value.
+-- Avoids loading lde-core (git2-sys/curl-sys/json), which dominates startup.
+-- Only intercept --version/-v as the first remaining arg: a command's own
+-- `--version <value>` must reach it, or clap's flag() would silently eat it.
 local versionRequested = false
 if args:peek() == "--version" or args:peek() == "-v" then
 	args:pop()
@@ -99,21 +79,18 @@ end
 
 const evalCode = args:short("e")
 
-	-- `--help` before a command shows that command's help; alone it shows the
-	-- main help. Handled inside the boundary (after applyOverrides) so unknown
-	-- targets render cleanly; help.lua lazy-loads lde-core, so plain `lde
-	-- --help` still pays nothing beyond ansi/env/fs/path.
+	-- Inside the boundary so unknown targets render cleanly; help.lua lazy-loads
+	-- lde-core.
 	const helpRequested = args:flag("help")
 
--- Hidden completion backend invoked by the generated shell scripts. Handled
--- before the overrides and lde-core load so tab-completion stays fast.
+-- Hidden completion backend for the generated shell scripts, kept off lde-core.
 if args:peek() == "__complete" then
 	args:pop()
 	require("lde.commands.complete")(args)
 	return
 end
 
--- Enable UTF-8 console output on Windows, needed for test output
+-- UTF-8 console output on Windows, needed for test output.
 if jit.os == "Windows" then
 	local ok, win32 = pcall(require, "winapi")
 	if ok then
@@ -121,17 +98,12 @@ if jit.os == "Windows" then
 	end
 end
 
--- Everything from here on runs through the error boundary: known errors
--- (lde.error.raise) render as a single clean message, anything unexpected is
--- treated as a bug and gets the "lde crashed" screen with a traceback. The
--- fast paths above (--version/--help/__complete/--lua) stay outside so plain
--- queries never pay for lde-core.
+-- Known errors render as one clean message; anything unexpected gets the
+-- "lde crashed" traceback screen.
 	local ok, boundaryErr = xpcall(function()
 	applyOverrides()
 
-	-- `--help` before a command shows that command's help; alone it shows the
-	-- main help. Runs through the boundary so `lde --help <unknown>` renders
-	-- a clean error; help.lua lazy-loads lde-core so the success path stays fast.
+	-- Through the boundary so `lde --help <unknown>` renders a clean error.
 	if helpRequested and not evalCode and not luaCliArgs then
 		local target = args:pop()
 		if target then
@@ -156,10 +128,7 @@ end
 		end
 	end
 
-	-- True when the cwd contains a package manifest (lpm.json/lde.json) or a
-	-- standalone *.rockspec, mirroring Package.open's discovery rules. The
-	-- io.open probes cost nothing (no fs module); the readdir scan only runs
-	-- for the rare manifest-less dirs that still hold a rockspec.
+	-- Mirrors Package.open's discovery: a manifest or a standalone *.rockspec.
 	---@return boolean
 	local function cwdHasPackageManifest()
 		local f = io.open("lpm.json", "rb")
@@ -178,11 +147,7 @@ end
 		return false
 	end
 
-	-- Outside a package, `-e` needs none of the core library — no Package,
-	-- no install machinery, no global dirs — so take a runtime-only fast path
-	-- (the bun-comparable "run code with no project" case) before lde-core's
-	-- module graph loads. Inside a package the normal path below runs, which
-	-- builds/installs deps and evaluates in project context.
+	-- Outside a package, -e needs no core library, so take a runtime-only fast path.
 	if evalCode and not luaCliArgs and not cwdHasPackageManifest() then
 		local env = require("env")
 		if not env.cwd() then
@@ -197,23 +162,16 @@ end
 		return
 	end
 
-	-- Everything below needs the full core library. Keep the fast commands
-	-- above (bare `lde`, `lde help`, `--setup`, project-less `-e`) free of
-	-- lde-core so startup stays ~1ms; the boundary's crash renderer requires
-	-- it lazily instead.
+	-- lde-core is required here (after the fast commands) so startup stays ~1ms.
+	-- Compact output by default; --verbose restores streaming; LDE_VERBOSE carries
+	-- the choice to the hidden build worker.
 	local lde = require("lde-core")
-	-- Build/install output is compact by default (one bun-style progress line
-	-- plus a summary; build.lua stdout is captured and only dumped on failure).
-	-- --verbose restores the old streaming per-item output. The hidden build
-	-- worker inherits the parent's choice via LDE_VERBOSE.
 	if os.getenv("LDE_VERBOSE") == "1" or verboseRequested then
 		lde.isVerbose = true
 	end
 
-	-- env.cwd() returns nil when the shell's cwd was deleted out from under
-	-- it (relative FS ops then act on the orphaned directory, so commands
-	-- don't fail on their own). Every command below operates relative to
-	-- cwd — fail cleanly instead of crashing on path.resolve(nil, ...).
+	-- Fail cleanly when the shell's cwd was deleted instead of crashing on
+	-- path.resolve(nil, ...).
 	if not require("env").cwd() then
 		lde.error.raise("Current working directory no longer exists (it may have been deleted); use an absolute path with -C or cd to an existing directory")
 	end
@@ -223,26 +181,21 @@ end
 		return
 	end
 
-	-- Hidden build worker: run a package's build.lua in a subprocess so the
-	-- install scheduler can overlap independent native builds (see
-	-- lde-core/package/build.lua). Invoked as: lde __build-pkg <pkgDir> <outDir> [<target>].
+	-- Runs build.lua in a subprocess so the install scheduler can overlap native
+	-- builds (see lde-core/package/build.lua).
 	if commandName == "__build-pkg" then
 		const pkgDir = args:pop()
 		local outDir = args:pop()
 		const targetName = args:pop()
 		const buildLog = require("lde-core.util.build-log")
-		-- Compact mode: capture the whole build output (build:sh subprocesses
-		-- and guest prints) and write it to a temp file on failure, then exit
-		-- silently — the parent renders the error and points at the log. The
-		-- path is deterministic (buildLog.pathFor), so parent and worker agree
-		-- on it without passing it over the wire.
+		-- Capture all build output; on failure write it to the deterministic
+		-- buildLog.pathFor temp file and exit (the parent renders the error).
 		const capture = (not lde.isVerbose) ? buildLog.newCapture() : nil
 		local ok, msg = pcall(function()
 			if not pkgDir or not outDir then
 				error("__build-pkg: missing package dir or output dir", 0)
 			end
-			-- The worker inherits the parent's compile target so build.lua C code
-			-- compiles for the target platform (build:cc()/build.target read it).
+			-- Inherit the target so build.lua C code builds for the target platform.
 			if targetName and targetName ~= "" then
 				local target, terr = require("sea").getTarget(targetName)
 				if not target then
@@ -258,9 +211,8 @@ end
 			if not bok then error(berr or "build failed", 0) end
 		end)
 		if not ok then
-			-- Capture the error itself: a build script that fails before any
-			-- subprocess output (a failing build:move, say) would otherwise
-			-- leave the worker's log empty and the parent with nothing to show.
+			-- Capture the error itself: a build failing before any subprocess output
+			-- would otherwise leave the log empty.
 			if capture then
 				capture:append("__build-pkg: " .. lde.error.message(msg) .. "\n")
 				if outDir then capture:write(outDir) end
@@ -323,9 +275,8 @@ end
 		repl      = "lde.commands.repl"
 	}
 
-	-- `lde ./file.lua` / `lde /abs/path.lua` on a file that doesn't exist must
-	-- report the missing path, not fall through to "Unknown command" (which
-	-- reads like a command typo).
+	-- A path-shaped arg on a missing file must report the missing path, not fall
+	-- through to "Unknown command".
 	---@param name string
 	---@return boolean
 	local function looksLikePath(name)
@@ -338,7 +289,6 @@ end
 		return false
 	end
 
-	-- Commands that don't need the global cache dirs initialized
 	const noInitCommands = { help = true, completion = true }
 
 	if not noInitCommands[commandName] and not treeOverride then
@@ -349,7 +299,6 @@ end
 	if commandFile then
 		require(commandFile)(args)
 	elseif require("fs").exists(commandName) then
-		-- TODO: Replace this hacky behavior
 		---@cast args { raw: string[] }
 		table.insert(args.raw, 1, commandName) ---@cast args clap.Args
 		require("lde.commands.run")(args)

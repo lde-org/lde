@@ -8,6 +8,13 @@
 local ffi = require("ffi")
 local process = require("process")
 
+--- Child handle shape, declared locally: the `process` class is only reachable
+--- through a symlinked target dir here, which the checker cannot resolve.
+---@class fuzzer.Child
+---@field kill fun(self: fuzzer.Child, force: boolean?)
+---@field wait fun(self: fuzzer.Child): number?, string?, string?
+---@field poll fun(self: fuzzer.Child): number?
+
 local sleep
 if jit.os == "Windows" then
 	ffi.cdef "void Sleep(unsigned long dwMilliseconds);"
@@ -54,7 +61,7 @@ local function run(bin, args, opts)
 			return { exit = code, timedOut = false, out = (stdout or "") .. (stderr or "") }
 		end
 		if os.clock() > deadline then
-			const proc = child --[[@as process.Child]]
+			const proc = child --[[@as fuzzer.Child]]
 			proc:kill(true)
 			-- Don't wait(): the killed process's grandchildren may still hold the
 			-- pipe write ends (e.g. a compiler or git spawned mid-build), which

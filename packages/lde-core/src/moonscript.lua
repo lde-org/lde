@@ -1,12 +1,9 @@
---- Moonscript compiler, built on the shared compiler guest machinery.
 ---@type lde.Compiler
 const moonscript = require("lde-core.compiler").new({
 	name = "Moonscript",
 	packageName = "moonscript",
 	loadExpr = 'return require("moonscript.base")',
 	extension = ".moon",
-	-- Runs inside the compiler guest: to_lua returns the compiled Lua or a
-	-- formatted error.
 	driver = [[
 		local source = ...
 		local base = require("moonscript.base")
@@ -17,8 +14,7 @@ const moonscript = require("lde-core.compiler").new({
 		return { code = code }
 	]],
 	matchSource = function(rel) return rel:match("%.moon$") ~= nil end,
-	-- Parenthesized: gsub returns a second (count) value that would leak into
-	-- path.join's varargs.
+	-- Parenthesized: gsub's count would leak into path.join's varargs.
 	outRel = function(rel) return (rel:gsub("%.moon$", ".lua")) end,
 })
 

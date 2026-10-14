@@ -9,7 +9,6 @@ const moonscript = require("lde-core.moonscript")
 
 local PROFILER_MS_PER_SAMPLE = 1
 
---- Prints a fancy profile report: VM state bars + hotspot table.
 ---@param counts   table<string, number>  stack → sample count
 ---@param vmstates table<string, number>  vmstate char → sample count
 ---@param total    number
@@ -93,8 +92,6 @@ local function printProfileReport(counts, vmstates, total, cwd)
 	io.write("\n")
 end
 
---- Start the profiler using a custom callback so we get vmstate per tick.
---- Returns a stop() function that returns counts, vmstates, stacks, total.
 ---@param state lua.State
 ---@return fun(): table, table, table, number
 local function startProfiler(state)
@@ -103,8 +100,7 @@ local function startProfiler(state)
 	local stacks   = {}
 	local total    = 0
 
-	-- Frames to skip when looking for a meaningful hotspot key.
-	-- These are lde internals or Lua builtins that appear at the top of every stack.
+	-- lde internals / Lua builtins that top every stack and make poor hotspot keys.
 	const skipFrames = {
 		["require"]    = true,
 		["pcall"]      = true,
@@ -113,7 +109,7 @@ local function startProfiler(state)
 		["chunk"]      = true,
 	}
 
-	-- Strip the name:line suffix that luajit appends in "f;" mode (e.g. "foo:42" → "foo").
+	-- Strip the name:line suffix luajit appends in "f;" mode (e.g. "foo:42" → "foo").
 	---@param f string
 	local function frameName(f)
 		return (f:gsub(":%d+$", ""))
@@ -124,7 +120,6 @@ local function startProfiler(state)
 		vmstates[vmstate] = (vmstates[vmstate] or 0) + samples
 		if vmstate == "G" or not stack or stack == "" then return end
 
-		-- Accumulate the full stack for flamegraph (clean frame names).
 		local cleanParts = {}
 		for frame in stack:gmatch("([^;]+)") do
 			const name = frameName(frame)
@@ -137,7 +132,6 @@ local function startProfiler(state)
 			stacks[cleanStack] = (stacks[cleanStack] or 0) + samples
 		end
 
-		-- Hotspot key: first frame that isn't a generic builtin.
 		local key
 		for _, part in ipairs(cleanParts) do
 			if not skipFrames[part] then
@@ -157,8 +151,7 @@ local function startProfiler(state)
 	end
 end
 
---- Write the sampled profile data as JSON so tools and tests can consume it
---- programmatically (the text report and HTML flamegraph are human-facing).
+--- Written as JSON so tools/tests can consume it programmatically (the text report and HTML flamegraph are human-facing).
 ---@param filePath string
 ---@param counts table<string, number> # function -> sample count
 ---@param vmstates table<string, number> # vmstate char -> sample count
@@ -203,12 +196,7 @@ end
 ---@field profileJson  string? # path: also write the sampled data as JSON
 ---@field jit          boolean? # JIT diagnostics: report trace aborts with reasons and locations
 
---- Create a fresh isolated guest state with the standard lde runtime setup:
---- cwd/env handling, package.path/cpath, preloads, injected globals, and arg[].
---- This is the single source of truth for the guest environment — callers keep
---- the state open to drive it (eval chunks, a REPL loop, ...). Call cleanup()
---- to restore the host cwd/env and state:close() to free the guest.
----
+--- Single source of truth for the guest environment; callers keep the state open to drive it (eval chunks, a REPL loop, ...). Call cleanup() to restore the host cwd/env and state:close() to free the guest.
 ---@param opts lde.ExecuteOptions?
 ---@return lua.State state
 ---@return lua.Table g      # live proxy of the guest globals
@@ -224,7 +212,6 @@ local function createState(opts)
 		env.chdir(here --[[@as string]])
 	end
 
-	-- Apply env vars; save originals for restore
 	const oldEnvVars = {}
 	if opts.env then
 		for k, v in pairs(opts.env) do
@@ -238,17 +225,14 @@ local function createState(opts)
 		if oldCwd then env.chdir(oldCwd) end
 	end
 
-	-- Fresh isolated state
 	local state = lua.new()
 	local g     = state:globals() --[[@as { package: { path: string?, cpath: string?, loaded: table<string, any> }, arg: any }]]
 
-	-- Set package.path / package.cpath
 	const pkg = g.package
 	if opts.packagePath  then pkg.path  = opts.packagePath  end
 	if opts.packageCPath then pkg.cpath = opts.packageCPath end
 
-	-- Inject preloaded modules directly into package.loaded so require() returns
-	-- them immediately — no loader function or cross-boundary callback needed.
+	-- Injected into package.loaded (not as loaders) so require() returns them immediately with no cross-boundary callback.
 	if opts.preload then
 		const loaded = pkg.loaded
 		for modname, loader in pairs(opts.preload) do
@@ -258,15 +242,13 @@ local function createState(opts)
 		end
 	end
 
-	-- Inject extra globals. toLua handles all types including plain host tables.
+	-- toLua handles all types, including plain host tables.
 	if opts.globals then
 		for k, v in pairs(opts.globals) do
 			if v ~= nil then g[k] = v end
 		end
 	end
 
-	-- Populate arg[] — args[0] is arg[0] (the chunk name / script path),
-	-- args[1..] are the positional arguments.
 	local args   = opts.args or {}
 	const argTbl = state:table()
 	argTbl[0]   = args[0] or "?"
@@ -276,9 +258,6 @@ local function createState(opts)
 	return state, g, cleanup
 end
 
---- Run Lua source inside a fresh lua-sys guest state (see createState for
---- the environment setup).
----
 ---@param source    string  Lua source code to run
 ---@param chunkName string  Label shown in error traces
 ---@param opts      lde.ExecuteOptions?
@@ -286,9 +265,7 @@ end
 local function executeSource(source, chunkName, opts)
 	opts = opts or {}
 	local args = opts.args or {}
-	-- arg[0] defaults to the chunk label; callers that run a file pre-set it
-	-- to the plain path so the "@"-prefixed chunk name (which LuaJIT needs to
-	-- report path:line errors) doesn't leak into arg[0].
+	-- Callers that run a file pre-set arg[0] to the plain path so the "@"-prefixed chunk name (which LuaJIT needs for path:line errors) doesn't leak into arg[0].
 	if args[0] == nil then
 		args = { [0] = chunkName, unpack(args) }
 	end
@@ -303,9 +280,7 @@ local function executeSource(source, chunkName, opts)
 		globals = opts.globals,
 	})
 
-	-- Optional JIT diagnostics (jit.attach hook): live trace-abort warnings
-	-- during the run, plus a summary on exit. Installed after the state exists
-	-- so its bootstrap chunk can load into it.
+	-- Installed after the state exists so its jit.attach bootstrap chunk can load into it.
 	local jitDiagSession, jitdiagReport
 	if opts.jit then
 		const jitdiag = require("lde-core.jitdiag")
@@ -315,23 +290,17 @@ local function executeSource(source, chunkName, opts)
 		end
 	end
 
-	-- Start profiler if requested
 	local stopProfiler
 	if opts.profile or opts.flamegraph or opts.profileJson then
 		stopProfiler = startProfiler(state)
 	end
 
-	-- Execute the script, passing args as varargs so { ... } in the script works
 	local chunk = state:load(source, chunkName)
 	local ok, a, b, c, d, e, f = pcall(chunk.eval, chunk, unpack(args))
 
-	-- Collect profiling results
 	if stopProfiler then
 		local counts, vmstates, stacks, total = stopProfiler()
-		-- Artifacts (flamegraph HTML, profile JSON) are always written — the
-		-- caller requested them — but the report and status lines are
-		-- suppressed while quiet (the test runner sets lde.isQuiet so library
-		-- calls under `lde test` don't spam the suite's output).
+		-- Artifacts are always written (the caller requested them), but the report/status lines are suppressed while lde.isQuiet (the test runner sets it so library calls under `lde test` don't spam the suite).
 		const isQuiet = lde.isQuiet
 		if not isQuiet and opts.profile then
 			printProfileReport(counts, vmstates, total, opts.cwd or env.cwd())
@@ -372,9 +341,7 @@ local function executeSource(source, chunkName, opts)
 	return ok, a, b, c, d, e, f
 end
 
---- Read a script file, compiling Teal/Moonscript sources to Lua when needed.
---- Shared by executeFile and the --hot/--watch driver so both re-read the
---- entry point the same way on every run.
+--- Shared by executeFile and the --hot/--watch driver so both re-read the entry point identically on every run.
 ---@param filePath string
 ---@return string? source
 ---@return string? err
@@ -384,14 +351,12 @@ local function readCompiledFile(filePath)
 		return nil, "Failed to read " .. filePath .. ": " .. (err or "unknown error")
 	end
 	if filePath:match("%.tl$") and not filePath:match("%.d%.tl$") then
-		-- Teal entry point: compile to Lua before handing it to the guest state.
 		local code, cerr = teal:compileFile(filePath)
 		if not code then
 			return nil, "Failed to compile " .. filePath .. ":\n" .. (cerr or "unknown error")
 		end
 		return code, nil
 	elseif filePath:match("%.moon$") then
-		-- Moonscript entry point: compile to Lua before handing it to the guest state.
 		local code, cerr = moonscript:compileFile(filePath)
 		if not code then
 			return nil, "Failed to compile " .. filePath .. ":\n" .. (cerr or "unknown error")
@@ -405,17 +370,14 @@ end
 ---@param opts lde.ExecuteOptions?
 local function executeFile(scriptPath, opts)
 	opts = opts or {}
-	-- Resolve relative paths before reading, using opts.cwd if provided,
-	-- so that callers can pass e.g. "./scripts/foo.lua" with a cwd override.
+	-- Resolve relative paths against opts.cwd first so callers can pass e.g. "./scripts/foo.lua" with a cwd override.
 	local resolvedPath = scriptPath
 	if opts.cwd and not path.isAbsolute(scriptPath) then
 		resolvedPath = path.join(opts.cwd, scriptPath)
 	end
 	local source, err = readCompiledFile(resolvedPath)
 	if not source then return false, err end
-	-- The "@" chunk label makes LuaJIT report file-backed errors as
-	-- path:line:msg. A bare path would render as [string "<path>"] with the
-	-- truncated source text instead (executeLuaCLI uses the same convention).
+	-- The "@" chunk label makes LuaJIT report file-backed errors as path:line:msg; a bare path would render as [string "<path>"] with the truncated source text.
 	local args = opts.args or {}
 	opts.args = { [0] = resolvedPath, unpack(args) }
 	return executeSource(source, "@" .. resolvedPath, opts)
@@ -427,13 +389,7 @@ local function executeString(code, opts)
 	return executeSource(code, "-e", opts)
 end
 
---- Run arguments as a Lua interpreter would: zero or more `-e <code>` chunks,
---- then an optional script with its args (or an interactive REPL when the
---- script slot is `-i`). Test harnesses shell out through the lde binary as
---- their Lua interpreter, and depend on the chaining semantics — a prelude
---- chunk (e.g. luacov's runner) must run before the script *in the same
---- state*, and the script must see a rebuilt arg table (arg[0] = script,
---- arg[1..] = its args), matching stock `lua -e ... script args`.
+--- Test harnesses shell out through the lde binary as their Lua interpreter and depend on the chaining semantics: a prelude `-e` chunk (e.g. luacov's runner) runs before the script *in the same state*, with a rebuilt arg table (arg[0] = script).
 ---@param args string[] # the command line after `--lua`
 ---@param opts lde.ExecuteOptions?
 ---@return boolean ok
@@ -441,7 +397,6 @@ end
 local function executeLuaCLI(args, opts)
 	opts = opts or {}
 
-	-- Parse `-e <code>` chunks at the front, then an optional script.
 	const eChunks = {}
 	local i = 1
 	while args[i] == "-e" do
@@ -462,8 +417,6 @@ local function executeLuaCLI(args, opts)
 		return false, "no script or -e chunk given after --lua"
 	end
 
-	-- arg[0] = the script path (real Lua semantics); -e chunks see the same
-	-- table the script would.
 	scriptArgs[0] = script or "-e"
 	local state, _, cleanup = createState({
 		args = scriptArgs,

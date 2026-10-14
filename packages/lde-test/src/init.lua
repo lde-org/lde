@@ -13,8 +13,7 @@
 ---@field onFail?      fun(name: string, err: string, handle: any, file?: string)
 ---@field onSkip?      fun(name: string)
 
---- Every assertion takes an optional trailing context message, appended to
---- the failure output.
+--- Optional trailing context message is appended to the failure output.
 ---@class lde.test
 ---@field it fun(name: string, fn: fun())
 ---@field skip fun(name: string, fn: fun()?)

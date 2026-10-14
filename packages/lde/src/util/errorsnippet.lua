@@ -1,7 +1,4 @@
--- Renders Lua errors the way test failures are shown: a clean "file:line:
--- message" line plus a highlighted source snippet with a caret under the
--- failing line, when the source can be located. Shared by `lde test`, `lde
--- run`, and `lde x`.
+-- Renders Lua errors test-failure style; shared by `lde test`/`run`/`x`.
 const ansi = require("ansi")
 const fs = require("fs")
 local path = require("path")
@@ -9,7 +6,6 @@ const highlight = require("readline.highlight")
 
 const errorsnippet = {}
 
--- Lines of context shown above and below the failing line.
 const CONTEXT = 2
 
 -- Split source text into lines (dropping the empty entry left by a final newline).
@@ -43,8 +39,7 @@ const ASSERT_NAMES = {
 	"includes", "truthy", "falsy", "greater", "less", "match", "equal",
 }
 
---- Search a line for the assertion call (or a variable named in the error
---- message) so the caret points at what actually failed.
+--- Finds the failing assertion call, or the variable named in the error message.
 ---@param line string
 ---@param msg string?
 ---@return number col, number len
@@ -66,7 +61,6 @@ local function findCaretCol(line, msg)
 		end
 	end
 
-	-- Failing assertion call, e.g. `test.deepEqual(a, b)`.
 	for _, name in ipairs(ASSERT_NAMES) do
 		local i = 1
 		while i <= #line do
@@ -85,8 +79,7 @@ local function findCaretCol(line, msg)
 		end
 	end
 
-	-- A variable/field called out in a runtime error, e.g.
-	-- `attempt to index a nil value (local 'x')`.
+	-- The quoted variable named by a runtime error, e.g. (local 'x').
 	if msg then
 		const var = msg:match("^.*'([^']+)'")
 		if var then
@@ -95,7 +88,6 @@ local function findCaretCol(line, msg)
 		end
 	end
 
-	-- Fallback: start of the statement.
 	local first = line:find("%S")
 	return first or 1, 1
 end
@@ -109,10 +101,7 @@ local function makeRelative(packageDir, msg)
 	return (string.gsub(msg, prefix, ""))
 end
 
---- Whether `s` starts with a `<file>:<line>: ` source position. A path with
---- spaces only counts when it carries a separator, so a loader frame followed by
---- a message like "bad argument #1 to 'x' (number:2: expected)" is not mistaken
---- for one.
+--- True when `s` starts with `<file>:<line>: `; a path with spaces only counts when it carries a separator, so a loader frame isn't mistaken for one.
 ---@param s string
 ---@return boolean
 local function isLocationStart(s)
@@ -120,15 +109,7 @@ local function isLocationStart(s)
 	return s:match("^%S*[/\\].-:%d+: ") ~= nil
 end
 
---- Strip wrappers that prefix the real source position so the renderer can find
---- the file on disk. Two shapes occur, both from loading through lua-sys:
----
----   [string "lua-sys"]:459: /p/init.lua:3: unexpected symbol near '<eof>'
----   error loading module 'x' from file '/p/x.lua':
----       /p/x.lua:3: unexpected symbol near '<eof>'
----
---- A loader frame whose innermost source is an eval chunk (`[string "-e"]`) is
---- left alone: that frame *is* the position.
+--- Strip the lua-sys loader/searcher frames that prefix the real position, so the renderer finds the file on disk; an eval-chunk frame *is* the position, so it is left alone.
 ---@param msg string
 local function stripNestedFrames(msg)
 	-- Chunk-loader frames nest innermost-last.
@@ -149,14 +130,10 @@ end
 ---@return string msg
 local function parseError(err)
 	if type(err) ~= "string" then
-		-- Non-string errors (an lde.Error table raised by lde.error.raise, a
-		-- raw table, ...) would make the :match calls below raise a confusing
-		-- "attempt to call method 'match' (a nil value)" instead of the real
-		-- failure. Render their message; lde.Error.__tostring is the message.
+		-- Non-string errors (an lde.Error table, a raw table, ...) would make the :match calls below raise; tostring gives the message.
 		err = tostring(err)
 	end
-	-- Compile errors: strip the "Failed to compile <path>:" wrapper and prefer
-	-- the compiler's "path:line:col: msg" position.
+	-- Compile errors: strip the "Failed to compile <path>:" wrapper and prefer the compiler's "path:line:col: msg" position.
 	const compileFile, compileErr = err:match("^Failed to compile (.-):\n(.*)$")
 	if compileFile then
 		local file, line, col, msg = compileErr:match("^(.-):(%d+):(%d+): (.*)$")
@@ -164,29 +141,23 @@ local function parseError(err)
 			return path.normalize(file), tonumber(line), tonumber(col), msg
 		end
 
-		-- Moonscript reports the line only:
-		--   Failed to parse:
-		--    [N] >>    <source line>
+		-- Moonscript reports the line only, as "[N]".
 		const mLine = compileErr:match("%[(%d+)%]")
 		if mLine then
 			return path.normalize(compileFile), tonumber(mLine), nil, (compileErr:match("^([^\n]*)"))
 		end
 
-		-- Unrecognized compiler error (e.g. Moonscript's format): parse the
-		-- unwrapped text below instead of the wrapper-prefixed original.
+		-- Unrecognized compiler format: parse the unwrapped text below.
 		err = compileErr
 	end
 
-	-- Loading through lua-sys wraps the real position in loader/searcher frames;
-	-- strip them so the file below resolves to something on disk.
+	-- Strip loader/searcher frames so the file below resolves on disk.
 	err = stripNestedFrames(err)
 
 	local file, line, msg = err:match("^(.*):(%d+): (.*)$")
 	if not file then return nil, nil, nil, err end
 
-	-- The outermost match may still contain nested loader frames; take the
-	-- last bracketed chunk name, which is the innermost source. Real files are
-	-- chunk-named by their path; eval chunks ("-e", "...") keep their brackets.
+	-- The last bracketed chunk name is the innermost source; real files are chunk-named by path, eval chunks ("-e", "...") keep their brackets.
 	local inner = file:match(".*%[string \"(.-)\"%]$")
 		or file:match(".*%[(.-)%]$")
 
@@ -197,10 +168,7 @@ local function parseError(err)
 	return file, tonumber(line), nil, msg
 end
 
---- Build the candidate files for a failure's path: the message file itself
---- (resolving LuaJIT's truncated short_src tail under pkgDir), the
---- pkgDir-joined form for relative paths, and the known file as a last
---- resort.
+--- Candidate paths for a failure's source, in lookup order (the first resolves LuaJIT's truncated short_src tail under pkgDir).
 ---@param pkgDir string
 ---@param msgFile string
 ---@param knownFile? string
@@ -231,13 +199,7 @@ local function sourceCandidates(pkgDir, msgFile, knownFile)
 	return candidates
 end
 
---- Resolve the file to read for a failure. The path in the error prefix uses
---- short_src, which LuaJIT truncates to "..." + the tail of the path for long
---- chunk names, so a required module deep under target/ arrives as
---- ".../target/tests/tl-components/page-tilt.lua". The tail keeps the end of
---- the real path, so it is searched under the package dir (stripping leading
---- fragments, since the cut can land mid-component) before falling back to the
---- file the caller knows it was executing.
+--- Resolve the file to read for a failure: LuaJIT truncates long short_src names to "..." + tail, so that tail is searched under pkgDir (stripping leading fragments, since the cut can land mid-component) before the known file.
 ---@param pkgDir string
 ---@param msgFile string
 ---@param knownFile? string
@@ -246,8 +208,7 @@ local function resolveSource(pkgDir, msgFile, knownFile)
 		if fs.exists(c) then
 			local src = fs.read(c)
 			if src then
-				-- Prefer the source tests/ copy over the built target/tests/
-				-- mirror (the error line belongs to the same file).
+				-- Prefer the source tests/ copy over the built target/tests/ mirror (same file).
 				const testsPrefix = path.join(pkgDir, "target", "tests") .. path.separator
 				if c:sub(1, #testsPrefix) == testsPrefix then
 					const srcTests = path.join(pkgDir, "tests", c:sub(#testsPrefix + 1))
@@ -261,9 +222,7 @@ local function resolveSource(pkgDir, msgFile, knownFile)
 	return nil, nil
 end
 
---- Resolve the failure's file to a real path on disk (see resolveSource),
---- without reading it — used to normalize a possibly-truncated path before a
---- caller remap matches against it.
+--- Like resolveSource but without reading; normalizes a possibly-truncated path before a caller remap matches against it.
 ---@param pkgDir string
 ---@param msgFile string
 ---@param knownFile? string
@@ -274,9 +233,7 @@ local function resolveFile(pkgDir, msgFile, knownFile)
 	return nil
 end
 
--- Print the gutter + highlighted code window for a failing line, with a caret
--- placed directly under the failing line. The caret line keeps a blank gutter
--- (a gap where the line number would be) so the arrows have vertical room.
+-- Print the code window for a failing line with a caret; the caret line keeps a blank gutter for vertical room.
 ---@param src string
 ---@param line number
 ---@param msg string?
@@ -291,9 +248,7 @@ local function printSnippet(src, line, msg)
 	const bar       = ansi.colorize("gray", "│")
 	const pad       = string.rep(" ", width)
 
-	-- Code lines with the gutter prefix: indent + right-aligned number +
-	-- separator + bar + separator. Every other line (bars, caret) reuses the
-	-- same prefix so the gutter stays horizontally aligned.
+	-- Every line (bars, caret) reuses the same prefix so the gutter stays aligned.
 	local prefix = indent .. pad .. " " .. bar .. " "
 	const gutter = {}
 	for ln = startLine, endLine do
@@ -304,8 +259,7 @@ local function printSnippet(src, line, msg)
 
 	local failing = expandTabs(lines[line])
 	local col, len = findCaretCol(failing, msg)
-	-- An '<eof>' syntax error has nothing after the statement: point the caret
-	-- at the end of the line instead of the first token.
+	-- An '<eof>' error has nothing after the statement: caret goes at line end.
 	if msg and msg:find("<eof>", 1, true) then
 		col, len = #failing + 1, 1
 	end
@@ -319,11 +273,7 @@ local function printSnippet(src, line, msg)
 	print(indent .. pad .. " " .. bar)
 end
 
---- Print a failure message, followed by a source snippet when the failing
---- line can be located. Loader frames are stripped first, and `remap` lets
---- the caller rewrite the error's file (e.g. target/<name>/X -> src/X).
---- Returns false (printing nothing) when the error has no file position, so
---- the caller can fall back to its own rendering.
+--- Print a failure message plus a source snippet; false (printing nothing) when the error has no file position, so the caller can fall back.
 ---@param pkgDir string
 ---@param err string
 ---@param knownFile? string # the file being executed when the error path can't be resolved
@@ -335,9 +285,7 @@ local function printError(pkgDir, err, knownFile, remap)
 		return false
 	end
 
-	-- Resolve the error's file to a real path first: LuaJIT truncates long
-	-- chunk names ("..." + tail), so a remap matching target/<name>/X must
-	-- see the full path to map it to src/X.
+	-- Resolve first: a remap matching target/<name>/X must see the full path, since LuaJIT truncates long chunk names to "..." + tail.
 	local resolved = resolveFile(pkgDir, mfile, knownFile)
 	if resolved then
 		knownFile = knownFile or mfile
@@ -352,16 +300,13 @@ local function printError(pkgDir, err, knownFile, remap)
 		end
 	end
 	local actual, src = resolveSource(pkgDir, mfile, knownFile)
-	-- If the fallback file doesn't contain the failing line, the line belongs to
-	-- a different (unresolvable, truncated) file — show the path as reported
-	-- instead of pairing a wrong path with the line.
+	-- If the fallback file lacks the failing line, show the reported path rather than pair a wrong path with the line.
 	local displayLine = mline
 	if src then
 		local lines = splitLines(src)
 		if mline > #lines then
 			if mline == #lines + 1 and #lines > 0 then
-				-- '<eof>' errors report one past the last line; highlight the
-				-- last line instead.
+				-- '<eof>' errors report one past the last line.
 				displayLine = #lines
 			else
 				actual, src = nil, nil
@@ -375,27 +320,13 @@ local function printError(pkgDir, err, knownFile, remap)
 	return true
 end
 
---- The lde version + platform line printed under run errors, mirroring how
---- Bun annotates its errors. Kept separate so it can be extended with trace
---- frames in between.
+--- The version line under run errors; separate so trace frames can slot in.
 local function versionFooter()
 	const ok, v = pcall(require, "lde.version")
 	return string.format("lde v%s", ok and v or "0.11.0")
 end
 
---- Render an error Bun-style for `lde run` / `lde x` / loose files:
----
----   2 | print(x.foo)
----     |       ^
----   error: attempt to index local 'x' (a nil value)
----       at /abs/src/init.lua:2:8
----
----   lde v0.11.0
----
---- The source is left-aligned (no indent), the position has a column, and the
---- "at <file>:<line>:<col>" line plus the footer leave room for a full stack
---- trace to slot in between. Returns false (printing nothing) when the error
---- has no file position, so the caller can fall back to its own rendering.
+--- Render a run/x error Bun-style (left-aligned source, caret, error line, at file:line:col, footer); false when the error has no position.
 ---@param pkgDir string
 ---@param err string
 ---@param knownFile? string # the file being executed when the error path can't be resolved
@@ -407,9 +338,7 @@ local function printRunError(pkgDir, err, knownFile, remap)
 		return false
 	end
 
-	-- Resolve the error's file to a real path first (see printError): the
-	-- error prefix carries LuaJIT's truncated short_src for long chunk names,
-	-- which would otherwise defeat the target/<name>/X -> src/X remap.
+	-- Resolve first (see printError): truncated short_src would defeat the target/<name>/X -> src/X remap.
 	local resolved = resolveFile(pkgDir, mfile, knownFile)
 	if resolved then
 		knownFile = knownFile or mfile
@@ -429,8 +358,7 @@ local function printRunError(pkgDir, err, knownFile, remap)
 		local lines = splitLines(src)
 		if mline > #lines then
 			if mline == #lines + 1 and #lines > 0 then
-				-- '<eof>' errors report one past the last line; highlight the
-				-- last line instead.
+				-- '<eof>' errors report one past the last line.
 				displayLine = #lines
 			else
 				actual, src = nil, nil
@@ -438,9 +366,7 @@ local function printRunError(pkgDir, err, knownFile, remap)
 		end
 	end
 
-	-- Column of the failing token. Compilers (Teal/Moonscript) report an exact
-	-- column; plain Lua errors carry none, so the caret position is the best
-	-- approximation.
+	-- Compilers report an exact column; plain Lua errors carry none, so the caret heuristic is used.
 	local col, caretLen = mcol or 1, 1
 	if actual and src then
 		local lines = splitLines(src)
@@ -451,14 +377,12 @@ local function printRunError(pkgDir, err, knownFile, remap)
 		if not mcol then
 			col, caretLen = findCaretCol(failing, rest)
 			if rest and rest:find("<eof>", 1, true) then
-				-- An '<eof>' error has nothing after the statement: point the
-				-- caret at the end of the line.
+				-- An '<eof>' error has nothing after the statement: caret at line end.
 				col, caretLen = #failing + 1, 1
 			end
 		end
 
 		for ln = startLine, displayLine do
-			-- Gray gutter (line number + bar), matching the test-failure renderer.
 			local num = string.format("%" .. width .. "d | ", ln)
 			print(ansi.colorize("gray", num) .. highlight(expandTabs(lines[ln])))
 		end

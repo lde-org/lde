@@ -18,18 +18,14 @@ local function registryRawBase()
 	return (REGISTRY_REPO:gsub("%.git$", ""):gsub("^https://github%.com/", "https://raw.githubusercontent.com/"))
 end
 
---- Converts an SSH git URL to its HTTPS form so the registry can clone it
---- (e.g. git@github.com:user/repo.git -> https://github.com/user/repo.git).
---- Passes URLs that aren't SSH through unchanged.
+-- The registry clones over HTTPS; non-SSH URLs pass through unchanged.
 ---@param url string
 ---@return string
 local function toHttpsUrl(url)
-	-- scp-like syntax: git@host:user/repo.git
 	const host, path = url:match("^git@([^:]+):(.+)$")
 	if host and path then
 		return "https://" .. host .. "/" .. path
 	end
-	-- ssh:// protocol: ssh://git@host/user/repo.git
 	const protoHost, protoPath = url:match("^ssh://git@([^/]+)/(.+)$")
 	if protoHost and protoPath then
 		return "https://" .. protoHost .. "/" .. protoPath
@@ -38,7 +34,6 @@ local function toHttpsUrl(url)
 	return url
 end
 
---- Fetches the live registry portfile for a package, if one exists.
 ---@param name string
 ---@return lde.Portfile? portfile # nil when the package has never been published
 ---@return string? err # transport/parse errors that prevented checking
@@ -88,8 +83,7 @@ local function publish(args)
 	const config = pkg:readConfig()
 	const pkgDir = pkg:getDir()
 
-	-- The registry enforces strict naming rules; fail here instead of letting
-	-- the browser submit an issue that the bot would reject.
+	-- The registry enforces strict naming rules; fail here instead of letting the bot reject the issue.
 	const nameErr = lde.global.validatePackageName(config.name)
 	if nameErr then
 		lde.error.raise("Cannot publish: " .. nameErr)
@@ -112,9 +106,7 @@ local function publish(args)
 
 	const branch = repo:currentBranch() or "master"
 
-	-- Preserve previously published version commits: fetch the live portfile
-	-- (if any) and merge its versions with the new one. All other fields are
-	-- rebuilt fresh from the current package below.
+	-- Preserve previously published version commits: merge the live portfile's versions with the new one; other fields are rebuilt from the current package.
 	const existing, fetchErr = fetchExistingPortfile(config.name)
 	if fetchErr then
 		ansi.printf("{yellow}Could not check registry for existing versions: %s", fetchErr)
@@ -138,9 +130,7 @@ local function publish(args)
 
 	const portfileJson = json.encode(portfile)
 	local filename = "packages/" .. config.name .. ".json"
-	-- Keep the "/" of namespaced names (packages/ns/pkg.json) unencoded so
-	-- GitHub's file-create page creates the nested directory instead of a
-	-- single file whose name contains a literal %2F.
+	-- Keep the "/" of namespaced names (packages/ns/pkg.json) unencoded so GitHub creates the nested directory, not a %2F-named file.
 	const encodedFilename = urlEncode(filename):gsub("%%2F", "/")
 	local url = REGISTRY_REPO .. "/new/master"
 		.. "?filename=" .. encodedFilename

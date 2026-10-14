@@ -1,23 +1,6 @@
---- Version parsing and range matching, used to resolve registry dependencies.
----
---- A version is `major.minor.patch`; a missing part means 0, so "0.1" is
---- 0.1.0. A *constraint* is either one version, or a range naming every
---- version it allows:
----
----   "1.2.3"      exactly 1.2.3
----   "1.2"        >=1.2.0 <1.3.0   (a partial version is a prefix range)
----   "1"          >=1.0.0 <2.0.0
----   "1.2.x"      >=1.2.0 <1.3.0
----   "^1.2.3"     >=1.2.3 <2.0.0   (caret: never the leftmost non-zero part)
----   "^0.2.3"     >=0.2.3 <0.3.0
----   "~1.2.3"     >=1.2.3 <1.3.0   ("~>" is a LuaRocks-spelled alias)
----   ">=1.2"      >=1.2.0
----   ">=1.2 <2"   >=1.2.0 <2.0.0   (space/comma joined comparators are AND)
----   "^1.2 || ^2" either            ("||" is OR)
----   "latest"     any version ("*" and "" too)
----
---- Prerelease and build suffixes ("1.2.3-rc.1", "1.2.3+deadbeef") never take
---- part in a comparison, matching how the rest of lde ignores them.
+--- Version parsing and range matching: an exact version, a prefix/range (`~`,
+--- `^`, `>=`/`<`, space/`,` = AND, `||` = OR) or "latest"/"*". Prerelease and
+--- build suffixes never take part in a comparison.
 const semver = {}
 
 ---@class semver.Version
@@ -25,8 +8,7 @@ const semver = {}
 ---@field minor number
 ---@field patch number
 
---- One comparator's bounds, normalized to "major.minor.patch" strings. A
---- missing bound is unbounded on that side.
+--- Bounds in "major.minor.patch"; a missing one is unbounded on that side.
 ---@class semver.Bound
 ---@field lower string?
 ---@field lowerInc boolean?
@@ -68,8 +50,6 @@ function semver.compare(v1, v2)
 	return a.patch - b.patch
 end
 
---- Returns true if candidate is a compatible update for current:
---- same major version, and candidate > current (minor or patch bump).
 ---@param current string
 ---@param candidate string
 function semver.isCompatibleUpdate(current, candidate)
@@ -78,18 +58,13 @@ function semver.isCompatibleUpdate(current, candidate)
 	return n.major == c.major and semver.compare(candidate, current) > 0
 end
 
---- True when the constraint pins one version rather than naming a range.
---- Callers use this to keep a mistyped pin an error instead of silently
---- resolving to a nearby version: "1.0.1" is exact (and must exist), while
---- "1.0" is a range (and resolves to the newest 1.0.x).
+--- Callers keep a mistyped pin an error instead of resolving to a nearby version.
 ---@param constraint string
 function semver.isExact(constraint)
 	return constraint:find("^%d+%.%d+%.%d+") ~= nil
 end
 
---- Parses one side of a comparator, capturing how many parts it spells out:
---- "1" is 1 part, "1.2" is 2, "1.2.3" is 3. Wildcards lower the count
---- ("1.x" is 1 part); a bare wildcard is 0 parts, i.e. unbounded.
+--- Wildcards lower the part count ("1.x" is 1); a bare wildcard is 0, i.e. unbounded.
 ---@param s string
 ---@return integer major
 ---@return integer minor
@@ -117,7 +92,6 @@ local function parsePartial(s)
 	return tonumber(major) or 0, tonumber(minor) or 0, tonumber(patch) or 0, parts
 end
 
---- Expands one comparator into the bounds it implies.
 ---@param op string # "", "=", ">", ">=", "<", "<=", "^", "~", "~>"
 ---@param spec string
 ---@return semver.Bound? # nil when the comparator isn't understood
@@ -128,8 +102,7 @@ local function expand(op, spec)
 
 	local lower = format(major, minor, patch)
 	const isExactVersion = parts == 3
-	-- The version that opens the next prefix: "0.1" -> "0.2.0". Only the
-	-- prefix forms below read it; an exact version has no next prefix.
+	-- The version opening the next prefix ("0.1" -> "0.2.0"), read only below.
 	local nextPrefix = format(major + 1, 0, 0)
 	if parts == 2 then
 		nextPrefix = format(major, minor + 1, 0)
@@ -138,7 +111,6 @@ local function expand(op, spec)
 	end
 
 	if op == "" or op == "=" then
-		-- A prefix means "any version in it"; an exact version means itself.
 		if isExactVersion then
 			return { lower = lower, lowerInc = true, upper = lower, upperInc = true }
 		end
@@ -160,14 +132,12 @@ local function expand(op, spec)
 	end
 
 	if op == "<=" then
-		-- "<=1.2" includes the whole 1.2 prefix.
 		if isExactVersion then return { upper = lower, upperInc = true } end
 		return { upper = nextPrefix, upperInc = false }
 	end
 
 	if op == "^" then
-		-- Caret allows any change that keeps the leftmost non-zero part,
-		-- so "0.x" is the wild west but "0.2.3" is restricted to 0.2.x.
+		-- Keeps the leftmost non-zero part: "0.x" is the wild west, "0.2.3" is limited to 0.2.x.
 		local upMajor, upMinor, upPatch
 		if major > 0 then
 			upMajor, upMinor, upPatch = major + 1, 0, 0
@@ -182,8 +152,7 @@ local function expand(op, spec)
 	end
 
 	if op == "~" or op == "~>" then
-		-- Tilde allows patch-only changes, or the whole major when only the
-		-- major is spelled out.
+		-- Patch-only changes, or the whole major when only the major is spelled out.
 		const upper = parts == 1 ? format(major + 1, 0, 0) : format(major, minor + 1, 0)
 		return { lower = lower, lowerInc = true, upper = upper, upperInc = false }
 	end
@@ -191,8 +160,7 @@ local function expand(op, spec)
 	return nil
 end
 
---- Splits a constraint into its OR alternatives, each a list of AND-ed
---- bounds. Returns nil when any comparator is malformed.
+--- OR alternatives, each a list of AND-ed bounds; nil when a comparator is malformed.
 ---@param constraint string
 local function compile(constraint)
 	local alternatives = {}
@@ -202,8 +170,7 @@ local function compile(constraint)
 	end
 
 	for alternative in constraint:gmatch("[^|]+") do
-		-- Comparators are separated by spaces and/or commas, and ">= 1.2"
-		-- writes the operator apart from its version, so glue those back.
+		-- ">= 1.2" writes the operator apart from its version, so glue it back.
 		alternative = alternative:gsub(",", " "):gsub("([<>=~^]+)%s+", "%1")
 		local bounds = {}
 		for token in alternative:gmatch("%S+") do
@@ -250,8 +217,7 @@ local function matches(version, alternatives)
 	return false
 end
 
---- True when `version` satisfies `constraint`. A malformed constraint
---- satisfies nothing, so a typo can never resolve to a surprise version.
+--- A malformed constraint satisfies nothing, so a typo never resolves to a surprise version.
 ---@param version string
 ---@param constraint string
 ---@return boolean
@@ -261,7 +227,6 @@ function semver.satisfies(version, constraint)
 	return matches(version, alternatives)
 end
 
---- The highest version satisfying `constraint`, or nil when none does.
 ---@param versions table<string, any>? # set keyed by version (a portfile's `versions`)
 ---@param constraint string
 ---@return string?

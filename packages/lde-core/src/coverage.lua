@@ -1,12 +1,4 @@
---- Line coverage collection for `lde test --coverage`.
----
---- A line hook is installed on each guest test state
---- (state:setHook(hook, "line")) and records every executed line in files
---- belonging to the package under test. Everything else the guest loads —
---- dependencies, the test framework, the guest standard library — is
---- filtered out by the in-scope directory prefixes. Hits are shared across
---- all test files (each file runs in its own fresh state) and merged into a
---- single report by Coverage:compute().
+--- Line coverage for `lde test --coverage`: a line hook on each guest test state records executed lines under the package's prefixes, and hits are shared across all test files (each runs in a fresh state) then merged by Coverage:compute().
 
 const fs   = require("fs")
 const path = require("path")
@@ -29,11 +21,7 @@ function Coverage.new(prefixes, baseDir)
 	return setmetatable({ prefixes = prefixes, baseDir = baseDir, hits = {} }, Coverage)
 end
 
---- Line hook handler; install via `state:setHook(hook, "line")`. Only "line"
---- events for files under one of the collector's prefixes are recorded.
---- `info.source` is "@<chunk path>" — the path require resolved from the
---- guest's package.path, i.e. the package's built output under target/<name>.
----
+--- `info.source` is "@<chunk path>" — the path require resolved from the guest's package.path, i.e. the package's built output under target/<name>.
 ---@param event string
 ---@param info  { source: string, currentline: number }
 function Coverage:hook(event, info)
@@ -41,11 +29,7 @@ function Coverage:hook(event, info)
 	local src = info.source
 	if not src or src:sub(1, 1) ~= "@" then return end
 	local file = src:sub(2)
-	-- Relative chunk names come from dofile/loadfile with relative paths;
-	-- resolve them against the package dir so the prefix filter can match.
-	-- Chunk names use "/" separators on every platform, so the joined path is
-	-- normalized to the native separator ("src/mod.lua" must equal the
-	-- backslash-joined key tests and the hook's own prefixes use).
+	-- Relative chunk names (dofile/loadfile) resolve against the package dir; normalize to the native separator since chunk names use "/" on every platform.
 	if not (file:sub(1, 1) == "/" or file:sub(1, 1) == "\\" or file:match("^%a:[/\\]")) then
 		if not self.baseDir then return end
 		file = (path.join(self.baseDir, file):gsub("\\", "/")):gsub("/", path.separator)
@@ -63,12 +47,7 @@ function Coverage:hook(event, info)
 	end
 end
 
---- Blank lines, comments, and the interiors of multi-line strings / block
---- comments never produce a line event, so they don't count toward the
---- executable total. Counting is done with a small Lua lexer that tracks long
---- bracket state (strings `[[...]]` / `[=[...]=]` and comments `--[[...]]`)
---- across lines, so string-literal-heavy modules (embedded driver chunks,
---- HTML templates) aren't penalized with lines that can never be covered.
+--- Skips non-executable lines using a lexer that tracks long-bracket state (strings/comments) across lines, so string-literal-heavy modules aren't penalized with lines that can never be covered.
 ---@param src string
 ---@param out table<number, true>? # receives the executable line numbers
 ---@return number
@@ -77,15 +56,13 @@ local function countExecutableLines(src, out)
 	local lineNo = 0
 	local pos = 1
 	const len = #src
-	-- Level of the long bracket (string or block comment) we're inside; nil
-	-- when not inside one. A level-0 opener can contain higher-level brackets.
+	-- Long-bracket nesting level we're inside (nil when none); a level-0 opener can contain higher-level brackets.
 	local level ---@type number?
 
 	---@param i number
 	---@return integer
 	local function charAt(i) return i <= len ? string.byte(src, i) : -1 end
 
-	-- Level of a long-bracket opener at i ("[" + n*"=" + "["), or nil.
 	---@param i number
 	---@return integer?
 	local function openerLevelAt(i)
@@ -107,7 +84,6 @@ local function countExecutableLines(src, out)
 			local i = pos
 			while i <= lineEnd do
 				if level then
-					-- Inside a long string/comment: find the matching closer.
 					local lit = "]" .. string.rep("=", level) .. "]"
 					const close = src:find(lit, i, true)
 					if not close or close > lineEnd then
@@ -128,7 +104,6 @@ local function countExecutableLines(src, out)
 						break -- line comment to end of line
 					end
 				elseif c == 34 or c == 39 then -- '"' or "'"
-					-- Regular string literal (cannot span lines).
 					local j = i + 1
 					while j <= lineEnd do
 						const sc = charAt(j)
@@ -170,9 +145,6 @@ local function countExecutableLines(src, out)
 	return n
 end
 
---- Compute per-file stats by reading each hit file's source. Files that can
---- no longer be read (deleted mid-run) are skipped.
----
 ---@return lde.CoverageFile[] files
 ---@return number totalExecutable
 ---@return number totalCovered

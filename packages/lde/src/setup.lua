@@ -9,7 +9,6 @@ const lde = require("lde-core")
 ---@param toolsDir string
 local function updatePath(ldeDir, toolsDir)
 	if jit.os == "Windows" then
-		-- Read current user PATH, append missing dirs, write back via PowerShell
 		const getCmd = '[Environment]::GetEnvironmentVariable("Path","User")'
 		const code, stdout =  process.exec("powershell", { "-NoProfile", "-Command", getCmd })
 		if code ~= 0 then
@@ -45,14 +44,10 @@ local function updatePath(ldeDir, toolsDir)
 		end
 		ansi.printf("{yellow}Restart your terminal for the change to take effect.")
 	else
-		-- Unix: patch the first shell rc file that already mentions the lde
-		-- home, or the first that exists among the standard candidates.
+		-- Unix: patch the first rc file that mentions the lde home, or the first that exists.
 		local home = os.getenv("HOME") or ""
 		const ldeHome = os.getenv("LDE_HOME")
-		-- When LDE_HOME is set, tools live there rather than under ~/.lde, so
-		-- the PATH entry references $LDE_HOME (dynamic, like $HOME below) and
-		-- rc detection keys on the LDE_HOME marker — repeated setups must not
-		-- append duplicate lines.
+		-- With LDE_HOME set, tools live there, so the entry references $LDE_HOME and rc detection keys on the LDE_HOME marker; repeated setups must not append duplicates.
 		const hasLdeHome = ldeHome ~= nil and ldeHome ~= ""
 		const homeRef = hasLdeHome ? "$LDE_HOME" : "$HOME/.lde"
 		local marker = hasLdeHome ? "LDE_HOME" : ".lde"
@@ -70,19 +65,15 @@ local function updatePath(ldeDir, toolsDir)
 			home .. "/.profile"
 		}
 
-		-- Find a file that already has an lde PATH entry and needs updating,
-		-- or the first rc file that exists (to append to).
+		-- Prefer an rc file that already has an lde entry; else the first that exists (to append to).
 		local target = nil
 		for _, rc in ipairs(rcFiles) do
 			if fs.exists(rc) then
 				local content = fs.read(rc) or ""
 				if content:find(marker, 1, true) then
-					-- Already has some lde entry, check if tools is missing
 					if not content:find(marker .. "/tools", 1, true) then
-						-- Replace the existing lde PATH line with the full one
 						local updated = content:gsub('export PATH="[^"]*' .. patternMarker .. '[^"]*"', pathLine)
 						if updated == content then
-							-- Line format didn't match the pattern; just append
 							updated = content .. "\n" .. pathLine .. "\n"
 						end
 						fs.write(rc, updated)
@@ -96,7 +87,6 @@ local function updatePath(ldeDir, toolsDir)
 			end
 		end
 
-		-- No file had an lde entry yet, append to the first existing rc (or create the default)
 		target = target or defaultRc
 		local content = fs.read(target) or ""
 		fs.write(target, content .. "\n# Added by lde\n" .. pathLine .. "\n")

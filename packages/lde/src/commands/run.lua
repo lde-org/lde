@@ -8,8 +8,7 @@ const errorsnippet = require("lde.util.errorsnippet")
 const lde = require("lde-core")
 const runtime = require("lde-core.runtime")
 
---- Print a run error with a Bun-style source snippet when the file can be
---- located; fall back to the clean error for errors without a file position.
+-- Falls back to the clean error when no file position can be located.
 ---@param err string
 ---@param pkgDir string
 ---@param knownFile? string # the file being executed
@@ -21,10 +20,7 @@ local function raiseRunError(err, pkgDir, knownFile, remap)
 	lde.error.raise(err)
 end
 
---- Resolve the entry point for `lde run [name]` and drive the in-process
---- --hot/--watch loop: the guest state runs in this process, and the driver
---- re-runs the entry point when watched files change (restarting the state
---- for --watch, patching package.loaded for --hot).
+-- --watch restarts the guest state; --hot patches package.loaded instead. Both re-run the entry point on change.
 ---@param pkg lde.Package?
 ---@param pkgErr string?
 ---@param name string?
@@ -48,8 +44,6 @@ local function runWithWatcher(pkg, pkgErr, name, scriptArgs, mode, jitDiag)
 		lde.watchrun.run({
 			mode = mode,
 			entry = entry,
-			-- No package to name it after: the script's own file name is what a
-			-- reader knows it by.
 			entryLabel = path.basename(entry),
 			args = args,
 			watchDirs = watchDirs,
@@ -77,8 +71,7 @@ local function runWithWatcher(pkg, pkgErr, name, scriptArgs, mode, jitDiag)
 			return
 		end
 
-		-- --watch can still re-run shell scripts (they're child processes, so
-		-- the in-process driver's state/hook machinery doesn't apply).
+		-- --watch can still re-run shell scripts: they're child processes, so the in-process driver's state/hook machinery doesn't apply.
 		local watchDir = pkg:getSrcDir()
 		const watcher = fs.watch(watchDir, function() end, { recursive = true })
 		if not watcher then
@@ -129,9 +122,7 @@ local function runWithWatcher(pkg, pkgErr, name, scriptArgs, mode, jitDiag)
 	lde.watchrun.run({
 		mode = mode,
 		entry = entry,
-		-- Editing src/init.lua re-runs the whole package: report it as the
-		-- package, not as a module (it has no require() path of its own). A
-		-- named entry file is reported by its file name instead.
+		-- Editing src/init.lua re-runs the whole package: report it as the package, not a module (it has no require() path).
 		entryLabel = name ? path.basename(entry) : config.name,
 		args = args,
 		watchDirs = { { dir = srcDir, recursive = true } },
@@ -140,8 +131,7 @@ local function runWithWatcher(pkg, pkgErr, name, scriptArgs, mode, jitDiag)
 		onError = function(err)
 			return errorsnippet.printRunError(pkg:getDir(), err, entry, remap)
 		end,
-		-- Rebuild before each hot reload so target/ picks up the change (the
-		-- stamp check makes this a no-op when nothing changed).
+		-- Rebuild before each hot reload so target/ picks up the change (the stamp check makes it a no-op when unchanged).
 		preReload = mode == "hot" ? function()
 			local ok, err = pcall(pkg.build, pkg)
 			if not ok then
@@ -172,8 +162,7 @@ local function run(args)
 	if not flamegraph and args:flag("flamegraph") then flamegraph = "profile.html" end
 	local profileJson = args:option("json")
 	if not profileJson and args:flag("json") then profileJson = "profile.json" end
-	-- JIT diagnostics (LuaJIT -jv style): report trace aborts — code that
-	-- could not be JIT-compiled — with source locations and reasons.
+	-- JIT diagnostics (LuaJIT -jv style): report trace aborts with source locations and reasons.
 	local jitDiag = args:flag("jit")
 
 	if (hot or watch) and (profile or flamegraph or profileJson) then
@@ -187,8 +176,7 @@ local function run(args)
 			name = args:pop()
 			scriptArgs = args:drain(dashPos)
 		else
-			-- -- was first: everything after it is a script arg (drain from 1,
-			-- not 0, which would leave a nil hole at index 1).
+			-- -- was first: drain from 1, not 0, which would leave a nil hole at index 1.
 			scriptArgs = args:drain(1)
 		end
 	else
@@ -232,8 +220,7 @@ local function run(args)
 			lde.error.raise(err or "Script exited with a non-zero exit code")
 		end
 	else
-		-- Map the built entry (target/<name>/X) back to its source (src/X) so
-		-- the snippet points at what the user wrote.
+		-- Map the built entry (target/<name>/X) back to its source (src/X) so the snippet points at what the user wrote.
 		local targetPrefix = pkg:getTargetDir() .. path.separator
 		local srcDir = pkg:getSrcDir()
 		local remap = function(file)

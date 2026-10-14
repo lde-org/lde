@@ -20,7 +20,6 @@
 		"luarocks": { "path": "../luarocks" },
 		"lde-registry": { "path": "../lde-registry" },
 		"archive": { "version": "^0.1.0" },
-		"socket": { "version": "^0.3.0" },
 		"lua-sys": { "version": "^0.1.2" }
 	}
 }

@@ -16,9 +16,7 @@ local function executePackage(pkg, scriptArgs, cwd)
 
 	const ok, result = pkg:runFile(nil, scriptArgs, nil, cwd)
 	if not ok then
-		-- Map the built entry (target/<name>/X) back to its source (src/X) so
-		-- the snippet points at what the user wrote; fall back to the clean
-		-- error when there is no file position.
+		-- Remap the built entry (target/<name>/X) to its source (src/X) so snippets point at what the user wrote.
 		const targetPrefix = pkg:getTargetDir() .. path.separator
 		local srcDir = pkg:getSrcDir()
 		const remap = function(file)
@@ -34,8 +32,7 @@ local function executePackage(pkg, scriptArgs, cwd)
 		lde.error.raise(result or "Script exited with a non-zero exit code")
 	end
 
-	-- A module (library) entry returns its table instead of running; exiting
-	-- 0 with no output reads as "broken", so say what happened.
+	-- A library entry returns its table instead of running; say so rather than exiting 0 silently.
 	if result ~= nil then
 		local name = pkg:getName()
 		ansi.note("'%s' returned a value instead of running — it looks like a library.", name)

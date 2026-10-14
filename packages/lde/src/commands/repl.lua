@@ -16,9 +16,7 @@ end
 
 ---@param _args clap.Args
 local function repl(_args)
-	-- Piped/redirected stdin (scripts, `echo ... | lde repl`): behave like a
-	-- stdin script — no banner and no prompts, just evaluate the lines. The
-	-- banner and prompts are interactive-terminal furniture.
+	-- Piped/redirected stdin behaves like a stdin script: no banner or prompts (those are interactive furniture).
 	if prompt.interactive then
 		ansi.printf("{blue}{bold}lde repl{reset} — LuaJIT interactive shell")
 		ansi.printf("{gray}Type {bold}exit(){reset}{gray} or press Ctrl+C to quit.\n")
@@ -31,8 +29,7 @@ local function repl(_args)
 	const pkg = lde.Package.open()
 	local state, g, cleanup
 	if pkg then
-		-- Build + install + guest state with the package's target/ on the
-		-- module paths — the same setup lde run uses.
+		-- Build + install + guest state with the package's target/ on the module paths, same as `lde run`.
 		state, g, cleanup = pkg:createState({ args = { [0] = "repl" }, globals = globals })
 
 		if prompt.interactive then
@@ -63,7 +60,6 @@ local function repl(_args)
 
 		const guest = isGuestValue(val)
 		if guest and val._type ~= "table" then
-			-- guest thread/userdata — nothing to walk
 			return ansi.format("{yellow}%s", tostring(val))
 		end
 		if not guest and seen[val] then
@@ -89,11 +85,7 @@ local function repl(_args)
 		return "{\n" .. table.concat(items, ",\n") .. "\n" .. pad .. "}"
 	end
 
-	-- Desugar local and const declarations so names persist in g across lines:
-	--   `local function name(...)` → `function name(...)` (lands in the chunk env)
-	--   `local x, y = ...`         → `x, y = ...`
-	--   `const x, y = ...`         → `x, y = ...` (const is a soft keyword, so a
-	--                            global keeps the value across lines)
+	-- Desugar local/const so names persist in g across lines (const is a soft keyword, so a global keeps the value).
 	---@param s string
 	local function delocal(s)
 		s = s:gsub("^%s*local%s+function%s+([%a_][%w_]*)%s*%(", "function %1(")
@@ -162,8 +154,7 @@ local function repl(_args)
 			local p = ansi.format(buffer ~= "" and "{gray}...{reset} " or "{blue}>{reset} ")
 			line = readline.read(p, highlight, complete)
 		else
-			-- Piped/redirected stdin: no prompts (they would pollute the
-			-- output of `echo ... | lde repl` / `lde repl < script.lua`).
+			-- No prompts: they would pollute `echo ... | lde repl` / `lde repl < script.lua` output.
 			line = io.read()
 		end
 
@@ -179,7 +170,6 @@ local function repl(_args)
 			if result ~= nil then ansi.printf("{gray}={reset} %s", pretty(result)) end
 			buffer = ""
 		elseif tostring(result):find("<eof>") then
-			-- incomplete, keep buffering
 		else
 			ansi.printf("{red}%s", tostring(result))
 			buffer = ""

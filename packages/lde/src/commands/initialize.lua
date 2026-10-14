@@ -8,8 +8,7 @@ const prompt = require("lde.util.prompt")
 ---@param args clap.Args
 local function init(args)
 	const opts = prompt.scaffoldOptions(args)
-	-- Consume the --name option before popping the positional so
-	-- `lde init --name foo [dir]` parses the same as `lde init [dir] --name foo`.
+	-- Consume the --name option before popping the positional so both orders of `lde init` parse the same.
 	const nameFlag = args:option("name")
 
 	local dir = args:pop() or env.cwd()

@@ -5,7 +5,6 @@ const M = {}
 --- Build a tree from { "outerFrame;...;innerFrame" = count } folded stacks.
 ---@param stacks table<string, number>
 ---@param rootName string?
---- Build a tree from { "outerFrame;...;innerFrame" = count } folded stacks.
 function M.buildTree(stacks, rootName)
 	local root = { n = rootName or "root", v = 0, c = {} }
 
@@ -29,9 +28,7 @@ function M.buildTree(stacks, rootName)
 	return root
 end
 
---- Minimal JSON encoder for the tree (only needs string keys n, integer v, array c).
 ---@param s string
---- Minimal JSON encoder for the tree (only needs string keys n, integer v, array c).
 local function jsonStr(s)
 	return '"' .. s:gsub('\\', '\\\\'):gsub('"', '\\"'):gsub('\n', '\\n') .. '"'
 end
@@ -181,7 +178,6 @@ resize();
 </body>
 </html>]==]
 
---- Write a self-contained flamegraph HTML file.
 ---@param stacks table<string, number> folded stack strings → sample count
 ---@param total number total sample count
 ---@param intervalMs number sampling interval in ms

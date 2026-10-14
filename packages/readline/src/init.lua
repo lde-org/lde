@@ -32,9 +32,7 @@ function readline.edit(opts)
 	local saved = ""
 	local ghost
 
-	-- The prompt, the line as it is coloured, and what is being suggested after the cursor, then the
-	-- cursor is put back where it belongs: the whole line is rewritten because a highlight changes
-	-- what came before the cursor as well as what follows it.
+	-- Whole line rewritten because a highlight changes text before the cursor too.
 	local function redraw()
 		ghost = (complete and pos == #line) ? complete(line, pos) : nil
 		const suffix = ghost ? ("\27[2m" .. ghost .. "\27[0m") : ""

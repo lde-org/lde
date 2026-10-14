@@ -1,3 +1,2 @@
--- Re-export of the shared syntax highlighter (moved into the ansi package so
--- both the REPL/error snippets and lde-core diagnostics can use it).
+-- Re-export so callers can require either name.
 return require("ansi.highlight")

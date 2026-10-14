@@ -101,7 +101,7 @@ test.it("compile: the LuaJIT dist cache defaults to ~/.lde, not the temp dir", f
 
 	local home = env.var("HOME") or env.var("USERPROFILE")
 	test.truthy(home, "tests need HOME or USERPROFILE set")
-	test.equal(cacheDir, path.join(home, ".lde", "luajit"), "the temp dir is wiped on reboot")
+	test.equal(cacheDir, path.join(assert(home), ".lde", "luajit"), "the temp dir is wiped on reboot")
 end)
 
 test.it("compile: native C module is loadable in compiled binary", function()

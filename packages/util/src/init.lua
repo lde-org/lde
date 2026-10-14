@@ -31,14 +31,11 @@ function util.dedent(str)
 	return result:match("^(.-)%s*$") or result
 end
 
----Compute a 64-bit rapidhash of a string, returned as a 16-char lowercase hex string.
 ---@param s string
 function util.hash(s)
 	return rapidhash.hex(s)
 end
 
---- Returns a lazily evaluated value: `factory()` runs on the first call,
---- every call after that returns the cached value.
 ---@generic T
 ---@param factory fun(): T
 ---@return fun(): T

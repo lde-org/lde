@@ -5,7 +5,6 @@ local path = require("path")
 const lde = require("lde-core")
 const gitShorthand = require("lde.util.gitShorthand")
 
---- Resolves a rocks: name to a Package
 ---@param name string e.g. "rocks:busted@2.0"
 ---@param isOffline boolean?
 ---@return lde.Package?, string?
@@ -17,7 +16,6 @@ local function resolveRocks(name, isOffline)
 	return pkg, err
 end
 
---- Resolves --git, --path, or a registry/rocks: name to a Package.
 --- Returns pkg, err, extraName (the popped sub-package name for git/path)
 ---@param args clap.Args
 ---@param parsed { git: string?, path: string?, isOffline: boolean? }? # Pre-consumed --git/--path/--isOffline values (the install command peeks them to decide its project-install branch)
@@ -52,11 +50,7 @@ local function resolvePackage(args, parsed)
 		local name = args:pop()
 		if not name then return nil, "no name" end
 
-		-- Git shorthand (gh:owner/repo, gh:<pkg>@owner/repo, github:...,
-		-- codeberg:..., gitlab:...): behaves like `--git <url> [package-name]`.
-		-- The <pkg>@ form carries the sub-package name in the shorthand itself;
-		-- otherwise an optional positional is popped (a literal "--" is the arg
-		-- separator, not a package name).
+		-- Git shorthand behaves like `--git <url> [package-name]`; the <pkg>@ form carries the name, else an optional positional is popped (a literal "--" is the separator, not a name).
 		const shorthandUrl, subPackage, serr = gitShorthand.expand(name)
 		if serr then return nil, serr end
 		if shorthandUrl then
@@ -75,8 +69,7 @@ local function resolvePackage(args, parsed)
 		local packageName, versionStr = name:match("^([^@]+)@(.+)$")
 		if not packageName then packageName = name end
 
-		-- @latest always re-checks for the newest version, which needs the
-		-- network — incompatible with --offline.
+		-- @latest needs the network, so it is incompatible with --offline.
 		if versionStr == "latest" and isOffline then
 			return nil, "Cannot resolve '@latest' offline (it always checks for the newest version)"
 		end

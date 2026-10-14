@@ -1,8 +1,5 @@
--- Hidden completion backend (`lde __complete <words...>`), invoked by the
--- scripts emitted from `lde completion`. The words are the tokens typed so
--- far, with the (possibly partial) current word last; one candidate per line
--- is printed to stdout. No output means "no suggestions" — the shell scripts
--- fall back to file completion.
+-- Hidden `lde __complete <words...>` backend for the `lde completion` shell scripts:
+-- one candidate per line, and no output means "fall back to file completion".
 
 const usage = require("lde.commands.usage")
 const fs = require("fs")
@@ -27,10 +24,7 @@ local function emit(words, cur)
 	end
 end
 
---- List files and directories matching a partial path, for positions where a
---- Lua file can be passed (`lde <file>`, `lde run <file>`). Directories get a
---- trailing slash so the shell can drill into them. Returns nothing when the
---- directory cannot be read.
+--- Files/dirs matching a partial path; dirs get a trailing slash to drill in.
 ---@param cur string
 ---@return string[]
 local function fileCandidates(cur)
@@ -52,9 +46,7 @@ local function fileCandidates(cur)
 	return out
 end
 
---- Script names defined in the current directory's manifest (lde.json, or the
---- legacy lpm.json, mirroring configPathAtDir's preference). Returns nil when
---- there is no readable manifest.
+--- Manifest script names (lpm.json preferred over lde.json, mirroring configPathAtDir).
 ---@return string[]?
 local function scriptNames()
 	const content = fs.read("lpm.json") or fs.read("lde.json")
@@ -71,7 +63,6 @@ local function scriptNames()
 	return out
 end
 
---- Deduplicate and sort candidates, then emit those matching the current word.
 ---@param words string[]
 ---@param cur string
 local function emitUnique(words, cur)
@@ -100,17 +91,15 @@ local function complete(args)
 	const n = #words
 	const cur = n > 0 and words[n] or ""
 
-	-- `--` (as its own word) starts the positional args: nothing to complete.
 	for i = 1, n - 1 do
 		if words[i] == "--" then return end
 	end
 
-	-- A bare `--` is the separator; `--flag=value` values are left to the shell.
+	-- `--flag=value` values are left to the shell.
 	if cur == "--" or (cur:sub(1, 1) == "-" and cur:find("=", 1, true)) then
 		return
 	end
 
-	-- Value position of a flag with known values (e.g. --target): offer them.
 	if n >= 2 and usage.flagValues then
 		local values = usage.flagValues[words[n - 1]]
 		if values then
@@ -119,18 +108,13 @@ local function complete(args)
 		end
 	end
 
-	-- The value position of a value-taking flag: no suggestions.
 	if n >= 2 and isValueFlag(words[n - 1]) then return end
 
 	if n <= 1 then
-		-- First word: command names, or global flags when typing an option.
 		if cur:sub(1, 1) == "-" then
 			emit(allFlagNames(), cur)
 		else
-			-- Commands and the project's scripts (`lde dev`); files only when
-			-- neither matches, so an empty line stays command/script-only
-			-- without file noise. The first positional can also be a loose Lua
-			-- file (`lde ./file.lua`).
+			-- Files only when nothing else matches; a loose Lua file (`lde ./file.lua`) is also valid.
 			local matched = false
 			local seen = {}
 			for _, w in ipairs(usage.completionNames) do
@@ -157,8 +141,6 @@ local function complete(args)
 		return
 	end
 
-	-- Find the command: the first word that isn't an option, skipping the
-	-- values of value-taking options (e.g. `-C <dir> run ...`).
 	local command
 	local skipValue = false
 	for i = 1, n - 1 do
@@ -173,7 +155,6 @@ local function complete(args)
 		end
 	end
 
-	-- `help`/`completion` take a command name as their positional argument.
 	if command == "help" or command == "completion" then
 		if cur:sub(1, 1) ~= "-" then
 			emit(usage.completionNames, cur)
@@ -193,9 +174,7 @@ local function complete(args)
 		table.sort(flags)
 		emit(flags, cur)
 	end
-	-- Positional arguments: `run` takes an entry point, a script name, or a
-	-- Lua file path, so offer scripts and files there; other commands get
-	-- none and the shells fall back to file completion.
+	-- `run` accepts a script name or Lua file; other commands use the shells' file completion.
 	if command == "run" and cur:sub(1, 1) ~= "-" then
 		local words = {}
 		for _, w in ipairs(scriptNames() or {}) do words[#words + 1] = w end

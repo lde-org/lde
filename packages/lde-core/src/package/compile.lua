@@ -6,7 +6,6 @@ const features = require("lde-core.package.features")
 
 const lde = require("lde-core")
 
--- Build timings collection (no-op while inactive; no dependency on lde-core).
 const timings = require("lde-core.util.timings")
 
 const bundlePackage = require("lde-core.package.bundle")
@@ -25,8 +24,7 @@ end
 ---@param package lde.Package
 ---@param targetName? string # release target to cross-compile for (e.g. "windows-x86-64"); nil = native
 local function compilePackage(package, targetName)
-	-- Resolve the target up front so a typo'd --target fails before any
-	-- build/install work. A target matching the host is a native build.
+	-- Resolved up front so a typo'd --target fails before any build/install work; a target matching the host is a native build.
 	local target
 	if targetName then
 		const resolved, terr = sea.getTarget(targetName)
@@ -39,13 +37,9 @@ local function compilePackage(package, targetName)
 		end
 	end
 
-	-- The whole pipeline — build.lua (via build:cc()/build.target and the CC
-	-- env var), rockspec native modules, and sea.compile — reads the current
-	-- target so native dependencies are built for the target, not the host.
+	-- The whole pipeline (build.lua, rockspec native modules, sea.compile) reads the current target so native dependencies are built for the target, not the host.
 	lde.global.setTarget(target)
 
-	-- Native shared-library extensions of the target (cross targets build
-	-- .dll/.dylib/.so files of their own platform, not the host's).
 	local nativeExts
 	if target then
 		if target.platform == "windows" then
@@ -67,20 +61,13 @@ local function compilePackage(package, targetName)
 		if rootBuild then timings.finish(rootBuild) end
 		package:installDependencies()
 
-		-- Raw bytecode: sea embeds the per-module bytecode as a raw blob (.incbin)
-		-- and registers lazy preload loaders over it, so startup only deserializes
-		-- the modules a command actually requires.
+		-- Raw bytecode: sea embeds it as a blob and registers lazy preload loaders, so startup only deserializes the modules a command actually requires.
 		const bundleHandle = timings.active()
 			? timings.start("bundle " .. package:getName(), "bundle") : nil
 		local source = bundlePackage(package, { raw = true })
 		if bundleHandle then timings.finish(bundleHandle) end
 
-		-- sea.compile throws a raw string when the main module is missing; check
-		-- first so a broken project (no src/init.lua, src as a file, ...) fails
-		-- cleanly instead of crashing. The entry is the one `lde run` executes:
-		-- the manifest's `bin` when set, src/init.lua otherwise. Packages named
-		-- "tests" are the one case where the entry dir is skipped by the
-		-- test-fixture filter, hence the name comparison in bundlePackage.
+		-- sea.compile throws a raw string when the main module is missing; check first so a broken project fails cleanly. Packages named "tests" skip the entry dir via the test-fixture filter, hence the name comparison in bundlePackage.
 		local mainName = source.name
 		local hasMain = false
 		for _, m in ipairs(source.modules) do
@@ -95,16 +82,13 @@ local function compilePackage(package, targetName)
 		local sharedLibs = {}
 		local modulesDir = package:getModulesDir()
 
-		-- The same feature globs the Lua half of the bundle uses, so a feature
-		-- can drop a native backend as well as the Lua that drives it.
+		-- Same feature globs as the Lua half of the bundle, so a feature can drop a native backend as well as the Lua driving it.
 		const excludesFor = features.resolverFor(package)
 
 		for entry in fs.readdir(modulesDir) do
 			local p = path.join(modulesDir, entry.name)
 			if entry.name == "tests" and package:getName() ~= "tests" then
-				-- lde test exposes the package's tests/ dir as target/tests; test
-				-- code must never end up embedded in the executable. A package
-				-- *named* "tests" has its own module dir at target/tests — keep it.
+				-- Test code must never end up embedded; a package *named* "tests" has its own module dir at target/tests, so keep it.
 				goto continue
 			end
 
@@ -137,9 +121,7 @@ local function compilePackage(package, targetName)
 			::continue::
 		end
 
-		-- sea.compile raises plain strings (unknown target, missing cross
-		-- toolchain, compiler failure, dist download); they are surfaced as
-		-- clean user-facing errors below, not "lde crashed".
+		-- sea.compile raises plain strings, surfaced as clean user-facing errors below, not "lde crashed".
 		const seaHandle = timings.active() ? timings.start("sea compile", "compile") : nil
 		const executable = sea.compile(mainName, source, sharedLibs, lde.global.getCCBin(), targetName)
 		if seaHandle then timings.finish(seaHandle) end
@@ -149,8 +131,7 @@ local function compilePackage(package, targetName)
 
 	if not ok then
 		local msg = tostring(result)
-		-- pcall prefixes the error with its chunk position; strip that like the
-		-- test framework does so the message stays clean.
+		-- pcall prefixes the error with its chunk position; strip it like the test framework does.
 		msg = (msg:gsub('^%[string "[^"]*"%]:%d+: ', "", 1))
 		msg = (msg:gsub("^@[^:]+:%d+: ", "", 1))
 		lde.error.raise(msg)

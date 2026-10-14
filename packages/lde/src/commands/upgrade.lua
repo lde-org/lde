@@ -14,9 +14,7 @@ const releasesUrl = "https://api.github.com/repos/lde-org/lde/releases"
 local arch = jit.arch == "arm64" and "aarch64" or "x86-64"
 const isAndroid = env.var("ANDROID_ROOT") ~= nil
 
--- musl systems (Alpine and other musl distros) ship the musl build under a
--- -musl artifact name. Detect musl by its dynamic loader rather than ldd:
--- musl's ldd has no --version, so a ldd-based probe can't tell it from glibc.
+-- Detect musl by its dynamic loader: musl's ldd has no --version, so a ldd probe can't tell it from glibc.
 local libc = ""
 if jit.os == "Linux" and not isAndroid then
 	const code = process.exec("sh", { "-c", "ls /lib/ld-musl-* >/dev/null 2>&1" })
@@ -30,7 +28,6 @@ const artifactNames = {
 	BSD = "lde-freebsd-" .. arch .. ".zip"
 }
 
--- Name of the binary inside the release archive.
 const innerNames = {
 	Windows = "lde-windows-" .. arch .. ".exe",
 	Linux = isAndroid ? "lde-android-" .. arch : "lde-linux-" .. arch .. libc,
@@ -126,7 +123,6 @@ local function upgrade(args)
 
 	const bar = ansi.progress("Downloading " .. artifactName, { indent = false })
 
-	-- Download the archive directly to file
 	const dlOk, dlErr = curl.download(downloadUrl, tempZipLocation, {
 		url = downloadUrl,
 		progress = function(dltotal, dlnow)
@@ -150,7 +146,6 @@ local function upgrade(args)
 		return
 	end
 
-	-- Extract the binary from the archive
 	const extractOk, extractErr = Archive.new(tempZipLocation):extract(tempExtractDir)
 	if not extractOk then
 		fs.delete(tempZipLocation)
@@ -188,10 +183,8 @@ local function upgrade(args)
 		return
 	end
 
-	-- Move new executable to original location
 	const moveNewSuccess, moveNewErr = fs.move(tempNewLocation, binLocation)
 	if not moveNewSuccess then
-		-- Try to restore the old binary
 		fs.move(tempOldLocation, binLocation)
 		fs.delete(tempNewLocation)
 		ansi.printf("{red}Failed to install new binary: %s", moveNewErr)
@@ -202,7 +195,6 @@ local function upgrade(args)
 		fs.chmod(binLocation, tonumber("755", 8))
 	end
 
-	-- Clean up old binary
 	fs.delete(tempOldLocation)
 
 	if shouldNightly then

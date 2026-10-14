@@ -228,8 +228,7 @@ end)
 
 test.it("getUserDir defaults to ~/.lde without LDE_HOME", function()
 	env.set("LDE_HOME", nil)
-	local home = env.var("HOME") or env.var("USERPROFILE")
-	test.truthy(home, "tests need HOME or USERPROFILE set")
+	local home = assert(env.var("HOME") or env.var("USERPROFILE"), "tests need HOME or USERPROFILE set")
 	test.equal(global.getUserDir(), path.join(home, ".lde"))
 	test.equal(global.getDir(), path.join(home, ".lde"), "getDir must default to the user dir")
 end)
@@ -246,7 +245,7 @@ end)
 
 test.it("an empty LDE_HOME is ignored", function()
 	env.set("LDE_HOME", "")
-	local home = env.var("HOME") or env.var("USERPROFILE")
+	local home = assert(env.var("HOME") or env.var("USERPROFILE"), "tests need HOME or USERPROFILE set")
 	test.equal(global.getUserDir(), path.join(home, ".lde"))
 end)
 

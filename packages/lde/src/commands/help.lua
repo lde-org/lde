@@ -7,11 +7,9 @@ const suggest = require("lde.util.suggest")
 local ok, currentVersion = pcall(require, "lde.version")
 currentVersion = ok and currentVersion or "0.11.0"
 
--- lde-core is only needed to raise the unknown-command error; load it lazily
--- so the fast help paths (bare `lde`, `lde --help`) never pay for it.
+-- Lazy-load lde-core: it is only needed to raise the unknown-command error, so fast help paths skip it.
 const lde = util.lazy(|| -> require("lde-core"))
 
---- Render a table of options as aligned rows: "  --flag <arg>  desc".
 ---@param opts table<string, { arg?: string, desc: string }>
 local function printOptions(opts)
 	local rows = {}
@@ -31,7 +29,6 @@ local function printOptions(opts)
 	end
 end
 
---- Print detailed help for a single command (`lde help <command>`).
 ---@param name string
 local function forCommand(name)
 	const canonical = usage.aliases[name] or name
@@ -122,9 +119,7 @@ local function main(args)
 	ansi.printf("{bold}Usage:{reset} lde <command> {magenta}[options]")
 	ansi.printf("\n{bold}Commands:{reset}")
 
-	-- Column widths fit the longest command/example so the table stays
-	-- compact; %-Ns pads the plain text, so the escape overhead never shifts
-	-- the columns (colored and plain output line up identically).
+	-- Widths fit the longest command/example; %-Ns pads plain text, so escape overhead never shifts the columns.
 	local cmdW, exW = 0, 0
 	for _, c in ipairs(commands) do
 		if c.cmd then
@@ -135,18 +130,15 @@ local function main(args)
 
 	exW += 1
 
-	-- Breathing room between the command and example columns. The footer
-	-- links pad their labels to the same total width so they line up with
-	-- the descriptions.
+	-- The footer links pad their labels to cmdW+gap+exW so they line up with the descriptions.
 	const gap = 2
 	const linkW = cmdW + gap + exW
 
 	for _, command in ipairs(commands) do
-		if not command.cmd then -- Separator
+		if not command.cmd then
 			print("")
 		else
-			-- The {reset} after each cell keeps the example's color from
-			-- bleeding into the description.
+			-- The {reset} after each cell keeps the example's color off the description.
 			ansi.printf("  {bold}{" .. command.color .. "}%-" .. cmdW .. "s{reset}" .. string.rep(" ", gap) .. "{" .. (command.exColor or "gray") .. "}%-" .. exW .. "s{reset} %s",
 				command.cmd, command.ex or "", command.desc)
 		end

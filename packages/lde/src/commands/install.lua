@@ -8,41 +8,29 @@ local path = require("path")
 const json = require("json")
 const rocked = require("rocked")
 
--- Resolution inputs for `rocks:` lookups. The resolved URL is a pure function
--- of these two files (the URL cache for unversioned names, the manifest for
--- versioned ones), so the receipt can vouch for "the resolution is unchanged"
--- by comparing their mtimes instead of re-resolving.
+-- The resolved URL is a pure function of these two files, so compare their mtimes instead of re-resolving.
 const URL_CACHE_PATH = path.join(lde.global.getUserDir(), "luarocks-url-cache-5.1.json")
 const MANIFEST_PATH = path.join(lde.global.getUserDir(), "luarocks-manifest.raw")
 
--- stat().modifyTime is an int64 cdata; normalize to a Lua number so the
--- receipt survives json.encode/decode round-trips.
+-- modifyTime is int64 cdata; normalize so the receipt survives json round-trips.
 ---@param stat table?
 ---@return number
 local function statMtime(stat)
 	return stat and tonumber(stat.modifyTime) or 0
 end
 
---- Per-tree install receipt for `install rocks:<name>`: a small JSON sidecar
---- proving that a specific resolved version is already installed and intact.
---- Written after a successful full install, so later invocations of the same
---- name/version can skip the open/parse/build/install work entirely. The check
---- mirrors the install fast path's `.installed` hash plus isInstallIntact's
---- materialization test, but reads only the receipt + a few stat calls instead
---- of opening and parsing the package.
+--- Sidecar proving a resolved rocks version is installed, so later runs can skip the install.
 ---@param rocksName string
 local function rocksReceiptPath(rocksName)
 	return path.join(lde.global.getDir(), "rocks-installed", rocksName .. ".json")
 end
 
---- Whether the receipt proves `rocks:<name>` is already installed and intact.
 ---@param rocksName string
 ---@return boolean
 local function isRocksInstalled(rocksName)
 	const receiptPath = rocksReceiptPath(rocksName)
 	if not fs.exists(receiptPath) then return false end
 
-	-- decodeJson returns (decoded, err) — the value is the first return.
 	local decoded = lde.util.decodeJson(fs.read(receiptPath) or "")
 	if type(decoded) ~= "table" then return false end
 	local receipt = decoded
@@ -50,43 +38,33 @@ local function isRocksInstalled(rocksName)
 	if receipt.runtime ~= lde.global.currentVersion then return false end
 	if receipt.targetKey ~= lde.global.getTargetKey() then return false end
 
-	-- Pre-resolution gate: the resolution result is unchanged only while the
-	-- URL cache and manifest files are the ones the install resolved against.
-	-- Both live in the user dir (shared across trees), so this is what makes
-	-- the skip safe without calling resolveLuarocksSource at all.
+	-- Safe only while the shared user-dir URL cache and manifest are the ones resolved against.
 	local cacheStat = fs.stat(URL_CACHE_PATH)
 	local manifestStat = fs.stat(MANIFEST_PATH)
 	if not cacheStat or not manifestStat then return false end
 	if receipt.cacheMtime ~= statMtime(cacheStat) then return false end
 	if receipt.manifestMtime ~= statMtime(manifestStat) then return false end
 
-	-- The .installed marker only proves the lockfile/manifest/runtime/target
-	-- didn't change; verify the file still matches what the receipt recorded,
-	-- and that every dependency alias is still materialized (mirrors
-	-- isInstallIntact, which also checks path deps with build.lua — impossible
-	-- for rocks installs, whose deps are rocks/git/archive).
+	-- .installed covers only lockfile/manifest/runtime/target; also verify the modules dir and aliases.
 	if fs.read(path.join(receipt.modulesDir, ".installed")) ~= receipt.installedHash then
 		return false
 	end
 	for _, alias in ipairs(receipt.deps or {}) do
 		if not fs.exists(path.join(receipt.modulesDir, alias)) then return false end
 	end
-	-- The wrapper is the install's user-facing artifact; a deleted wrapper
-	-- must be rewritten, so a receipt without it doesn't count as installed.
+	-- A deleted wrapper must be rewritten, so a receipt without it isn't installed.
 	if not fs.exists(path.join(lde.global.getToolsDir(), receipt.toolName or rocksName)) then
 		return false
 	end
 	return true
 end
 
---- Writes the install receipt for a successful `install rocks:<name>`.
 ---@param pkg lde.Package
 ---@param srcUrl string
 ---@param rocksName string
 local function writeRocksReceipt(pkg, srcUrl, rocksName)
 	local modulesDir = pkg:getModulesDir()
-	-- commitLockfile writes .installed at the end of installDependencies, so
-	-- it exists here. Missing marker = the install didn't finish; skip.
+	-- .installed is written at the end of installDependencies; a missing marker means it didn't finish.
 	local installedHash = fs.read(path.join(modulesDir, ".installed"))
 	if not installedHash then return end
 
@@ -113,19 +91,14 @@ local function writeRocksReceipt(pkg, srcUrl, rocksName)
 	fs.write(rocksReceiptPath(rocksName), json.encode(receipt))
 end
 
---- Overlapped install for `install rocks:<name>`: the root package's .src.rock
---- starts downloading in the background while its published rockspec (tiny) is
---- fetched and the dependency graph is resolved, so the root download overlaps
---- the dependency install instead of running serially before it.
+-- Starts the .src.rock download while the small rockspec is fetched and deps resolved.
 ---@param name string # "rocks:busted" or "rocks:busted@2.0"
 local function installRocks(name)
 	local download = require("lde-core.util.download")
 	local rocksName, versionStr = name:match("^rocks:([^@]+)@?(.*)$")
 	versionStr = versionStr ~= "" ? versionStr : nil
 
-	-- Fast path: the receipt proves this exact resolution is already
-	-- installed and intact (its URL-cache/manifest mtimes guarantee the
-	-- resolution is unchanged), so skip everything — including the resolve.
+	-- Receipt proves this exact resolution is installed and intact, so skip everything.
 	if isRocksInstalled(rocksName) then
 		return
 	end
@@ -150,8 +123,7 @@ local function installRocks(name)
 	local archiveFile = archiveDir .. ".archive"
 
 	if fs.exists(archiveDir) then
-		-- Already materialized: classic path, which hits the install fast path
-		-- (few ms on a warm tree).
+		-- Already materialized: classic path, a few ms on a warm tree.
 		local pkg, _, perr = lde.util.openLuarocksPackage(rocksName, versionStr)
 		if not pkg then lde.error.raise(perr or "Failed to open package") end ---@cast pkg -nil
 		pkg:build()
@@ -161,9 +133,7 @@ local function installRocks(name)
 		return
 	end
 
-	-- Cold install: start the session and kick off the .src.rock download in
-	-- the background. The archive cache seeds already-downloaded content so a
-	-- fresh tree doesn't re-fetch bytes a previous tree already fetched.
+	-- Archive cache seeds already-downloaded content so a fresh tree doesn't re-fetch.
 	download.begin({
 		archiveCache = path.join(lde.global.getUserDir(), "archives"),
 	})
@@ -185,12 +155,7 @@ local function installRocks(name)
 	const ok, spec = rocked.parse(content)
 	if not ok then lde.error.raise("Failed to parse rockspec '" .. rockspecUrl .. "': " .. tostring(spec)) end
 
-	-- Wait for the .src.rock download, then extract it and open the package
-	-- from the real source tree inside (a source subdir, or the nested archive
-	-- extracted alongside the rockspec). The package must be opened from that
-	-- tree: dependencies install into the package's target/ and bin scripts are
-	-- copied from the sources, so building from a made-up directory would
-	-- silently produce an empty install with no bin.
+	-- Open from the extracted source tree: deps install into its target/ and bins come from its sources.
 	download.waitBackground(archiveFile)
 	const exOk, exErr = lde.global.extractArchive(srcUrl, archiveFile, archiveDir)
 	if not exOk then
@@ -210,15 +175,11 @@ end
 
 ---@param args clap.Args
 local function install(args)
-	-- The option() calls consume their values; capture them up front so the
-	-- project-install check and resolvePackage can both see them. --production
-	-- must be consumed here too: left in the stream, peek() below would read
-	-- it as a package name.
+	-- option() consumes values; capture them before resolvePackage and --production read.
 	local gitUrl = args:option("git")
 	const pathDir = args:option("path")
 	const isProduction = args:flag("production")
 
-	-- No flags and no name = install deps for current project
 	if not gitUrl and not pathDir and not args:peek() then
 		local pkg, err = lde.Package.open()
 		if not pkg then

@@ -39,11 +39,7 @@ end
 ---@field nativeFiles number
 ---@field nativeBytes number
 
---- Build the project and measure what a compiled executable would embed: the
---- per-module LuaJIT bytecode (bundlePackage raw mode) plus every native
---- .so/.dll/.dylib under target/, grouped by the target/ alias they belong to.
---- This is exactly the content compile.lua hands to sea.compile — no C
---- toolchain needed.
+--- Measures what a compiled executable would embed — exactly the content compile.lua hands to sea.compile, so no C toolchain is needed.
 ---@param package lde.Package
 ---@return lde.bloat.Report
 local function analyze(package)
@@ -102,10 +98,7 @@ local function analyze(package)
 		addFile(m.name, "lua", #m.code)
 	end
 
-	-- Native libraries embedded by sea.compile, scanned exactly like
-	-- compile.lua scans them (tests/ excluded, same naming, same feature-flag
-	-- exclusions) so the report answers "what will the executable contain"
-	-- rather than "what is on disk".
+	-- Scanned exactly like compile.lua (tests/ excluded, same naming and feature-flag exclusions) so the report answers "what the executable will contain".
 	local modulesDir = package:getModulesDir()
 	const excludesFor = features.resolverFor(package)
 	for entry in fs.readdir(modulesDir) do
@@ -143,7 +136,6 @@ local function analyze(package)
 		::continue::
 	end
 
-	-- Biggest bloat first, so the prune candidates surface at the top.
 	local entries = {}
 	for _, alias in ipairs(order) do
 		entries[#entries + 1] = entriesByName[alias]

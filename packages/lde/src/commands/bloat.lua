@@ -7,9 +7,7 @@ const path = require("path")
 const lde = require("lde-core")
 const prompt = require("lde.util.prompt")
 
--- Distinct, contrasting colors for the top 5 dependencies; lower ranks and the
--- bar remainder render in gray. Colors are rank-stable so the bar, the legend
--- and the list always agree.
+-- Rank-stable colors: the bar, the legend and the list must agree per dependency.
 const barColors = { "red", "green", "yellow", "blue", "magenta" }
 const BAR_WIDTH = 40
 const VIEW_HEIGHT = 5
@@ -38,8 +36,6 @@ local function pctColored(bytes, denominator)
 	return ansi.colorize("cyan", pctStr(bytes, denominator))
 end
 
---- The file's name relative to its dependency: the module name minus the
---- `entry.` prefix; the entry's own init module renders as init.lua.
 ---@param entry lde.bloat.Entry
 ---@param file lde.bloat.File
 local function displayName(entry, file)
@@ -82,10 +78,7 @@ end
 ---@field name string
 ---@field bytes number
 
---- The proportional bar: each of the top 5 entries gets a colored run of
---- characters proportional to its share of the bundle; the remainder (lower
---- ranks plus rounding) is gray. Returns the bar and the legend entries for
---- its colored segments.
+--- Top-5 entries get a colored run proportional to their share; the rest is gray.
 ---@param entries lde.bloat.Entry[]
 ---@param denominator number
 ---@return string
@@ -108,8 +101,7 @@ local function barAndLegend(entries, denominator)
 		used += segments[#segments].count
 	end
 
-	-- Floor rounding can leave a small dep with a zero-width segment; give
-	-- every shown dep one character so its legend color is visible in the bar.
+	-- Floor rounding leaves small deps zero-width; give each one char so its color shows.
 	for _, segment in ipairs(segments) do
 		if used < BAR_WIDTH and segment.count == 0 then
 			segment.count = 1
@@ -145,8 +137,6 @@ local function legendLines(legend, denominator, restBytes)
 	return lines
 end
 
---- Print the title, counts, total, bar and legend. Returns false when the
---- bundle is empty (a note was printed instead).
 ---@param report lde.bloat.Report
 ---@param binaryPath string?
 ---@param binaryBytes number?
@@ -193,7 +183,7 @@ local function renderPreamble(report, binaryPath, binaryBytes)
 	print("")
 	local bar, legend = barAndLegend(report.entries, denominator)
 	print(bar)
-	print("") -- gap between the bar and its legend
+	print("")
 	for _, line in ipairs(legendLines(legend, denominator, restBytes)) do
 		print(line)
 	end
@@ -217,9 +207,6 @@ end
 ---@field isEntry boolean
 ---@field text string
 
---- Interactive tree browser: dependencies start collapsed; ↑/↓ (or j/k) move a
---- cursor through a 5-row window, Enter toggles a dependency open/closed,
---- q/Esc/Ctrl+C quits.
 ---@param report lde.bloat.Report
 ---@param denominator number
 local function interactiveBrowse(report, denominator)
@@ -313,7 +300,7 @@ local function interactiveBrowse(report, denominator)
 		elseif ch == "\r" or ch == "\n" then
 			toggle()
 		elseif ch == "\x1b" and not prompt.escSequencePending() then
-			done = true -- bare Esc: quit
+			done = true
 		elseif ch == "\x1b[A" then -- Windows returns the whole sequence at once
 			move(-1)
 		elseif ch == "\x1b[B" then
@@ -371,8 +358,7 @@ end
 
 ---@param args clap.Args
 local function bloat(args)
-	-- --binary and --json both take an optional value: a bare flag resolves the
-	-- default (the compile output / stdout), a value overrides it.
+	-- --binary/--json take an optional value: a bare flag gives the default, a value overrides.
 	local binaryPath = args:option("binary")
 	if not binaryPath and args:flag("binary") then
 		binaryPath = ""
@@ -388,8 +374,7 @@ local function bloat(args)
 		lde.error.raise(err)
 	end ---@cast pkg -nil
 
-	-- A bare `--json` pipes the report to stdout, so it must stay free of the
-	-- build/install progress bars (which print to stdout); file mode keeps them.
+	-- A bare `--json` writes to stdout, so progress bars (also stdout) must be off.
 	local report
 	if jsonPath == "" then
 		const wasVerbose, wasQuiet = lde.isVerbose, lde.isQuiet

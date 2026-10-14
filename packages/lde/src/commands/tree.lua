@@ -5,19 +5,13 @@ const features = require("lde-core.package.features")
 
 const depthColors = { "yellow", "magenta", "cyan" }
 
---- The optional deps the platform's own flags turn on. Shared with the
---- resolver, so `lde tree` can never disagree with what an install would pick
---- -- it used to carry its own copy of the OS-to-flag table, which also had no
---- `bsd` entry.
+--- Shared with the resolver so `lde tree` can never disagree with an install.
 ---@param defs table<string, lde.Package.Config.FeatureDefinition>?
 local function enabledOptionals(defs)
 	return features.enabledDependencies(defs, nil)
 end
 
---- Merge a root lockfile entry onto a manifest dependency so git deps resolve
---- to their pinned commit. A dep's own lockfile is not authoritative — the
---- root lockfile flat-pins every alias in the tree — and manifest-only fields
---- (version, optional, features) must survive the merge.
+--- Root lockfile entries flat-pin every alias and must win over a dep's own lockfile.
 ---@param info lde.Package.Config.Dependency
 ---@param locked table<string, lde.Lockfile.Dependency>
 ---@param name string
@@ -33,7 +27,6 @@ local function mergeLocked(info, locked, name)
 	return merged
 end
 
---- The package's runtime dependencies, each merged with the root lockfile.
 ---@param pkg lde.Package
 ---@param locked table<string, lde.Lockfile.Dependency>
 ---@return table<string, lde.Package.Config.Dependency>
@@ -45,9 +38,7 @@ local function getMergedDeps(pkg, locked)
 	return merged
 end
 
---- Open a dependency as a package so the tree can walk its own deps. Rocks
---- deps resolve to a content dir with no lde.json, so they open with their
---- rockspec (or scan for one in the dir).
+--- Rocks deps have no lde.json, so they open with their rockspec.
 ---@param pkg lde.Package
 ---@param name string
 ---@param info lde.Package.Config.Dependency
@@ -59,9 +50,7 @@ local function openDep(pkg, name, info)
 	return lde.Package.open(depPath, info.rockspec)
 end
 
---- Mark every alias that lies on a root->target path (the --why highlight
---- set). `chain` holds the aliases from the root to `pkg` (inclusive);
---- `inChain` guards against cycles.
+--- Mark every alias on a root->target path for --why; `inChain` guards against cycles.
 ---@param pkg lde.Package
 ---@param target string
 ---@param locked table<string, lde.Lockfile.Dependency>
@@ -98,9 +87,6 @@ local function tree(args)
 
 	local rootName = pkg:getName()
 
-	-- The root lockfile flat-pins every resolved alias in the tree; merge it
-	-- into each package's manifest deps as the tree walks (a dep's own
-	-- lockfile is not authoritative for transitive pins).
 	const lockfile = pkg:readLockfile()
 	local locked = {}
 	if lockfile and not lockfile:isStale(pkg:readConfig()) then

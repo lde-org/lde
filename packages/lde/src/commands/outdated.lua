@@ -15,9 +15,7 @@ local function outdated(_args)
 
 	for name, depInfo in pairs(deps) do
 		if depInfo.luarocks then
-			-- luarocks dep: pick latest from manifest, compare with the
-			-- version pinned in the lockfile (the archive URL), not the
-			-- rockspec constraint (">= 1.6").
+			-- Compare against the version pinned in the lockfile (the archive URL), not the rockspec constraint (">= 1.6").
 			local manifest, merr = lde.util.getManifest()
 			if not manifest then
 				ansi.printf("{red}%s: %s", name, merr)
@@ -27,7 +25,6 @@ local function outdated(_args)
 			const latestUrl =  luarocks.getRockspecUrl(manifest --[[@as luarocks.Manifest]], depInfo.luarocks)
 			if not latestUrl then goto continue end
 
-			-- extract version from url: name-VERSION.rockspec
 			local latest = latestUrl:match(depInfo.luarocks .. "%-([^/]+)%.rockspec$")
 			local current
 			if depInfo.archive then
@@ -40,7 +37,6 @@ local function outdated(_args)
 				found = true
 			end
 		elseif depInfo.version then
-			-- lde registry dep
 			lde.global.syncRegistry()
 			const portfile, rerr = lde.global.lookupRegistryPackage(depInfo.name or name)
 			if not portfile then
@@ -48,9 +44,7 @@ local function outdated(_args)
 				goto continue
 			end
 
-			-- A range ("0.1") resolves to the newest version it allows, so that
-			-- is what the dependency currently installs; an exact pin resolves
-			-- to itself.
+			-- A range ("0.1") resolves to the newest version it allows, so that is what currently installs; an exact pin resolves to itself.
 			local current = semver.maxSatisfying(portfile.versions, depInfo.version)
 			if not current then current = depInfo.version end ---@cast current -nil
 			local latest = current

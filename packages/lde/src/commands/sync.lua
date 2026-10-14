@@ -9,10 +9,6 @@ local function sync(args)
 		lde.error.raise(err)
 	end ---@cast pkg -nil
 
-	-- --timings collects wall-clock units for the build and writes an HTML
-	-- report to target/timings.html; --json switches the report to JSON
-	-- (target/timings.json) for machine/LLM consumption. --json implies
-	-- collection, so it works standalone too.
 	const wantJSON = args:flag("json")
 	local timings = nil
 	if args:flag("timings") or wantJSON then

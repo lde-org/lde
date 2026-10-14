@@ -4,15 +4,13 @@ const path = require("path")
 const archive = require("archive")
 const process = require("process")
 
--- Minimal lua-sys surface used here (the full classes live in the lua-sys
--- package, which is a dependency of the caller, not of lde-build).
+-- Minimal lua-sys surface; the full classes live in the lua-sys package dependency.
 ---@class lua.State
 ---@field load fun(self: lua.State, code: string, name?: string): lua.Chunk
 ---@class lua.Chunk
 ---@field call fun(self: lua.Chunk, ...: any): any
 
---- Capture buffer for hidden build output (created by lde-core's build-log;
---- lde-build only ever appends to it).
+--- Created by lde-core's build-log; lde-build only appends to it.
 ---@class lde.buildLog.Capture
 ---@field append fun(self: lde.buildLog.Capture, ...: string?)
 
@@ -42,7 +40,6 @@ function Instance.new(outDir, gccBin, target, targetFlag, captureLog)
 	}, Instance)
 end
 
---- Records the feature flags enabled for this build.
 ---@param flags string[]
 ---@return lde.build.Instance self
 function Instance:setFeatures(flags)
@@ -54,9 +51,7 @@ function Instance:setFeatures(flags)
 	return self
 end
 
---- True when the named feature flag is enabled for this build. The build script
---- sees the same answer as `build:feature(name)` in the guest, and as the
---- `features` exclusions the bundler applies to the Lua half.
+--- The build script sees the same answer as the `features` exclusions the bundler applies.
 ---@param name string
 ---@return boolean
 function Instance:feature(name)
@@ -65,8 +60,7 @@ end
 
 ---@param url string
 function Instance:fetch(url)
-	-- Total-time budget: a server that accepts the connection but never
-	-- finishes the body would otherwise hang the build forever.
+	-- Total-time budget: a server that never finishes the body would hang the build.
 	local res, err = curl.get(url, { timeout = 120 })
 	if not res then
 		error("failed to fetch " .. url .. ": " .. err)
@@ -109,10 +103,7 @@ function Instance:copy(rel, dest)
 	local full = path.join(self.outDir, rel)
 	const destAbs = path.join(self.outDir, dest)
 
-	-- Build outputs (native .so/.dll files) can be dlopen'd by the running
-	-- process while a rebuild replaces them; copy atomically (temp + rename)
-	-- so a live mapping is never truncated underneath it. Directories keep the
-	-- plain recursive copy.
+	-- Native outputs can be dlopen'd while a rebuild replaces them; copy atomically.
 	local ok, err
 	if fs.isfile(full) then
 		ok = fs.copyAtomic(full, destAbs)
@@ -152,14 +143,7 @@ function Instance:exists(rel)
 	return fs.exists(full)
 end
 
---- List the files under `rel`, recursively.
----
---- Paths come back relative to the output dir, so every result can be handed
---- straight back to read/write/exists. `glob` narrows the list to the paths
---- relative to `rel` ("**" by default): `*` and `?` stop at a separator, `**`
---- crosses them, and a leading "**/" also matches the scanned directory
---- itself. A `rel` that does not exist lists as empty — build scripts
---- routinely iterate over optional asset directories.
+--- `*`/`?` stop at a separator, `**` crosses it, and a leading "**/" also matches the scanned dir.
 ---@param rel string # Relative path at output dir
 ---@param glob? string # Glob filter, matched against paths relative to rel
 ---@return string[] # matching paths relative to the output dir, unsorted
@@ -170,12 +154,8 @@ function Instance:scan(rel, glob)
 		return {}
 	end
 
-	-- fs.scan globs the absolute entry path with the platform separator, which
-	-- leaves "**/*.qoi" unusable on Windows; the filtering happens here
-	-- instead, against the entry's path relative to `rel` with separators
-	-- normalized to "/". A leading "**/" gets a second pattern for the same
-	-- directory: fs.globToPattern wants the separator there, so "**/*.qoi"
-	-- alone would silently skip the .qoi files sitting directly in `rel`.
+	-- fs.scan globs absolute paths with the platform separator (unusable on Windows),
+	-- so filter here; a leading "**/" needs a second pattern.
 	local pattern, rootPattern
 	if glob then
 		pattern = fs.globToPattern(glob)
@@ -184,9 +164,7 @@ function Instance:scan(rel, glob)
 		end
 	end
 
-	-- fs.scan returns its paths relative to the scanned dir; re-rooting them on
-	-- the output dir is a prefix, since that is the base every other method
-	-- here reads and writes against.
+	-- fs.scan returns paths relative to the scanned dir; re-rooting on the output dir is a prefix.
 	local prefix = root == "." and "" or root .. path.separator
 	local files = {}
 
@@ -205,20 +183,9 @@ end
 
 ---@param cmd string
 function Instance:sh(cmd)
-	-- Run relative to the output dir so `build:sh("echo x > out.txt")` lands
-	-- where the rest of the build API writes. Compact mode captures the output
-	-- (hidden from the user, dumped to a temp file if the build fails) so
-	-- configure-style scripts can't flood the terminal; verbose mode streams
-	-- it live to keep the current behavior. Both stdout and stderr are piped
-	-- so the concurrent fd drain (readFds) can't deadlock on >64KB output.
-	--
-	-- The command is a ready-to-run shell string (callers quote paths
-	-- themselves), so it must reach the shell verbatim: on Windows the
-	-- MSVCRT-style escaping process applies per argument is incompatible with
-	-- cmd.exe's /c quote handling and mangles embedded quotes (cmd re-parses
-	-- the line and prepends the cwd to the first quoted arg, doubling paths).
-	-- `unsafe` skips that escaping; on POSIX args reach sh -c directly and it
-	-- is a no-op.
+	-- Run in the output dir so `build:sh(...)` writes where the rest of the API does.
+	-- Compact mode captures output, verbose streams it; both pipes are drained so >64KB
+	-- can't deadlock. Pass the command verbatim (`unsafe`, a no-op on POSIX).
 	local shell, flag = jit.os == "Windows" ? "cmd" : "sh", jit.os == "Windows" ? "/c" : "-c"
 	if self.captureLog then
 		local code, stdout, stderr = process.exec(shell, { flag, cmd }, {
@@ -243,11 +210,7 @@ function Instance:sh(cmd)
 	assert(code == 0, "failed to execute " .. cmd)
 end
 
---- Run the C compiler (clang on most systems; mingw clang on Windows).
---- When cross-compiling, prepends the clang -target flag so the code is
---- compiled for the target platform.
---- On Windows, prepends the mingw bin dir to PATH so subtools (as.exe, ld.exe, etc.) are found.
---- Errors if the compiler exits non-zero.
+--- Compile with clang, prepending the cross-compile -target flag and (on Windows) the mingw bin dir to PATH.
 ---@param args string[] # compiler arguments, e.g. {"-c", "foo.c", "-o", "foo.o"}
 function Instance:cc(args)
 	local bin = self.gccBin
@@ -273,13 +236,7 @@ function Instance:cc(args)
 	return stdout or "", stderr or ""
 end
 
--- ─── Guest-side assembly ─────────────────────────────────────────────────
---
--- The build table scripts see via require("lde-build") is assembled guest-
--- side. The host methods can't be called across the state boundary with the
--- instance as self, so setup() passes them in as host callbacks (varargs);
--- this chunk wires them into the table, forwarding calls. `cc` receives its
--- argument table already unpacked — only primitives cross host↔guest.
+-- Host methods can't be called across the state boundary with the instance as self.
 local GUEST_SOURCE = [==[
 	local outDir, gccBin, target, features, fetch, write, read, extract, copy, delete, move, exists, scan, sh, cc = ...
 	-- Enabled feature flags, newline-joined: only primitives cross the boundary,
@@ -324,12 +281,8 @@ local GUEST_SOURCE = [==[
 	package.preload["lpm-build"] = function() return build end
 ]==]
 
---- Inject an lde-build instance into a lua-sys guest state.
----
---- The instance methods are registered as host callbacks and passed into the
---- guest as varargs; the guest chunk assembles them into the `lde-build`
---- table via package.preload. No globals cross the boundary, and only
---- primitives come back: scan() ships its list newline-joined.
+--- The instance methods are passed into the guest as varargs; the chunk wires
+--- them into the `lde-build` table via package.preload. Only primitives cross.
 ---@param state     lua.State
 ---@param outputDir string
 ---@param gccBin?   string # path to gcc binary; defaults to "gcc"

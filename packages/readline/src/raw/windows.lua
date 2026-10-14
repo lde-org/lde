@@ -54,8 +54,7 @@ const ENABLE_LINE_INPUT      = 0x0002
 const ENABLE_PROCESSED_INPUT = 0x0001
 const KEY_EVENT              = 0x0001
 
--- What a key arrives as. The console hands over virtual key codes, and the editor above reads the
--- same escape sequences a terminal sends, so this is where the two are made to agree.
+-- The console sends virtual key codes; this table maps them to the escapes the editor reads.
 ---@type table<integer, string>
 const KEY = {
 	[0x25] = "\x1b[D",   -- left
@@ -69,8 +68,7 @@ const KEY = {
 	[0x0D] = "\r",       -- enter
 }
 
--- Held rather than made per call: `readByte` runs once per keystroke, and a record made there is
--- garbage on every one of them.
+-- Held, not made per call: readByte runs per keystroke and would garbage a fresh record.
 local record = ffi.new("INPUT_RECORD[1]")
 const read   = ffi.new("DWORD[1]")
 const screen = ffi.new("CONSOLE_SCREEN_BUFFER_INFO")
@@ -104,8 +102,7 @@ function readline.getCols()
 	return 80
 end
 
--- Returns a key descriptor string: printable char, or one of:
--- "up","down","left","right","home","end","backspace","delete","enter", nil on EOF
+-- Returns a key descriptor: printable char, "up"/"down"/"left"/"right"/"home"/"end"/"backspace"/"delete"/"enter", or nil on EOF
 function readline.readByte()
 	while true do
 		if kernel32.ReadConsoleInputW(hIn, record, 1, read) == 0 then return nil end

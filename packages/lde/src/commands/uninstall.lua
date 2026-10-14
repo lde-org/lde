@@ -13,7 +13,6 @@ local function toolUninstall(args)
 
 	local toolsDir = lde.global.getToolsDir()
 
-	-- Try the platform-specific wrapper path first, then the bare name
 	local candidates
 	if jit.os == "Windows" then
 		candidates = {

@@ -45,8 +45,7 @@ function Lockfile.open(p)
 		return nil
 	end
 
-	-- A corrupt lockfile is treated as absent: the next install regenerates
-	-- it, instead of crashing every command on the package.
+	-- A corrupt lockfile is treated as absent so the next install regenerates it instead of crashing every command on the package.
 	const decoded = lde.util.decodeJson(content)
 	if not decoded then
 		return nil
@@ -84,11 +83,7 @@ function Lockfile:getDependencies()
 	end
 end
 
---- Deterministic hash of the manifest's dependency declarations. Any change to
---- `dependencies`, `devDependencies`, or `features` changes the hash, which
---- invalidates the lockfile's pins (see `Lockfile:isStale`). `json.encode`
---- sorts the keys of tables it hasn't decoded itself, so the hash is stable
---- regardless of key order in the manifest file.
+--- Any change to `dependencies`, `devDependencies`, or `features` invalidates the lockfile's pins; `json.encode` sorts keys it hasn't decoded, so the hash is stable regardless of manifest key order.
 ---@param config lde.Package.Config
 function Lockfile.manifestHash(config)
 	return util.hash(json.encode({
@@ -98,22 +93,12 @@ function Lockfile.manifestHash(config)
 	}))
 end
 
----@return string?
-function Lockfile:getManifestHash()
-	return self.raw.manifestHash
-end
-
 ---@param hash string
 function Lockfile:setManifestHash(hash)
 	self.raw.manifestHash = hash
 end
 
---- True when the manifest's dependency declarations no longer match the
---- declarations the lockfile was resolved from. A stale lockfile must not pin
---- resolution — e.g. a dep switched from git to registry in lde.json would
---- otherwise keep installing the old git source (or conflict with the new
---- registry requests). Lockfiles written before the hash existed count as
---- stale so they re-resolve exactly once and are rewritten with a hash.
+--- A stale lockfile must not pin resolution (e.g. a dep switched from git to registry would otherwise keep installing the old git source); lockfiles written before the hash existed count as stale so they re-resolve exactly once and are rewritten with a hash.
 ---@param config lde.Package.Config
 ---@return boolean
 function Lockfile:isStale(config)

@@ -155,17 +155,32 @@ test.it("sandbox exposes no globals at all", function()
 	test.notEqual(parsed:find("attempt to call global 'tostring'"), nil)
 end)
 
-test.it("sandbox has no string metatable either", function()
-	-- `_G` is stripped, but every string shares one metatable: without detaching
-	-- it, `("x"):rep(3)` reaches string.rep without naming a global.
+test.it("string methods work, like under LuaRocks", function()
+	-- The string metatable stays intact: real rockspecs compute versions with
+	-- `("1.0"):gsub(...)`, and LuaRocks accepts them. Only the I/O and code-loading
+	-- globals are stripped.
 	local ok, parsed = rocked.parse([[
 		package = "probe"
 		version = ("1.0-1"):rep(1)
+		build = { type = "builtin" }
+	]])
+	if not ok then
+		error("Expected string method access to work: " .. tostring(parsed))
+	end ---@cast parsed rocked.raw.Output
+	test.equal(parsed.version, "1.0-1")
+end)
+
+test.it("string.format is still unreachable, like under LuaRocks", function()
+	-- LuaRocks loads rockspecs with an empty environment too, so `string` is not a
+	-- name a rockspec can use there either — parity means not adding it here.
+	local ok, parsed = rocked.parse([[
+		package = "probe"
+		version = string.format("%d.0-1", 1)
 	]])
 	if ok then
-		error("Expected string method access to fail, but it parsed")
+		error("Expected the string global to be unreachable, but it parsed")
 	end ---@cast parsed string
-	test.notEqual(parsed:find("attempt to index a string value"), nil)
+	test.notEqual(parsed:find("attempt to index global 'string'"), nil)
 end)
 
 test.it("sandbox accepts a data-only rockspec", function()

@@ -9,8 +9,7 @@ const gitShorthand = require("lde.util.gitShorthand")
 
 ---@param args clap.Args
 local function add(args)
-	-- Consume flags/options before popping the positional name so
-	-- `lde add --dev foo` parses the same as `lde add foo --dev`.
+	-- Consume flags/options before popping the positional name so their order is free.
 	const isDevelopment = args:flag("dev")
 
 	const gitUrl = args:option("git")
@@ -21,13 +20,10 @@ local function add(args)
 		lde.error.raise("Usage: lde add <name>[@<version>] --path <path> | --git <url>")
 	end ---@cast rawName -nil
 
-	-- Support lde add <name>@<version> syntax
 	local name, versionFromName = rawName:match("^([^@]+)@(.+)$")
 	if not name then name = rawName end ---@cast name string
 
-	-- Strip only the rocks: prefix (e.g. rocks:foo -> foo). Other prefixes are
-	-- not real; a namespaced package is ns/foo, so "ns:foo" must fail
-	-- validation below instead of silently becoming "foo".
+	-- A namespaced package is ns/foo, so only the rocks: prefix is stripped; "ns:foo" must fail validation.
 	name = name:match("^rocks:(.+)$") or name
 
 	---@type ("git" | "path")?, string?
@@ -40,10 +36,7 @@ local function add(args)
 		depType = "path"
 		depValue = pathValue
 	else
-		-- Git shorthand: gh:owner/repo, or gh:<pkg>@owner/repo for a package
-		-- inside a monorepo. The dependency key is the sub-package name (or
-		-- the repo basename for the plain form) — the name lde expects to find
-		-- inside the repo.
+		-- Dep key is the sub-package name (or repo basename), what lde expects to find inside the repo.
 		const shorthandUrl, subPackage, serr = gitShorthand.expand(rawName)
 		if serr then
 			lde.error.raise(serr)
@@ -88,9 +81,7 @@ local function add(args)
 		dependencyTable = config.dependencies --[[@as table]]
 	end ---@cast dependencyTable -nil
 
-	-- Whether the name routes through the luarocks branch. Existing deps are
-	-- re-pinned through whatever kind they already are, so `lde add
-	-- semver@1.0.0` works on a luarocks dep without needing the rocks: prefix.
+	-- Existing deps re-pin through their existing kind, so semver@1.0.0 works on a luarocks dep.
 	local isRocks = rawName:match("^rocks:") ~= nil
 	local isUpdate = false
 
@@ -101,8 +92,7 @@ local function add(args)
 			return
 		end
 
-		-- An explicit spec (version, or a --git/--path source) replaces the
-		-- existing entry: `lde add semver@1.0.0` upgrades/downgrades the pin.
+		-- An explicit spec replaces the existing entry.
 		isUpdate = true
 		if not depType and existing.luarocks then
 			isRocks = true
@@ -124,11 +114,7 @@ local function add(args)
 		local branch = args:option("branch")
 		local commit = args:option("commit")
 
-		-- Resolve the ref now (lsRemote) instead of on the next install, so a
-		-- typo'd or dead URL fails at add time and the lockfile gets the
-		-- auto-pin immediately. An explicit --commit skips resolution — it is
-		-- a deliberate pin (and keeps fully-offline adds working); the install
-		-- still verifies the commit exists when it fetches the repo.
+		-- Resolve the ref now so a typo'd/dead URL fails at add time; --commit skips resolution.
 		local pin = commit
 		if not pin then
 			const sha, rerr = lde.global.resolveGitRef(depValue, branch)
@@ -151,9 +137,7 @@ local function add(args)
 			lde.error.raise(err, { hint = lde.util.suggestPackage(name, true) })
 		end
 
-		-- @latest resolves the newest version now and pins that concrete
-		-- version; any other constraint is stored as given (a bare name stays
-		-- version-less, so installs keep resolving the newest).
+		-- @latest pins the concrete newest version now; other constraints stored as given.
 		local pinnedVersion = registryVersion
 		if registryVersion == "latest" then
 			pinnedVersion = lde.util.resolveLuarocksBest(name, "latest")
@@ -163,7 +147,6 @@ local function add(args)
 		ansi.printf("{green}%s luarocks %s: %s{reset}%s", verb, isDevelopment ? "dev dependency" : "dependency", name,
 			pinnedVersion ? ansi.format(" ({cyan}version: %s{reset})", pinnedVersion) : "")
 	else
-		-- Registry dependency
 		lde.global.syncRegistry()
 
 		local portfile, err = lde.global.lookupRegistryPackage(name)
@@ -171,14 +154,10 @@ local function add(args)
 			lde.error.raise(err, { hint = lde.util.suggestPackage(name, false) })
 		end ---@cast portfile -nil
 
-		-- resolveRegistryVersion treats "latest" as "newest", so a bare name
-		-- and @latest both resolve to the newest release here.
+		-- "latest" means "newest", so a bare name and @latest resolve the same here.
 		const resolvedVersion = lde.global.resolveRegistryVersion(portfile, registryVersion)
 
-		-- A single version is saved as a caret range, so later installs move to
-		-- newer compatible releases instead of freezing on the version that
-		-- happened to be newest at add time. A range the user wrote out ("0.1",
-		-- ">=0.2") is kept exactly as written.
+		-- A single version is saved as a caret range so later installs move to compatible releases.
 		local storedVersion = "^" .. resolvedVersion
 		if registryVersion and registryVersion ~= "latest" and not semver.isExact(registryVersion) then
 			storedVersion = registryVersion
@@ -192,8 +171,7 @@ local function add(args)
 		ansi.printf("{green}%s %s: %s{reset} ({cyan}%s: %s{reset})", verb, isDevelopment and "dev dependency" or "dependency", name, depType, depValue)
 	end
 
-	-- removeField first: addField appends the key to the encoder's key store,
-	-- so re-adding an existing key without removing it would emit a duplicate.
+	-- removeField first: addField appends to the encoder's key store, so re-adding would duplicate.
 	if isUpdate then
 		json.removeField(dependencyTable, name)
 	end

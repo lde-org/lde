@@ -8,9 +8,7 @@ const util = require("lde-core.util")
 
 const git2 = require("util").lazy(function() return require("git2-sys") end)
 
---- The entry exactly as lde.json declares it. getDependencies()/getDevDependencies()
---- overlay the lockfile's pin on top of the manifest, so the merged view they
---- return cannot tell a commit the user pinned from one resolution recorded.
+--- The entry as lde.json declares it: getDependencies() overlays the lockfile pin, so its merged view can't tell a user-pinned commit from one resolution recorded.
 ---@param package lde.Package
 ---@param name string
 ---@return lde.Package.Config.Dependency?
@@ -21,19 +19,13 @@ local function declaredDependency(package, name)
 	return config.devDependencies?.[name]
 end
 
---- Checks a git dependency for newer commits via ls-remote and pins any
---- newer commit in the lockfile.
 ---@param package lde.Package
 ---@param name string
 ---@param depInfo lde.Package.Config.GitDependency
 ---@return boolean updated
 ---@return string message
 local function updateGitDependency(package, name, depInfo)
-	-- A commit spelled out in lde.json is a deliberate pin, never a resolution
-	-- artifact: update moves dependencies that follow a ref (a branch, or the
-	-- repo's default HEAD) and leaves pinned ones alone, or the lockfile would
-	-- silently install a commit the manifest doesn't declare. Re-adding the
-	-- dependency is how a pin moves.
+	-- A commit spelled out in lde.json is a deliberate pin: update only moves deps that follow a ref, or the lockfile would silently install a commit the manifest doesn't declare.
 	const declared = declaredDependency(package, name)
 	if declared and declared.commit then
 		return false, "pinned in lde.json (" .. declared.commit:sub(1, 7) .. ")"
@@ -49,11 +41,7 @@ local function updateGitDependency(package, name, depInfo)
 		return false, "already up to date (" .. latestCommit:sub(1, 7) .. ")"
 	end
 
-	-- Pin the new commit in the lockfile so the next install uses it.
-	-- (Registry/luarocks updates write to lde.json instead; a git dep that
-	-- follows a ref has nothing in lde.json to write: the ref is the manifest
-	-- and the commit it currently points at only lives in the lockfile, which
-	-- is what getDependencies() reports from.)
+	-- Git deps that follow a ref have nothing in lde.json to write (the ref is the manifest), so the commit is pinned in the lockfile instead.
 	local lockfile = package:readLockfile()
 	if lockfile then
 		local isLocked = lockfile:getDependency(name)
@@ -70,9 +58,6 @@ local function updateGitDependency(package, name, depInfo)
 	return true, msg
 end
 
---- Updates a registry dependency to the latest compatible version (same major),
---- or, for a range constraint, to the newest version the range allows.
---- Writes the new version back to lde.json if updated.
 ---@param package lde.Package
 ---@param name string
 ---@param depInfo lde.Package.Config.RegistryDependency
@@ -89,10 +74,7 @@ local function updateRegistryDependency(package, name, depInfo)
 
 	local versions = portfile.versions or {}
 
-	-- A range ("0.1", "^0.1.2") floats: every install resolves the newest
-	-- version it allows, so updating means re-resolving rather than rewriting
-	-- lde.json. The lockfile is what pins the range, so dropping its entry for
-	-- this dependency lets the next install float to the newest match.
+	-- A range floats: the lockfile is what pins it, so dropping its entry lets the next install resolve the newest allowed version.
 	if not semver.isExact(depInfo.version) then
 		const resolved = semver.maxSatisfying(versions, depInfo.version)
 		if not resolved then
@@ -110,7 +92,6 @@ local function updateRegistryDependency(package, name, depInfo)
 		return false, "already up to date (" .. resolved .. ")"
 	end
 
-	-- Find the latest compatible version (same major, higher minor/patch)
 	local best = depInfo.version
 	for v in pairs(versions) do
 		if semver.isCompatibleUpdate(best, v) then
@@ -122,7 +103,6 @@ local function updateRegistryDependency(package, name, depInfo)
 		return false, "already up to date (" .. depInfo.version .. ")"
 	end
 
-	-- Write the updated version back to lde.json
 	local configPath = package:getConfigPath()
 	local configRaw = fs.read(configPath)
 	if not configRaw then
@@ -142,7 +122,6 @@ local function updateRegistryDependency(package, name, depInfo)
 	return true, depInfo.version .. " -> " .. best
 end
 
---- Updates a luarocks dependency to the latest version.
 ---@param package lde.Package
 ---@param name string
 ---@param depInfo lde.Package.Config.Dependency
@@ -178,7 +157,6 @@ local function updateLuarocksDependency(package, name, depInfo)
 	return true, (current or "?") .. " -> " .. latest
 end
 
---- Updates all dependencies for a package.
 ---@param package lde.Package
 ---@param dependencies table<string, lde.Package.Config.Dependency>?
 ---@return table<string, { updated: boolean, message: string }>
@@ -190,8 +168,7 @@ local function updateDependencies(package, dependencies)
 		local updated, message
 		if depInfo.luarocks then
 			if package.isRockspec then
-				-- Rockspec dependencies are pinned by the rockspec itself;
-				-- there's no lde.json to write an updated version to.
+				-- Rockspec deps are pinned by the rockspec itself; there's no lde.json to write a version to.
 				updated, message = false, "managed by rockspec"
 			else
 				updated, message = updateLuarocksDependency(package, name, depInfo)

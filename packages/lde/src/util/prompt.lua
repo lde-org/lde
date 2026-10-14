@@ -24,22 +24,14 @@ local function fdIsTTY(fd)
 	end
 end
 
--- The select below renders with cursor-movement escapes and reads raw key
--- presses, so it only makes sense when both stdin and stdout are terminals.
--- When either is redirected (CI, pipes, tests) scaffolding falls back to
--- defaults instead of hanging or spewing escapes into a log file.
+-- Needs both stdin and stdout to be terminals; when redirected (CI, pipes) scaffolding falls back to defaults instead of hanging.
 const interactive = fdIsTTY(0) and fdIsTTY(1)
 prompt.interactive = interactive
 
--- After an ESC byte (POSIX sends arrows byte-by-byte), check whether more of
--- the escape sequence is already pending. A bare ESC with nothing following
--- within the window quits the menu instead of blocking on a read that will
--- never arrive. Falls back to "pending" when poll is unavailable.
+-- After ESC (POSIX sends arrows byte-by-byte), check whether more of the sequence is pending; a bare ESC quits instead of blocking, and poll being unavailable falls back to "pending".
 local PollFds, canPoll
 if ffi.os ~= "Windows" then
-	-- process.raw.posix already declares struct pollfd + poll (it is loaded by
-	-- the time scaffolding runs); the pcalls are no-ops when it has, and
-	-- declare the symbols when it hasn't.
+	-- Usually already declared by process.raw.posix; the pcalls are no-ops then and declare the symbols otherwise.
 	pcall(ffi.cdef, "struct pollfd { int fd; short events; short revents; };")
 	pcall(ffi.cdef, "int poll(struct pollfd* fds, unsigned long nfds, int timeout);")
 	local ok, t = pcall(ffi.typeof, "struct pollfd[?]")
@@ -52,8 +44,7 @@ end
 ---@return boolean
 local function escSequencePending()
 	if ffi.os == "Windows" then
-		-- Arrows arrive as a single string on Windows, so a lone "\x1b" byte
-		-- can only be a bare escape — no peek needed.
+		-- Arrows arrive as one string on Windows, so a lone "\x1b" can only be a bare escape.
 		return false
 	end
 	if not canPoll then return true end
@@ -68,8 +59,7 @@ prompt.escSequencePending = escSequencePending
 ---@field key string
 ---@field desc string
 
----Interactive arrow-key select. ↑/↓ (or j/k) move the cursor, a number jumps
----straight to that option, Enter confirms, Esc or Ctrl+C cancels.
+---Interactive arrow-key select: ↑/↓ or j/k move, a number jumps, Enter confirms, Esc/Ctrl+C cancels.
 ---@param opts { prompt: string, options: lde.prompt.Option[], default: string }
 function prompt.select(opts)
 	const count = #opts.options
@@ -94,7 +84,6 @@ function prompt.select(opts)
 		return marker .. name .. "  " .. ansi.colorize("gray", opt.desc)
 	end
 
-	-- Rewrites every option row in place, leaving the cursor on the first row.
 	local function redraw()
 		for i = 1, count do
 			io.write("\r\x1b[2K" .. row(i, i == idx))
@@ -106,12 +95,10 @@ function prompt.select(opts)
 
 	raw.enterRaw()
 
-	-- Hide the terminal cursor while the menu is up — without this it floats
-	-- at the end of the last-rendered row.
+	-- Hide the cursor while the menu is up, else it floats at the end of the last row.
 	io.write("\x1b[?25l")
 	io.flush()
 
-	-- Draw the prompt and options; the cursor ends up on the first option row.
 	io.write("\r" .. ansi.format("{cyan}?{reset} {bold}%s{reset}", opts.prompt) .. "\n")
 	for i = 1, count do
 		io.write("\r" .. row(i, i == idx) .. "\n")
@@ -120,8 +107,7 @@ function prompt.select(opts)
 	io.flush()
 
 	local cancelled = false
-	-- The input loop must always unwind raw mode, even if a key handler
-	-- throws (leaving the terminal raw makes all subsequent input invisible).
+	-- Always unwind raw mode, even if a key handler throws (a leftover raw terminal makes input invisible).
 	local ok, err = pcall(function()
 		while true do
 			local ch = raw.readByte()
@@ -174,7 +160,6 @@ function prompt.select(opts)
 		lde.error.raise(err)
 	end
 
-	-- Collapse the options into a single answer line.
 	local opt = opts.options[idx]
 	local line = cancelled
 		and ansi.format("{yellow}Aborted.{reset}")
@@ -186,9 +171,7 @@ function prompt.select(opts)
 	return opt.key
 end
 
----Interactive single-line input. Enter accepts the value; empty input accepts
----the default (when one is given) or re-prompts (when required). Esc or Ctrl+C
----cancels (returns nil). Backspace edits; arrow keys are consumed and ignored.
+---Interactive single-line input: Enter accepts, empty accepts the default or re-prompts, Esc/Ctrl+C cancels, arrow keys are ignored.
 ---@param opts { prompt: string, default: string? }
 ---@return string? # the entered value, or nil when cancelled
 function prompt.ask(opts)
@@ -209,8 +192,7 @@ function prompt.ask(opts)
 		io.flush()
 
 		local cancelled = false
-		-- Always unwind raw mode, even on an unexpected error (a raw terminal
-		-- makes all subsequent input invisible).
+		-- Always unwind raw mode, even on an unexpected error (a leftover raw terminal makes input invisible).
 		local ok, err = pcall(function()
 			while true do
 				local ch = raw.readByte()
@@ -262,8 +244,7 @@ function prompt.ask(opts)
 	end
 end
 
----Resolve the package's manifest name from a `--name` flag, an interactive
----prompt, or (non-interactive) the given default. Cancelling the prompt exits.
+---Resolve the manifest name from a `--name` flag, a prompt, or (non-interactive) the default; cancelling exits.
 ---@param args clap.Args
 ---@param default string
 ---@return string
@@ -284,8 +265,7 @@ function prompt.resolveName(args, default)
 	return name
 end
 
----Pre-install the compiler for a scaffolded language so the first `lde run`
----doesn't download it. Failures are warnings, not scaffold errors.
+---Pre-install the scaffolded language's compiler so the first run doesn't download it; failures only warn.
 ---@param language "lua"|"teal"|"moonscript"
 function prompt.ensureCompiler(language)
 	if language == "teal" then
@@ -301,9 +281,7 @@ function prompt.ensureCompiler(language)
 	end
 end
 
----Resolve scaffolding choices from `--type` and `--language` flags, or from
----interactive prompts when stdin and stdout are terminals. Non-interactive
----runs with no flags keep the historical defaults (blank project, Lua).
+---Resolve --type/--language from flags or, when interactive, prompts; non-interactive runs keep the blank/Lua defaults.
 ---@param args clap.Args
 function prompt.scaffoldOptions(args)
 	const opts = {} --[[@as lde.Package.InitOptions]]

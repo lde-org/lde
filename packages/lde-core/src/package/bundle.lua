@@ -69,9 +69,7 @@ local function bundleDir(projectName, dir, out, excludes)
 		---@type string[]
 		local names = {}
 		if stripped ~= dotted then
-			-- X/init.lua answers to both "X" and "X.init" through package.path,
-			-- so the bundle has to preload both names. Rocks rely on the second
-			-- spelling: lgi explicitly does require("lgi.init").
+			-- X/init.lua answers to both "X" and "X.init"; rocks rely on the second spelling (lgi does require("lgi.init")).
 			names[#names + 1] = stripped ~= "" and (projectName .. "." .. stripped) or projectName
 			names[#names + 1] = projectName .. "." .. dotted
 		else
@@ -84,11 +82,7 @@ local function bundleDir(projectName, dir, out, excludes)
 	end
 end
 
--- The module name of the entry point: the file `lde run` executes. `bin` in the
--- manifest is a path relative to the built modules dir (target/<name>/), so
--- "main.lua" is bundled as "<name>.main". A file named init.lua answers to its
--- directory's name, so "init.lua" is the package name itself. Without `bin` the
--- entry is src/init.lua, which is also the package name.
+-- `bin` in the manifest is a path relative to the built modules dir, so "main.lua" is bundled as "<name>.main" and "init.lua" as the package name; without `bin` the entry is src/init.lua (also the package name).
 ---@param package lde.Package
 local function entryModuleName(package)
 	local name = package:getName()
@@ -113,11 +107,7 @@ local function bundlePackage(package, opts)
 	---@field names string[] # every name this file answers to, best first
 	---@field content string
 
-	--- Files directly under target/ (a rock's X.lua) and files found inside a
-	--- package directory (target/<pkg>/X.lua) are collected separately: when
-	--- both spellings of one name exist, package.path resolves ?.lua first, so
-	--- the plain file has to claim the plain name before the directory's
-	--- init.lua can.
+	--- When both spellings of a name exist, package.path resolves ?.lua first, so a rock's plain X.lua must claim the plain name before a directory's init.lua can.
 	---@type lde.bundle.File[]
 	const topFiles = {}
 	---@type lde.bundle.File[]
@@ -125,15 +115,10 @@ local function bundlePackage(package, opts)
 	local modulesDir = package:getModulesDir()
 	local mainName = entryModuleName(package)
 
-	-- Feature-flag file exclusion. Every entry in target/ is filtered by the
-	-- globs its own features turn on, so a package can carry several platform
-	-- backends and still ship only the one that runs. target/<alias> resolves
-	-- through the lockfile and the dependency's own manifest.
+	-- Each entry in target/ is filtered by the globs its own features turn on, so a package can ship several platform backends but only deploy the one that runs.
 	const excludesFor = features.resolverFor(package, opts.features)
 
-	-- Native modules (.so/.dll/.dylib): embedded as raw bytes and extracted
-	-- next to the bundle at load time, so `require("cmod.core")` resolves
-	-- through package.cpath like it does in a normal lde project.
+	-- Native modules (.so/.dll/.dylib) are embedded as raw bytes and extracted next to the bundle at load time so `require` resolves through package.cpath as in a normal project.
 	const nativeExts = jit.os == "Windows" and { "dll" }
 		or (jit.os == "OSX" and { "so", "dylib" } or { "so" })
 	---@type table<string, string> # cpath-relative path ("cmod/core.so") -> bytes
@@ -142,18 +127,14 @@ local function bundlePackage(package, opts)
 	for entry in fs.readdir(modulesDir) do
 		local p = path.join(modulesDir, entry.name)
 		if entry.name == "tests" and package:getName() ~= "tests" then
-			-- lde test exposes the package's tests/ dir as target/tests; it's
-			-- test-only code and must never end up in a bundle. A package
-			-- *named* "tests" has its own module dir at target/tests — keep it.
+			-- target/tests is the package's test-only dir and must never end up in a bundle; a package *named* "tests" owns its own module dir there — keep it.
 			goto continue
 		end
 
 		if fs.isdir(p) then
 			const excludes = excludesFor(entry.name)
 			bundleDir(entry.name, p, dirFiles, excludes)
-			-- Native modules are filtered by the same feature globs: a feature
-			-- may drop a backend .so as well as the Lua that drives it, so
-			-- `build:feature(...)` and the manifest agree on one set of flags.
+			-- Native modules are filtered by the same feature globs, so build:feature(...) and the manifest agree on one set of flags that may drop a backend .so as well as its Lua.
 			for _, relativePath in ipairs(fs.scan(p, "**")) do
 				local ext = relativePath:match("%.([^.]+)$")
 				local isNative = false
@@ -171,8 +152,7 @@ local function bundlePackage(package, opts)
 				end
 			end
 		elseif entry.name:match("%.lua$") and not isTestFile(entry.name) then
-			-- A rock's flat module (target/X.lua): keyed by its own name, which
-			-- is how a dependency alias would spell it in the lockfile.
+			-- A rock's flat module (target/X.lua) is keyed by its own name, how a dependency alias spells it in the lockfile.
 			if not features.isExcluded(entry.name, excludesFor(entry.name:gsub("%.lua$", ""))) then
 				local content = fs.read(p)
 				if content then
@@ -181,9 +161,7 @@ local function bundlePackage(package, opts)
 				end
 			end
 		else
-			-- Top-level native module (e.g. lfs.so from a rock that installs a
-			-- single module into target/): embedded like the nested ones, and
-			-- filtered by the same globs.
+			-- Top-level native module (e.g. lfs.so): embedded like the nested ones and filtered by the same globs.
 			local ext = entry.name:match("%.([^.]+)$")
 			local isNative = false
 			for _, e in ipairs(nativeExts) do
@@ -200,10 +178,7 @@ local function bundlePackage(package, opts)
 		::continue::
 	end
 
-	-- Give every file one primary name plus any remaining aliases. A file keeps
-	-- its own body under each of them: pointing X.init at module "X" instead
-	-- would recurse the moment X.lua is a forwarder to X/init.lua, which is
-	-- exactly what lgi ships.
+	-- A file keeps its own body under each name: pointing X.init at module "X" would recurse the moment X.lua forwards to X/init.lua, which is exactly what lgi ships.
 	---@type table<string, string>
 	const files = {}
 	---@type table<string, string[]>
@@ -234,10 +209,7 @@ local function bundlePackage(package, opts)
 	for _, rec in ipairs(dirFiles) do claim(rec) end
 
 	if raw then
-		-- Raw bytecode table for sea.compile: each module's bytecode is kept
-		-- separate so the C side can embed it as raw bytes and deserialize it
-		-- lazily on first require(), instead of parsing/deserializing the whole
-		-- module graph at startup.
+		-- Each module's bytecode is kept separate so the C side can deserialize it lazily on first require() instead of parsing the whole module graph at startup.
 		local modules = {}
 		for moduleName, content in pairs(files) do
 			modules[#modules + 1] = {
@@ -251,12 +223,7 @@ local function bundlePackage(package, opts)
 
 	local parts = {}
 	if next(nativeFiles) then
-		-- Extract embedded native libraries next to the bundle and put the
-		-- directory on package.cpath before any module loads.
-		--
-		-- Binary bytes are embedded as a short string with \xNN escapes, NOT a
-		-- long string: the Lua lexer normalizes \r and \r\n to \n inside long
-		-- strings, which would silently corrupt the .so.
+		-- Binary bytes use a short string with \xNN escapes, NOT a long string: the Lua lexer normalizes \r and \r\n to \n inside long strings, which would silently corrupt the .so.
 		local entries = {}
 		for relPath, content in pairs(nativeFiles) do
 			entries[#entries + 1] = string.format('\t["%s"] = "%s"', relPath, escapeBytes(content))
@@ -300,21 +267,14 @@ local function bundlePackage(package, opts)
 
 		local loader
 		if moduleName == mainName then
-			-- Main entry: loaded eagerly so the final call can pass args through.
+			-- Loaded eagerly so the final call can pass args through.
 			loader = string.format('load("%s", "@%s")', content, moduleName)
 		else
-			-- Everything else: defer bytecode deserialization to first require(),
-			-- so trivial commands (--version, help) don't pay for the whole
-			-- module graph at startup. Forward the modname vararg that require
-			-- passes to preload loaders: modules use (...), e.g. lde-core does
-			-- package.loaded[(...)] = lde at the top.
+			-- Defer deserialization to first require() so trivial commands don't pay for the whole module graph; the modname vararg is forwarded because modules use (...), e.g. lde-core sets package.loaded[(...)] = lde.
 			loader = string.format('function(...) return load("%s", "@%s")(...) end', content, moduleName)
 		end
 
-		-- A module with preload aliases (X/init.lua answers to "X" and
-		-- "X.init") shares one loader between the names: emitting the file twice
-		-- would double its bytes, and aliasing to package.preload[moduleName]
-		-- would recurse when a sibling X.lua owns that name.
+		-- Aliases (X/init.lua answers to "X" and "X.init") share one loader: emitting the file twice would double its bytes, and aliasing to package.preload[moduleName] would recurse when a sibling X.lua owns that name.
 		local list = fileAliases[moduleName]
 		if list and #list > 0 then
 			const var = "__lde_load_" .. moduleName:gsub("%W", "_")

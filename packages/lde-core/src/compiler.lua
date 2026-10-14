@@ -1,11 +1,4 @@
---- Shared machinery for compilers that turn a source language into Lua
---- (Moonscript, Teal, ...). A language is a spec; the compiler guest state
---- that runs the translator stays loaded across compiles.
----
---- The guest state is created once per process: the compiler package is
---- resolved via luarocks, built, and installed as a dependency, then the
---- driver chunk is loaded into a fresh lua-sys state with the package path
---- the runner would use. Every subsequent compile reuses that state.
+--- A language is a spec; the compiler guest state is created once per process (compiler package resolved via luarocks, built, installed, then the driver chunk loaded into a fresh lua-sys state) and reused across compiles.
 ---
 ---@class lde.CompilerSpec
 ---@field name string # language name for error messages ("Moonscript", "Teal")
@@ -43,9 +36,7 @@ local function mkdirp(dir)
 	fs.mkdir(dir)
 end
 
---- Ensure the compiler guest state exists, resolving + building the compiler
---- package first if needed. Retries once after clearing the cached archive,
---- in case the first resolution produced a broken install.
+--- Retries once after clearing the cached archive, in case the first resolution produced a broken install.
 ---@return lua.State
 function Compiler:ensure()
 	if self.state then return self.state end
@@ -60,7 +51,6 @@ function Compiler:ensure()
 		pkg:build()
 		pkg:installDependencies()
 
-		-- Reuse the package path setup shared by the runner and build scripts.
 		const luaPath, luaCPath = require("lde-core.package.run").getLuaPaths(pkg)
 		local st = lua.new()
 		const g = st:globals() --[[@as { package: { path: string?, cpath: string? } }]]
@@ -90,7 +80,6 @@ function Compiler:ensure()
 	error("unreachable", 0)
 end
 
---- Whether a directory contains any source files in this language.
 ---@param dir string
 ---@return boolean
 function Compiler:hasSource(dir)
@@ -124,9 +113,7 @@ function Compiler:compileFile(file)
 	return self:compileSource(source, file)
 end
 
---- Compile every source file under srcDir into outDir (mirroring the
---- directory structure) and copy everything else, so outDir is a drop-in Lua
---- mirror of srcDir.
+--- Mirrors srcDir into outDir as Lua (directory structure preserved); everything else is copied verbatim.
 ---@param srcDir string
 ---@param outDir string
 function Compiler:compileDir(srcDir, outDir)

@@ -1,11 +1,4 @@
--- lde-core/src/jitdiag.lua
---
--- JIT diagnostics for `lde run --jit`: LuaJIT -jv-style trace reporting.
--- Hooks jit.attach in a guest state and reports trace aborts — code that
--- could not be JIT-compiled — with a source location and the compiler's
--- reason (e.g. "NYI: bytecode FNEW"), plus a summary of compiled vs aborted
--- traces. This is a trace-level diagnostic: it fires on every trace event,
--- so it is opt-in and deliberately separate from the sampling --profile.
+-- JIT diagnostics for `lde run --jit`: jit.attach hooks in a guest state report trace aborts (unJITtable code) with source location and reason; a trace-level diagnostic, so it is opt-in and kept separate from the sampling --profile.
 
 const ansi = require("ansi")
 const path = require("path")
@@ -14,9 +7,7 @@ const highlight = require("ansi.highlight")
 
 const jitdiag = {}
 
--- Trace compiler error codes (TraceError enum), in order, from the bundled
--- LuaJIT fork's src/lj_traceerr.h. The attach callback passes the code as an
--- integer; %s/%d placeholders are filled from the event's errinfo.
+-- Trace compiler error codes in order from the bundled LuaJIT fork's src/lj_traceerr.h; the callback passes the code as an integer, %s/%d filled from errinfo.
 ---@type table<integer, string>
 const TRACE_ERRORS = {
 	[0]  = "error thrown or hook called during recording",
@@ -56,9 +47,7 @@ const TRACE_ERRORS = {
 	[34] = "NYI: register coalescing too complex",
 }
 
--- Bytecode opcode names, in order, from the fork's src/lj_bc.h. The NYIBC
--- abort's errinfo is the opcode number ("NYI: bytecode <opcode>"), which we
--- decode to a name here.
+-- Bytecode opcode names in order from the fork's src/lj_bc.h; the NYIBC abort's errinfo is the opcode number, decoded to a name here.
 ---@type string[]
 const BC_NAMES = {
 	"ISLT", "ISGE", "ISLE", "ISGT", "ISEQV", "ISNEV", "ISEQS", "ISNES",
@@ -76,7 +65,6 @@ const BC_NAMES = {
 	"JFUNCF", "FUNCV", "IFUNCV", "JFUNCV", "FUNCC", "FUNCCW",
 }
 
---- Decode an abort reason code + errinfo into a human message.
 ---@param code integer
 ---@param errinfo string?
 local function formatReason(code, errinfo)
@@ -95,8 +83,6 @@ local function formatReason(code, errinfo)
 	return template
 end
 
--- Installed per guest state. The guest callback forwards (event, info) to the
--- driver; the driver formats with ansi and tallies.
 ---@class lde.jitdiag.Session
 ---@field compiled integer
 ---@field aborted integer
@@ -122,8 +108,7 @@ local function displayPath(file)
 	return file
 end
 
---- Split source text into lines (dropping the empty entry left by a final
---- newline). gmatch-based splitting miscounts blank lines.
+--- gmatch-based splitting miscounts blank lines.
 ---@param src string
 ---@return string[]
 local function splitLines(src)
@@ -147,8 +132,7 @@ local function expandTabs(line)
 	return (line:gsub("\t", "    "))
 end
 
--- Guest-side bootstrap: installs jit.attach and forwards events to the
--- driver. NB: the config vararg must not shadow the global `jit`.
+-- Guest-side bootstrap; the config vararg must not shadow the global `jit`.
 local BOOTSTRAP = [==[
 local diag = ...
 local util = require("jit.util")
@@ -187,21 +171,16 @@ jit.attach(function(event, trace, func, pos, reason, errinfo)
 end, "trace")
 ]==]
 
--- Handles for reporting after a run: state -> session. The state is a lua-sys
--- object; keys are weak so closed states drop out.
+-- state -> session; weak keys so closed lua.State objects drop out.
 ---@type table<lua.State, lde.jitdiag.Session>
 const sessions = setmetatable({}, { __mode = "k" })
 
---- Install trace diagnostics into a guest state. The guest forwards every
---- trace event; aborts print live (deduped per site) and are tallied for the
---- end-of-run report.
 ---@param state lua.State
 ---@param opts { cwd: string? }?
 function jitdiag.install(state, opts)
 	opts = opts or {}
 	local session = newSession()
 
-	-- Called from the guest on every trace event.
 	---@param event string
 	local function onCount(event)
 		if event == "stop" then session.compiled = session.compiled + 1 end
@@ -225,7 +204,6 @@ function jitdiag.install(state, opts)
 			line = info.line,
 		}
 		session.sites[key] = site
-		-- First occurrence of this site prints live as a warning.
 		ansi.printf("{yellow}jit{reset}: {red}aborted{reset} at %s - %s",
 			file .. ":" .. site.line, ansi.colorize("yellow", reason))
 	end
@@ -244,13 +222,6 @@ function jitdiag.install(state, opts)
 	return session
 end
 
---- The session for a state (nil when diagnostics were not installed).
----@param state lua.State
----@return lde.jitdiag.Session?
-function jitdiag.sessionFor(state)
-	return sessions[state]
-end
-
 ---@param session lde.jitdiag.Session
 ---@param cwd string?
 function jitdiag.report(session, cwd)
@@ -263,9 +234,6 @@ function jitdiag.report(session, cwd)
 	ansi.printf("{yellow}jit{reset}: {gray}%d traces compiled, %d aborted (%d site%s){reset}",
 		session.compiled, session.aborted, #sites, #sites == 1 ? "" : "s")
 	for _, site in ipairs(sites) do
-		-- Bun-style block: highlighted snippet with an underline under the
-		-- incident line and the reason beside it. Fall back to a one-liner
-		-- when the source file can't be read.
 		local rendered = false
 		if cwd and site.line > 0 then
 			const f = (site.file and path.isAbsolute(site.file)) ? site.file : path.join(cwd, site.file)
@@ -280,8 +248,6 @@ function jitdiag.report(session, cwd)
 					const num = string.format("%" .. width .. "d | ", ln)
 					return ansi.colorize("gray", num)
 				end
-				-- Caret directly under the incident line (mid-window), with the
-				-- remaining context after it — same layout as run errors.
 				for ln = startLine, site.line do
 					print(gutter(ln) .. highlight(expandTabs(lines[ln])))
 				end

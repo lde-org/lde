@@ -1,11 +1,4 @@
--- Central registry of per-command usage documentation. This is the single
--- source of truth for:
---
---   * `lde help <command>` / `lde --help <command>` (commands/help.lua)
---   * shell completions (commands/completion.lua, commands/complete.lua)
---
--- The table is intentionally pure data (no requires) so the completion
--- backend can load it without pulling in the rest of the CLI.
+-- Single source of truth for `lde help` and shell completions; kept pure data for cheap loading.
 
 ---@class lde.CommandOption
 ---@field arg? string # placeholder shown after the flag (e.g. "url" for --git)
@@ -67,6 +60,7 @@ local commands = {
 			["--watch"] = { desc = "Re-run tests on file changes" },
 			["--coverage"] = { desc = "Print a per-file line coverage report" },
 			["--json"] = { arg = "file", desc = "Also write the coverage report as JSON (default: coverage.json; implies --coverage)" },
+			["--jobs"] = { arg = "n", desc = "Test files (and packages) to run at once (default: one per CPU, max 8; 1 disables)" },
 		},
 	},
 	new = {
@@ -198,8 +192,7 @@ local aliases = {
 	i = "install",
 }
 
--- Global flags that make sense anywhere (shown in per-command help and offered
--- after a command by the completions).
+-- Global flags valid anywhere (also offered after a command by the completions).
 ---@type table<string, lde.CommandOption>
 local globalFlags = {
 	["--help"] = { desc = "Show help" },
@@ -224,16 +217,12 @@ local topLevelFlags = {
 -- Flags whose value is a directory (shells complete directories for these).
 local dirFlags = { "-C", "--cwd", "--tree", "--path" }
 
--- Flags whose value is a file path.
 local fileFlags = { "--outfile" }
 
--- Flags that take a value: completion suppresses suggestions for the value
--- position (shells handle the common cases listed above).
+-- Value-taking flags: completion suppresses suggestions at the value position.
 local valueFlags = { "-C", "--cwd", "--tree", "--path", "--git", "--branch", "--commit", "--version", "--outfile", "--flamegraph", "--type", "--language", "--name", "--target" }
 
--- Known values for value-taking flags; the completion backend offers these
--- instead of suppressing the value position. Kept as pure data (like the rest
--- of this module) so completion stays fast.
+-- Known values for these flags; the completion backend offers them at the value position.
 ---@type table<string, string[]>
 local flagValues = {
 	["--target"] = { "linux-x86-64", "linux-aarch64", "windows-x86-64", "windows-aarch64", "macos-x86-64", "macos-aarch64", "freebsd-x86-64", "freebsd-aarch64", "android-aarch64" },
@@ -242,7 +231,6 @@ local flagValues = {
 -- Canonical command names in display order.
 local names = { "help", "run", "x", "search", "repl", "test", "new", "init", "upgrade", "sync", "install", "uninstall", "add", "remove", "tree", "update", "outdated", "publish", "compile", "bundle", "bloat", "completion" }
 
--- Every name the completions may offer, including aliases.
 local completionNames = {}
 for _, name in ipairs(names) do
 	completionNames[#completionNames + 1] = name

@@ -5,11 +5,22 @@ const env = require("env")
 const process = require("process")
 const ffi = require("ffi")
 
+const json = require("json")
 const errorsnippet = require("lde.util.errorsnippet")
+
+--- Default shard count: one per available CPU, capped so a small suite does not
+--- spawn more processes than it has files.
+---@return integer
+local function defaultJobs()
+	const _, out = process.exec("nproc")
+	local text = (out or ""):gsub("%s+$", "")
+	local count = tonumber(text) or 0
+	if count < 1 then count = 4 end
+	return math.min(count, 8)
+end
 
 const lde = require("lde-core")
 
--- Cross-platform sleep used to poll the file watchers in --watch mode.
 local sleep
 if jit.os == "Windows" then
 	pcall(ffi.cdef, "void Sleep(unsigned long dwMilliseconds);")
@@ -39,8 +50,7 @@ local function makeReporter(pkgDir)
 		end,
 		onFail = function(name, err, handle, file)
 			handle:fail(name)
-			-- Errors without a file position (e.g. error("boom", 0)) fall back
-			-- to a plain message.
+			-- Errors without a file position (e.g. error("boom", 0)) fall back to a plain message.
 			if not errorsnippet.printError(pkgDir, err or "unknown error", file) then
 				ansi.printf("     {red}%s", err or "unknown error")
 			end
@@ -100,8 +110,7 @@ end
 ---@field totalCovered number
 ---@field percent number
 
---- Build a per-file coverage report (display paths, sorted worst-first). Shared
---- by the text printer and the --json emitter so both see identical data.
+-- Shared by the text printer and the --json emitter so both see identical data.
 ---@param pkg lde.Package
 ---@param coverage lde.Coverage
 ---@return lde.CoverageReport
@@ -118,8 +127,7 @@ local function coverageReport(pkg, coverage)
 		if rel:sub(1, #targetPrefix) == targetPrefix then
 			rel = path.join("src", rel:sub(#targetPrefix + 1))
 		end
-		-- Display paths with forward slashes on every platform; path.relative
-		-- and path.join use the OS separator (backslashes on Windows).
+		-- Forward slashes on every platform: path.relative/join use the OS separator.
 		rel = rel:gsub("\\", "/")
 		rows[#rows + 1] = {
 			file = rel,
@@ -142,8 +150,7 @@ local function coverageReport(pkg, coverage)
 	}
 end
 
--- Print a per-file line coverage report. Files show as src/ paths (modules
--- load from target/<name>, the built copy of src/), sorted worst-first.
+-- Files show as src/ paths (modules load from target/<name>, the built copy of src/), sorted worst-first.
 ---@param pkg lde.Package
 ---@param coverage lde.Coverage
 local function printCoverage(pkg, coverage)
@@ -156,9 +163,7 @@ local function printCoverage(pkg, coverage)
 
 	local totalExecutable, totalCovered = report.totalExecutable, report.totalCovered
 
-	-- Column widths: files left-aligned (min 38 chars), the covered/total
-	-- ratio right-aligned as a unit, so "lines" and the percentage land in
-	-- the same column on every row and on the Total line.
+	-- Files left-aligned (min 38), covered/total ratio right-aligned as a unit, so the percentage aligns on every row.
 	local fileW = 38
 	local covW, totW = 1, 1
 	for _, r in ipairs(rows) do
@@ -174,8 +179,7 @@ local function printCoverage(pkg, coverage)
 	ansi.printf("  {bold}Coverage")
 	print("  " .. ansi.colorize("gray", string.rep("─", sepW)))
 	for _, r in ipairs(rows) do
-		-- The color token is spliced into the format string at runtime so
-		-- ansi.format resolves it; {%s} would survive gsub and print literally.
+		-- Spliced in at runtime so ansi.format resolves it; {%s} would survive gsub and print literally.
 		const color = percentColor(r.percent)
 		ansi.printf("  {gray}%-" .. fileW .. "s{reset} %" .. ratioW .. "s {gray}lines{reset}  {" .. color .. "}%.1f%%",
 			r.file, ("%d/%d"):format(r.covered, r.executable), r.percent)
@@ -188,13 +192,9 @@ local function printCoverage(pkg, coverage)
 		("%" .. (ratioW + fileW - 6) .. "s"):format(("%d/%d"):format(totalCovered, totalExecutable)), totalPercent)
 end
 
---- Write one or more per-package coverage reports as JSON for programmatic
---- analysis (CI, dashboards, finding untested modules). The shape mirrors the
---- text report: files sorted worst-first, per-package and combined totals.
 ---@param reports lde.CoverageReport[]
 ---@param jsonPath string
 local function writeCoverageJson(reports, jsonPath)
-	const json = require("json")
 	local totalExecutable, totalCovered = 0, 0
 	for _, r in ipairs(reports) do
 		totalExecutable += r.totalExecutable
@@ -219,7 +219,6 @@ local function writeCoverageJson(reports, jsonPath)
 	ansi.printf("{cyan}Coverage JSON written to %s", jsonPath)
 end
 
--- Print a notice when coverage was requested but the runner can't provide it.
 ---@param results lde.TestResults
 local function printCoverageNotice(results)
 	if results.external and not results.coverageRan then
@@ -227,10 +226,7 @@ local function printCoverageNotice(results)
 	end
 end
 
---- Re-run `lde test` whenever the project's source or tests change.
---- The watcher only covers src/, tests/, and the package root (non-recursive,
---- filtered to lde.json/build.lua) so the target/ churn from running the tests
---- never triggers a re-run.
+-- The watcher covers src/, tests/, and the package root (non-recursive, lde.json/build.lua only) so target/ churn never triggers a re-run.
 ---@param filters string[]
 ---@param coverage boolean?
 local function runWatch(filters, coverage)
@@ -313,12 +309,19 @@ end
 local function test(args)
 	const watch = args:flag("watch")
 	local coverage = args:flag("coverage")
+	local jobs = tonumber(args:option("jobs") or "") or defaultJobs()
+	-- Hidden shard mode: run exactly one file and record its results for the parent.
+	const shardFile = args:option("shard-file")
+	const shardResults = args:option("shard-results")
+	-- Coverage collection is in-process (a line hook per guest state), so sharded
+	-- runs cannot merge it; --coverage and --verbose always run files sequentially.
+	if coverage or lde.isVerbose then jobs = 1 end
 	-- --json <file> writes the coverage report as JSON (implies --coverage).
+	const resultsOut = args:option("results")
 	local jsonOut = args:option("json")
 	if not jsonOut and args:flag("json") then jsonOut = "coverage.json" end
 	if jsonOut then coverage = true end
 
-	-- Collect remaining positional args as test file filter globs
 	args:flag("") -- consume the `--` separator if present
 	local filters = {}
 	while true do
@@ -334,9 +337,14 @@ local function test(args)
 
 	local package = lde.Package.open()
 
+	if shardFile and shardResults and package then
+		const results = package:runTests(nil, { shardFile }, { coverage = false, jobs = 1, isShard = true })
+		fs.write(shardResults, json.encode({ files = results.files, error = results.error }))
+		return
+	end
+
 	print()
 
-	-- Running outside of a package, run tests for all packages inside of cwd
 	if not package then
 		local cwd = env.cwd()
 		local hadFailures = false
@@ -347,8 +355,7 @@ local function test(args)
 		local packages = {}
 		local coverageReports = {} ---@type lde.CoverageReport[]
 		for _, relativePath in ipairs(fs.scan(cwd, "**" .. path.separator .. "lde.json")) do
-			-- Skip hidden directories (.git, .fuzz, .shotgun, ...) anywhere in
-			-- the path: VCS internals and generated scratch dirs are not packages.
+			-- Hidden dirs (.git, .fuzz, ...) anywhere in the path are VCS internals or scratch, not packages.
 			if relativePath:match("^%.[^/\\\\]*[/\\\\]") or relativePath:match("[/\\\\]%.[^/\\\\]*[/\\\\]") then goto continue end
 			local configPath = path.join(cwd, relativePath)
 			local pkgDir = path.dirname(configPath)
@@ -360,9 +367,7 @@ local function test(args)
 			::continue::
 		end
 
-		-- Rockspec-based packages (e.g. LuaRocks projects) whose test
-		-- specification lives in the rockspec; skip ones that also have an
-		-- lde.json (already handled above) and require a busted-style layout.
+		-- Rockspec packages whose test spec lives in the rockspec; skip ones with lde.json (handled above).
 		for _, relativePath in ipairs(fs.scan(cwd, "**" .. path.separator .. "*.rockspec")) do
 			if relativePath:match("^%.[^/\\\\]*[/\\\\]") or relativePath:match("[/\\\\]%.[^/\\\\]*[/\\\\]") then goto continue end
 			local configPath = path.join(cwd, relativePath)
@@ -388,8 +393,117 @@ local function test(args)
 			#packages, #packages == 1 ? "package" : "packages")
 		print()
 
-		-- Whether any package actually ran a file: with a filter, a run where
-		-- nothing matched anywhere is a mistake (typo'd glob), not a pass.
+		-- Packages run in their own `lde test` processes when there is more than
+		-- one: the two heavy packages (lde, lde-core) dominate the suite, and
+		-- nothing in them shares state except the global caches, which are
+		-- materialized atomically. Coverage is in-process, so it stays sequential.
+		if jobs > 1 and #packages > 1 and not coverage and not lde.isVerbose then
+			const packageWorkers = math.min(#packages, math.max(2, math.floor(jobs / 4)))
+			const fileJobs = math.max(1, math.floor(jobs / packageWorkers))
+			const scratch = path.join(env.tmpdir(), "lde-pkgs-" .. tostring({}):match("0x(%x+)$"))
+			fs.mkdirAll(scratch)
+			const execPath = assert(env.execPath(), "no executable path")
+
+			---@type { name: string, child: process.Child?, results: string, output: string? }[]
+			const running = {}
+			---@type { name: string, output: string, total: integer, failures: integer, skipped: integer, error: string? }[]
+			const finished = {}
+			local next = 1
+			local hadFailures = false
+			local totalPassed, totalFailures, totalSkipped = 0, 0, 0
+
+			---@param pkg lde.Package
+			---@param index integer
+			---@return { name: string, child: process.Child?, results: string, output: string? }
+			local function startPackage(pkg, index)
+				const resultsFile = path.join(scratch, index .. ".json")
+				local childArgs = { "-C", pkg:getDir(), "test", "--results", resultsFile, "--jobs", tostring(fileJobs) }
+				if lde.global.getDir() ~= lde.global.getUserDir() then
+					childArgs[#childArgs + 1] = "--tree"
+					childArgs[#childArgs + 1] = lde.global.getDir()
+				end
+				for _, f in ipairs(filters) do childArgs[#childArgs + 1] = f end
+				local child = process.spawn(execPath, childArgs, { stdout = "pipe", stderr = "pipe" })
+				if not child then
+					fs.write(resultsFile, json.encode({ total = 0, failures = 1, skipped = 0 }))
+				end
+				return { name = pkg:getName(), child = child, results = resultsFile }
+			end
+
+			local function startNext()
+				if next > #packages then return end
+				const entry = startPackage(packages[next], next)
+				entry.output = nil
+				running[#running + 1] = entry
+				next += 1
+			end
+
+			local function reapFinished()
+				for i = #running, 1, -1 do
+					const entry = running[i]
+					if not entry.child or entry.child:poll() ~= nil then
+						local output = ""
+						if entry.child then
+							local _, stdout, stderr = entry.child:wait()
+							output = (stdout or "") .. (stderr or "")
+						end
+
+						local decoded
+						if fs.exists(entry.results) then
+							const okDecode, parsed = pcall(json.decode, fs.read(entry.results) or "")
+							if okDecode and type(parsed) == "table" then decoded = parsed end
+						end
+						const skipped = (decoded and decoded.skipped) or 0
+						const failures = (decoded and decoded.failures) or (decoded and 0 or 1)
+						const total = (decoded and decoded.total) or 0
+						finished[#finished + 1] = {
+							name = entry.name,
+							output = output,
+							total = total,
+							failures = failures,
+							skipped = skipped,
+							error = decoded and decoded.error or (not decoded and "test process failed" or nil),
+						}
+						table.remove(running, i)
+					end
+				end
+			end
+
+			while next <= #packages and #running < packageWorkers do startNext() end
+			while #running > 0 do
+				reapFinished()
+				while next <= #packages and #running < packageWorkers do startNext() end
+				if #running > 0 then sleep(5) end
+			end
+
+			-- Results are printed in package order once every package has finished,
+			-- so a slow package never delays reporting of the ones after it.
+			for _, entry in ipairs(finished) do
+				ansi.printf("{gray}%s", entry.name)
+				print()
+				io.write(entry.output)
+				if not entry.error and entry.output == "" then print() end
+				if entry.error then
+					ansi.printf("  {red}%s", entry.error)
+					hadFailures = true
+					totalFailures = totalFailures + 1
+				else
+					totalPassed = totalPassed + entry.total - entry.failures
+					totalFailures = totalFailures + entry.failures
+					totalSkipped = totalSkipped + entry.skipped
+					if entry.failures > 0 then hadFailures = true end
+				end
+			end
+
+			fs.rmdir(scratch)
+
+			print()
+			printSummary(totalFailures, totalPassed, totalPassed + totalFailures, totalSkipped)
+			if hadFailures then os.exit(1) end
+			return
+		end
+
+		-- A run where a filter matched nothing anywhere is a typo, not a pass.
 		local anyMatched = false
 
 		for _, pkg in ipairs(packages) do
@@ -398,14 +512,13 @@ local function test(args)
 			local reporter = makeReporter(pkg:getDir())
 			-- Run package relative to its own dir so you get identical behavior as if you ran the individual package's tests.
 			env.chdir(pkg:getDir())
-			local results = pkg:runTests(reporter, filters, { coverage = coverage })
+			local results = pkg:runTests(reporter, filters, { coverage = coverage, jobs = jobs })
 			env.chdir(cwd)
 			if results.error then
 				ansi.printf("  {red}%s", results.error)
 				hadFailures = true
 				totalFailures += 1
 			elseif results.external then
-				-- External runners (busted) print their own results.
 				anyMatched = true
 				if results.exitCode ~= 0 then
 					ansi.printf("  {red}Tests: failed (exit %s)", tostring(results.exitCode))
@@ -416,8 +529,7 @@ local function test(args)
 					totalPassed = totalPassed + 1
 				end
 			elseif #results.files == 0 then
-				-- Nothing matched in this package; a per-package miss is only
-				-- an error when no package matched anywhere (checked below).
+				-- Per-package miss is only an error when no package matched anywhere (checked below).
 				if #filters > 0 then
 					ansi.printf("  {gray}No files matched")
 				else
@@ -450,8 +562,7 @@ local function test(args)
 		local totalTests = totalPassed + totalFailures
 		printSummary(totalFailures, totalPassed, totalTests, totalSkipped)
 
-		-- A filter that matched nothing anywhere is a typo, and a run where no
-		-- package had any tests is nothing to celebrate — both must fail.
+		-- A typo'd filter (no match anywhere) and a run with zero tests must both fail.
 		if #filters > 0 and not anyMatched then
 			lde.error.raise("No test files match: " .. table.concat(filters, ", "))
 		end
@@ -467,12 +578,19 @@ local function test(args)
 	end
 
 	local reporter = makeReporter(package:getDir())
-	local results = package:runTests(reporter, filters, { coverage = coverage })
+	local results = package:runTests(reporter, filters, { coverage = coverage, jobs = jobs })
+	if resultsOut then
+		fs.write(resultsOut, json.encode({
+			total = results.total,
+			failures = results.failures,
+			skipped = results.skipped,
+			error = results.error,
+		}))
+	end
 	if results.error then
 		lde.error.raise(results.error)
 	elseif results.external then
-		-- External runners (busted) print their own results; lde just reports
-		-- the verdict so the exit code matches the suite's.
+		-- External runners (busted) print their own results; lde reports the verdict so the exit code matches the suite's.
 		if results.exitCode ~= 0 then
 			ansi.printf("{red}Tests: failed (exit %s)", tostring(results.exitCode))
 		else
@@ -483,8 +601,7 @@ local function test(args)
 		os.exit(results.exitCode ~= 0 and 1 or 0)
 		return
 	elseif #results.files == 0 then
-		-- Nothing ran: a filter that matched no file, or no test files at all
-		-- (an empty or typo'd tests/ dir must not pass silently).
+		-- A filter matching no file, or an empty/typo'd tests/ dir, must not pass silently.
 		if #filters > 0 then
 			lde.error.raise("No test files match: " .. table.concat(filters, ", "))
 		end

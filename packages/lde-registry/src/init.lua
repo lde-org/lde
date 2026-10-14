@@ -1,13 +1,5 @@
---- lde's package registry client. The registry is a git repo whose
---- `packages/<name>.json` files ("portfiles") map package versions to git
---- commits:
----
----   { "name": "foo", "git": "https://...", "versions": { "1.0.0": "<sha>" } }
----
---- A Registry instance is a plain object; every dependency (filesystem, git,
---- json, semver, error raising) is injected through the constructor so
---- callers and tests can substitute fakes — the CLI wires a production
---- instance in lde.global.
+--- lde's package registry client: a git repo whose `packages/<name>.json`
+--- portfiles map versions to commits. Dependencies are injected so tests can fake them.
 
 ---@class lde.Portfile
 ---@field name string
@@ -61,24 +53,20 @@
 const Registry = {}
 Registry.__index = Registry
 
---- The user-level lde dir: LDE_HOME when set, else ~/.lde. Mirrors
---- lde-core.global.getUserDir() so a Registry built without an injected
---- dirFn (production always injects one) lands in the same tree.
+--- Mirrors lde-core.global.getUserDir() so a Registry with no injected dirFn lands in the same tree.
 local function userLdeDir()
 	local path = require("path")
 	const ldeHome = os.getenv("LDE_HOME")
 	if ldeHome and ldeHome ~= "" then return ldeHome end
-	return path.join(os.getenv("HOME") or os.getenv("USERPROFILE"), ".lde")
+	return path.join(os.getenv("HOME") or os.getenv("USERPROFILE") or "", ".lde")
 end
 
---- Default registry checkout dir: <user lde dir>/registry.
 local function defaultDir()
 	local path = require("path")
 	return path.join(userLdeDir(), "registry")
 end
 
---- Safe JSON decode: returns nil + message instead of raising on malformed
---- input and rejects non-object documents.
+--- Returns nil + message instead of raising, and rejects non-object documents.
 ---@param content string
 ---@return table?, string?
 local function defaultDecodeJson(content)
@@ -108,21 +96,16 @@ function Registry.new(opts)
 	return self
 end
 
---- The registry checkout directory.
 ---@return string
 function Registry:getDir()
 	return self.dirFn()
 end
 
---- How often the registry checkout may be re-fetched, in seconds. Every
---- command invocation is a fresh process and search/add/install all sync, so
---- without this `lde search` pays a git fetch (network round trip) every time.
+--- Every command is a fresh process and search/add/install all sync, hence the TTL.
 ---@type integer
 const SYNC_TTL = 10 * 60
 
---- Clone the registry if not present, otherwise pull to update. A failed pull
---- (e.g. offline) is non-fatal; cached data is used. Only runs once per
---- Registry instance.
+--- A failed pull (e.g. offline) is non-fatal; cached data is used.
 function Registry:sync()
 	if self.isSynced then return end
 	self.isSynced = true
@@ -139,9 +122,7 @@ function Registry:sync()
 		end
 		if repo.updateSubmodules then repo:updateSubmodules() end
 	else
-		-- A recent fetch means the checkout is current: skip the network
-		-- round trip. FETCH_HEAD is touched by every fetch. (fs.stat may be
-		-- absent on minimal test doubles — then always pull.)
+		-- FETCH_HEAD is touched by every fetch; fs.stat may be absent on test doubles.
 		const fetchHead = self.path.join(registryDir, ".git", "FETCH_HEAD")
 		const fstat = self.fs.stat and self.fs.stat(fetchHead)
 		if not (fstat and (os.time() - fstat.modifyTime) < SYNC_TTL) then
@@ -151,15 +132,7 @@ function Registry:sync()
 	end
 end
 
---- Validates a package name against the lde registry naming rules (mirrors
---- schemas/registry.schema.json in the lde-org/registry repo):
----
----   * flat ("foo") or exactly one namespace level ("ns/foo")
----   * lowercase only; parts use a-z, 0-9, _ and - (no dots, no "..")
----   * each part starts with a letter and ends with a letter or digit
----   * the namespace part is at least 3 characters
----   * the full name is at most 128 characters
----
+--- Mirrors schemas/registry.schema.json in the lde-org/registry repo.
 ---@param name string
 function Registry:validateName(name)
 	if type(name) ~= "string" or name == "" then
@@ -203,7 +176,6 @@ function Registry:validateName(name)
 	return nil
 end
 
---- Reads a package's portfile from the registry checkout.
 ---@param name string
 ---@return lde.Portfile?
 ---@return string? err
@@ -213,8 +185,7 @@ function Registry:lookup(name)
 		return nil, "Invalid package name '" .. tostring(name) .. "': " .. nameErr
 	end
 
-	-- Namespaced names (ns/foo) live at packages/ns/foo.json; split on "/" and
-	-- re-join with the OS separator so nested lookups work on Windows too.
+	-- Namespaced names live at packages/ns/foo.json; re-join on the OS separator for Windows.
 	const relPath = (name:gsub("/", self.path.separator))
 	const portfilePath = self.path.join(self:getDir(), "packages", relPath .. ".json")
 	const content = self.fs.read(portfilePath)
@@ -229,10 +200,6 @@ function Registry:lookup(name)
 	return portfile, nil
 end
 
---- Resolves a version string (or nil for latest) to a commit hash. The string
---- is either an exact version, which must exist, or a range — "0.1" (a
---- prefix), "^0.1.2", ">=0.1 <0.2" — which resolves to the newest version it
---- allows.
 ---@param portfile lde.Portfile
 ---@param version string? # nil or "latest" means the newest version
 ---@return string version
@@ -248,9 +215,7 @@ function Registry:resolveVersion(portfile, version)
 		const commit = versions[version]
 		if commit then return version, commit end
 
-		-- Not an exact published version: it may still be a range. A pin that
-		-- merely looks exact never resolves to a different version, so only
-		-- ranges are allowed to pick a nearby release.
+		-- A pin that looks exact never resolves elsewhere, so only ranges pick a nearby release.
 		if not self.semver.isExact(version) then
 			local best = self.semver.maxSatisfying(versions, version)
 			if best then return best, versions[best] end
@@ -260,7 +225,6 @@ function Registry:resolveVersion(portfile, version)
 		self.raise("Version '" .. version .. "' of '" .. portfile.name .. "' not found in lde registry")
 	end
 
-	-- Find highest semver
 	local latest = nil
 	for v in pairs(versions) do
 		if latest == nil or self.semver.compare(v, latest) > 0 then

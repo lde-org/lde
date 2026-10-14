@@ -1,17 +1,4 @@
--- Failure-log capture for build.lua scripts.
---
--- build.lua output is hidden by default (compact install mode): stdout from
--- build:sh / guest print calls is captured in memory instead of streamed, so
--- a 500-line cmake configure no longer floods the terminal. If the build
--- fails, the capture is written to a deterministic file under the temp dir
--- and the error message points at it:
---
---   error: Build failed for 'curl-sys'
---     full output at /tmp/lde-build-curl-sys-1a2b3c4d.log
---
--- The path is derived only from the output dir, so an async build worker
--- (a separate `lde __build-pkg` process) and its parent agree on the file
--- without passing it over the wire.
+-- Build output is captured in memory and written to a deterministic temp log on failure; the path derives only from the output dir, so an async worker and its parent agree on it.
 
 const fs = require("fs")
 const path = require("path")
@@ -34,9 +21,7 @@ local function tmpDir()
 	return os.getenv("TMPDIR") or "/tmp"
 end
 
---- Deterministic failure-log path for a build output dir. Both the build
---- worker and the install scheduler can compute it, so the scheduler can
---- reference the file the worker wrote on failure.
+--- Both the build worker and the install scheduler can compute this, so the scheduler can reference the worker's log on failure.
 ---@param destPath string # the build output dir (target/<name>)
 function M.pathFor(destPath)
 	const name = path.basename(destPath) or "pkg"

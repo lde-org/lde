@@ -9,7 +9,6 @@ const lde = require("lde-core")
 const luarocks = require("luarocks")
 const prompt = require("lde.util.prompt")
 
---- Default cap on how many results are shown at once.
 const DEFAULT_LIMIT = 10
 
 ---@class lde.search.Result
@@ -25,8 +24,6 @@ local function matches(query, s)
 	return s?.:lower():find(query, 1, true) ~= nil
 end
 
---- Sort rank: exact name match, then name prefix, then name substring, and
---- description-only matches last.
 ---@param query string
 ---@param name string
 ---@param description string?
@@ -71,9 +68,7 @@ local function searchRegistry(query)
 	return results
 end
 
---- Package names matching the query from the cached luarocks manifest. Version
---- keys are excluded by requiring a package block to start with a version
---- block (`["name"] = { ["version"] = {`).
+--- Manifest names only; version keys are excluded by requiring a version block.
 ---@param query string
 local function searchRocks(query)
 	local manifest = lde.util.getManifest()
@@ -89,8 +84,7 @@ local function searchRocks(query)
 	return results
 end
 
---- Lazily fills in the latest version for a rock (parses its manifest block on
---- first use, so queries with thousands of matches stay cheap).
+--- Lazily parses the rock's manifest block on first use, keeping large queries cheap.
 ---@param r lde.search.Result
 local function ensureLatest(r)
 	if r.latest ~= nil then return end
@@ -103,9 +97,7 @@ end
 
 ---@param r lde.search.Result
 local function formatRow(r)
-	-- Rocks get a rock emoji before the name (a plain "R" when the terminal
-	-- can't render emoji); the luarocks manifest has no descriptions, so rock
-	-- rows are just the marker + name + version.
+	-- The manifest has no descriptions, so rock rows are marker + name + version.
 	local prefix = ""
 	if r.kind == "rocks" then
 		prefix = ansi.supportsEmoji() ? "🪨 " : "R "
@@ -115,13 +107,11 @@ local function formatRow(r)
 	return ansi.format("{green}%s%s{reset}%s{gray}%s{reset}", prefix, r.name, desc, ver)
 end
 
---- The command verb the selector's Enter action runs.
 ---@param inPackage boolean
 local function actionVerb(inPackage)
 	return inPackage ? "lde add" : "lde install"
 end
 
---- Run the action for a picked result in-process.
 ---@param r lde.search.Result
 ---@param inPackage boolean
 local function runAction(r, inPackage)
@@ -130,9 +120,6 @@ local function runAction(r, inPackage)
 	require(command)(clap.parse({ name }))
 end
 
---- Interactive selector: ↑/↓ (or j/k) move a cursor through all results
---- (scrolling the window to follow it), Enter runs the add/install action for
---- the selection, q/Esc/EOF cancels.
 ---@param results lde.search.Result[]
 ---@param limit number
 ---@param inPackage boolean
@@ -140,8 +127,8 @@ local function selectResult(results, limit, inPackage)
 	const raw = jit.os == "Windows" ? require("readline.raw.windows") : require("readline.raw.posix")
 	local total = #results
 	const window = math.min(limit, total)
-	local cursor = 1 -- 1-based result index
-	local offset = 0 -- 0-based index of the first visible result
+	local cursor = 1
+	local offset = 0
 
 	local function rowText(r, isSelected)
 		const marker = isSelected ? "{green}>{reset} " : "  "
@@ -209,7 +196,6 @@ local function selectResult(results, limit, inPackage)
 			picked = results[cursor]
 			done = true
 		elseif ch == "\x1b" and not prompt.escSequencePending() then
-			-- bare Esc with nothing more coming: cancel
 			done = true
 		elseif ch == "\x1b[A" then -- Windows returns the whole sequence at once
 			move(-1)
@@ -232,10 +218,7 @@ local function selectResult(results, limit, inPackage)
 	end
 
 	raw.exitRaw()
-	-- Raw mode disables OPOST, so the draw's trailing \n moved the cursor down
-	-- without returning it to column 0. The cursor is already on the blank line
-	-- below the footer; a plain \r parks it at column 0 there without adding an
-	-- extra empty line before the shell prompt (or the action's output).
+	-- Raw mode disables OPOST, so the cursor sits on the blank line below the footer; \r parks it at column 0.
 	io.write("\r")
 	io.write("\x1b[?25h")
 	io.flush()
@@ -245,7 +228,7 @@ end
 ---@param args clap.Args
 local function search(args)
 	const showAll = args:flag("all")
-	args:flag("rocks") -- accepted for compatibility; rocks are included by default now
+	args:flag("rocks") -- accepted for compatibility; rocks are included by default
 	const rawQuery = args:pop()
 	if not rawQuery then
 		lde.error.raise("Usage: lde search <query> [--all]", {
@@ -253,7 +236,6 @@ local function search(args)
 		})
 	end ---@cast rawQuery -nil
 
-	-- `lde search rocks:<query>` searches luarocks only.
 	local rocksOnly = false
 	local query = rawQuery
 	if query:sub(1, 6) == "rocks:" then
@@ -270,16 +252,13 @@ local function search(args)
 	---@type lde.search.Result[]
 	local results = {}
 	if not rocksOnly then
-		const regOk = pcall(lde.global.syncRegistry)
+		const regOk = pcall(require("lde-core.global").syncRegistry)
 		if regOk then
 			for _, r in ipairs(searchRegistry(query)) do results[#results + 1] = r end
 		end
 	end
-	-- luarocks matches are always included (rocks:<query> searches them only).
 	for _, r in ipairs(searchRocks(query)) do results[#results + 1] = r end
 
-	-- Sort: exact name > name prefix > name substring > description-only,
-	-- with lde registry packages preferred over luarocks within the same rank.
 	for _, r in ipairs(results) do r.rank = rank(query, r.name, r.description) end
 	table.sort(results, function(a, b)
 		if a.rank ~= b.rank then return a.rank < b.rank end
@@ -294,7 +273,6 @@ local function search(args)
 		return
 	end
 
-	-- "Found N packages matching 'q':" — N green, query yellow, colon gray.
 	ansi.printf("Found {green}%d{reset} package%s matching {yellow}'%s'{reset}{gray}:{reset}",
 		total, total == 1 ? "" : "s", query)
 
@@ -309,8 +287,6 @@ local function search(args)
 		return
 	end
 
-	-- Non-interactive (pipes, CI): show the first `limit` results and say how
-	-- many were left out.
 	local shown = 0
 	for _, r in ipairs(results) do
 		if shown >= limit then break end

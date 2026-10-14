@@ -2,9 +2,7 @@ const lde = require("lde-core")
 
 const usage = require("lde.commands.usage")
 
--- Scripts are emitted as-is except for the __DIR_FLAGS__/__FILE_FLAGS__
--- placeholders, which are filled from usage.lua so the flag lists can't drift
--- between the scripts, the help text, and the completion backend.
+-- __DIR_FLAGS__/__FILE_FLAGS__ are filled from usage.lua so the flag lists can't drift.
 
 local bash = [==[
 # lde shell completion for bash.

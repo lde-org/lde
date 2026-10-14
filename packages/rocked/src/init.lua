@@ -58,9 +58,6 @@ const rocked = {}
 ---@field test { type: string?, flags: string[]?, platforms: table<string, { flags: string[]? }>? }?
 ---@field build rocked.raw.Build
 
--- ─── Host side of the sandbox ─────────────────────────────────────────────
-
--- Instruction budget for a rockspec chunk before it is killed.
 const DEFAULT_INSTRUCTION_LIMIT = 1e7
 const DEFAULT_MEMORY_LIMIT = 64 * 1024 * 1024
 const BYTECODE_SIGNATURE = 27
@@ -78,11 +75,13 @@ const BYTECODE_SIGNATURE = 27
 ---@field extraModules? fun(name: string): boolean # module names this sandbox will install itself (backend polyfills)
 ---@field permissions rocked.Permissions? # per-action gates; unlisted actions default to allow
 
+--- A rockspec runs with an empty environment. The shared string metatable stays
+--- intact: rockspecs compute versions from strings (`("1.0"):gsub(...)`) and
+--- LuaRocks accepts that, so detaching it rejected ~5% of published rockspecs for
+--- no security gain — the string library does no I/O and `load` is stripped.
 local ROCKSPEC_ENV = {}
 
---- Convert a guest value (a lua.Table proxy or primitive) into plain host
---- data, recursively. Guest functions are rejected: rockspecs and backends
---- hand data across the boundary, not executable values.
+--- Guest functions are rejected; only data crosses the boundary.
 ---@param v any
 local function materialize(v)
 	if type(v) == "function" then
@@ -98,9 +97,7 @@ local function materialize(v)
 	return out
 end
 
---- Remove every key of a guest table that is not whitelisted, sparing any name
---- that `keep` accepts. Keys are collected before anything is deleted: deleting
---- while iterating a guest table is unsafe.
+--- Keys are collected first: deleting while iterating a guest table is unsafe.
 ---@param tbl lua.Table
 ---@param allowed table<string, boolean>
 ---@param keep? fun(name: string): boolean # extra names to spare (a backend's polyfills)
@@ -114,33 +111,8 @@ local function stripUnwhitelisted(tbl, allowed, keep)
 	for _, name in ipairs(drop) do tbl:set(name, nil) end
 end
 
----@param state lua.State
-local function detachStringMetatable(state)
-	local L = state.L
-	if L == nil then return end
-	const lraw = lua.raw
-	const top = lraw.gettop(L)
-	lraw.pushstring(L, "")
-	if lraw.getmetatable(L, -1) then
-		lraw.pushnil(L)
-		lraw.setfield(L, -2, "__index")
-	end
-
-	lraw.settop(L, top)
-end
-
---- Run `source` inside a fresh isolated lua-sys guest state: an environment of
---- `env` (empty for rockspecs), an instruction limit (which also keeps the
---- guest on the interpreter so the count hook fires) and a memory cap.
----
---- Nothing luarocks-specific lives here. `opts.extraModules` is how the backend
---- path brings in its polyfills: the names they will occupy are spared when the
---- module cache is stripped, and `fn` installs them. A rockspec passes no
---- extras, so its state never has them.
----
---- The host callback `fn(state, g)` does the actual work; its first two
---- results become the return values, and any error it raises becomes
---- `(false, err)`.
+--- Run `source` in a fresh isolated guest state: environment `env`, an instruction
+--- limit (keeps the guest on the interpreter so the count hook fires) and a memory cap.
 ---@param opts rocked.SandboxOpts?
 ---@param env table<string, boolean> # names the chunk may see; empty for none
 ---@param fn fun(state: lua.State, g: lua.Table): any, any # (ok, result-or-err); shapes differ per caller
@@ -151,38 +123,22 @@ local function sandbox(opts, env, fn)
 	local state = lua.new()
 	local g = state:globals()
 
-	-- Reach `package` before the globals are stripped: with an empty rockspec
-	-- environment the name is gone from `_G` afterwards, but a backend still
-	-- needs its path and cpath set.
+	-- `package` is reached before the globals strip removes it from _G.
 	const packageTable = g:get("package") --[[@as lua.Table?]]
 
 	stripUnwhitelisted(g, env)
 
-	-- With the string library gone there is no reason for its metatable to
-	-- resolve anything, and leaving it wired up would be a way to reach the
-	-- library that the `_G` strip just removed.
-	if not env.string then detachStringMetatable(state) end
-
 	if packageTable then
-		-- require() only resolves preloads and the caller-provided paths.
 		packageTable:set("path", opts.packagePath or "")
 		packageTable:set("cpath", opts.cpath or "")
 
-		-- Stripping the globals is not enough. `luaL_openlibs` also registers
-		-- every standard library in package.loaded, and deleting the global
-		-- leaves those tables alive and reachable: a chunk could still call
-		-- `package.loaded.os.execute("...")`, read files through
-		-- `package.loaded.io`, or reach `debug`. So the module cache is
-		-- stripped on the same whitelist as the globals, and package.preload —
-		-- the other table require() consults — is emptied so a stale loader
-		-- cannot reintroduce one. For a rockspec the whitelist is empty and no
-		-- extras are passed, so this clears the cache outright.
+		-- The globals strip is not enough: luaL_openlibs also registers stdlibs in package.loaded.
 		const extraModules = opts.extraModules
 		stripUnwhitelisted(packageTable:get("loaded") --[[@as lua.Table]], env, extraModules)
 		stripUnwhitelisted(packageTable:get("preload") --[[@as lua.Table]], env, extraModules)
 	end
 
-	-- Instruction budget; setHook also disables the guest JIT while installed.
+	-- setHook also disables the guest JIT while installed.
 	state:setHook(function()
 		error("Rockspec took too long to run")
 	end, "count", opts.instructionLimit or DEFAULT_INSTRUCTION_LIMIT)
@@ -195,15 +151,7 @@ local function sandbox(opts, env, fn)
 	return a, b
 end
 
---- Fail closed when the pinned lua-sys predates the two capabilities this
---- sandbox depends on for containment: restricting a chunk to text (so the
---- loader itself refuses bytecode) and capping the guest heap. Silently
---- skipping either would leave the containment looking enforced while it is
---- not, so an old lua-sys is a hard error instead.
----
---- Probed once, on a throwaway state, so an unsupported lua-sys fails at
---- require time rather than on the first package install. When raising the
---- lua-sys floor here, update the version in lde.json too.
+--- Fail closed, since skipping either capability would leave containment looking enforced.
 local function checkSandboxSupport()
 	const probe = lua.new()
 	const hasMemoryLimit = type(probe.setMemoryLimit) == "function"
@@ -221,8 +169,6 @@ end
 
 checkSandboxSupport()
 
---- Compile a rockspec or backend chunk in the guest state and refuse any
---- precompiled chunk.
 ---@param state lua.State
 ---@param code string
 ---@param chunkName string
@@ -234,8 +180,6 @@ local function loadSpec(state, code, chunkName)
 
 	return state:load(code, chunkName):setMode("text")
 end
-
--- ─── Rockspec parsing ─────────────────────────────────────────────────────
 
 ---@type string[]
 const ROCKSPEC_FIELDS = {
@@ -261,9 +205,7 @@ function rocked.parse(spec, permissions)
 
 		local build = out.build
 		if not build then
-			-- Rockspec format 3.0+ makes the build table optional: it defaults
-			-- to a builtin build (modules are autodetected from the source
-			-- tree). Older formats require an explicit build table.
+			-- Format 3.0+ defaults to a builtin build; older formats require one.
 			const format = out.rockspec_format
 			const major = format and tonumber(tostring(format):match("^(%d+)"))
 			if major and major >= 3 then
@@ -279,12 +221,7 @@ function rocked.parse(spec, permissions)
 	end)
 end
 
---- Parses a single rockspec dependency string into its package name and
---- optional version constraint.
----
---- LuaRocks names may contain dots (e.g. "fidget.nvim >= 1.1.0"), so the
---- name is everything up to the first whitespace — not up to the first '.'
---- or operator character.
+--- Names may contain dots, so the name ends at the first whitespace, not the first '.'/operator.
 ---@param depStr string
 ---@return string? name
 ---@return string? version # Constraint such as ">= 1.1.0"; nil when unconstrained
@@ -294,9 +231,6 @@ function rocked.parseDependency(depStr)
 	return name, rest ~= "" ? rest : nil
 end
 
---- Detects a git dependency in a rockspec dependency string (e.g.
---- "git+https://github.com/x/y", "git://github.com/x/y", or a plain
---- "https://...git" URL) and returns the raw URL, or nil for rock deps.
 ---@param depStr string
 ---@return string? gitUrl
 function rocked.gitDependency(depStr)
@@ -306,10 +240,7 @@ function rocked.gitDependency(depStr)
 	return url
 end
 
--- ─── Custom build backends ────────────────────────────────────────────────
-
---- Driver chunk for a custom build backend. Kept as a named constant so the
---- long literal is not an argument expression full of unindented lines.
+--- A named constant so the long literal is not an unindented argument expression.
 local BACKEND_DRIVER = [[
 	local build_type, rockspec = ...
 	-- rockspec:type() is a method on the (guest-coerced) rockspec. It
@@ -323,16 +254,7 @@ local BACKEND_DRIVER = [[
 	end
 ]]
 
---- Run a custom build backend (e.g. "rust-mlua") inside the sandbox.
----
---- Mirrors LuaRocks' build dispatch: the backend is a module named
---- `luarocks.build.<type>` provided by a rock named `luarocks-build-<type>`
---- (installed via build_dependencies), and is invoked as
---- `driver.run(rockspec, no_install)`.
----
---- This is the one sandbox that gets the luarocks.* polyfills, whose module
---- names are declared up front so the module cache strip spares them. A
---- rockspec never reaches them: it runs in a state with an empty environment.
+--- The one sandbox that gets the luarocks.* polyfills, spared from the module-cache strip.
 ---@param buildType string
 ---@param rockspec table # Host-side rockspec data (coerced into the guest)
 ---@param opts rocked.SandboxOpts?
