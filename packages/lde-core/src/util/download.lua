@@ -164,7 +164,6 @@ const DOWNLOAD_TIMEOUT = 120 -- seconds
 --- The path this session downloads `destPath` through: private to the process, and
 --- stable for the session so a retry reuses it instead of leaving another leftover.
 ---@param destPath string
----@return string
 local function partPath(destPath) ---@cast session -nil
 	local part = session.partFor[destPath]
 	if part then return part end

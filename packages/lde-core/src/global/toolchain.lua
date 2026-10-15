@@ -171,7 +171,6 @@ end
 --- Android keeps it under $PREFIX/bin, so a hardcoded /bin/sh silently fails to
 --- exec there. Windows gets the bundled BusyBox sh when the toolchain is
 --- installed (callers on Windows branch on getScriptShell instead).
----@return string
 function M.getShellPath()
 	if jit.os == "Windows" then
 		const shExe = path.join(dirs.getMingwDir(), "bin", "sh.exe")

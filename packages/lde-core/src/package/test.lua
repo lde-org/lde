@@ -161,13 +161,22 @@ local function ensureMockLuaDir()
 
 	local luaBin = assert(env.execPath(), "no executable path")
 	fs.delete(path.join(luaDir, "run-e.lua"))
-	-- #! needs an absolute path, and /bin/sh is not universal (Termux/Android keeps
-	-- its shell under $PREFIX/bin), so the wrapper would silently fail to exec there.
-	const wrapper = "#!" .. lde.global.getShellPath() .. "\n"
-		.. "exec '" .. luaBin .. "' --lua \"$@\"\n"
-	local wrapperPath = path.join(luaDir, "lua")
-	fs.write(wrapperPath, wrapper)
-	fs.chmod(wrapperPath, tonumber("755", 8))
+
+	-- Windows has no shebangs (and no fs.chmod): the wrapper is a .cmd, the same
+	-- shape global/wrapper.lua writes for tools. Elsewhere it is a shell script
+	-- whose #! needs an absolute path — /bin/sh is not universal (Termux/Android
+	-- keeps its shell under $PREFIX/bin), so it is resolved rather than assumed.
+	local wrapperPath
+	if jit.os == "Windows" then
+		wrapperPath = path.join(luaDir, "lua.cmd")
+		fs.write(wrapperPath, '@"' .. luaBin .. '" --lua %*\r\n')
+	else
+		wrapperPath = path.join(luaDir, "lua")
+		const wrapper = "#!" .. lde.global.getShellPath() .. "\n"
+			.. "exec '" .. luaBin .. "' --lua \"$@\"\n"
+		fs.write(wrapperPath, wrapper)
+		fs.chmod(wrapperPath, tonumber("755", 8))
+	end
 
 	local jitTree = require("sea").getLuajitPath()
 	for _, sub in ipairs({ "include", "lib" }) do
@@ -614,8 +623,9 @@ local function runSharded(testFiles, package, jobs, reporter, status)
 		for i = #running, 1, -1 do
 			const entry = running[i]
 			if not entry.child or entry.child:poll() ~= nil then
-				local output = ""
+				local output, exitCode = "", nil
 				if entry.child then
+					exitCode = entry.child:poll()
 					local _, stdout, stderr = entry.child:wait()
 					output = (stdout or "") .. (stderr or "")
 				end
@@ -631,8 +641,11 @@ local function runSharded(testFiles, package, jobs, reporter, status)
 						error = decoded.files?.[1]?.error ?? decoded.error,
 					}
 				else
+					-- The exit code is the only clue when a shard dies without writing
+					-- results or printing anything (a crash, or an os.exit).
 					shards[entry.rel] = {
-						error = "test shard failed" .. (output ~= "" and (": " .. output) or ""),
+						error = "test shard failed" .. (exitCode and (" (exit " .. tostring(exitCode) .. ")") or "")
+							.. (output ~= "" and (": " .. output) or ""),
 					}
 					-- A shard that died printed nothing useful; surface its output instead.
 					output = output ~= "" and ("  " .. entry.rel .. "\n" .. output .. "\n") or ""

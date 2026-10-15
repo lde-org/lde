@@ -93,7 +93,10 @@ test.it("list: nil when nothing is excluded", function()
 end)
 
 test.it("list: a flag that is off contributes nothing", function()
-	local defs = features.parse({ windows = { "p.a" } }, "p")
+	-- A platform flag is on for the host, so gate on the other one: this must hold
+	-- on every runner, not just POSIX.
+	const offFlag = jit.os == "Windows" and "linux" or "windows"
+	local defs = features.parse({ [offFlag] = { "p.a" } }, "p")
 	test.equal(features.excludes(defs, nil), nil)
 end)
 
@@ -239,7 +242,10 @@ fs.write(path.join(depDir, "src", "unix.lua"), 'return "unix"')
 -- A nested module: `e2e-dep.sub.nested.win` resolves to sub/nested/win.lua.
 fs.write(path.join(depDir, "src", "sub", "nested", "win.lua"), 'return "nested"')
 -- A native module under the same gating, to prove one entry covers both.
-fs.write(path.join(depDir, "src", "plugin.so"), "PLUGIN-BYTES-MARKER")
+-- The bundler treats only the host's native extension as a native module, so the
+-- fixture follows the host (a .so on Windows would just be an inert file).
+const nativeExt = jit.os == "Windows" and "dll" or (jit.os == "OSX" and "dylib" or "so")
+fs.write(path.join(depDir, "src", "plugin." .. nativeExt), "PLUGIN-BYTES-MARKER")
 fs.write(path.join(depDir, "lde.json"), json.encode({
 	name = "e2e-dep",
 	version = "0.1.0",
@@ -247,7 +253,10 @@ fs.write(path.join(depDir, "lde.json"), json.encode({
 	-- platform the bundle is built on. This is the shape `fs` would use to stop
 	-- being a monorepo.
 	features = {
-		windows = { "e2e-dep.unix", "e2e-dep.sub.nested.win", "e2e-dep.plugin" },
+		windows = { "e2e-dep.unix", "e2e-dep.sub.nested.win" },
+		-- The plugin is gated by a flag no platform turns on by itself, so the
+		-- "kept" bundle contains it on every host.
+		noPlugin = { "e2e-dep.plugin" },
 		unix    = { "e2e-dep.win", "e2e-dep.sub.nested.win" },
 	},
 }))
@@ -291,9 +300,9 @@ test.it("bundle: a native module dropped by a feature is not embedded", function
 	dep:build()
 
 	const withNative = bundlePackage(dep, {}) --[[@as string]]
-	const withoutNative = bundlePackage(dep, { features = { "windows" } }) --[[@as string]]
+	const withoutNative = bundlePackage(dep, { features = { "noPlugin" } }) --[[@as string]]
 
-	-- The `windows` flag drops `e2e-dep.plugin`, which is src/plugin.so.
+	-- The `noPlugin` flag drops `e2e-dep.plugin`, the fixture's native module.
 	test.truthy(withNative:find("PLUGIN-BYTES-MARKER", 1, true))
 	test.falsy(withoutNative:find("PLUGIN-BYTES-MARKER", 1, true))
 	-- ...and it is a Lua module list, so the Lua half still behaves.
