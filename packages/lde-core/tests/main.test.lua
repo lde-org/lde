@@ -303,7 +303,10 @@ test.it("runFile: a rock bin that is not Lua is executed instead of interpreted"
 	local dir = path.join(tmpBase, "bin-run-shell")
 	fs.mkdir(tmpBase)
 	fs.mkdir(dir)
-	fs.write(path.join(dir, "tool.sh"), "#!/bin/sh\n[ \"$1\" = ok ]\n")
+	-- A shebang is resolved by the kernel without PATH; /bin/sh is not universal
+	-- (Termux/Android), so use whatever shell this system actually has.
+	const shellPath = require("lde-core.global.toolchain").getShellPath()
+	fs.write(path.join(dir, "tool.sh"), "#!" .. shellPath .. "\n[ \"$1\" = ok ]\n")
 	fs.write(path.join(dir, "shell-bin-1.0-1.rockspec"), [[
 package = "shell-bin"
 version = "1.0-1"

@@ -166,4 +166,28 @@ function M.getScriptShell()
 	return "sh", "-c", false
 end
 
+--- Absolute path of the POSIX shell, for `#!` lines: a shebang is resolved by the
+--- kernel without PATH, and not every system keeps a shell at /bin/sh — Termux on
+--- Android keeps it under $PREFIX/bin, so a hardcoded /bin/sh silently fails to
+--- exec there. Windows gets the bundled BusyBox sh when the toolchain is
+--- installed (callers on Windows branch on getScriptShell instead).
+---@return string
+function M.getShellPath()
+	if jit.os == "Windows" then
+		const shExe = path.join(dirs.getMingwDir(), "bin", "sh.exe")
+		if fs.exists(shExe) then return shExe end
+		return os.getenv("COMSPEC") or "cmd.exe"
+	end
+	const pathVar = os.getenv("PATH") or ""
+	for dir in pathVar:gmatch("[^:]+") do
+		---@cast dir string
+		const candidate = path.join(dir, "sh")
+		const stat = fs.stat(candidate)
+		if stat and (stat.mode ?? 0) & 0x49 ~= 0 then -- any exec bit
+			return candidate
+		end
+	end
+	return "/bin/sh"
+end
+
 return M

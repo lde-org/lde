@@ -96,6 +96,18 @@ local function withChild(args, cwd, fn, capture)
 	return output
 end
 
+--- Runs the fixture once so the language compiler (Teal/Moonscript, fetched and
+--- compiled on first use) is cached before the timed section below: on a slow
+--- runner the cold fetch alone can outlast the log wait and look like a missed
+--- reload. Output goes to a throwaway log so the test's own log stays empty.
+---@param dir string
+local function warmCompiler(dir)
+	const warmLog = path.join(dir, "warm.log")
+	fs.write(warmLog, "")
+	process.exec(ldePath, { "run", "--", warmLog }, { cwd = dir })
+	fs.delete(warmLog)
+end
+
 ---@param name string
 local function makePackage(name)
 	local dir = path.join(tmpBase, name)
@@ -490,9 +502,10 @@ test.it("lde run --hot reloads a Teal entry", function()
 
 	local logFile = path.join(tmpBase, "pkg-teal-hot.log")
 	fs.write(logFile, "")
+	warmCompiler(dir)
 
 	withChild({ "run", "--hot", "--", logFile }, dir, function()
-		test.truthy(waitForLog(logFile, "teal v1", 20000), "initial Teal run missing from log")
+		test.truthy(waitForLog(logFile, "teal v1", 30000), "initial Teal run missing from log")
 
 		fs.write(path.join(dir, "src", "init.tl"), TEAL_V2)
 
@@ -506,6 +519,7 @@ test.it("lde run --hot recovers after a Teal syntax error is fixed", function()
 
 	local logFile = path.join(tmpBase, "pkg-teal-err.log")
 	fs.write(logFile, "")
+	warmCompiler(dir)
 
 	withChild({ "run", "--hot", "--", logFile }, dir, function()
 		test.truthy(waitForLog(logFile, "teal v1", 20000), "initial Teal run missing from log")
@@ -518,7 +532,7 @@ test.it("lde run --hot recovers after a Teal syntax error is fixed", function()
 		-- Fix it: the next change must rebuild and re-run.
 		fs.write(path.join(dir, "src", "init.tl"), TEAL_FIXED)
 
-		test.truthy(waitForLog(logFile, "teal fixed", 20000), "hot reload did not recover after the syntax error was fixed")
+		test.truthy(waitForLog(logFile, "teal fixed", 30000), "hot reload did not recover after the syntax error was fixed")
 	end)
 end)
 
@@ -532,9 +546,10 @@ f\close()
 
 	local logFile = path.join(tmpBase, "pkg-moon-hot.log")
 	fs.write(logFile, "")
+	warmCompiler(dir)
 
 	withChild({ "run", "--hot", "--", logFile }, dir, function()
-		test.truthy(waitForLog(logFile, "moon v1", 20000), "initial Moonscript run missing from log")
+		test.truthy(waitForLog(logFile, "moon v1", 30000), "initial Moonscript run missing from log")
 
 		fs.write(path.join(dir, "src", "init.moon"), [==[
 f = assert(io.open(arg[1], "a"))
@@ -542,6 +557,6 @@ f\write("moon v2\n")
 f\close()
 ]==])
 
-		test.truthy(waitForLog(logFile, "moon v2", 20000), "Moonscript hot reload did not pick up the change")
+		test.truthy(waitForLog(logFile, "moon v2", 30000), "Moonscript hot reload did not pick up the change")
 	end)
 end)

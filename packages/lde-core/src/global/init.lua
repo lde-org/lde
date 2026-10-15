@@ -42,6 +42,7 @@ global.getCCCommand = toolchain.getCCCommand
 global.getCCBin = toolchain.getCCBin
 global.getMakeBin = toolchain.getMakeBin
 global.getScriptShell = toolchain.getScriptShell
+global.getShellPath = toolchain.getShellPath
 
 global.getGitRepoDir = git.getGitRepoDir
 global.markGitRepoCached = git.markGitRepoCached

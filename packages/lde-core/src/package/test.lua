@@ -161,7 +161,9 @@ local function ensureMockLuaDir()
 
 	local luaBin = assert(env.execPath(), "no executable path")
 	fs.delete(path.join(luaDir, "run-e.lua"))
-	const wrapper = "#!/bin/sh\n"
+	-- #! needs an absolute path, and /bin/sh is not universal (Termux/Android keeps
+	-- its shell under $PREFIX/bin), so the wrapper would silently fail to exec there.
+	const wrapper = "#!" .. lde.global.getShellPath() .. "\n"
 		.. "exec '" .. luaBin .. "' --lua \"$@\"\n"
 	local wrapperPath = path.join(luaDir, "lua")
 	fs.write(wrapperPath, wrapper)

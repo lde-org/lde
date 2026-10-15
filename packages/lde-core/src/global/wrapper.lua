@@ -62,7 +62,9 @@ function M.writeWrapper(toolName, packageDir, packageName)
 		ansi.printf("{green}Installed tool '%s' -> %s", toolName, wrapperPath)
 	else
 		local wrapperPath = path.join(toolsDir, toolName)
-		local content = "#!/bin/sh\nexec " .. invocation .. ' "$@"\n'
+		-- #! needs an absolute path, and /bin/sh is not universal (Termux/Android).
+		const shellPath = require("lde-core.global.toolchain").getShellPath()
+		local content = "#!" .. shellPath .. "\nexec " .. invocation .. ' "$@"\n'
 
 		-- Skip the write + chmod when the wrapper is already current (see above).
 		if fs.exists(wrapperPath) and fs.read(wrapperPath) == content then return end
