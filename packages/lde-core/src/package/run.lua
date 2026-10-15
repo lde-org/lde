@@ -96,7 +96,9 @@ local function runStringWithLuaCLI(package, code, args, vars, engine, cwd)
 	return exitCode == 0, stderr or "Script exited with a non-zero exit code"
 end
 
---- A rock can install a native binary (ELF/PE/Mach-O) or a shell/python/… wrapper that must be executed, not read as Lua; a Lua shebang stays on the lde runtime so it sees the package's dependency tree rather than PATH's interpreter.
+--- A rock can install a native binary (ELF/PE/Mach-O) or a shell/python wrapper that
+--- must be executed, not read as Lua. A Lua shebang stays on the lde runtime so it
+--- sees the package's dependency tree instead of PATH's interpreter.
 ---@param scriptPath string
 local function isForeignEntry(scriptPath)
 	local file = io.open(scriptPath, "rb")

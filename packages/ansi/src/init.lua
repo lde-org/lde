@@ -7,20 +7,25 @@ const ffi = require("ffi")
 ---@field tv_sec number
 ---@field tv_nsec number
 
-local isTTY = true
--- Progress goes to stderr, so its live rendering needs its own probe (see
--- ansi.progress); the payload stream is what isTTY tracks.
+-- Both probes are writable so tests can pin either path: live rendering is
+-- otherwise terminal-dependent. isTTY tracks stdout (the payload stream),
+-- isStderrTTY tracks stderr (where install progress draws).
 local isStderrTTY = true
 local now
+
+-- Declared before the probes below, which record their results on it.
+const ansi = {}
+ansi.isTTY = true
+
 do
 	if ffi.os == "Windows" then
 		pcall(ffi.cdef, "int _isatty(int fd);")
 		local ok, result = pcall(|| -> ffi.C._isatty(1) ~= 0)
-		if ok then isTTY = result end
+		if ok then ansi.isTTY = result end
 		local okErr, resultErr = pcall(|| -> ffi.C._isatty(2) ~= 0)
 		if okErr then isStderrTTY = resultErr end
 
-		if isTTY or isStderrTTY then
+		if ansi.isTTY or isStderrTTY then
 			-- Legacy Windows consoles (conhost) ignore ANSI escapes unless VT
 			-- processing is enabled on the handle being written to. Without this,
 			-- progress redraws (\x1b[2K\r) print the escape bytes literally and
@@ -47,7 +52,7 @@ do
 					end
 				end)
 			end
-			if isTTY then enableVirtualTerminal(-11) end
+			if ansi.isTTY then enableVirtualTerminal(-11) end
 			if isStderrTTY then enableVirtualTerminal(-12) end
 		end
 
@@ -71,7 +76,7 @@ do
 	else
 		pcall(ffi.cdef, "int isatty(int fd);")
 		local ok, result = pcall(|| -> ffi.C.isatty(1) ~= 0)
-		if ok then isTTY = result end
+		if ok then ansi.isTTY = result end
 		local okErr, resultErr = pcall(|| -> ffi.C.isatty(2) ~= 0)
 		if okErr then isStderrTTY = resultErr end
 
@@ -102,8 +107,6 @@ do
 	end
 	if not now then now = os.clock end
 end
-
-const ansi = {}
 
 -- Registered before ansi.progress is required (below) so its require("ansi")
 -- resolves to this table instead of re-entering the loader.
@@ -171,7 +174,7 @@ const colors = {
 -- Colors are emitted when stdout is a terminal that supports them, or when
 -- a CI log viewer renders ANSI without a tty (GitHub Actions, GitLab CI).
 -- Windows consoles don't set TERM; their VT mode was enabled above.
-local colorEnabled = isTTY
+local colorEnabled = ansi.isTTY
 if colorEnabled and ffi.os ~= "Windows" then
 	local term = os.getenv("TERM")
 	colorEnabled = term ~= nil and term ~= "dumb"
@@ -193,6 +196,11 @@ end
 if not colorEnabled then
 	for k in pairs(colors) do colors[k] = "" end
 end
+
+--- Whether this process emits colors. Callers that pipe a child's output and
+--- re-emit it to their own terminal need it: the child sees a pipe, so it would
+--- drop every escape unless the decision is carried across (CLICOLOR_FORCE).
+ansi.hasColor = colorEnabled
 
 ---@param name ansi.Color
 ---@param s string
@@ -258,17 +266,12 @@ do
 	if columns < 20 then columns = 80 end
 end
 
-function ansi.clearLine()
-	if not isTTY then return end
-	io.write(ESC .. "2K\r")
-	io.flush()
-end
 
 -- Clear the visible screen and home the cursor, preserving scrollback
 -- (bun-style fresh screen per re-run). TTY-only: the escape bytes would
 -- corrupt redirected output.
 function ansi.clearScreen()
-	if not isTTY then return end
+	if not ansi.isTTY then return end
 	io.write(ESC .. "2J" .. ESC .. "H")
 	io.flush()
 end
@@ -323,7 +326,7 @@ ansi._core = {
 	colors  = colors,
 	escape  = ESC,
 	columns = columns,
-	isTTY   = isTTY,
+	isTTY   = ansi.isTTY,
 	now     = now,
 }
 

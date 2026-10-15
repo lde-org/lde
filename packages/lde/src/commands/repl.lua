@@ -1,6 +1,6 @@
 const ansi      = require("ansi")
 const readline  = require("readline")
-local highlight = require("readline.highlight")
+local highlight = require("ansi.highlight")
 
 const lde     = require("lde-core")
 const runtime = require("lde-core.runtime")

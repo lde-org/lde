@@ -1,11 +1,13 @@
 {
 	"name": "readline",
 	"version": "0.1.0",
-	"dependencies": {
-		"ansi": { "path": "../ansi" }
-	},
+	"dependencies": {},
 	"features": {
-		"windows": ["readline.raw.posix"],
-		"unix": ["readline.raw.windows"]
+		"windows": [
+			"readline.raw.posix"
+		],
+		"unix": [
+			"readline.raw.windows"
+		]
 	}
 }

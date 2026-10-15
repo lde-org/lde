@@ -98,7 +98,9 @@ function Lockfile:setManifestHash(hash)
 	self.raw.manifestHash = hash
 end
 
---- A stale lockfile must not pin resolution (e.g. a dep switched from git to registry would otherwise keep installing the old git source); lockfiles written before the hash existed count as stale so they re-resolve exactly once and are rewritten with a hash.
+--- A stale lockfile must not pin resolution: a dep switched from git to registry
+--- would keep installing the old source. Lockfiles written before the hash existed
+--- count as stale, so they re-resolve once and get rewritten with a hash.
 ---@param config lde.Package.Config
 ---@return boolean
 function Lockfile:isStale(config)

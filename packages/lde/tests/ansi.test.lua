@@ -1,16 +1,34 @@
 const test = require("lde-test")
 const env = require("env")
 
+--- The variables ansi's color detection reads. A test that asserts one signal
+--- decides the outcome has to clear the others first: the suite may run under
+--- NO_COLOR=1 or TERM=dumb (any non-tty CI, or a dumb terminal), either of
+--- which otherwise decides the result before the signal under test is read.
+const COLOR_ENV = { "NO_COLOR", "CLICOLOR_FORCE", "GITHUB_ACTIONS", "GITLAB_CI", "TERM" }
+
 --- Set an env var, reload ansi so its color detection re-runs, run fn, then
---- restore the previous value and drop the module again.
+--- restore the previous value and drop the module again. The other color
+--- variables are cleared for the duration: an inherited CLICOLOR_FORCE (a
+--- colorized parent, or the developer's shell) outranks the signal under test.
 ---@param name string
 ---@param value string?
 ---@param fn fun()
 local function withEnv(name, value, fn)
 	const before = env.var(name)
+	const cleared = {}
+	for _, other in ipairs(COLOR_ENV) do
+		if other ~= name then
+			cleared[other] = env.var(other)
+			env.set(other, nil)
+		end
+	end
 	env.set(name, value)
 	package.loaded["ansi"] = nil
 	local ok, err = pcall(fn)
+	for _, other in ipairs(COLOR_ENV) do
+		if other ~= name then env.set(other, cleared[other]) end
+	end
 	env.set(name, before)
 	package.loaded["ansi"] = nil
 	if not ok then error(err, 2) end
@@ -20,7 +38,6 @@ end
 --- decides the outcome has to clear the others first: the suite may run under
 --- NO_COLOR=1 or TERM=dumb (any non-tty CI, or a dumb terminal), either of
 --- which otherwise decides the result before the signal under test is read.
-const COLOR_ENV = { "NO_COLOR", "CLICOLOR_FORCE", "GITHUB_ACTIONS", "GITLAB_CI", "TERM" }
 
 --- Run fn with every color-detection variable unset.
 ---@param fn fun()
@@ -166,7 +183,6 @@ test.it("installProgress writes its summary to stderr, not stdout", function()
 		p:update(0.5, "1/2")
 		p:setCurrent("curl-sys")
 		p:setCurrent("git2-sys")
-		p:tick()
 		p:finish("curl-sys")
 		p:finish("git2-sys")
 		p:done("2 packages installed")

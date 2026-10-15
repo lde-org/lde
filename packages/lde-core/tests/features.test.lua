@@ -133,10 +133,6 @@ test.it("match: a different module is untouched", function()
 	test.falsy(features.isExcluded("native/coreX.lua", excludes))
 end)
 
-test.it("match: filter keeps everything when there are no excludes", function()
-	test.equal(#features.filter({ "a.lua", "b.lua" }, nil), 2)
-end)
-
 -- ── enabled flags, as build scripts see them ─────────────────────────────────
 
 test.it("enabledFlags: platform flags are on whether or not they are declared", function()

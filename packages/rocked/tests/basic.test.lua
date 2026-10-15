@@ -289,10 +289,8 @@ test.it("polyfills are reachable from backends but not from rockspecs", function
 	-- purpose: letting a custom build backend run. A rockspec must not be able
 	-- to obtain them.
 	const luarocks = require("rocked.luarocks")
-	test.truthy(luarocks.isPolyfill("luarocks.fs"))
-	test.falsy(luarocks.isPolyfill("os"))
-
-	const backendEnv = luarocks.backendEnv()
+	const backendEnv = {}
+	for _, name in ipairs(luarocks.backendEnv()) do backendEnv[name] = true end
 	test.truthy(backendEnv["package"])
 	test.truthy(backendEnv["require"])
 	test.falsy(backendEnv["os"])

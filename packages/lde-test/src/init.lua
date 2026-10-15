@@ -1,8 +1,8 @@
 ---@meta
 
 ---@alias lde.test.Result
---- | { name: string, ok: true }
---- | { name: string, ok: false, error: string }
+--- | { name: string, ok: true, ms?: integer }
+--- | { name: string, ok: false, error: string, ms?: integer }
 --- | { name: string, ok: true, skipped: true }
 
 ---@class lde.TestReporter

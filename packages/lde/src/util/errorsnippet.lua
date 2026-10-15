@@ -2,7 +2,7 @@
 const ansi = require("ansi")
 const fs = require("fs")
 local path = require("path")
-const highlight = require("readline.highlight")
+const highlight = require("ansi.highlight")
 
 const errorsnippet = {}
 

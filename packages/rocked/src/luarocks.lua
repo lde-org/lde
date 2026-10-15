@@ -109,38 +109,14 @@ const BACKEND_FUNCS = {
 	"setmetatable", "tonumber", "tostring", "type", "unpack", "xpcall",
 }
 
----@param libs string[]
----@param funcs string[]
----@return table<string, boolean>
-local function allowSet(libs, funcs)
-	const allowed = {}
-	for _, name in ipairs(libs) do allowed[name] = true end
-	for _, name in ipairs(funcs) do allowed[name] = true end
-	return allowed
-end
-
-const BACKEND_ENV = allowSet(BACKEND_LIBS, BACKEND_FUNCS)
-
--- Spared when the sandbox strips package.loaded so a backend's require() finds them.
-const POLYFILL_MODULES = {
-	"luarocks.fs",
-	"luarocks.dir",
-	"luarocks.path",
-	"luarocks.core.cfg",
-	"luarocks.util",
-}
-const POLYFILL_SET = {}
-for _, name in ipairs(POLYFILL_MODULES) do POLYFILL_SET[name] = true end
-
---- True for a module name these polyfills provide, so the sandbox keeps it.
----@param name string
----@return boolean
-function luarocks.isPolyfill(name)
-	return POLYFILL_SET[name] == true
-end
-
+--- The globals a backend chunk may see. The sandbox builds its environment from this
+--- list, so anything absent here is unreachable (no I/O, process, debug or FFI).
+---@return string[]
 function luarocks.backendEnv()
-	return BACKEND_ENV
+	const names = {}
+	for _, name in ipairs(BACKEND_LIBS) do names[#names + 1] = name end
+	for _, name in ipairs(BACKEND_FUNCS) do names[#names + 1] = name end
+	return names
 end
 
 --- The package.loaded proxy coerces the modules into the guest by value, so require() returns them.

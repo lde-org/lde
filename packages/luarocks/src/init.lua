@@ -169,44 +169,7 @@ function luarocks.getRockspecUrls(manifest, name)
 	return urls
 end
 
----@param manifest luarocks.Manifest
----@param name string
----@return table<string, string>? # version -> url
----@return string? err
-function luarocks.getSrcUrls(manifest, name)
-	local versions = manifest:package(name)
-	if not versions then
-		return nil, "Package not found in luarocks registry: " .. name
-	end
 
-	local urls = {}
-	for ver, entries in pairs(versions) do
-		for _, entry in ipairs(entries) do
-			if entry.arch == "src" then
-				urls[ver] = string.format("%s/%s-%s.src.rock", ROCKSPEC_BASE, name, ver)
-				break
-			end
-		end
-	end
-
-	if not next(urls) then
-		return nil, "No src entries found for: " .. name
-	end
-
-	return urls
-end
-
----@param manifest luarocks.Manifest
----@param name string
----@return table<string, luarocks.Manifest.Entry[]>? # version -> entries
----@return string? err
-function luarocks.getEntries(manifest, name)
-	local versions = manifest:package(name)
-	if not versions then
-		return nil, "Package not found in luarocks registry: " .. name
-	end
-	return versions
-end
 
 ---@param v string
 ---@return number[]
@@ -333,60 +296,7 @@ end
 
 ---@param urlMap table<string, string>
 ---@param name string
----@param constraint string?
-local function pickUrl(urlMap, name, constraint)
-	local sorted = {}
-	for v in pairs(urlMap) do sorted[#sorted + 1] = v end
-	table.sort(sorted, |a, b| -> cmpVer(parseVer(a), parseVer(b)) > 0)
 
-	if not constraint or constraint == "" then
-		return urlMap[sorted[1]]
-	end
-
-	---@type { op: string, ver: string }[]
-	local constraints = {}
-	for op, ver in constraint:gmatch("([><=~!]+)%s*([%d%.%-]+)") do
-		constraints[#constraints + 1] = { op = tostring(op), ver = tostring(ver) }
-	end
-
-	if #constraints == 0 then
-		local v = matchExactOrPrefix(urlMap, constraint --[[@as string]])
-		if v then return urlMap[v] end
-		return nil, "Version '" .. constraint .. "' not found for: " .. name
-	end
-
-	for _, v in ipairs(sorted) do
-		local ok = true
-		for _, c in ipairs(constraints) do
-			if not luarocks.satisfies(v, c.op, c.ver) then ok = false; break end
-		end
-		if ok then return urlMap[v] end
-	end
-
-	return nil, "No version of '" .. name .. "' satisfies: " .. constraint
-end
-
----@param manifest luarocks.Manifest
----@param name string
----@param constraint string?
-function luarocks.getSrcUrl(manifest, name, constraint)
-	local urls, err = luarocks.getSrcUrls(manifest, name)
-	if not urls then return nil, err end
-	return pickUrl(urls, name, constraint)
-end
-
----@param manifest luarocks.Manifest
----@param name string
----@param constraint string?
----@return string? url
----@return "src"|"rockspec"|nil arch
----@return string? err
-function luarocks.getUrl(manifest, name, constraint)
-	local _, rockspecUrl, srcUrl, err = luarocks.getBest(manifest, name, constraint)
-	if not rockspecUrl and not srcUrl then return nil, nil, err end
-	if srcUrl then return srcUrl, "src" end
-	return rockspecUrl, "rockspec"
-end
 
 --- Both URLs belong to one version, so graph resolution and content download can't disagree.
 ---@param manifest luarocks.Manifest
@@ -445,6 +355,20 @@ function luarocks.getBest(manifest, name, constraint)
 
 	return nil, nil, nil, "No version of '" .. name .. "'" .. (constraint and (" satisfies: " .. constraint) or " found")
 end
+
+---@param manifest luarocks.Manifest
+---@param name string
+---@param constraint string?
+---@return string? url
+---@return "src"|"rockspec"|nil arch
+---@return string? err
+function luarocks.getUrl(manifest, name, constraint)
+	local _, rockspecUrl, srcUrl, err = luarocks.getBest(manifest, name, constraint)
+	if not rockspecUrl and not srcUrl then return nil, nil, err end
+	if srcUrl then return srcUrl, "src" end
+	return rockspecUrl, "rockspec"
+end
+
 
 --- Newest first, so callers can skip versions the engine can't use.
 ---@param manifest luarocks.Manifest

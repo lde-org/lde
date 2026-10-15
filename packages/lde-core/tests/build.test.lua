@@ -90,8 +90,8 @@ end)
 -- Package:build input invalidation (build.lua packages)
 --
 
-test.it("build script is skipped when src/, lde.json, and build.lua are unchanged", function()
-	local dir = makePackageWithSrc("build-skip-unchanged", {
+test.it("build script runs only when its inputs change", function()
+	local dir = makePackageWithSrc("build-incremental", {
 		["init.lua"] = 'return 1'
 	})
 
@@ -103,85 +103,39 @@ f:close()
 ]])
 
 	local pkg = assert(lde.Package.open(dir))
+	local count = function() return fs.read(path.join(dir, "build-count.txt")) end
+
 	pkg:build()
 	pkg:build()
 	pkg:build()
 
-	test.equal(fs.read(path.join(dir, "build-count.txt")), "x")
+	test.equal(count(), "x", "unchanged inputs must not re-run the script")
 	-- the stamp records the input state inside the output dir
 	test.truthy(fs.exists(path.join(dir, "target", pkg:getName(), ".lde-build-stamp")))
-end)
 
-test.it("build script is re-run when a src file changes", function()
-	local dir = makePackageWithSrc("build-rerun-src", {
-		["init.lua"] = 'return 1'
-	})
-
-	fs.write(path.join(dir, "build.lua"), [[
-local f = assert(io.open("build-count-src.txt", "a"))
-f:write("x")
-f:close()
-]])
-
-	local pkg = assert(lde.Package.open(dir))
-	pkg:build()
-	-- Different size so the mtime/size fast path can't mask the change.
+	-- Every change below also changes the file size, so the mtime/size fast path
+	-- cannot mask it.
 	fs.write(path.join(dir, "src", "init.lua"), 'return 123456')
 	pkg:build()
+	test.equal(count(), "xx", "a src change must re-run the script")
 
-	test.equal(fs.read(path.join(dir, "build-count-src.txt")), "xx")
-end)
-
-test.it("build script is re-run when lde.json changes", function()
-	local dir = makePackageWithSrc("build-rerun-config", {
-		["init.lua"] = 'return 1'
-	})
-
-	fs.write(path.join(dir, "build.lua"), [[
-local f = assert(io.open("build-count-config.txt", "a"))
-f:write("x")
-f:close()
-]])
-
-	local pkg = assert(lde.Package.open(dir))
-	pkg:build()
-
-	-- Rewrite with a clearly larger config so the mtime/size fast path can't mask it.
 	fs.write(path.join(dir, "lde.json"), json.encode({
-		name        = "build-rerun-config",
+		name        = "build-incremental",
 		version     = "0.20.0",
 		description = "a longer config to change the file size",
 		dependencies = {}
 	}))
 	pkg:build()
-
-	test.equal(fs.read(path.join(dir, "build-count-config.txt")), "xx")
-end)
-
-test.it("build script is re-run when build.lua itself changes", function()
-	local dir = makePackageWithSrc("build-rerun-script", {
-		["init.lua"] = 'return 1'
-	})
+	test.equal(count(), "xxx", "a config change must re-run the script")
 
 	fs.write(path.join(dir, "build.lua"), [[
-local f = assert(io.open("build-count-script.txt", "a"))
-f:write("x")
-f:close()
-]])
-
-	local pkg = assert(lde.Package.open(dir))
-	pkg:build()
-
-	-- Longer script: changes the size so the mtime/size fast path can't mask it.
-	fs.write(path.join(dir, "build.lua"), [[
-local f = assert(io.open("build-count-script.txt", "a"))
+local f = assert(io.open("build-count.txt", "a"))
 f:write("y")
 f:close()
 -- extra line to change the file size
 ]])
 	pkg:build()
-
-	test.equal(fs.read(path.join(dir, "build-count-script.txt")), "xy")
+	test.equal(count(), "xxxy", "a build.lua change must re-run the script")
 end)
 
 --
@@ -386,50 +340,32 @@ local function makeAppWithDep(name, depName)
 	return pkg
 end
 
-test.it("installDependencies skips a path dep's build.lua while its inputs are unchanged", function()
-	makeBuildScriptDep("install-skip-dep", "install-skip-count.txt")
-	local pkg = makeAppWithDep("install-skip-main", "install-skip-dep")
+test.it("installDependencies re-runs a path dep's build.lua only when its inputs change", function()
+	local depDir = makeBuildScriptDep("install-incremental-dep", "install-incremental-count.txt")
+	local pkg = makeAppWithDep("install-incremental-main", "install-incremental-dep")
+	local count = function() return fs.read(path.join(depDir, "install-incremental-count.txt")) end
 
 	pkg:installDependencies()
-	test.equal(fs.read(path.join(tmpBase, "install-skip-dep", "install-skip-count.txt")), "x")
+	test.equal(count(), "x")
 
-	-- locked = true forces the full walk (bypassing the .installed fast path) so
-	-- the stamp check itself is exercised, not just the root marker.
+	-- locked = true forces the full walk (bypassing the .installed fast path) so the
+	-- stamp check itself is exercised, not just the root marker.
 	pkg:installDependencies(nil, nil, nil, { isLocked = true })
-	test.equal(fs.read(path.join(tmpBase, "install-skip-dep", "install-skip-count.txt")), "x",
-		"dep build.lua must not re-run while its inputs are unchanged")
-end)
-
-test.it("installDependencies re-runs a path dep's build.lua when its src changes", function()
-	local depDir = makeBuildScriptDep("install-src-dep", "install-src-count.txt")
-	local pkg = makeAppWithDep("install-src-main", "install-src-dep")
-
-	pkg:installDependencies()
-	test.equal(fs.read(path.join(depDir, "install-src-count.txt")), "x")
+	test.equal(count(), "x", "dep build.lua must not re-run while its inputs are unchanged")
 
 	-- Different size so the mtime/size fast path can't mask the change.
 	fs.write(path.join(depDir, "src", "init.lua"), 'return 123456')
 	pkg:installDependencies(nil, nil, nil, { isLocked = true })
-	test.equal(fs.read(path.join(depDir, "install-src-count.txt")), "xx",
-		"dep build.lua must re-run when the dep's source changed")
-end)
-
-test.it("installDependencies re-runs a path dep's build.lua when its build.lua changes", function()
-	local depDir = makeBuildScriptDep("install-script-dep", "install-script-count.txt")
-	local pkg = makeAppWithDep("install-script-main", "install-script-dep")
-
-	pkg:installDependencies()
-	test.equal(fs.read(path.join(depDir, "install-script-count.txt")), "x")
+	test.equal(count(), "xx", "dep build.lua must re-run when the dep's source changed")
 
 	fs.write(path.join(depDir, "build.lua"), string.format([[
 local f = assert(io.open("%s", "a"))
 f:write("y")
 f:close()
 -- extra line to change the file size
-]], "install-script-count.txt"))
+]], "install-incremental-count.txt"))
 	pkg:installDependencies(nil, nil, nil, { isLocked = true })
-	test.equal(fs.read(path.join(depDir, "install-script-count.txt")), "xy",
-		"dep build.lua must re-run when the dep's build.lua changed")
+	test.equal(count(), "xxy", "dep build.lua must re-run when the dep's build.lua changed")
 end)
 
 test.it("installDependencies fast path detects a stale path dep build (src change invalidates the cache)", function()

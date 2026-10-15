@@ -177,19 +177,6 @@ function features.isExcluded(relativePath, excludes)
 end
 
 ---@param relativePaths string[]
----@param excludes string[]?
-function features.filter(relativePaths, excludes)
-	if not excludes or #excludes == 0 then return relativePaths end
-
-	---@type string[]
-	const kept = {}
-	for _, relativePath in ipairs(relativePaths) do
-		if not features.isExcluded(relativePath, excludes) then
-			kept[#kept + 1] = relativePath
-		end
-	end
-	return kept
-end
 
 --- Fallback for a package built outside an install (`lde compile` on itself), where only platform flags are known; inside an install `Package:getFeatures` has the recorded flags.
 ---@param pkg lde.Package

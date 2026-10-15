@@ -389,7 +389,9 @@ local function executeString(code, opts)
 	return executeSource(code, "-e", opts)
 end
 
---- Test harnesses shell out through the lde binary as their Lua interpreter and depend on the chaining semantics: a prelude `-e` chunk (e.g. luacov's runner) runs before the script *in the same state*, with a rebuilt arg table (arg[0] = script).
+--- Test harnesses use the lde binary as their Lua interpreter and depend on these
+--- semantics: a prelude `-e` chunk (e.g. luacov's runner) runs before the script in
+--- the same state, with a rebuilt arg table (arg[0] = script).
 ---@param args string[] # the command line after `--lua`
 ---@param opts lde.ExecuteOptions?
 ---@return boolean ok

@@ -1,4 +1,6 @@
---- Line coverage for `lde test --coverage`: a line hook on each guest test state records executed lines under the package's prefixes, and hits are shared across all test files (each runs in a fresh state) then merged by Coverage:compute().
+--- Line coverage for `lde test --coverage`: a line hook per guest test state records
+--- executed lines under the package's prefixes. Each test file runs in a fresh state,
+--- so hits are accumulated across files and merged by Coverage:compute().
 
 const fs   = require("fs")
 const path = require("path")

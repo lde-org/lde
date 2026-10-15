@@ -4,7 +4,9 @@ const util = require("util")
 
 const curl = util.lazy(|| -> require("curl-sys"))
 
---- Parallel download session used during dependency installation: the resolver prefetches a whole level in parallel so the sequential work that follows hits the cache. Outside an active session everything falls back to synchronous `curl.*` calls.
+--- Parallel download session for installs: the resolver prefetches a whole level in
+--- parallel so the sequential work that follows hits the cache. Without a session,
+--- every call falls back to synchronous `curl.*`.
 
 const download = {}
 
@@ -125,7 +127,9 @@ end
 --- A server that accepts the connection but never finishes the body would block the batch forever (curl-sys applies no default timeout).
 const DOWNLOAD_TIMEOUT = 120 -- seconds
 
---- A file already at `destPath` is only trusted when it was registered this session or is backed by the user-level archive cache (written only after a successful transfer); a bare leftover from an interrupted run is a partial download and is deleted so the caller re-fetches.
+--- A file at `destPath` is trusted only when this session registered it or the
+--- user-level archive cache backs it (both written after a successful transfer);
+--- a leftover from an interrupted run is partial and is deleted to force a re-fetch.
 ---@param destPath string
 ---@return boolean
 local function seedFromCache(destPath) ---@cast session -nil

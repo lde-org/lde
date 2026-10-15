@@ -35,18 +35,12 @@ end
 ---@param modulesDir string
 ---@param isStale boolean? # true when lde.json changed since the old lockfile was written
 local function commitLockfile(pkg, stack, modulesDir, isStale)
-	-- Merge with any existing lockfile: runtime and dev installs each commit
-	-- their own slice of the graph, and neither should drop the other's pins.
-	-- Copy into a fresh table: the json package iterates a decoded table's
-	-- internal key order (maintained via json.addField), so mutating the
-	-- decoded table directly would silently drop added entries on encode.
-	--
-	-- A stale lockfile's pins were resolved from different declarations and
-	-- must not survive, or a pin for a dep in the *other* slice (e.g. a dev
-	-- dep during the runtime install) leaks back in once the rewritten
-	-- lockfile carries the new manifest hash — the next slice trusts it and
-	-- keeps the stale version instead of re-resolving. Commit only the fresh
-	-- stack; the other slice re-resolves on its own install.
+	-- Runtime and dev installs each commit their own slice, so merge with the existing
+	-- lockfile instead of dropping the other slice's pins. A stale lockfile's pins come
+	-- from declarations that no longer match lde.json: keeping them would let the next
+	-- slice trust a version the new manifest never asked for. Commit only the fresh
+	-- stack. Copy into a fresh table because json encodes a decoded table in its internal
+	-- key order, which mutating the decoded table would corrupt.
 	const lockEntries = {}
 	if not isStale then
 		const existing = pkg:readLockfile()
@@ -189,12 +183,9 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 		end
 	end
 
-	-- The lockfile's pins are only trustworthy while lde.json's dependency
-	-- declarations match what the lockfile was resolved from. A manifest edit
-	-- (switching a git dep to a registry dep, adding/removing deps, ...) makes
-	-- them stale: applying them would override the new declarations, or conflict
-	-- with transitive requests for the same alias. Re-resolve everything from
-	-- the manifest and rewrite the lockfile instead.
+	-- A pin is only trustworthy while lde.json still declares what it was resolved
+	-- from; a manifest edit (git dep to registry dep, deps added or removed) makes it
+	-- stale, and applying it would override the new declaration. Re-resolve instead.
 	local rootLockfile = package:readLockfile()
 	const isLockfileStale = rootLockfile ~= nil and rootLockfile:isStale(package:readConfig())
 	if opts.isLocked and isLockfileStale then
@@ -224,15 +215,9 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 	-- Parallel download session: sources are prefetched in batches during the
 	-- graph walk and materialized afterwards. Always cleaned up, even on error.
 	--
-	-- Compact mode shows one bun-style live line for the whole pass: the
-	-- currently building dependency, a moving total progress bar, and the
-	-- elapsed time for that dependency. Verbose mode keeps the old per-item
-	-- progress bars.
-	--
-	-- A session may already be active when this install runs inside an
-	-- overlapped `install rocks:` flow (the root package's own download started
-	-- before resolution). In that case the session is shared and the caller
-	-- ends it.
+	-- One live line for the whole pass (compact) or a bar per item (verbose).
+	-- An `install rocks:` flow starts the session before resolution; a shared
+	-- session is left for that caller to end.
 	const download = require("lde-core.util.download")
 	const isSessionActive = download.active()
 	const progress = (not lde.isVerbose and not lde.isQuiet and installs > 0)

@@ -1,6 +1,6 @@
 const test      = require("lde-test")
 const ansi      = require("ansi")
-local highlight = require("readline.highlight")
+local highlight = require("ansi.highlight")
 
 -- The codes ansi would emit in this environment (empty when colors are
 -- disabled, e.g. piped output) — the tests must pass in both modes.

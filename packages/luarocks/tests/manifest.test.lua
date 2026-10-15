@@ -116,59 +116,11 @@ test.it("getRockspecUrl returns nil for unknown package", function()
 	test.truthy(err)
 end)
 
-test.it("getSrcUrls returns src urls", function()
-	local m = Manifest.new(MANIFEST)
-	local urls, err = luarocks.getSrcUrls(m, "luafilesystem")
-	test.equal(err, nil) ---@cast urls -nil
-	test.truthy(urls["1.8.0-1"])
-	test.truthy(urls["1.8.0-1"]:find("luafilesystem-1.8.0-1.src.rock", 1, true))
-end)
 
-test.it("getSrcUrls excludes rockspec-only versions", function()
-	local m = Manifest.new(MANIFEST)
-	local urls, err = luarocks.getSrcUrls(m, "luafilesystem")
-	test.equal(err, nil) ---@cast urls -nil
-	-- 1.7.0-2 only has rockspec, should not appear
-	test.equal(urls["1.7.0-2"], nil)
-end)
 
-test.it("getSrcUrls returns nil for package with no src entries", function()
-	local _ = Manifest.new(MANIFEST)
-	-- luafilesystem 1.7.0-2 only has rockspec, but we need a package with NO src at all
-	-- use a custom manifest snippet
-	local noSrcManifest = luarocks.Manifest.new([[
-repository = {
-   nosrcpkg = {
-      ["1.0.0-1"] = { { arch = "rockspec" } }
-   }
-}
-]])
-	local urls, err = luarocks.getSrcUrls(noSrcManifest, "nosrcpkg")
-	test.equal(urls, nil)
-	test.truthy(err)
-end)
 
-test.it("getSrcUrl picks latest src version", function()
-	local m = Manifest.new(MANIFEST)
-	local url, err = luarocks.getSrcUrl(m, "luasystem")
-	test.equal(err, nil) ---@cast url -nil
-	test.truthy(url:find("luasystem-0.5.0-1.src.rock", 1, true))
-end)
 
-test.it("getEntries returns all entries for a package", function()
-	local m = Manifest.new(MANIFEST)
-	local entries, err = luarocks.getEntries(m, "luafilesystem")
-	test.equal(err, nil) ---@cast entries -nil
-	test.truthy(entries["1.8.0-1"])
-	test.equal(#entries["1.8.0-1"], 2)
-end)
 
-test.it("getEntries returns nil for unknown package", function()
-	local m = Manifest.new(MANIFEST)
-	local entries, err = luarocks.getEntries(m, "doesnotexist")
-	test.equal(entries, nil)
-	test.truthy(err)
-end)
 
 test.it("getUrl prefers src over rockspec", function()
 	local m = Manifest.new(MANIFEST)
@@ -280,15 +232,6 @@ test.it("getUrl honors a version constraint", function()
 	test.truthy(noneErr)
 end)
 
-test.it("getBest returns the version, rockspec, and src URLs for the best match", function()
-	local m = Manifest.new(MANIFEST)
-	local version, rockspecUrl, srcUrl, err = luarocks.getBest(m, "luafilesystem", ">= 1.7")
-	test.equal(err, nil)
-	test.equal(version, "1.8.0-1") ---@cast rockspecUrl -nil
-	---@cast srcUrl -nil
-	test.truthy(rockspecUrl:find("luafilesystem-1.8.0-1.rockspec", 1, true))
-	test.truthy(srcUrl:find("luafilesystem-1.8.0-1.src.rock", 1, true))
-end)
 
 test.it("listBest returns versions sorted descending, filtered by constraint", function()
 	local m = Manifest.new(MANIFEST)

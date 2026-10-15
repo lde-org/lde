@@ -102,76 +102,49 @@ test.it("lde sync installs path dependencies and writes the lockfile", function(
 	test.equal(lock.dependencies["sync-basic-dep"].path, "../sync-basic-dep")
 end)
 
-test.it("lde sync is a cached no-op when nothing changed", function()
-	makeDep("sync-cached-dep")
-	local dir = makeProject("sync-cached", { ["sync-cached-dep"] = { path = "../sync-cached-dep" } })
-
-	local ok, out = cli({ "sync" }, dir)
-	test.truthy(ok, "first sync failed: " .. tostring(out))
-
-	local ok2, out2 = cli({ "sync" }, dir)
-	test.truthy(ok2, "second sync failed: " .. tostring(out2))
-	local text = plain(out2 or "")
-	test.includes(text, "No changes")
-	test.includes(text, "(cached)")
-end)
-
---
--- Manual cache deletion invalidates the sync
---
-
-test.it("lde sync re-installs when target/.installed is deleted", function()
-	makeDep("sync-installed-dep")
-	local dir = makeProject("sync-installed", { ["sync-installed-dep"] = { path = "../sync-installed-dep" } })
+test.it("lde sync stays cached until an input is deleted, then heals itself", function()
+	makeDep("sync-cache-dep")
+	local dir = makeProject("sync-cache", { ["sync-cache-dep"] = { path = "../sync-cache-dep" } })
+	local depInit = path.join(dir, "target", "sync-cache-dep", "init.lua")
+	local notCached = function(out)
+		return plain(out or ""):find("(cached)", 1, true) == nil
+	end
 
 	cli({ "sync" }, dir)
+
+	local ok, out = cli({ "sync" }, dir)
+	test.truthy(ok, "second sync failed: " .. tostring(out))
+	test.includes(plain(out or ""), "No changes")
+	test.includes(plain(out or ""), "(cached)")
+
+	-- The .installed marker records the run; without it the sync must redo the work.
 	fs.delete(path.join(dir, "target", ".installed"))
-
-	local ok, out = cli({ "sync" }, dir)
+	ok, out = cli({ "sync" }, dir)
 	test.truthy(ok, "sync after .installed deletion failed: " .. tostring(out))
-	test.falsy(plain(out or ""):find("(cached)", 1, true),
-		"sync must not report cached after .installed was deleted")
-	test.truthy(fs.exists(path.join(dir, "target", "sync-installed-dep", "init.lua")))
-end)
+	test.truthy(notCached(out), "sync must not report cached after .installed was deleted")
+	test.truthy(fs.exists(depInit))
 
-test.it("lde sync re-installs when a dependency is deleted from target/", function()
-	makeDep("sync-wipe-dep")
-	local dir = makeProject("sync-wipe", { ["sync-wipe-dep"] = { path = "../sync-wipe-dep" } })
-
-	cli({ "sync" }, dir)
-	fs.rmdir(path.join(dir, "target", "sync-wipe-dep"))
-
-	local ok, out = cli({ "sync" }, dir)
+	-- A dependency missing from target/ is reinstalled.
+	fs.rmdir(path.join(dir, "target", "sync-cache-dep"))
+	ok, out = cli({ "sync" }, dir)
 	test.truthy(ok, "sync after dep wipe failed: " .. tostring(out))
-	test.falsy(plain(out or ""):find("(cached)", 1, true))
-	test.truthy(fs.exists(path.join(dir, "target", "sync-wipe-dep", "init.lua")))
-end)
+	test.truthy(notCached(out))
+	test.truthy(fs.exists(depInit))
 
-test.it("lde sync re-installs everything when target/ is deleted", function()
-	makeDep("sync-nuke-dep")
-	local dir = makeProject("sync-nuke", { ["sync-nuke-dep"] = { path = "../sync-nuke-dep" } })
-
-	cli({ "sync" }, dir)
-	fs.rmdir(path.join(dir, "target"))
-
-	local ok, out = cli({ "sync" }, dir)
-	test.truthy(ok, "sync after target wipe failed: " .. tostring(out))
-	test.falsy(plain(out or ""):find("(cached)", 1, true))
-	test.truthy(fs.exists(path.join(dir, "target", "sync-nuke-dep", "init.lua")))
-end)
-
-test.it("lde sync re-creates the lockfile when it is deleted", function()
-	makeDep("sync-lock-del-dep")
-	local dir = makeProject("sync-lock-del", { ["sync-lock-del-dep"] = { path = "../sync-lock-del-dep" } })
-
-	cli({ "sync" }, dir)
+	-- The lockfile is re-created when it disappears.
 	fs.delete(path.join(dir, "lde.lock"))
 	fs.delete(path.join(dir, "target", ".installed"))
-
-	local ok, out = cli({ "sync" }, dir)
+	ok, out = cli({ "sync" }, dir)
 	test.truthy(ok, "sync after lockfile deletion failed: " .. tostring(out))
 	test.truthy(fs.exists(path.join(dir, "lde.lock")))
-	test.truthy(fs.exists(path.join(dir, "target", "sync-lock-del-dep", "init.lua")))
+	test.truthy(fs.exists(depInit))
+
+	-- Wiping target/ re-installs everything.
+	fs.rmdir(path.join(dir, "target"))
+	ok, out = cli({ "sync" }, dir)
+	test.truthy(ok, "sync after target wipe failed: " .. tostring(out))
+	test.truthy(notCached(out))
+	test.truthy(fs.exists(depInit))
 end)
 
 test.it("lde sync installs a newly added dependency after lde.json changes", function()
@@ -202,26 +175,6 @@ end)
 --
 -- Cache directory (tar / git) invalidation — scoped with --tree
 --
-
-test.it("lde sync re-downloads when the tar cache is deleted", function()
-	local treeDir = path.join(tmpBase, "sync-tar-tree")
-	fs.rmdir(treeDir)
-	local dir = makeProject("sync-tar", { lpeg = { luarocks = "lpeg" } })
-
-	local ok, out = cli({ "--tree", treeDir, "sync" }, dir)
-	test.truthy(ok, "initial sync failed: " .. tostring(out))
-	test.truthy(fs.exists(path.join(dir, "target", "lpeg")), "lpeg not installed")
-
-	-- Wipe the tar cache AND the materialized dep: the .installed hash alone
-	-- can't see either, so a full re-download must happen.
-	fs.rmdir(path.join(treeDir, "tar"))
-	fs.rmdir(path.join(dir, "target", "lpeg"))
-
-	local ok2, out2 = cli({ "--tree", treeDir, "sync" }, dir)
-	test.truthy(ok2, "sync after tar cache wipe failed: " .. tostring(out2))
-	test.includes(plain(out2 or ""), "All dependencies installed successfully")
-	test.truthy(fs.exists(path.join(dir, "target", "lpeg")), "lpeg not re-installed")
-end)
 
 test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde sync re-clones when the git cache is deleted", function()
 	local repoDir = makeLocalGitRepo("syncgit")

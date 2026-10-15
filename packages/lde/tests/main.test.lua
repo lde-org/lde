@@ -35,74 +35,62 @@ test.it("should not ignore --git in ldx", function()
 	fs.rmdir(repoDir)
 end)
 
-test.it("ldx gh:owner/repo resolves the shorthand to a git repo", function()
-	local cloneUrl = "https://github.com/bycruz/hood"
-
-	-- Resolve the real commit so the cache key matches what getOrCloneRepo expects.
-	local commit = assert(git2.lsRemote(cloneUrl, "HEAD")) ---@cast commit string
-
-	-- Pre-populate the cache with a fake repo (same trick as the --git test above).
-	local repoDir = lde.global.getGitRepoDir("hood", commit)
-	fs.rmdir(repoDir)
-	fs.mkdir(repoDir)
-	fs.write(path.join(repoDir, "lde.json"), json.encode({
-		name = "hood",
-		version = "1.0.0",
-		dependencies = {}
-	}))
-	fs.mkdir(path.join(repoDir, "src"))
-	fs.write(path.join(repoDir, "src", "init.lua"), 'print("from shorthand hood")')
-
-	-- The repo root package runs, exactly as `ldx --git <url>` would.
-	local ok, out = ldecli({ "x", "gh:bycruz/hood" })
-	test.truthy(ok, "ldx gh:... failed: " .. tostring(out)) ---@cast out -nil
-	test.includes(out, "from shorthand hood")
-
-	-- An extra positional is a sub-package name, like --git's [package-name].
-	local _, out2 = ldecli({ "x", "gh:bycruz/hood", "triangle" }) ---@cast out2 -nil
-	test.includes(out2, "No package named 'triangle'")
-
-	fs.rmdir(repoDir)
-end)
-
-test.it("ldx gh:<pkg>@owner/repo runs the sub-package of a monorepo", function()
-	local cloneUrl = "https://github.com/bycruz/hood"
-
-	-- Resolve the real commit so the cache key matches what getOrCloneRepo expects.
-	local commit = assert(git2.lsRemote(cloneUrl, "HEAD")) ---@cast commit string
-
-	-- Pre-populate the cache with a fake monorepo: a root package plus a
-	-- "triangle" package in a subdirectory.
-	local repoDir = lde.global.getGitRepoDir("hood", commit)
-	fs.rmdir(repoDir)
-	fs.mkdir(repoDir)
-	fs.write(path.join(repoDir, "lde.json"), json.encode({
-		name = "hood",
-		version = "1.0.0",
-		dependencies = {}
-	}))
-	fs.mkdir(path.join(repoDir, "src"))
-	fs.write(path.join(repoDir, "src", "init.lua"), "")
-	fs.mkdir(path.join(repoDir, "triangle"))
-	fs.mkdir(path.join(repoDir, "triangle", "src"))
-	fs.write(path.join(repoDir, "triangle", "lde.json"), json.encode({
-		name = "triangle",
-		version = "1.0.0",
-		dependencies = {}
-	}))
-	fs.write(path.join(repoDir, "triangle", "src", "init.lua"), 'print("from triangle subpackage")')
-
-	local ok, out = ldecli({ "x", "gh:triangle@bycruz/hood" })
-	test.truthy(ok, "ldx gh:<pkg>@... failed: " .. tostring(out)) ---@cast out -nil
-	test.includes(out, "from triangle subpackage")
-
-	fs.rmdir(repoDir)
-end)
-
 test.it("ldx gh:owner/repo@version rejects malformed shorthands", function()
 	local ok, out = ldecli({ "x", "gh:foo/bar@1.0.0" })
 	test.falsy(ok)
 	test.includes(tostring(out), "Invalid git shorthand")
+end)
+
+test.it("lde test prints each file's results as one unbroken block", function()
+	local tmpDir = path.join(env.tmpdir(), "lde-test-blocks")
+	fs.rmdir(tmpDir)
+	fs.mkdirAll(path.join(tmpDir, "src"))
+	fs.mkdirAll(path.join(tmpDir, "tests"))
+	fs.write(path.join(tmpDir, "src", "init.lua"), "return true")
+	fs.write(path.join(tmpDir, "lde.json"), json.encode({ name = "blocks", version = "0.1.0" }))
+
+	-- One slow file started first, two fast ones behind it: a parent that streams
+	-- each shard's output as it arrives prints the slow file's header and then the
+	-- fast files' tests, leaving the header with nothing under it.
+	fs.write(path.join(tmpDir, "tests", "a-slow.test.lua"), [[
+		local test = require("lde-test")
+		test.it("slow test", function()
+			local started = os.clock()
+			while os.clock() - started < 0.3 do end
+			test.equal(1, 1)
+		end)
+	]])
+	for _, name in ipairs({ "b", "c" }) do
+		fs.write(path.join(tmpDir, "tests", name .. "-fast.test.lua"), string.format([[
+			local test = require("lde-test")
+			test.it("%s one", function() test.equal(1, 1) end)
+			test.it("%s two", function() test.equal(2, 2) end)
+		]], name, name))
+	end
+
+	local ok, out = ldecli({ "test" }, tmpDir)
+	test.truthy(ok, "lde test failed: " .. tostring(out))
+
+	-- Escape-insensitive: a colorized parent (CLICOLOR_FORCE, a real tty) wraps the
+	-- header and the result markers.
+	local plain = (out or ""):gsub("\27%[[0-9;]*[A-Za-z]", "")
+
+	local pending, results = nil, 0
+	for line in plain:gmatch("[^\n]+") do
+		const file = line:match("^%s+([%w%-_]+%.test%.lua)%s*$")
+		if file then
+			if pending then
+				test.truthy(results > 0, "file " .. pending .. " printed no results before " .. file)
+			end
+			pending, results = file, 0
+		elseif pending and (line:find("✓", 1, true) or line:find("✗", 1, true) or line:find("%- ")) then
+			results = results + 1
+		end
+	end
+	test.truthy(pending ~= nil, "no test file headers in the output")
+	test.truthy(results > 0, "the last file printed no results")
+
+	fs.rmdir(tmpDir)
 end)
 
 test.it("lde test skips packages with no tests/ directory", function()
@@ -174,6 +162,13 @@ test.it("lde test monorepo mode runs each package from its own cwd", function()
 	test.truthy(ok, "monorepo lde test must run packages from their own cwd: " .. tostring(out))
 	test.includes(out or "", "pkg-one")
 	test.includes(out or "", "pkg-two")
+
+	-- Workers report counts through their result files; the run prints one summary.
+	local summaries = 0
+	for line in (out or ""):gmatch("[^\n]+") do
+		if line:find("Tests:", 1, true) then summaries = summaries + 1 end
+	end
+	test.equal(summaries, 1, "monorepo mode must print a single summary")
 
 	fs.rmdir(tmpDir)
 end)

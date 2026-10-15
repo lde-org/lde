@@ -92,7 +92,6 @@ const BYTECODE_SIGNATURE = 27
 ---@field libDir string? # what luarocks.path.lib_dir() resolves to
 ---@field instructionLimit number?
 ---@field memoryLimit number? # bytes the guest state may hold; 0 removes the cap
----@field extraModules? fun(name: string): boolean # module names this sandbox will install itself (backend polyfills)
 ---@field permissions rocked.Permissions? # per-action gates; unlisted actions default to allow
 ---@field luaBin string? # interpreter path backends see as cfg.variables.LUA
 ---@field luaDir string? # mock Lua install dir backends see as cfg.variables.LUA_DIR
@@ -103,8 +102,9 @@ const BYTECODE_SIGNATURE = 27
 --- A rockspec runs with an empty environment. The shared string metatable stays
 --- intact: rockspecs compute versions from strings (`("1.0"):gsub(...)`) and
 --- LuaRocks accepts that, so detaching it rejected ~5% of published rockspecs for
---- no security gain — the string library does no I/O and `load` is stripped.
-local ROCKSPEC_ENV = {}
+--- no security gain — the string library does no I/O and `load` is not in the
+--- environment.
+const ROCKSPEC_ENV = {}
 
 --- Guest functions are rejected; only data crosses the boundary.
 ---@param v any
@@ -122,61 +122,101 @@ local function materialize(v)
 	return out
 end
 
---- Keys are collected first: deleting while iterating a guest table is unsafe.
----@param tbl lua.Table
----@param allowed table<string, boolean>
----@param keep? fun(name: string): boolean # extra names to spare (a backend's polyfills)
-local function stripUnwhitelisted(tbl, allowed, keep)
-	const drop = {}
-	for name in tbl:pairs() do
-		if type(name) == "string" and not allowed[name] and not (keep and keep(name)) then
-			drop[#drop + 1] = name
-		end
+--- A chunk's environment is its whole view of the world, so building it from the
+--- whitelist *is* the isolation: the guest keeps its standard library, the sandboxed
+--- chunk never sees it. Clearing the globals table key by key instead cost a bridge
+--- round trip per key (~0.7 µs, hundreds per state) and tripped a LuaJIT trace-exit
+--- bug (lj_snap_restore) on the bulk deletion.
+local ENV_LOADER = [==[
+	local source, chunkName, names = ...
+	local env = {}
+	for i = 1, #names do
+		local name = names[i]
+		env[name] = _G[name]
 	end
-	for _, name in ipairs(drop) do tbl:set(name, nil) end
+	local f, err = loadstring(source, chunkName)
+	if not f then error(err, 0) end
+	setfenv(f, env)
+	return f, env
+]==]
+
+---@param state lua.State
+---@param names string[] # globals the chunk may see; nothing else is reachable
+---@param code string
+---@param chunkName string
+---@return lua.Chunk chunk
+---@return lua.Table env # the chunk's environment: everything it defines lands here
+local function loadInEnv(state, names, code, chunkName)
+	if code:byte(1) == BYTECODE_SIGNATURE then
+		error("rockspec must be Lua source, not precompiled bytecode", 0)
+	end
+
+	const ok, chunk, env = state:load(ENV_LOADER, "@lde-env"):setMode("text"):pcall(code, chunkName, names)
+	if not ok then error("rocked: cannot compile the chunk: " .. tostring(chunk), 0) end
+	return chunk --[[@as lua.Chunk]], env --[[@as lua.Table]]
 end
 
---- Run `source` in a fresh isolated guest state: environment `env`, an instruction
---- limit (keeps the guest on the interpreter so the count hook fires) and a memory cap.
+--- Clears a guest table in place. In place, because LuaJIT's require() reads the module
+--- cache from a registry entry that still points at this table; guest-side, because
+--- clearing through the bridge costs a round trip per key. Keys are collected first:
+--- deleting during a traversal trips a LuaJIT trace-exit bug (lj_snap_restore).
+local CACHE_CLEAR = [==[
+	local tbl = ...
+	local drop = {}
+	for k in pairs(tbl) do drop[#drop + 1] = k end
+	for i = 1, #drop do tbl[drop[i]] = nil end
+]==]
+
+--- Run `fn` against a fresh guest state: an instruction limit (which also keeps the
+--- guest on the interpreter, so the count hook fires) and a memory cap.
 ---@param opts rocked.SandboxOpts?
----@param env table<string, boolean> # names the chunk may see; empty for none
----@param fn fun(state: lua.State, g: lua.Table): any, any # (ok, result-or-err); shapes differ per caller
+---@param names string[] # the sandbox's whole global environment
+---@param fn fun(state: lua.State, names: string[]): any, any
 ---@return any ok
 ---@return any resultOrErr
-local function sandbox(opts, env, fn)
+local function sandbox(opts, names, fn)
 	opts = opts or {}
 	local state = lua.new()
-	local g = state:globals()
+	const g = state:globals()
+	local reachesModules = false
+	for _, name in ipairs(names) do
+		if name == "require" or name == "package" then reachesModules = true end
+	end
 
-	-- `package` is reached before the globals strip removes it from _G.
+	-- The guest keeps its own `package`, but not its search path or module cache: a
+	-- backend's require() must reach the installed tree and the polyfills that
+	-- `luarocks.setup` registers below, never the standard library.
 	const packageTable = g:get("package") --[[@as lua.Table?]]
-
-	stripUnwhitelisted(g, env)
-
 	if packageTable then
 		packageTable:set("path", opts.packagePath or "")
 		packageTable:set("cpath", opts.cpath or "")
-
-		-- The globals strip is not enough: luaL_openlibs also registers stdlibs in package.loaded.
-		const extraModules = opts.extraModules
-		stripUnwhitelisted(packageTable:get("loaded") --[[@as lua.Table]], env, extraModules)
-		stripUnwhitelisted(packageTable:get("preload") --[[@as lua.Table]], env, extraModules)
 	end
 
-	-- setHook also disables the guest JIT while installed.
 	state:setHook(function()
 		error("Rockspec took too long to run")
 	end, "count", opts.instructionLimit or DEFAULT_INSTRUCTION_LIMIT)
-
 	state:setMemoryLimit(opts.memoryLimit or DEFAULT_MEMORY_LIMIT)
 
-	local ok, a, b = pcall(fn, state, g)
+	-- Only a chunk that can reach `require` needs the cache emptied; a rockspec has
+	-- no globals at all, so its sandbox skips the work.
+	if packageTable and reachesModules then
+		const clear = state:load(CACHE_CLEAR, "@lde-cache"):setMode("text")
+		for _, field in ipairs({ "loaded", "preload" }) do
+			const cache = packageTable:get(field) --[[@as lua.Table?]]
+			if cache then
+				const cleared = clear:pcall(cache)
+				if not cleared then error("rocked: cannot clear package." .. field, 0) end
+			end
+		end
+	end
+
+	local ok, a, b = pcall(fn, state, names)
 	state:close()
 	if not ok then return false, a --[[@as string?]] end
 	return a, b
 end
 
---- Fail closed, since skipping either capability would leave containment looking enforced.
+--- The sandbox needs lua-sys for chunk modes and memory limits.
 local function checkSandboxSupport()
 	const probe = lua.new()
 	const hasMemoryLimit = type(probe.setMemoryLimit) == "function"
@@ -191,20 +231,7 @@ local function checkSandboxSupport()
 			" (>= 0.1.2); run `lde update lua-sys`", 0)
 	end
 end
-
 checkSandboxSupport()
-
----@param state lua.State
----@param code string
----@param chunkName string
----@return lua.Chunk
-local function loadSpec(state, code, chunkName)
-	if type(code) == "string" and code:byte(1) == BYTECODE_SIGNATURE then
-		error("rockspec must be Lua source, not precompiled bytecode", 0)
-	end
-
-	return state:load(code, chunkName):setMode("text")
-end
 
 ---@type string[]
 const ROCKSPEC_FIELDS = {
@@ -218,13 +245,14 @@ const ROCKSPEC_FIELDS = {
 ---@param spec string
 ---@param permissions rocked.Permissions? # per-action gates for sandbox side effects
 function rocked.parse(spec, permissions)
-	return sandbox({ permissions = permissions }, ROCKSPEC_ENV, function(state, g)
-		local ok, err = loadSpec(state, spec, "t"):pcall()
+	return sandbox({ permissions = permissions }, ROCKSPEC_ENV, function(state, names)
+		const chunk, env = loadInEnv(state, names, spec, "t")
+		const ok, err = chunk:pcall()
 		if not ok then return false, err end
 
 		local out = {}
 		for _, field in ipairs(ROCKSPEC_FIELDS) do
-			const v = g:get(field)
+			const v = env:get(field)
 			if v ~= nil then out[field] = materialize(v) end
 		end
 
@@ -302,12 +330,11 @@ local TEST_BACKEND_DRIVER = [[
 ---@return boolean ok
 ---@return string? err
 function rocked.runTestBackend(testType, rockspec, args, opts)
-	local backendOpts = opts or {}
-	backendOpts.extraModules = luarocks.isPolyfill
-	return sandbox(backendOpts, luarocks.backendEnv(), function(state, g)
+	const backendOpts = opts or {}
+	return sandbox(backendOpts, luarocks.backendEnv(), function(state, names)
 		luarocks.setup(state, backendOpts)
-		local ok, err = loadSpec(state, TEST_BACKEND_DRIVER, "@lde-test-backend"):pcall(testType, state:table(rockspec),
-			state:table(args))
+		const chunk = loadInEnv(state, names, TEST_BACKEND_DRIVER, "@lde-test-backend")
+		const ok, err = chunk:pcall(testType, state:table(rockspec), state:table(args))
 		if ok then return true end
 		return false, err --[[@as string?]]
 	end)
@@ -319,12 +346,11 @@ end
 ---@return boolean ok
 ---@return string? err
 function rocked.runBackend(buildType, rockspec, opts)
-	local backendOpts = opts or {}
-	backendOpts.extraModules = luarocks.isPolyfill
-	return sandbox(backendOpts, luarocks.backendEnv(), function(state, g)
-		-- Names in extraModules survived the strip; put the modules there now.
+	const backendOpts = opts or {}
+	return sandbox(backendOpts, luarocks.backendEnv(), function(state, names)
 		luarocks.setup(state, backendOpts)
-		local ok, err = loadSpec(state, BACKEND_DRIVER, "@lde-backend"):pcall(buildType, state:table(rockspec))
+		const chunk = loadInEnv(state, names, BACKEND_DRIVER, "@lde-backend")
+		const ok, err = chunk:pcall(buildType, state:table(rockspec))
 		if ok then return true end
 		return false, err --[[@as string?]]
 	end)

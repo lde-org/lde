@@ -91,16 +91,37 @@ local function runTestFile(testFile, luaPath, luaCPath, reporter, coverage)
 		state:setHook(function(event, info) coverage:hook(event, info) end, "line")
 	end
 
-	const runSuite = ldetest.setup(state, reporter, {
+	-- The host times each test: a shard's results are rendered by a parent (possibly
+	-- another process), which has no clock reading for work it did not run.
+	const startedAt = {} ---@type table<string, number>
+	const timed = {
+		onFileStart = reporter and reporter.onFileStart or nil,
+		onFileDone  = reporter and reporter.onFileDone or nil,
+		onSkip      = reporter and reporter.onSkip or nil,
+		onStart     = function(name)
+			startedAt[name] = ansi.now()
+			if reporter and reporter.onStart then return reporter.onStart(name) end
+		end,
+		onPass = function(name, handle)
+			if reporter and reporter.onPass then reporter.onPass(name, handle) end
+		end,
+		onFail = function(name, err, handle, file)
+			if reporter and reporter.onFail then reporter.onFail(name, err, handle, file) end
+		end,
+	}
+
+	const runSuite = ldetest.setup(state, timed, {
 		file = testFile,
 		onResult = function(name, ok, skipped, err)
 			-- Spelled as the `lde.test.Result` member holds it: the alias tells the three apart by `ok`/`skipped`.
+			local started = startedAt[name]
+			const ms = started and math.floor((ansi.now() - started) * 1000) or nil
 			if skipped then
-				results[#results + 1] = { name = name, ok = true,      skipped = true }
+				results[#results + 1] = { name = name, ok = true,      skipped = true, ms = ms }
 			elseif ok == true then
-				results[#results + 1] = { name = name, ok = true,       error = err }
+				results[#results + 1] = { name = name, ok = true,       error = err,    ms = ms }
 			else
-				results[#results + 1] = { name = name, ok = false,      error = err }
+				results[#results + 1] = { name = name, ok = false,      error = err,    ms = ms }
 			end
 		end,
 	})
@@ -491,15 +512,18 @@ end
 
 --- Runs every test file in its own `lde test --shard-file` process so a suite's
 --- slow files (network installs, native compiles, watcher timeouts) overlap.
---- Each child prints nothing and writes its result records as JSON; this process
---- renders them through the same reporter a sequential run uses, so the output is
---- identical and stays in file order.
+--- Each shard records its file's results; this process renders that file the moment
+--- the shard exits, so a file lands whole, in completion order, and never interleaves
+--- with another. Rendering happens here rather than in the shard because a shard's
+--- stdout is a pipe (no colors, and no clock reading for work it did not run). A live
+--- line above the blocks reports files and tests as they finish.
 ---@param testFiles string[]
 ---@param package lde.Package
 ---@param jobs integer
 ---@param reporter lde.TestReporter?
+---@param status boolean? # draw the live line (off when a parent captures this output)
 ---@return lde.TestResults
-local function runSharded(testFiles, package, jobs, reporter)
+local function runSharded(testFiles, package, jobs, reporter, status)
 	const execPath = assert(env.execPath(), "no executable path")
 	const scratch = path.join(env.tmpdir(), "lde-shards-" .. tostring({}):match("0x(%x+)$"))
 	fs.mkdirAll(scratch)
@@ -515,6 +539,8 @@ local function runSharded(testFiles, package, jobs, reporter)
 			args[#args + 1] = "--tree"
 			args[#args + 1] = lde.global.getDir()
 		end
+		-- The shard records results and stays quiet; this process renders them, so the
+		-- output is written by whoever owns the terminal (colors and ordering intact).
 		local child, err = process.spawn(execPath, args, { stdout = "pipe", stderr = "pipe" })
 		if not child then
 			fs.write(resultFile, json.encode({
@@ -536,6 +562,50 @@ local function runSharded(testFiles, package, jobs, reporter)
 		local child, resultFile = start(testFiles[next], next)
 		running[#running + 1] = { rel = testFiles[next], child = child, resultFile = resultFile }
 		next += 1
+	end
+
+	const progress = status and #testFiles > 1
+		and ansi.progress("Running " .. #testFiles .. " test files", { stream = "stdout" })
+		or nil
+	local finishedFiles, finishedTests, finishedFailures = 0, 0, 0
+
+	--- Renders one file's records through the caller's reporter: the same shape a
+	--- sequential run prints, with the durations the shard recorded.
+	---@param file string
+	---@param shard { results: lde.test.Result[]?, error: string? }
+	local function renderFile(file, shard)
+		if reporter == nil then return end
+		if reporter.onFileStart then reporter.onFileStart(file) end
+		for _, record in ipairs(shard.results or {}) do
+			if record.skipped then
+				if reporter.onSkip then reporter.onSkip(record.name) end
+			elseif record.ok then
+				if reporter.onPass then
+					const handle = reporter.onStart and reporter.onStart(record.name) or nil
+					reporter.onPass(record.name, handle, record.ms and record.ms / 1000 or nil)
+				end
+			elseif reporter.onFail then
+				const handle = reporter.onStart and reporter.onStart(record.name) or nil
+				reporter.onFail(record.name, record.error, handle, file)
+			end
+		end
+		if reporter.onFileDone then reporter.onFileDone(file) end
+	end
+
+	---@param file string
+	---@param shard { results: lde.test.Result[]?, error: string? }
+	---@param output string # anything the file itself printed
+	local function flushBlock(file, shard, output)
+		if progress then progress:clear() end
+		if output ~= "" and reporter ~= nil then
+			io.write(output)
+			io.flush()
+		end
+		renderFile(file, shard)
+		if progress then
+			progress:update(finishedFiles / #testFiles,
+				string.format("%d tests, %d failed", finishedTests, finishedFailures))
+		end
 	end
 
 	local function reapFinished()
@@ -562,7 +632,15 @@ local function runSharded(testFiles, package, jobs, reporter)
 					shards[entry.rel] = {
 						error = "test shard failed" .. (output ~= "" and (": " .. output) or ""),
 					}
+					-- A shard that died printed nothing useful; surface its output instead.
+					output = output ~= "" and ("  " .. entry.rel .. "\n" .. output .. "\n") or ""
 				end
+				finishedFiles += 1
+				for _, r in ipairs(shards[entry.rel].results or {}) do
+					finishedTests += 1
+					if not r.ok then finishedFailures += 1 end
+				end
+				flushBlock(entry.rel, shards[entry.rel], output)
 				table.remove(running, i)
 			end
 		end
@@ -575,6 +653,7 @@ local function runSharded(testFiles, package, jobs, reporter)
 		if #running > 0 then sleep(2) end
 	end
 
+	if progress then progress:clear() end
 	fs.rmdir(scratch)
 
 	local files         = {}
@@ -583,27 +662,11 @@ local function runSharded(testFiles, package, jobs, reporter)
 	local totalSkipped  = 0
 
 	for _, relativePath in ipairs(testFiles) do
-		if reporter and reporter.onFileStart then reporter.onFileStart(relativePath) end
-
+		-- The shard already printed this file's header and records; only the
+		-- counts and file-level errors are needed here.
 		const shard = shards[relativePath] or {}
 		---@type lde.TestFileResult
 		const fileResult = { file = relativePath, results = shard.results or {}, error = shard.error }
-
-		if shard.results and reporter then
-			for _, record in ipairs(shard.results) do
-				if record.skipped then
-					if reporter.onSkip then reporter.onSkip(record.name) end
-				elseif record.ok then
-					if reporter.onPass then
-						const handle = reporter.onStart and reporter.onStart(record.name) or nil
-						reporter.onPass(record.name, handle)
-					end
-				elseif reporter.onFail then
-					const handle = reporter.onStart and reporter.onStart(record.name) or nil
-					reporter.onFail(record.name, record.error, handle, relativePath)
-				end
-			end
-		end
 
 		local failCount = 0
 		local skipCount = 0
@@ -618,8 +681,6 @@ local function runSharded(testFiles, package, jobs, reporter)
 		totalFailures += failCount
 		totalSkipped  += skipCount
 		files[#files + 1] = fileResult
-
-		if reporter and reporter.onFileDone then reporter.onFileDone(relativePath) end
 	end
 
 	return {
@@ -634,7 +695,7 @@ end
 ---@param package  lde.Package
 ---@param reporter lde.TestReporter?
 ---@param filters  string[]?
----@param opts     { coverage: boolean?, jobs: integer?, isShard: boolean? }?
+---@param opts     { coverage: boolean?, jobs: integer?, isShard: boolean?, status: boolean? }?
 ---@return lde.TestResults
 local function runTests(package, reporter, filters, opts)
 	opts = opts or {}
@@ -743,7 +804,7 @@ local function runTests(package, reporter, filters, opts)
 	end
 
 	if opts.jobs and opts.jobs > 1 and #testFiles > 1 and not coverage and not lde.isVerbose then
-		return runSharded(testFiles, package, opts.jobs, reporter)
+		return runSharded(testFiles, package, opts.jobs, reporter, opts.status)
 	end
 
 	local files         = {}

@@ -5,7 +5,6 @@ const core = ansi._core
 const colors = core.colors
 const ESC = core.escape
 const columns = core.columns
-const isTTY = core.isTTY
 local now = core.now
 
 -- ─── Emoji support ───────────────────────────────────────────────────────
@@ -101,8 +100,9 @@ end
 ---@class ansi.Progress
 ---@field update fun(self: ansi.Progress, ratio: number?, info: string?)
 ---@field setLabel fun(self: ansi.Progress, label: string)
----@field done fun(self: ansi.Progress, msg: string?)
+---@field done fun(self: ansi.Progress, msg: string?, seconds: number?) # seconds overrides the handle's own elapsed (a parent re-rendering a recorded result)
 ---@field fail fun(self: ansi.Progress, msg: string?)
+---@field clear fun(self: ansi.Progress) # erase the live line without printing (caller writes its own output next)
 
 --- Progress is diagnostics, and stdout is the command's data: `eval "$(lde
 --- completion bash)"`, `lde <tool> | ...` and a tool wrapper run from a shell rc
@@ -110,13 +110,17 @@ end
 --- The test reporter is the one caller whose progress IS its output, hence the
 --- `stream` opt-in. Resolved per call so an injected stream (tests) is honored.
 ---@param label string
----@param opts { indent: boolean?, stream: "stdout"|"stderr"? }? # indent=false prints flush-left (compact install output); default indented (test runner)
+---@param opts { indent: boolean?, stream: "stdout"|"stderr"?, live: boolean? }? # indent=false prints flush-left (compact install output); default indented (test runner); live=false prints only the final line, for callers whose lines share the stream with other writers (sharded test files)
 ---@return ansi.Progress
 local function progress(label, opts)
 	if ansi.isQuiet then return silentProgress end
 	const stream = opts?.stream ?? "stderr"
 	local out = stream == "stdout" ? io.stdout : io.stderr
-	local isTerminal = stream == "stdout" ? isTTY : ansi.isStderrTTY
+	-- Parallel writers (sharded test files) turn the live line off: several
+	-- redraws would fight over one terminal, and each erase escape would wipe
+	-- the others' finished lines.
+	local isTerminal = (opts == nil or opts.live ~= false)
+		and (stream == "stdout" ? ansi.isTTY : ansi.isStderrTTY)
 	local startTime = now()
 	local indent = opts == nil or opts.indent ~= false
 	local donePrefix, failPrefix, livePrefix = "  ✓ ", "  ✗ ", "  - "
@@ -127,11 +131,12 @@ local function progress(label, opts)
 	if not isTerminal then
 		return {
 			update = function() end,
+			clear = function() end,
 			setLabel = function(_, newLabel)
 				label = newLabel
 			end,
-			done = function(_, msg)
-				local elapsed = formatElapsed(now() - startTime)
+			done = function(_, msg, seconds)
+				local elapsed = formatElapsed(seconds or (now() - startTime))
 				out:write(colors.green ..
 				donePrefix ..
 				colors.reset .. (msg or label) .. " " .. colors.gray .. "(" .. elapsed .. ")" .. colors.reset .. "\n")
@@ -199,8 +204,14 @@ local function progress(label, opts)
 			lastRendered = false -- force the next render past the pct dedupe check
 			render(lastRatio, lastInfo)
 		end,
-		done = function(_, msg)
-			local elapsed = formatElapsed(now() - startTime)
+		--- Erase the live line without printing anything, so a caller can write a
+		--- block of output and then resume updating below it.
+		clear = function()
+			clearLine()
+			lastRendered = false -- force the next update past the pct dedupe check
+		end,
+		done = function(_, msg, seconds)
+			local elapsed = formatElapsed(seconds or (now() - startTime))
 			clearLine()
 			out:write(colors.green ..
 			donePrefix ..
@@ -240,7 +251,6 @@ const INSTALL_EMOJI = {
 ---@field setDepCount fun(self: ansi.InstallProgress, label: string, built: integer, total: integer) # update a row's built/building count
 ---@field update fun(self: ansi.InstallProgress, ratio: number?, info: string?) # move the total progress bar
 ---@field finish fun(self: ansi.InstallProgress, label: string) # remove a finished dependency's row
----@field tick fun(self: ansi.InstallProgress) # redraw the region so elapsed counters animate while builds run
 ---@field done fun(self: ansi.InstallProgress, summary: string) # finalize: clear the region, print `✓ summary`
 ---@field fail fun(self: ansi.InstallProgress, msg: string) # finalize on error: clear the region, print `✗ msg`
 ---@field clear fun(self: ansi.InstallProgress) # clear the region without printing anything (caller prints its own summary)
@@ -346,9 +356,6 @@ local function installProgress(fallbackLabel)
 		render()
 	end
 
-	function progress:tick()
-		render()
-	end
 
 	function progress:done(summary)
 		clearRegion()

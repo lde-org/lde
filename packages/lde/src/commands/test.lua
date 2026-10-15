@@ -31,8 +31,9 @@ else
 end
 
 ---@param pkgDir string
+---@param live boolean? # false when other writers share the stream (sharded files)
 ---@return lde.TestReporter
-local function makeReporter(pkgDir)
+local function makeReporter(pkgDir, live)
 	local firstFile = true
 	return {
 		onFileStart = function(file)
@@ -43,10 +44,10 @@ local function makeReporter(pkgDir)
 			ansi.printf("  {bold}%s", file)
 		end,
 		onStart = function(name)
-			return ansi.progress(name, { stream = "stdout" })
+			return ansi.progress(name, { stream = "stdout", live = live })
 		end,
-		onPass = function(name, handle)
-			handle:done(name)
+		onPass = function(name, handle, seconds)
+			handle:done(name, seconds)
 		end,
 		onFail = function(name, err, handle, file)
 			handle:fail(name)
@@ -61,19 +62,69 @@ local function makeReporter(pkgDir)
 	}
 end
 
----@param results lde.TestResults
+---@param files lde.TestFileResult[]
 ---@param pkgDir string
-local function printFileErrors(results, pkgDir)
-	for _, file in ipairs(results.files) do
+---@param testDir string
+local function printFileErrors(files, pkgDir, testDir)
+	for _, file in ipairs(files) do
 		if file.error then
 			ansi.printf("  {red}FAIL {white}%s", file.file)
-			local testDir = results.package ? (results.package:getTestDir()) : pkgDir
 			if not errorsnippet.printError(pkgDir, file.error, path.join(testDir, file.file)) then
 				ansi.printf("     {red}%s", file.error)
 			end
 			print()
 		end
 	end
+end
+
+--- Renders one file's recorded results through a reporter, the same way a
+--- sequential run prints them (durations come from the records).
+---@param reporter lde.TestReporter
+---@param file lde.TestFileResult
+local function renderFile(reporter, file)
+	if reporter.onFileStart then reporter.onFileStart(file.file) end
+	for _, record in ipairs(file.results or {}) do
+		if record.skipped then
+			if reporter.onSkip then reporter.onSkip(record.name) end
+		elseif record.ok then
+			if reporter.onPass then
+				const handle = reporter.onStart and reporter.onStart(record.name) or nil
+				reporter.onPass(record.name, handle, record.ms and record.ms / 1000 or nil)
+			end
+		elseif reporter.onFail then
+			const handle = reporter.onStart and reporter.onStart(record.name) or nil
+			reporter.onFail(record.name, record.error, handle, file.file)
+		end
+	end
+	if reporter.onFileDone then reporter.onFileDone(file.file) end
+end
+
+--- Renders a finished package worker: its own stray output, every file's records,
+--- file-level failures, then the live line redrawn below.
+---@param name string
+---@param pkgDir string
+---@param testDir string
+---@param decoded table? # the worker's result file
+---@param output string
+---@param progress ansi.Progress
+---@param ratio number
+---@param tests integer
+---@param failures integer
+local function renderPackage(name, pkgDir, testDir, decoded, output, progress, ratio, tests, failures)
+	progress:clear()
+	ansi.printf("{gray}%s", name)
+	print()
+	if output ~= "" then
+		io.write(output)
+		io.flush()
+	end
+	const files = decoded and decoded.files or nil
+	if files then
+		const reporter = makeReporter(pkgDir)
+		for _, file in ipairs(files) do renderFile(reporter, file) end
+		printFileErrors(files, pkgDir, testDir)
+	end
+	progress:update(ratio, string.format("%d tests, %d failed", tests, failures))
 end
 
 ---@param failures number
@@ -338,6 +389,9 @@ local function test(args)
 	local package = lde.Package.open()
 
 	if shardFile and shardResults and package then
+		-- The shard records results and prints nothing: its stdout is a pipe, and the
+		-- process that owns the terminal renders these records (with colors, and with
+		-- the durations recorded here).
 		const results = package:runTests(nil, { shardFile }, { coverage = false, jobs = 1, isShard = true })
 		fs.write(shardResults, json.encode({ files = results.files, error = results.error }))
 		return
@@ -404,17 +458,19 @@ local function test(args)
 			fs.mkdirAll(scratch)
 			const execPath = assert(env.execPath(), "no executable path")
 
-			---@type { name: string, child: process.Child?, results: string, output: string? }[]
+			---@type { name: string, dir: string, child: process.Child?, results: string }[]
 			const running = {}
-			---@type { name: string, output: string, total: integer, failures: integer, skipped: integer, error: string? }[]
+			---@type { name: string, dir: string, files: lde.TestFileResult[]?, total: integer, failures: integer, skipped: integer, error: string? }[]
 			const finished = {}
+			const progress = ansi.progress("Running " .. #packages .. " packages", { stream = "stdout" })
+			local finishedTests, finishedFailures = 0, 0
 			local next = 1
 			local hadFailures = false
 			local totalPassed, totalFailures, totalSkipped = 0, 0, 0
 
 			---@param pkg lde.Package
 			---@param index integer
-			---@return { name: string, child: process.Child?, results: string, output: string? }
+			---@return { name: string, dir: string, child: process.Child?, results: string }
 			local function startPackage(pkg, index)
 				const resultsFile = path.join(scratch, index .. ".json")
 				local childArgs = { "-C", pkg:getDir(), "test", "--results", resultsFile, "--jobs", tostring(fileJobs) }
@@ -423,17 +479,18 @@ local function test(args)
 					childArgs[#childArgs + 1] = lde.global.getDir()
 				end
 				for _, f in ipairs(filters) do childArgs[#childArgs + 1] = f end
+				-- Piped and silent: the worker records results, and this process renders
+				-- them (it owns the terminal, so colors and durations are right).
 				local child = process.spawn(execPath, childArgs, { stdout = "pipe", stderr = "pipe" })
 				if not child then
 					fs.write(resultsFile, json.encode({ total = 0, failures = 1, skipped = 0 }))
 				end
-				return { name = pkg:getName(), child = child, results = resultsFile }
+				return { name = pkg:getName(), dir = pkg:getDir(), child = child, results = resultsFile }
 			end
 
 			local function startNext()
 				if next > #packages then return end
 				const entry = startPackage(packages[next], next)
-				entry.output = nil
 				running[#running + 1] = entry
 				next += 1
 			end
@@ -456,9 +513,17 @@ local function test(args)
 						const skipped = (decoded and decoded.skipped) or 0
 						const failures = (decoded and decoded.failures) or (decoded and 0 or 1)
 						const total = (decoded and decoded.total) or 0
+						finishedTests = finishedTests + total - failures
+						finishedFailures = finishedFailures + failures
+						renderPackage(entry.name, entry.dir,
+							(decoded and decoded.testDir) or path.join(entry.dir, "tests"),
+							decoded, output, progress,
+							#finished / #packages, finishedTests, finishedFailures)
+
 						finished[#finished + 1] = {
 							name = entry.name,
-							output = output,
+							dir = entry.dir,
+							files = decoded and decoded.files,
 							total = total,
 							failures = failures,
 							skipped = skipped,
@@ -476,15 +541,13 @@ local function test(args)
 				if #running > 0 then sleep(5) end
 			end
 
-			-- Results are printed in package order once every package has finished,
-			-- so a slow package never delays reporting of the ones after it.
+			progress:clear()
+
+			-- Every package printed its own block as it finished; only the aggregate
+			-- is left to report (in package order, so the totals are deterministic).
 			for _, entry in ipairs(finished) do
-				ansi.printf("{gray}%s", entry.name)
-				print()
-				io.write(entry.output)
-				if not entry.error and entry.output == "" then print() end
 				if entry.error then
-					ansi.printf("  {red}%s", entry.error)
+					ansi.printf("  {red}%s: %s", entry.name, entry.error)
 					hadFailures = true
 					totalFailures = totalFailures + 1
 				else
@@ -577,14 +640,22 @@ local function test(args)
 		return
 	end
 
-	local reporter = makeReporter(package:getDir())
-	local results = package:runTests(reporter, filters, { coverage = coverage, jobs = jobs })
+	-- A monorepo worker records results for its parent to render; anything it printed
+	-- here would be captured and replayed, with a pipe's colors and no terminal.
+	const reporter = resultsOut and nil or makeReporter(package:getDir())
+	local results = package:runTests(reporter, filters, {
+		coverage = coverage,
+		jobs = jobs,
+		status = resultsOut == nil,
+	})
 	if resultsOut then
 		fs.write(resultsOut, json.encode({
 			total = results.total,
 			failures = results.failures,
 			skipped = results.skipped,
 			error = results.error,
+			files = results.files,
+			testDir = package:getTestDir(),
 		}))
 	end
 	if results.error then
@@ -606,11 +677,15 @@ local function test(args)
 			lde.error.raise("No test files match: " .. table.concat(filters, ", "))
 		end
 		lde.error.raise("No tests found in: " .. package:getTestDir() .. " (expected *.test.lua files)")
-	else
-		printFileErrors(results, package:getDir())
+	elseif not resultsOut then
+		printFileErrors(results.files, package:getDir(), package:getTestDir())
 	end
-	print()
-	printSummary(results.failures, results.total - results.failures, results.total, results.skipped or 0)
+	-- A monorepo worker reports its counts through the result file; the parent
+	-- prints one aggregate summary, so the worker must not print its own.
+	if not resultsOut then
+		print()
+		printSummary(results.failures, results.total - results.failures, results.total, results.skipped or 0)
+	end
 	if coverage then
 		if results.coverage then
 			printCoverage(package, results.coverage)

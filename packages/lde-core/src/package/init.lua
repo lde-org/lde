@@ -1,4 +1,5 @@
-const Lockfile = require("lde-core.lockfile")
+-- Locked on demand: only dependency reads and installs touch the lockfile.
+const Lockfile = require("util").lazy(|| -> require("lde-core.lockfile"))
 
 const lde = require("lde-core")
 
@@ -57,7 +58,6 @@ function Package:getDir() return self.dir end
 
 function Package:getBuildScriptPath() return path.join(self.dir, "build.lua") end
 
-function Package:getLuarcPath() return path.join(self.dir, ".luarc.json") end
 
 function Package:getModulesDir() return path.join(self.dir, "target") end
 
@@ -318,7 +318,7 @@ end
 
 ---@return lde.Lockfile?
 function Package:readLockfile()
-	return Lockfile.open(self:getLockfilePath())
+	return Lockfile().open(self:getLockfilePath())
 end
 
 function Package:__tostring()
@@ -485,24 +485,11 @@ function Package:runScript(name, isCapture, args)
 	return nil, "Script exited with " .. (code and ("exit code " .. tostring(code)) or "an unknown error")
 end
 
--- Heavy command implementations load on first use instead of at package
--- load. Their module bodies pull in their own graphs (sea, rocked, luarocks,
--- lua-sys, …), so requiring them eagerly made every lde invocation — even a
--- bare `lde -e` that never installs or compiles — pay ~1ms for modules it
--- never touches.
---
--- lazyRequire is statically treated as `require` by the language server
--- (runtime.special in the repo's .luarc.json), so the map below keeps each
--- member's exact type — `Package.compile` is `compilePackage`, not `any`.
--- Two export shapes are supported, mirroring how the modules are written:
---   * whole-module function:  `Package.compile = lazyRequire("…compile")`
---   * a member of a table module: `Package.build = lazyRequire("…build").build`
--- The returned proxy is never stored bare: assigning it (whole-module form)
--- keeps a callable — `__call` resolves the module on first call. Reading
--- `.member` off it (member form) goes through `__index`, which returns a
--- thunk that resolves the module on that member's first call, so the
--- assignment itself loads nothing. Instance (`pkg:build()`) and static
--- (`Package.init(dir)`) call sites behave exactly as before.
+-- Heavy commands load on first use: their module bodies pull in sea/rocked/luarocks/
+-- lua-sys, which cost ~1ms on every invocation, including ones that never install.
+-- The language server treats lazyRequire as `require` (runtime.special in .luarc.json),
+-- so each member keeps its exact type. Both export shapes are supported:
+-- `lazyRequire(m)` for a whole module, `lazyRequire(m).member` for one member.
 ---@param moduleName string
 ---@return any # statically the module's return type (runtime.special)
 local function lazyRequire(moduleName)
