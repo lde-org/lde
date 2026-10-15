@@ -29,58 +29,29 @@ local function beginSession()
 	return archiveCache
 end
 
-test.it("prefetch discards a partial leftover download instead of trusting it", function()
+test.it("prefetch trusts a file already at the destination as complete", function()
 	beginSession()
+	-- Downloads land in a private part path and are renamed into place, so a file
+	-- at destPath is always a complete download — including one another process
+	-- renamed in while this session was starting. It must not be re-fetched, and
+	-- must not be deleted (a concurrent process may be extracting it right now).
 	local dest = path.join(destBase, "leftover.archive")
-	fs.write(dest, "partial bytes") -- an interrupted download left this behind
-
-	local status = download.prefetch("https://example.com/x.tar.gz", dest)
-	test.equal(status, "pending", "a partial leftover must not count as cached")
-	-- batch:add reopens the destination with "wb", so the leftover is gone
-	-- (truncated to an empty transfer output), not trusted as complete.
-	test.equal(fs.stat(dest).size, 0, "the partial bytes must not survive as a cache hit")
-	download.abort()
-end)
-
-test.it("background discards a partial leftover download instead of trusting it", function()
-	beginSession()
-	local dest = path.join(destBase, "leftover2.archive")
-	fs.write(dest, "partial bytes")
-
-	local status = download.background("https://example.com/y.tar.gz", dest)
-	test.equal(status, "pending")
-	test.equal(fs.stat(dest).size, 0, "the partial bytes must not survive as a cache hit")
-	download.abort()
-end)
-
-test.it("prefetch trusts a leftover backed by the user-level archive cache", function()
-	beginSession()
-	-- A completed transfer is copied into the archive cache by resolveTransfer;
-	-- a leftover with a matching copy there is a full download, not a partial.
-	local name = "full.archive"
-	fs.write(path.join(archiveCache, name), "complete bytes")
-	local dest = path.join(destBase, name)
 	fs.write(dest, "complete bytes")
 
-	local status = download.prefetch("https://example.com/full", dest)
-	test.equal(status, "done", "an archive-cache-backed leftover must count as cached")
-	test.truthy(fs.exists(dest), "the file must be left in place")
+	local status = download.prefetch("https://example.com/x.tar.gz", dest)
+	test.equal(status, "done", "a file at the destination must count as cached")
+	test.equal(fs.read(dest), "complete bytes", "the file must be left untouched")
 	download.finish()
 end)
 
-test.it("prefetch reseeds a partial leftover from the user-level archive cache", function()
+test.it("background trusts a file already at the destination as complete", function()
 	beginSession()
-	-- The leftover is a partial download, but the archive cache has the full
-	-- copy: the partial bytes must be replaced, not trusted (or extraction
-	-- would fail with "bad data" on every run).
-	local name = "reseed.archive"
-	fs.write(path.join(archiveCache, name), "complete bytes")
-	local dest = path.join(destBase, name)
-	fs.write(dest, "par")
+	local dest = path.join(destBase, "leftover2.archive")
+	fs.write(dest, "complete bytes")
 
-	local status = download.prefetch("https://example.com/reseed", dest)
+	local status = download.background("https://example.com/y.tar.gz", dest)
 	test.equal(status, "done")
-	test.equal(fs.read(dest), "complete bytes", "partial leftover must be replaced by the cached copy")
+	test.equal(fs.read(dest), "complete bytes")
 	download.finish()
 end)
 

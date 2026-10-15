@@ -217,7 +217,9 @@ function M.extractArchive(url, archiveFile, archiveDir)
 	-- path component mangles archives that have no single root directory.
 	local ok, err2 = archive.new(archiveFile):extract(tmpDir)
 
-	fs.delete(archiveFile)
+	-- The archive is left in place: it is the shared cache entry the download
+	-- renamed into position, and another process may be extracting those same
+	-- bytes right now (deleting it here made that process fail with "cannot open").
 	if not ok then
 		fs.rmdir(tmpDir)
 		return nil, err2

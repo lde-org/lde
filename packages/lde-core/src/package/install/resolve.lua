@@ -38,7 +38,7 @@ local function verifyMd5(n, c)
 	if c.kind ~= "archive" or c.url ~= source?.url then return end
 	const content = fs.read(c.file --[[@as string]])
 	if content and md5.sumhexa(content) ~= expected:lower() then
-		download.invalidateUserCache(c.file --[[@as string]])
+		download.invalidate(c.file --[[@as string]])
 		lde.error.raise("MD5 check for " .. (c.url or c.file or "?") .. " has failed.")
 	end
 end
@@ -247,7 +247,7 @@ handlers.git = {
 		if not ok then
 			-- The seeded copy may itself be corrupt; don't let the next run
 			-- re-trust (and re-fail on) it.
-			download.invalidateUserCache(c.file --[[@as string]])
+			download.invalidate(c.file --[[@as string]])
 			lde.error.raise("Failed to extract " .. n.repoName .. ": " .. (err or ""))
 		end
 	end,
@@ -296,7 +296,7 @@ handlers.archive = {
 		verifyMd5(n, c)
 		local ok, err = lde.global.extractArchive(c.url --[[@as string]], c.file --[[@as string]], c.dir --[[@as string]])
 		if not ok then
-			download.invalidateUserCache(c.file --[[@as string]])
+			download.invalidate(c.file --[[@as string]])
 			lde.error.raise("Failed to extract archive '" .. c.url .. "': " .. (err or ""))
 		end
 		local source = n.spec?.source
@@ -404,7 +404,7 @@ handlers.luarocks = {
 			ok, err = lde.global.extractArchive(c.url --[[@as string]], c.file --[[@as string]], c.dir --[[@as string]])
 		end
 		if not ok then
-			download.invalidateUserCache(c.file --[[@as string]])
+			download.invalidate(c.file --[[@as string]])
 			lde.error.raise("Failed to extract '" .. (c.url or c.dir) .. "': " .. (err or ""))
 		end
 		if c.kind ~= "git" then

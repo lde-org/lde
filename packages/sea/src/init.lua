@@ -70,7 +70,11 @@ end
 ---@param compiler? string # path to compiler binary; defaults to SEA_CC env var, a clang on PATH, then gcc
 ---@param targetName? string # release target (e.g. "windows-x86-64") to cross-compile for; nil or a host-matching target = native build
 function sea.compile(main, source, sharedLibs, compiler, targetName)
-	local outPath = path.join(env.tmpdir(), "sea.out")
+	-- Private to this process: a fixed name means two concurrent compiles (parallel
+	-- test shards, two terminals) link into the same file, and the loser's caller
+	-- picks up the winner's binary.
+	local outPath = path.join(env.tmpdir(),
+		"sea.out-" .. (tostring({}):match("0x(%x+)$") or tostring(os.time())))
 	sharedLibs = sharedLibs or {}
 	local compiler = compiler or env.var("SEA_CC") or "gcc"
 

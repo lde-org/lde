@@ -69,7 +69,13 @@ function emit.buildSource(main, source, sharedLibs, platform)
 		-- startup uses, so the assembler pass and the runtime share one file.
 		local libPath = path.join(env.tmpdir(), libFileName)
 		if not fs.exists(libPath) then
-			fs.write(libPath, lib.content)
+			-- Written through a private name and renamed: the path is content-addressed,
+			-- so a concurrent compile (or the runtime) may read it at any moment and
+			-- must never observe a half-written blob.
+			local part = libPath .. ".part-" .. (tostring({}):match("0x(%x+)$") or tostring(os.time()))
+			fs.write(part, lib.content)
+			if not fs.exists(libPath) then fs.move(part, libPath) end
+			if fs.exists(part) then fs.delete(part) end
 		end
 
 		local asmPath = libPath:gsub("\\", "/"):gsub('"', '\\"')
@@ -185,7 +191,13 @@ char lde_tmpdir[4096];
 		local hash   = util.hash(content)
 		local bcPath = path.join(env.tmpdir(), "lde-bundle-" .. hash .. ".bc")
 		if not fs.exists(bcPath) then
-			fs.write(bcPath, content)
+			-- Renamed into place for the same reason as the library blob below: the
+			-- path is content-addressed and shared, so a concurrent link must never
+			-- incbin a partially written file.
+			local part = bcPath .. ".part-" .. (tostring({}):match("0x(%x+)$") or tostring(os.time()))
+			fs.write(part, content)
+			if not fs.exists(bcPath) then fs.move(part, bcPath) end
+			if fs.exists(part) then fs.delete(part) end
 			if not fs.exists(bcPath) then
 				error("Failed to write bundle bytecode to " .. bcPath)
 			end

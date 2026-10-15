@@ -37,20 +37,35 @@ function download.begin(opts)
 		pending = {},
 		background = {},
 		archiveCache = opts?.archiveCache,
+		-- The batch writes straight to the path it is handed, so an in-flight
+		-- download goes to a path private to this process and is renamed into
+		-- place once complete: two installs fetching the same URL (parallel test
+		-- shards, two terminals) would otherwise interleave writes and both
+		-- extract a truncated file.
+		token = tostring({}):match("0x(%x+)$") or tostring(os.time()),
+		parts = 0,
+		partFor = {},
 	}
+end
+
+---@param dropParts boolean # true when in-flight downloads are being abandoned
+local function close(dropParts)
+	if dropParts then
+		for _, part in pairs(session.partFor) do fs.delete(part) end
+	end
+	session.batch:close()
+	session = nil
 end
 
 function download.finish()
 	if not session then return end
 	session.batch:runAll()
-	session.batch:close()
-	session = nil
+	close(true)
 end
 
 function download.abort()
 	if not session then return end
-	session.batch:close()
-	session = nil
+	close(true)
 end
 
 function download.active()
@@ -84,8 +99,27 @@ local function resolveTransfer(destPath) ---@cast session -nil
 	local res = session.batch:results()[index] or { ok = false, err = "missing result" }
 	session.pending[destPath] = res
 	session.background[destPath] = nil
-	if res.ok and res.path and session.archiveCache then
-		local cached = path.join(session.archiveCache, path.basename(res.path))
+	const part = session.partFor[destPath]
+	session.partFor[destPath] = nil
+	if res.ok and part then
+		-- Rename, not copy: a reader (another process, or this one) must only ever
+		-- see the complete file at destPath. A concurrent winner already there
+		-- holds the same bytes, so the part is simply dropped.
+		if fs.exists(destPath) then
+			fs.delete(part)
+		else
+			fs.mkdirAll(path.dirname(destPath))
+			const moved, moveErr = fs.move(part, destPath)
+			if not moved then
+				res.ok = false
+				res.err = "could not move download into place: " .. tostring(moveErr)
+				fs.delete(part)
+			end
+		end
+	end
+	if not res.ok and part then fs.delete(part) end
+	if res.ok and session.archiveCache then
+		local cached = path.join(session.archiveCache, path.basename(destPath))
 		if not fs.exists(cached) then
 			-- Copy to a temp name and rename: an interrupted copy must not leave a partial file that later runs trust as a full download.
 			fs.mkdirAll(path.dirname(cached))
@@ -127,36 +161,55 @@ end
 --- A server that accepts the connection but never finishes the body would block the batch forever (curl-sys applies no default timeout).
 const DOWNLOAD_TIMEOUT = 120 -- seconds
 
---- A file at `destPath` is trusted only when this session registered it or the
---- user-level archive cache backs it (both written after a successful transfer);
---- a leftover from an interrupted run is partial and is deleted to force a re-fetch.
+--- The path this session downloads `destPath` through: private to the process, and
+--- stable for the session so a retry reuses it instead of leaving another leftover.
+---@param destPath string
+---@return string
+local function partPath(destPath) ---@cast session -nil
+	local part = session.partFor[destPath]
+	if part then return part end
+	session.parts += 1
+	part = destPath .. ".part-" .. session.token .. "-" .. tostring(session.parts)
+	session.partFor[destPath] = part
+	return part
+end
+
+--- A file at `destPath` is always complete: downloads land in a private part path and
+--- are renamed into place, so nothing partial ever appears there. It is trusted as-is
+--- — deleting it (as an interrupted run's leftover) would race a concurrent process
+--- that is about to extract the very file it just renamed in.
 ---@param destPath string
 ---@return boolean
 local function seedFromCache(destPath) ---@cast session -nil
 	if fs.exists(destPath) then
-		if type(session.pending[destPath]) == "number" then return true end
-		local cached = session.archiveCache and path.join(session.archiveCache, path.basename(destPath))
-		if cached and fs.exists(cached) then
-			-- The leftover may be a partial download from an interrupted run; reseed from the complete copy instead of trusting it.
-			fs.copy(cached, destPath)
-			return true
-		end
-		fs.delete(destPath)
-		return false
+		return true
 	end
 	if not session.archiveCache then return false end
 	local cached = path.join(session.archiveCache, path.basename(destPath))
 	if not fs.exists(cached) then return false end
+	-- Copied through the same private path, so an interrupted seed cannot leave a
+	-- partial file where every later run would trust it.
+	const part = partPath(destPath)
 	fs.mkdirAll(path.dirname(destPath))
-	fs.copy(cached, destPath)
+	fs.copy(cached, part)
+	const moved = fs.move(part, destPath)
+	if not moved then
+		fs.delete(part)
+		return false
+	end
 	return true
 end
 
---- Called after extraction of seeded content fails: the copy may itself be corrupt and must not be re-trusted (and re-failed) on the next run.
+--- Called after a download turns out to be unusable (extraction or checksum failure):
+--- neither the file nor the user-level copy may be trusted again, or every later run
+--- re-fails on the same bytes. Safe against concurrent runs: a healthy download is
+--- never invalidated, since only the process that hit the failure calls this.
 ---@param destPath string
-function download.invalidateUserCache(destPath)
-	if not session or not session.archiveCache then return end
-	fs.delete(path.join(session.archiveCache, path.basename(destPath)))
+function download.invalidate(destPath)
+	fs.delete(destPath)
+	if session and session.archiveCache then
+		fs.delete(path.join(session.archiveCache, path.basename(destPath)))
+	end
 end
 
 ---@param url string
@@ -165,7 +218,7 @@ end
 function download.prefetch(url, destPath)
 	if not session then return "done" end
 	if seedFromCache(destPath) then return "done" end
-	local index = session.batch:add(url, { path = destPath, timeout = DOWNLOAD_TIMEOUT })
+	local index = session.batch:add(url, { path = partPath(destPath), timeout = DOWNLOAD_TIMEOUT })
 	session.pending[destPath] = index
 	return "pending"
 end
@@ -177,7 +230,7 @@ end
 function download.background(url, destPath)
 	if not session then return "done" end
 	if seedFromCache(destPath) then return "done" end
-	local index = session.batch:add(url, { path = destPath, timeout = DOWNLOAD_TIMEOUT })
+	local index = session.batch:add(url, { path = partPath(destPath), timeout = DOWNLOAD_TIMEOUT })
 	session.pending[destPath] = index
 	session.background[destPath] = true
 	return "pending"

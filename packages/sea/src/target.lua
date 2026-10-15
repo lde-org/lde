@@ -208,7 +208,13 @@ local function getLuajitPath(compiler, target)
 		ljDistTag,
 		tarballName
 	)
-	local tarballPath = path.join(cacheDir, tarballName)
+	-- Both paths are private to this process: the cache dir is shared (parallel
+	-- builds, two terminals), so a shared tarball path means racing downloads
+	-- truncate each other, and one process deleting the tarball another is still
+	-- extracting from. The finished tree is moved in atomically instead.
+	const token = tostring({}):match("0x(%x+)$") or tostring(os.time())
+	local tarballPath = path.join(cacheDir, tarballName .. ".part-" .. token)
+	local tmpDir = path.join(cacheDir, distName .. ".tmp-" .. token)
 
 	local ljLabel = "luajit for " .. (target?.name ?? (platform .. "-" .. arch))
 
@@ -228,16 +234,28 @@ local function getLuajitPath(compiler, target)
 	end
 	bar:done("Downloaded " .. ljLabel)
 
-	local ok, err = Archive().new(tarballPath):extract(cacheDir)
-	if not ok then
+	fs.rmdir(tmpDir)
+	fs.mkdirAll(tmpDir)
+	local ok, err = Archive().new(tarballPath):extract(tmpDir)
+	if ok and not fs.exists(path.join(targetDir, "include", "lua.h")) then
+		-- A concurrent build may have installed the same dist first; its tree is
+		-- identical, so leave it alone rather than replacing a directory another
+		-- process may already be linking against.
+		const moved, moveErr = fs.move(path.join(tmpDir, distName), targetDir)
+		if not moved then
+			ok, err = false, "could not move LuaJIT dist into place: " .. tostring(moveErr)
+		end
+	end
+	fs.rmdir(tmpDir)
+	fs.delete(tarballPath)
+
+	if not ok or not fs.exists(path.join(targetDir, "include", "lua.h")) then
 		-- The cache outlives this process now, so a half-extracted dist must not
 		-- stay behind: the next build trusts include/lua.h as the only check and
 		-- would link against a truncated libluajit.a.
 		fs.rmdir(targetDir)
-		error("Failed to extract LuaJIT from " .. tarballPath .. ": " .. (err or ""))
+		error("Failed to extract LuaJIT from " .. tarballPath .. ": " .. (err or "incomplete dist"))
 	end
-
-	fs.delete(tarballPath)
 
 	return targetDir
 end
