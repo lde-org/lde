@@ -334,6 +334,19 @@ handlers.archive = {
 	end,
 }
 
+--- True when an extracted .src.rock directory holds the rockspec it is supposed to
+--- carry. A directory without one is an incomplete cache entry, never a valid tree.
+---@param dir string
+---@return boolean
+local function hasSrcRockRockspec(dir)
+	const iter = fs.readdir(dir)
+	if not iter then return false end
+	for entry in iter do
+		if entry.type == "file" and entry.name:match("%.rockspec$") then return true end
+	end
+	return false
+end
+
 --- luarocks: metadata is the published rockspec; content prefers the .src.rock
 --- and falls back to the rockspec's own source artifact.
 handlers.luarocks = {
@@ -406,6 +419,18 @@ handlers.luarocks = {
 		if not ok then
 			download.invalidate(c.file --[[@as string]])
 			lde.error.raise("Failed to extract '" .. (c.url or c.dir) .. "': " .. (err or ""))
+		end
+		-- A src rock's tree must hold its rockspec. An incomplete cache directory
+		-- (a killed run, or a concurrent retirement) would otherwise fail every
+		-- later run with "No rockspec found in src rock": retire it and extract
+		-- once more instead of trusting it forever.
+		if c.kind == "src" and not hasSrcRockRockspec(c.dir --[[@as string]]) then
+			lde.util.retireCacheDir(c.dir --[[@as string]])
+			ok, err = lde.global.extractArchive(c.url --[[@as string]], c.file --[[@as string]], c.dir --[[@as string]])
+			if not ok or not hasSrcRockRockspec(c.dir --[[@as string]]) then
+				download.invalidate(c.file --[[@as string]])
+				lde.error.raise("Failed to load src rock: no rockspec in " .. (c.dir or "?") .. (err and (" (" .. err .. ")") or ""))
+			end
 		end
 		if c.kind ~= "git" then
 			-- Rockspec source.url archive: the package lives in the source

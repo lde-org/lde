@@ -425,6 +425,14 @@ function util.openLuarocksPackage(name, version, isOffline)
 		local archiveDir = lde.global.getOrInitArchive(url --[[@as string]], isOffline)
 		-- .src.rock extracts with the rockspec at root; source is a subdir or the nested archive.
 		local pkg, err = util.openSrcRock(archiveDir --[[@as string]], url --[[@as string]])
+		if not pkg and not isOffline then
+			-- A src rock without its rockspec is not a valid cache entry: a killed run
+			-- or a directory another process retired leaves one behind, and trusting it
+			-- fails every later run. Drop it and materialize once more.
+			util.retireCacheDir(archiveDir --[[@as string]])
+			archiveDir = lde.global.getOrInitArchive(url --[[@as string]], isOffline)
+			pkg, err = util.openSrcRock(archiveDir --[[@as string]], url --[[@as string]])
+		end
 		if not pkg then
 			return nil, nil, "Failed to load src rock '" .. name .. "': " .. (err or "")
 		end
@@ -469,6 +477,24 @@ function util.findNamedPackage(dir, packageName, rockspec)
 	end
 
 	return nil, "No lde.json with name '" .. packageName .. "' found in: " .. dir
+end
+
+--- Removes a cache directory without ever exposing a half-deleted tree to another
+--- process: the recursive delete happens on a private name after an atomic rename.
+--- Readers then see either the old tree or none at all, so a concurrent run can
+--- re-materialize instead of scanning a partially emptied directory (which is how
+--- "No rockspec found in src rock" happens).
+---@param dir string
+function util.retireCacheDir(dir)
+	if not fs.isdir(dir) then return end
+	const retired = dir .. ".retired-" .. (tostring({}):match("0x(%x+)$") or tostring(os.time()))
+	if fs.move(dir, retired) then
+		fs.rmdir(retired)
+		return
+	end
+	-- A reader holds it open (Windows) or the rename crossed devices: delete in
+	-- place as a last resort rather than leaving the cache entry behind.
+	fs.rmdir(dir)
 end
 
 --- A .src.rock holds the rockspec plus either an unpacked tree or a nested archive; the nested archive is authoritative and extracted over stray subdirs from interrupted runs.

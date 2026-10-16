@@ -71,8 +71,16 @@ function Compiler:ensure()
 		const url = ldeUtil.resolveLuarocksSource(self.spec.packageName)
 		if url then
 			const archiveDir = require("lde-core.global").getArchiveDir(url)
-			fs.rmdir(archiveDir)
+			-- Retire the cached entry instead of deleting it in place: this runs while
+			-- other processes (parallel test shards, another terminal) may be reading
+			-- the same directory — a recursive delete lets them scan a half-emptied
+			-- tree and fail with "No rockspec found in src rock". The build lock
+			-- serializes with the in-place build those processes do in this directory.
+			const lock = require("lde-core.package.install.lock")
+			const handle = lock.acquire(path.join(archiveDir, self.spec.packageName, "target", self.spec.packageName))
+			ldeUtil.retireCacheDir(archiveDir)
 			fs.delete(archiveDir .. ".archive")
+			lock.release(handle)
 		end
 	end
 
