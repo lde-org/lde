@@ -199,7 +199,10 @@ test.it("executeFile with profileJson writes decodable profile data", function()
 			for i = 1, n do s = s + i end
 			return s
 		end
-		for i = 1, 20 do work(1000000) end
+		-- Long enough that the 1 ms sampling timer is guaranteed to tick even while
+		-- the suite runs test files in parallel: a script that finishes before the
+		-- first tick collects no samples at all.
+		for i = 1, 200 do work(1000000) end
 	]])
 
 	local ok = lde.runtime.executeFile(scriptPath, { profileJson = outPath })

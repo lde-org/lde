@@ -32,7 +32,8 @@ function command.run(ctx)
 		OBJ_EXTENSION = "o"
 	}
 	for k, v in pairs(ctx.extVars) do vars[k] = v end
-	if ctx.exportFPic then vars.CFLAGS = "-fPIC" end
+	-- Always exported, empty on Windows: build commands read CFLAGS unconditionally.
+	vars.CFLAGS = ctx.exportFPic and "-fPIC" or ""
 
 	const cmdEnv = {}
 	for k, v in pairs(vars) do cmdEnv[k] = v end

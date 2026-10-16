@@ -241,8 +241,11 @@ local function getLuajitPath(compiler, target)
 		-- A concurrent build may have installed the same dist first; its tree is
 		-- identical, so leave it alone rather than replacing a directory another
 		-- process may already be linking against.
+		-- A lost race is fine: the winner installed the same tree, and deleting it
+		-- here (the error path below does) would pull it out from under a process
+		-- that may already be linking against it.
 		const moved, moveErr = fs.move(path.join(tmpDir, distName), targetDir)
-		if not moved then
+		if not moved and not fs.exists(path.join(targetDir, "include", "lua.h")) then
 			ok, err = false, "could not move LuaJIT dist into place: " .. tostring(moveErr)
 		end
 	end

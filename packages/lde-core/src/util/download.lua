@@ -1,8 +1,19 @@
 const fs = require("fs")
+local ffi = require("ffi")
 local path = require("path")
 const util = require("util")
 
 const curl = util.lazy(|| -> require("curl-sys"))
+
+-- Short wait while a concurrent process releases a handle we need.
+local sleep
+if jit.os == "Windows" then
+	pcall(ffi.cdef, "void Sleep(unsigned int ms);")
+	sleep = function(ms) ffi.C.Sleep(ms) end
+else
+	pcall(ffi.cdef, "int usleep(unsigned int usec);")
+	sleep = function(ms) ffi.C.usleep(ms * 1000) end
+end
 
 --- Parallel download session for installs: the resolver prefetches a whole level in
 --- parallel so the sequential work that follows hits the cache. Without a session,
@@ -103,18 +114,33 @@ local function resolveTransfer(destPath) ---@cast session -nil
 	session.partFor[destPath] = nil
 	if res.ok and part then
 		-- Rename, not copy: a reader (another process, or this one) must only ever
-		-- see the complete file at destPath. A concurrent winner already there
-		-- holds the same bytes, so the part is simply dropped.
-		if fs.exists(destPath) then
-			fs.delete(part)
-		else
-			fs.mkdirAll(path.dirname(destPath))
-			const moved, moveErr = fs.move(part, destPath)
-			if not moved then
-				res.ok = false
-				res.err = "could not move download into place: " .. tostring(moveErr)
-				fs.delete(part)
+		-- see the complete file at destPath.
+		fs.mkdirAll(path.dirname(destPath))
+		local moveErr
+		if not fs.exists(destPath) then
+			-- A failed move is not a failed download: another process may have renamed
+			-- its own part into place between the check and the move (Windows refuses
+			-- that with a sharing violation), or a scanner may briefly hold the freshly
+			-- written part. Its bytes are identical, so the part is dropped and the
+			-- winner's file is used. Retried because the handle is released shortly.
+			for attempt = 1, 100 do
+				local moved
+				moved, moveErr = fs.move(part, destPath)
+				if moved or fs.exists(destPath) then break end
+				if attempt % 4 == 0 then sleep(20) end
 			end
+			-- A scanner can hold the freshly written part for longer than that. The
+			-- bytes are complete either way, so copy instead of renaming: reading a
+			-- held file is allowed, renaming it is not.
+			if not fs.exists(destPath) then
+				if fs.copy(part, destPath) then moveErr = nil end
+			end
+		end
+		fs.delete(part)
+		if not fs.exists(destPath) then
+			res.ok = false
+			res.err = "could not move download into place: " .. destPath
+				.. (moveErr and (" (" .. tostring(moveErr) .. ")") or "")
 		end
 	end
 	if not res.ok and part then fs.delete(part) end

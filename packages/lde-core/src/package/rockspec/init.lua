@@ -259,7 +259,9 @@ local function openRockspec(dir, rockspecPath)
 		for k, v in pairs(extVars) do stdVars[k] = v end
 
 		const exportFPic = vars.exportFPic()
-		if exportFPic then stdVars.CFLAGS = "-fPIC" end
+		-- Always exported, empty on Windows: a build command may read CFLAGS
+		-- unconditionally (LuaRocks exports it the same way).
+		stdVars.CFLAGS = exportFPic and "-fPIC" or ""
 
 		---@type lde.rockspec.BuildContext
 		const ctx = {

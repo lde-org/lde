@@ -91,7 +91,9 @@ test.it("profile report prints VM state and hotspot sections", function()
 			for i = 1, n do s = s + i end
 			return s
 		end
-		for i = 1, 20 do work(1000000) end
+		-- See profile.test.lua: the workload must outlast the sampling timer's first
+		-- tick even under the parallel test run.
+		for i = 1, 200 do work(1000000) end
 	]])
 
 	local oldIsVerbose, oldIsQuiet, oldWrite = lde.isVerbose, lde.isQuiet, io.write

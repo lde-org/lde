@@ -714,7 +714,8 @@ test.it("lde run --profile prints a profile report", function()
 	})
 	fs.write(path.join(dir, "src", "main.lua"), [[
 		local s = 0
-		for i = 1, 5000000 do s = s + i end
+		-- Outlasts the sampling timer's first tick even under the parallel test run.
+		for i = 1, 200000000 do s = s + i end
 		print("prof-done")
 	]])
 
@@ -735,7 +736,7 @@ test.it("lde run --flamegraph writes an HTML flamegraph", function()
 			for i = 1, n do s = s + i end
 			return s
 		end
-		for i = 1, 20 do work(2000000) end
+		for i = 1, 200 do work(2000000) end
 	]])
 	const fgPath = path.join(tmpBase, "fg-cli.html")
 	fs.delete(fgPath)
@@ -760,7 +761,7 @@ test.it("lde run --json writes programmatically checkable profile data", functio
 			for i = 1, n do s = s + i end
 			return s
 		end
-		for i = 1, 30 do hotspot(2000000) end
+		for i = 1, 300 do hotspot(2000000) end
 		print("json-done")
 	]])
 	const jsonPath = path.join(tmpBase, "json-cli.json")

@@ -162,20 +162,28 @@ local function ensureMockLuaDir()
 	local luaBin = assert(env.execPath(), "no executable path")
 	fs.delete(path.join(luaDir, "run-e.lua"))
 
-	-- Windows has no shebangs (and no fs.chmod): the wrapper is a .cmd, the same
-	-- shape global/wrapper.lua writes for tools. Elsewhere it is a shell script
-	-- whose #! needs an absolute path — /bin/sh is not universal (Termux/Android
-	-- keeps its shell under $PREFIX/bin), so it is resolved rather than assumed.
-	local wrapperPath
+	-- The wrapper is needed in two shapes: exec'd directly (a declared test script)
+	-- and substituted into command strings a POSIX shell runs. Windows has no
+	-- shebangs and no fs.chmod, so the direct shape is a .cmd (what global/wrapper.lua
+	-- writes for tools) while the shell shape is a shebang script the bundled
+	-- BusyBox sh interprets itself — sh cannot execute a .cmd (exit 127). The #!
+	-- needs an absolute path and /bin/sh is not universal (Termux/Android keeps its
+	-- shell under $PREFIX/bin), so it is resolved rather than assumed.
+	const scriptPath = path.join(luaDir, "lua")
+	const shellPath = lde.global.getShellPath()
+	fs.write(scriptPath, "#!" .. shellPath .. "\n"
+		.. "exec '" .. luaBin .. "' --lua \"$@\"\n")
+	local wrapperPath = scriptPath
 	if jit.os == "Windows" then
 		wrapperPath = path.join(luaDir, "lua.cmd")
 		fs.write(wrapperPath, '@"' .. luaBin .. '" --lua %*\r\n')
+		-- `luaBin` is what a *shell command* uses for $(LUA): `<sh> <script>`, because
+		-- a POSIX shell cannot execute a .cmd (exit 127). Callers that exec a script
+		-- directly use the .cmd (see runCommandTests).
+		luaBin = '"' .. shellPath .. '" "' .. scriptPath .. '"'
 	else
-		wrapperPath = path.join(luaDir, "lua")
-		const wrapper = "#!" .. lde.global.getShellPath() .. "\n"
-			.. "exec '" .. luaBin .. "' --lua \"$@\"\n"
-		fs.write(wrapperPath, wrapper)
 		fs.chmod(wrapperPath, tonumber("755", 8))
+		luaBin = wrapperPath
 	end
 
 	local jitTree = require("sea").getLuajitPath()
@@ -189,7 +197,7 @@ local function ensureMockLuaDir()
 		end
 	end
 
-	return luaDir, wrapperPath
+	return luaDir, luaBin
 end
 
 --- The test backend a rockspec uses: `test.type` when named, else LuaRocks'
@@ -279,7 +287,11 @@ local function runCommandTests(package, testSpec, flags, luaBin, luaDir, luaPath
 		end
 		local argv = { script }
 		for _, flag in ipairs(flags) do argv[#argv + 1] = flag end
-		exitCode = process.exec(luaBin, argv, { cwd = package.dir, env = childEnv, stdout = "inherit", stderr = "inherit" })
+		-- Direct exec needs a real executable: on Windows that is the .cmd, since the
+		-- shell form (`<sh> <script>`) is only valid inside a command string.
+		local luaExec = luaBin
+		if jit.os == "Windows" then luaExec = path.join(luaDir, "lua.cmd") end
+		exitCode = process.exec(luaExec, argv, { cwd = package.dir, env = childEnv, stdout = "inherit", stderr = "inherit" })
 	else
 		if type(command) ~= "string" then return failure("Malformed rockspec: 'command' expects a string") end
 		const shellBin, shellFlag, isCmd = lde.global.getScriptShell()
@@ -342,7 +354,7 @@ local function runCustomTests(package, spec, testType, filters, flags, luaBin, l
 		skipped  = 0,
 		external = true,
 		exitCode = ok and 0 or 1,
-		error    = ok and nil or ("test backend 'luarocks.test." .. testType .. "' failed: " .. tostring(err)),
+		error    = ok ? nil : ("test backend 'luarocks.test." .. testType .. "' failed: " .. tostring(err)),
 	}
 end
 

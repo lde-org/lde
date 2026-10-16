@@ -388,12 +388,22 @@ local function test(args)
 
 	local package = lde.Package.open()
 
-	if shardFile and shardResults and package then
+	if shardFile or shardResults then
+		-- Shard mode is all-or-nothing: a shard that fell through to the normal path
+		-- would run the whole file, print its own results, and be rendered a second
+		-- time by its parent (the duplicated blocks in the Windows CI log). Fail loudly
+		-- instead, so the parent reports what went wrong.
+		if not (shardFile and shardResults and package) then
+			lde.error.raise("Shard mode needs --shard-file, --shard-results and an openable package")
+		end
 		-- The shard records results and prints nothing: its stdout is a pipe, and the
 		-- process that owns the terminal renders these records (with colors, and with
 		-- the durations recorded here).
 		const results = package:runTests(nil, { shardFile }, { coverage = false, jobs = 1, isShard = true })
-		fs.write(shardResults, json.encode({ files = results.files, error = results.error }))
+		const written = fs.write(shardResults, json.encode({ files = results.files, error = results.error }))
+		if not written then
+			lde.error.raise("Shard could not write its results to " .. tostring(shardResults))
+		end
 		return
 	end
 
@@ -499,8 +509,9 @@ local function test(args)
 				for i = #running, 1, -1 do
 					const entry = running[i]
 					if not entry.child or entry.child:poll() ~= nil then
-						local output = ""
+						local output, exitCode = "", nil
 						if entry.child then
+							exitCode = entry.child:poll()
 							local _, stdout, stderr = entry.child:wait()
 							output = (stdout or "") .. (stderr or "")
 						end
@@ -527,7 +538,11 @@ local function test(args)
 							total = total,
 							failures = failures,
 							skipped = skipped,
-							error = decoded and decoded.error or (not decoded and "test process failed" or nil),
+							error = decoded and decoded.error
+								or (not decoded and ("test process failed"
+									.. (exitCode and (" (exit " .. tostring(exitCode) .. ")") or "")
+									.. (output ~= "" and (": " .. output) or ""))
+									or nil),
 						}
 						table.remove(running, i)
 					end
@@ -642,7 +657,11 @@ local function test(args)
 
 	-- A monorepo worker records results for its parent to render; anything it printed
 	-- here would be captured and replayed, with a pipe's colors and no terminal.
-	const reporter = resultsOut and nil or makeReporter(package:getDir())
+	-- `resultsOut and nil or makeReporter(...)` would always build the reporter (a
+	-- Lua and/or trap): the worker would print its own blocks and its parent would
+	-- render the same records again, duplicating every file in the output.
+	local reporter
+	if not resultsOut then reporter = makeReporter(package:getDir()) end
 	local results = package:runTests(reporter, filters, {
 		coverage = coverage,
 		jobs = jobs,

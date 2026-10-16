@@ -1784,7 +1784,9 @@ test.it("rockspec: -fPIC is only passed for non-Windows targets", function()
 			luajitPath = "/lj",
 			destAbs = "/pkg/target/a.so",
 			jitOS = ctx.jitOS,
-			targetFlag = ctx.targetFlag,
+			-- Never nil: an unset flag falls back to the ambient build target, which
+			-- on a Windows host is a windows triple and would suppress -fPIC here.
+			targetFlag = ctx.targetFlag or "",
 		})
 	end
 
