@@ -153,45 +153,30 @@ local function runTestFile(testFile, luaPath, luaCPath, reporter, coverage)
 	return { file = testFile, results = results }
 end
 
---- Builds a shell-out `lua` at ~/.lde/lua (runs lde as plain Lua, honoring LUA_PATH/LUA_CPATH) plus include//lib/ from LuaJIT for C rocks; LuaRocks drives it via -Xhelper.
+--- Prepares the `$(LUA)` expansion and a mock `lua` install at ~/.lde/lua: a bare `lua`
+--- on PATH resolves to lde running as a plain interpreter (honoring LUA_PATH/LUA_CPATH),
+--- and include//lib/ come from LuaJIT so C rocks can build against it.
 local function ensureMockLuaDir()
 	local lde = require("lde-core")
 	local luaDir = path.join(lde.global.getDir(), "lua")
 	if not fs.isdir(luaDir) then fs.mkdir(luaDir) end
 
-	local luaBin = assert(env.execPath(), "no executable path")
+	const ldeBin = assert(env.execPath(), "no executable path")
 	fs.delete(path.join(luaDir, "run-e.lua"))
 
-	-- The wrapper is needed in two shapes: exec'd directly (a declared test script)
-	-- and substituted into command strings a POSIX shell runs. Windows has no
-	-- shebangs and no fs.chmod, so the direct shape is a .cmd (what global/wrapper.lua
-	-- writes for tools) while the shell shape is a shebang script the bundled
-	-- BusyBox sh interprets itself — sh cannot execute a .cmd (exit 127). The #!
-	-- needs an absolute path and /bin/sh is not universal (Termux/Android keeps its
-	-- shell under $PREFIX/bin), so it is resolved rather than assumed.
+	-- $(LUA) is the lde binary itself with --lua: no shell has to run a wrapper
+	-- script, so the same expansion works in sh, cmd.exe and a direct exec alike.
+	-- A bare `lua` (some harnesses shell out to one) still needs a real executable
+	-- on PATH, which keeps the mock install in the platform's native shape.
 	const scriptPath = path.join(luaDir, "lua")
-	const shellPath = lde.global.getShellPath()
-	fs.write(scriptPath, "#!" .. shellPath .. "\n"
-		.. "exec '" .. luaBin .. "' --lua \"$@\"\n")
-	local wrapperPath = scriptPath
+	fs.write(scriptPath, "#!" .. lde.global.getShellPath() .. "\n"
+		.. "exec '" .. ldeBin .. "' --lua \"$@\"\n")
 	if jit.os == "Windows" then
-		wrapperPath = path.join(luaDir, "lua.cmd")
-		fs.write(wrapperPath, '@"' .. luaBin .. '" --lua %*\r\n')
-		-- `luaBin` is what a *shell command* runs for $(LUA), so it has to match the
-		-- shell that will run it: a POSIX sh cannot execute a .cmd, and cmd.exe cannot
-		-- run a shebang script. getScriptShell() is the one that runs the command —
-		-- on a runner without the bundled BusyBox sh it is cmd.exe, which needs the
-		-- .cmd path here.
-		local shellBin, _, isCmd = lde.global.getScriptShell()
-		if isCmd then
-			luaBin = wrapperPath
-		else
-			luaBin = '"' .. shellBin .. '" "' .. scriptPath .. '"'
-		end
+		fs.write(path.join(luaDir, "lua.cmd"), '@"' .. ldeBin .. '" --lua %*\r\n')
 	else
-		fs.chmod(wrapperPath, tonumber("755", 8))
-		luaBin = wrapperPath
+		fs.chmod(scriptPath, tonumber("755", 8))
 	end
+	local luaBin = '"' .. ldeBin .. '" --lua'
 
 	local jitTree = require("sea").getLuajitPath()
 	for _, sub in ipairs({ "include", "lib" }) do
@@ -276,7 +261,10 @@ local function runCommandTests(package, testSpec, flags, luaBin, luaDir, luaPath
 
 	const childEnv = { LUA_PATH = luaPath, LUA_CPATH = luaCPath }
 	if luaDir ~= "" then
-		childEnv.PATH = luaDir .. path.separator .. (env.var("PATH") or "")
+		-- The PATH *list* separator, not path.separator (the directory one): a
+		-- platform whose PATH is a single entry (Termux) leaves the child unable to
+		-- resolve even `sh` when the two are joined with `/`.
+		childEnv.PATH = luaDir .. (jit.os == "Windows" and ";" or ":") .. (env.var("PATH") or "")
 	end
 	local exitCode
 	local script = testSpec?.script
@@ -292,12 +280,10 @@ local function runCommandTests(package, testSpec, flags, luaBin, luaDir, luaPath
 		if not fs.exists(path.join(package.dir, script)) then
 			return failure("Test script " .. script .. " does not exist")
 		end
-		local argv = { script }
+		const argv = { "--lua", script }
 		for _, flag in ipairs(flags) do argv[#argv + 1] = flag end
-		-- Direct exec needs a real executable: on Windows that is the .cmd, since the
-		-- shell form (`<sh> <script>`) is only valid inside a command string.
-		local luaExec = luaBin
-		if jit.os == "Windows" then luaExec = path.join(luaDir, "lua.cmd") end
+		-- The binary itself, so no wrapper script (and no shebang) is in the way.
+		const luaExec = assert(env.execPath(), "no executable path")
 		exitCode = process.exec(luaExec, argv, { cwd = package.dir, env = childEnv, stdout = "inherit", stderr = "inherit" })
 	else
 		if type(command) ~= "string" then return failure("Malformed rockspec: 'command' expects a string") end
