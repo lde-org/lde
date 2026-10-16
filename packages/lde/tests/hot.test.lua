@@ -92,7 +92,13 @@ local function withChild(args, cwd, fn, capture)
 		output = (stdout or "") .. (stderr or "")
 	end
 	sleep(150)
-	if not ok then error(perr, 2) end
+	if not ok then
+		-- The session's own output is the only thing that explains a missed log line
+		-- (a failed compiler install, a watcher that never started): keep it in the
+		-- failure instead of discarding it with the child.
+		const detail = capture and output and output ~= "" and ("\n--- session output ---\n" .. output) or ""
+		error(tostring(perr) .. detail, 2)
+	end
 	return output
 end
 
@@ -104,8 +110,14 @@ end
 local function warmCompiler(dir)
 	const warmLog = path.join(dir, "warm.log")
 	fs.write(warmLog, "")
-	process.exec(ldePath, { "run", "--", warmLog }, { cwd = dir })
+	-- A failed warm-up means the compiler is not installable here, which is the
+	-- failure worth reporting: silently ignoring it turns it into a "missed reload"
+	-- in the timed session below, with the session's own output as the only clue.
+	const code, out, err = process.exec(ldePath, { "run", "--", warmLog }, { cwd = dir, stdout = "pipe", stderr = "pipe" })
 	fs.delete(warmLog)
+	if code ~= 0 then
+		error(string.format("compiler warm-up failed (exit %s): %s%s", tostring(code), tostring(out or ""), tostring(err or "")), 2)
+	end
 end
 
 ---@param name string
@@ -510,7 +522,7 @@ test.it("lde run --hot reloads a Teal entry", function()
 		fs.write(path.join(dir, "src", "init.tl"), TEAL_V2)
 
 		test.truthy(waitForLog(logFile, "teal v2", 20000), "Teal hot reload did not pick up the change")
-	end)
+	end, true)
 end)
 
 test.it("lde run --hot recovers after a Teal syntax error is fixed", function()
@@ -522,7 +534,7 @@ test.it("lde run --hot recovers after a Teal syntax error is fixed", function()
 	warmCompiler(dir)
 
 	withChild({ "run", "--hot", "--", logFile }, dir, function()
-		test.truthy(waitForLog(logFile, "teal v1", 20000), "initial Teal run missing from log")
+		test.truthy(waitForLog(logFile, "teal v1", 30000), "initial Teal run missing from log")
 
 		-- Break the source: the rebuild fails and the hot loop must keep
 		-- watching (not wedge on the failed build).
@@ -533,7 +545,7 @@ test.it("lde run --hot recovers after a Teal syntax error is fixed", function()
 		fs.write(path.join(dir, "src", "init.tl"), TEAL_FIXED)
 
 		test.truthy(waitForLog(logFile, "teal fixed", 30000), "hot reload did not recover after the syntax error was fixed")
-	end)
+	end, true)
 end)
 
 test.it("lde run --hot reloads a Moonscript entry", function()
@@ -558,5 +570,5 @@ f\close()
 ]==])
 
 		test.truthy(waitForLog(logFile, "moon v2", 30000), "Moonscript hot reload did not pick up the change")
-	end)
+	end, true)
 end)
