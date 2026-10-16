@@ -177,10 +177,17 @@ local function ensureMockLuaDir()
 	if jit.os == "Windows" then
 		wrapperPath = path.join(luaDir, "lua.cmd")
 		fs.write(wrapperPath, '@"' .. luaBin .. '" --lua %*\r\n')
-		-- `luaBin` is what a *shell command* uses for $(LUA): `<sh> <script>`, because
-		-- a POSIX shell cannot execute a .cmd (exit 127). Callers that exec a script
-		-- directly use the .cmd (see runCommandTests).
-		luaBin = '"' .. shellPath .. '" "' .. scriptPath .. '"'
+		-- `luaBin` is what a *shell command* runs for $(LUA), so it has to match the
+		-- shell that will run it: a POSIX sh cannot execute a .cmd, and cmd.exe cannot
+		-- run a shebang script. getScriptShell() is the one that runs the command —
+		-- on a runner without the bundled BusyBox sh it is cmd.exe, which needs the
+		-- .cmd path here.
+		local shellBin, _, isCmd = lde.global.getScriptShell()
+		if isCmd then
+			luaBin = wrapperPath
+		else
+			luaBin = '"' .. shellBin .. '" "' .. scriptPath .. '"'
+		end
 	else
 		fs.chmod(wrapperPath, tonumber("755", 8))
 		luaBin = wrapperPath

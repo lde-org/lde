@@ -178,15 +178,20 @@ function M.getShellPath()
 		return os.getenv("COMSPEC") or "cmd.exe"
 	end
 	const pathVar = os.getenv("PATH") or ""
+	local found
 	for dir in pathVar:gmatch("[^:]+") do
 		---@cast dir string
 		const candidate = path.join(dir, "sh")
 		const stat = fs.stat(candidate)
-		if stat and (stat.mode ?? 0) & 0x49 ~= 0 then -- any exec bit
-			return candidate
+		if stat then
+			-- Prefer a shell the kernel will actually exec, but remember a plain
+			-- hit: on Android/Termux the PATH can live on a volume that reports no
+			-- mode bits, and /bin/sh does not exist there at all.
+			if (stat.mode ?? 0) & 0x49 ~= 0 then return candidate end
+			found = found or candidate
 		end
 	end
-	return "/bin/sh"
+	return found or "/bin/sh"
 end
 
 return M
