@@ -7,26 +7,27 @@
         ]
       },
       "locked": {
-        "lastModified": 1776201701,
-        "narHash": "sha256-lWLbP6NyXUMmXp6nKw8DowwX2gGjZz03uyJyF4pj5Zo=",
+        "lastModified": 1792146735,
+        "narHash": "sha256-G+K21phI5dWscg6GvI6thskajGPTpX9Ny9g8m/jqWF8=",
         "owner": "lde-org",
         "repo": "lde-nix",
-        "rev": "7c6f425bf53b7b56da7a819a076eb8ffacc45ca2",
+        "rev": "1c6b18e2be66d8a6059ef03df1e873bdad62db3e",
         "type": "github"
       },
       "original": {
         "owner": "lde-org",
+        "ref": "nightly",
         "repo": "lde-nix",
         "type": "github"
       }
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1773814637,
-        "narHash": "sha256-GNU+ooRmrHLfjlMsKdn0prEKVa0faVanm0jrgu1J/gY=",
+        "lastModified": 1782847189,
+        "narHash": "sha256-twXPFqFsrrY5r28Zh7Homgcp2gUMBgQ6WDS98Q/3xFI=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "fea3b367d61c1a6592bc47c72f40a9f3e6a53e96",
+        "rev": "b6018f87da91d19d0ab4cf979885689b469cdd41",
         "type": "github"
       },
       "original": {
