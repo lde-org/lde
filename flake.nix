@@ -1,7 +1,7 @@
 {
   description = "A package manager for Lua, written in Lua.";
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
-  inputs.lde.url = "github:lde-org/lde-nix";
+  inputs.lde.url = "github:lde-org/lde-nix/nightly";
   inputs.lde.inputs.nixpkgs.follows = "nixpkgs";
 
   outputs =
@@ -27,6 +27,7 @@
                 lua-language-server
 
                 # Packages necessary for tests and building
+                clang
                 cmake
                 curl
                 gnumake
