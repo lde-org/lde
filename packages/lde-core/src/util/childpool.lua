@@ -30,15 +30,15 @@ end
 ---@field spawnErrorResult fun(item: any, err: string?): table # JSON body written when the child cannot start
 ---@field onDone fun(item: any, decoded: table?, output: string, exitCode: number?)
 
-const M = {}
+const childPool = {}
 
 ---@param ms number
-function M.sleep(ms)
+function childPool.sleep(ms)
 	sleep(ms)
 end
 
 ---@param opts lde.childPool.Opts
-function M.run(opts)
+function childPool.run(opts)
 	const execPath = assert(env.execPath(), "no executable path")
 	const scratch = path.join(env.tmpdir(), opts.prefix .. "-" .. tostring({}):match("0x(%x+)$"))
 	fs.mkdirAll(scratch)
@@ -92,4 +92,4 @@ function M.run(opts)
 	fs.rmdir(scratch)
 end
 
-return M
+return childPool

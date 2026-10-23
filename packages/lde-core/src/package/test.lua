@@ -577,9 +577,10 @@ local function runSharded(testFiles, package, jobs, reporter, status)
 		---@param exitCode number?
 		onDone = function(relPath, decoded, output, exitCode)
 			if decoded then
+				const first = decoded.files and decoded.files[1]
 				shards[relPath] = {
-					results = decoded.files?.[1]?.results,
-					error = decoded.files?.[1]?.error ?? decoded.error,
+					results = first and first.results,
+					error = (first and first.error) or decoded.error,
 				}
 			else
 				-- The exit code is the only clue when a shard dies without writing

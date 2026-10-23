@@ -342,6 +342,13 @@ function Package:readConfig()
 	return newConfig
 end
 
+--- Reload the manifest from disk, bypassing the mtime cache.
+---@return lde.Package.Config
+function Package:reloadConfig()
+	self.cachedConfig, self.cachedConfigMtime = nil, nil
+	return self:readConfig()
+end
+
 ---@return lde.Lockfile?
 function Package:readLockfile()
 	return Lockfile().open(self:getLockfilePath())
@@ -383,6 +390,7 @@ end
 --- not override them: the dep re-resolves from lde.json and the next install
 --- rewrites the lockfile (see Lockfile:isStale). Without a usable lockfile the
 --- manifest entries are returned as-is.
+---@param self lde.Package
 ---@param deps table<string, lde.Package.Config.Dependency>
 ---@param config lde.Package.Config
 ---@return table<string, lde.Package.Config.Dependency>

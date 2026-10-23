@@ -190,8 +190,7 @@ local function add(args)
 	end
 	-- Hash the canonical view install compares against: `package` aliases are
 	-- normalized to `name` on read, so the raw decoded table would differ.
-	p.cachedConfig, p.cachedConfigMtime = nil, nil
-	lockfile:setManifestHash(lde.Lockfile.manifestHash(p:readConfig()))
+	lockfile:setManifestHash(lde.Lockfile.manifestHash(p:reloadConfig()))
 	lockfile:save()
 
 	fs.delete(path.join(p:getModulesDir(), ".installed"))

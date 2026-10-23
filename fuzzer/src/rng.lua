@@ -8,7 +8,7 @@
 ---@field int fun(n: integer?): integer # 0..n-1 (or 0..2^31-2)
 ---@field chance fun(p: number): boolean
 ---@field pick fun(t: any[]): any
----@field value fun(t: any[]): any # pick, then call a function shape
+---@field value fun(choices: any[]): any # pick, then call a function shape
 ---@field bytes fun(n: integer): string # printable ASCII
 ---@field token fun(maxLen: integer?): string # word/punct/unicode mix
 
@@ -41,14 +41,14 @@ local function new(seed)
 		return t[rng.int(#t) + 1]
 	end
 
-	--- Pick a shape from `t`; function shapes are called to produce a fresh
+	--- Pick a shape from `choices`; function shapes are called to produce a fresh
 	--- value (and advance the rng).
-	---@param t any[]
+	---@param choices any[]
 	---@return any
-	function rng.value(t)
-		local v = rng.pick(t)
-		if type(v) == "function" then return v() end
-		return v
+	function rng.value(choices)
+		local choice = rng.pick(choices)
+		if type(choice) == "function" then return choice() end
+		return choice
 	end
 
 	---@param n integer

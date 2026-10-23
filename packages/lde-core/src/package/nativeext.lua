@@ -60,13 +60,13 @@ function nativeext.scan(modulesDir, opts)
 			for _, relativePath in ipairs(fs.scan(entryPath, "**")) do
 				local ext = matchExt(relativePath)
 				if ext and not features.isExcluded(relativePath, excludes) then
-					const relativeName = relativePath:gsub("%." .. ext .. "$", "")
+					const relativeName = relativePath:gsub("%." .. ext .. "$", ""):gsub(path.separator, "/")
 					local name, cpath
 					if relativeName == "" then
 						name = entry.name
 						cpath = entry.name:gsub("%.", "/") .. "." .. ext
 					else
-						name = entry.name .. "." .. relativeName:gsub(path.separator, ".")
+						name = entry.name .. "." .. relativeName:gsub("/", ".")
 						cpath = (entry.name .. "." .. relativeName):gsub("%.", "/") .. "." .. ext
 					end
 					files[#files + 1] = {

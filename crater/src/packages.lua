@@ -17,16 +17,6 @@
 -- (lua-resty-* rocks whose modules load fine standalone *are* still tested:
 -- lua-resty-openssl, lua-resty-jit-uuid, lua-resty-string, lua-resty-template.)
 --
--- Modules that are not plain libraries are excluded from the require test:
---   * pl.strict                              -- installing global strict mode is
---                                               its whole purpose; requiring it
---                                               breaks every later module
---   * luacheck.main                          -- CLI entry point; unconditionally
---                                               runs main() (and os.exit) when
---                                               required
---   * luacheck.vendor.sha1.bit32_ops         -- implementation-selected: needs
---                                               undeclared 'bit32', and LuaJIT
---                                               picks bit_ops instead
 -- rank: all-time download rank (1-100) or "bN" for extra standalone libs.
 -- downloads: all-time download count from the scrape ("n/a" for bN extras).
 -- engine:  another runtime this rock is bound to; recorded as skipped, never
@@ -35,7 +25,6 @@
 --          ("vim" for neovim-only rocks).
 -- extra:   extra luarocks deps the published rockspec forgets to declare.
 local PACKAGES = {
-	-- ── Top 100: all-time downloads (scraped 2026-08-03 from /modules) ──────
 	{ rank = 1,   name = "lua-cjson", downloads = 24120863, skip = { "tests" } },
 	{ rank = 2,   name = "luafilesystem", downloads = 15020930, skip = { "tests" } }, -- rock ships its own test suite as a requireable module
 	{ rank = 3,   name = "lua-resty-http", downloads = 9881459, engine = "openresty" },
@@ -137,7 +126,6 @@ local PACKAGES = {
 	{ rank = 99,  name = "datafile", downloads = 749196 },
 	{ rank = 100, name = "luaunit", downloads = 738259, skip = { "doc" } },
 
-	-- ── Extras: well-known standalone libraries beyond the top 100 ───────────
 	{ rank = "b1",  name = "middleclass", downloads = "n/a" },
 	{ rank = "b2",  name = "lume", downloads = "n/a" },
 	{ rank = "b3",  name = "serpent", downloads = "n/a", skip = { "t" } },
@@ -155,7 +143,6 @@ local PACKAGES = {
 	{ rank = "b14", name = "push", downloads = "n/a" },
 	{ rank = "b15", name = "vusted", downloads = "n/a", shims = { "vim" }, skip = { "tests" } },
 
-	-- ── CMake: rocks whose rockspecs use the cmake build backend ─────────────
 	{ rank = "c1", name = "rapidjson", downloads = "n/a" }, -- C++ JSON binding
 	{ rank = "c2", name = "luv", downloads = "n/a" }, -- libuv bindings
 }
@@ -206,8 +193,7 @@ local EXCLUDE_MODULES = {
 
 --- Module name prefixes that are example/test programs rather than libraries.
 --- luasocket ships samples/ and test/ via copy_directories; the files open
---- sockets and loop forever when required (e.g. samples.mcsend). json.lua ships
---- bench/ — benchmark scripts that run (and crash) when required.
+--- sockets and loop forever when required (e.g. samples.mcsend).
 local EXCLUDE_PREFIXES = { "samples.", "test.", "tests.", "bench." }
 
 --- Functional checks for well-known APIs. Values are Lua expressions over the

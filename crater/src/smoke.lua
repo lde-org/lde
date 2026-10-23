@@ -24,6 +24,7 @@ local EXERCISES = packages.EXERCISES
 --- dropped, and calling it returns nil. Note: LuaJIT strips the metatable when
 --- __index returns a table whose own __index is the *same* function (its
 --- self-reference guard), so each stub level needs a fresh closure identity.
+---@param global string
 local function deepStubSource(global)
 	return string.format([[
 do
@@ -76,9 +77,12 @@ end
 ---@return string[]
 local function discoverModules(targetDir, exclude)
 	local seen, mods = {}, {}
+	---@param rel string
 	local function add(rel)
 		local parts = {}
-		for seg in rel:gmatch("[^/]+") do parts[#parts + 1] = seg end
+		for seg in rel:gmatch("[^/]+") do
+			parts[#parts + 1] = seg
+		end
 		if #parts == 0 or exclude[parts[1]] then return end
 		local name
 		local last = parts[#parts]
@@ -123,8 +127,8 @@ local function makeMainLua(mods, shims)
 		"  if kind == \"OK\" then print(\"OK\\t\" .. name) else failures = failures + 1 print(\"ERR\\t\" .. name .. \"\\t\" .. tostring(extra):gsub(\"[\\r\\n]+\", \" \")) end",
 		"end",
 	}
-	for _, g in ipairs(shims or {}) do
-		lines[#lines + 1] = deepStubSource(g)
+	for _, shim in ipairs(shims or {}) do
+		lines[#lines + 1] = deepStubSource(shim)
 	end
 
 	for _, name in ipairs(mods) do
@@ -132,8 +136,11 @@ local function makeMainLua(mods, shims)
 			excluded = excluded + 1
 		else
 			local skippedByPrefix = false
-			for _, p in ipairs(EXCLUDE_PREFIXES) do
-				if name:sub(1, #p) == p then skippedByPrefix = true break end
+			for _, prefix in ipairs(EXCLUDE_PREFIXES) do
+				if name:sub(1, #prefix) == prefix then
+					skippedByPrefix = true
+					break
+				end
 			end
 			if skippedByPrefix then
 				excluded = excluded + 1

@@ -480,9 +480,14 @@ local function test(args)
 					return childArgs
 				end,
 				---@param pkg lde.Package
-				---@param _ string?
-				spawnErrorResult = function(pkg, _)
-					return { total = 0, failures = 1, skipped = 0 }
+				---@param err string?
+				spawnErrorResult = function(pkg, err)
+					return {
+						total = 0,
+						failures = 1,
+						skipped = 0,
+						error = "failed to start test process for " .. pkg:getName() .. ": " .. (err or "spawn failed"),
+					}
 				end,
 				---@param pkg lde.Package
 				---@param decoded table?

@@ -3,6 +3,9 @@ name: Bootstrap
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build:
     uses: ./.github/workflows/_build.yml

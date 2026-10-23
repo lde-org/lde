@@ -49,8 +49,7 @@ local function remove(args)
 		json.removeField(lockfile.raw.dependencies, name)
 		-- Hash the canonical view install compares against: `package` aliases are
 		-- normalized to `name` on read, so the raw decoded table would differ.
-		pkg.cachedConfig, pkg.cachedConfigMtime = nil, nil
-		lockfile:setManifestHash(lde.Lockfile.manifestHash(pkg:readConfig()))
+		lockfile:setManifestHash(lde.Lockfile.manifestHash(pkg:reloadConfig()))
 		lockfile:save()
 	end
 

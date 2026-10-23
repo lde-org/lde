@@ -41,13 +41,17 @@ function util.hash(s)
 end
 
 --- The lde home directory: `LDE_HOME` when set (its value is the lde dir
---- itself), otherwise `~/.lde`. Shared by the lde-core dir layout (which also
---- places the registry tree) and sea's LuaJIT dist cache so both agree on one
---- home.
+--- itself), otherwise `~/.lde` under the first nonempty of HOME/USERPROFILE.
+--- When neither is set, fall back to a relative `.lde` rather than a root-level
+--- path. Shared by the lde-core dir layout (which also places the registry tree)
+--- and sea's LuaJIT dist cache so both agree on one home.
 function util.ldeHome()
 	const ldeHome = os.getenv("LDE_HOME")
 	if ldeHome and ldeHome ~= "" then return ldeHome end
-	return (os.getenv("HOME") or os.getenv("USERPROFILE") or "") .. separator .. ".lde"
+	local home = os.getenv("HOME")
+	if not home or home == "" then home = os.getenv("USERPROFILE") end
+	if not home or home == "" then return ".lde" end
+	return home .. separator .. ".lde"
 end
 
 ---@generic T

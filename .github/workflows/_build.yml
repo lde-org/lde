@@ -92,6 +92,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Cache llvm-mingw (Windows)
         if: runner.os == 'Windows'
@@ -188,7 +190,7 @@ jobs:
           docker run --rm -w /workspace \
             -v "${{ github.workspace }}":/workspace \
             -v "$HOME/.lde/lde":/usr/local/bin/lde:ro \
-            -e OUTFILE -e RUN_TESTS -e BOOTSTRAP \
+            -e OUTFILE -e RUN_TESTS -e BOOTSTRAP -e LDE_RELEASE \
             alpine:3.20 \
             sh -c '
               apk add --no-cache gcc clang musl-dev make cmake ninja curl tar git openssl-dev linux-headers libgcc &&
@@ -197,6 +199,8 @@ jobs:
                 curl -fsSLo /tmp/lj.tar.gz https://github.com/lde-org/luajit/releases/download/latest/luajit-linux-$A-musl.tar.gz &&
                 mkdir -p /tmp/lj && tar -xzf /tmp/lj.tar.gz -C /tmp/lj --strip-components=1 &&
                 PATH=/tmp/lj:$PATH luajit minilde.lua -C packages/lde run -- compile --outfile "$OUTFILE";
+              elif [ "$LDE_RELEASE" = "1" ]; then
+                lde -C packages/lde compile --outfile "$OUTFILE";
               else
                 lde -C packages/lde run -- compile --outfile "$OUTFILE";
               fi &&
