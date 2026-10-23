@@ -1,6 +1,7 @@
 --- Global lde directory layout and user-level paths.
 
 local path = require("path")
+const util = require("util")
 
 local M = {}
 
@@ -27,13 +28,11 @@ end
 
 --- The user-level lde directory, independent of any --tree override. Set via
 --- the LDE_HOME env var when present (its value is the lde dir itself),
---- otherwise ~/.lde. Global registry metadata (the luarocks manifest, the
---- resolved-URL cache) lives here so per-tree installs share it instead of
---- re-downloading per tree.
+--- otherwise ~/.lde (see util.ldeHome). Global registry metadata (the luarocks
+--- manifest, the resolved-URL cache) lives here so per-tree installs share it
+--- instead of re-downloading per tree.
 function M.getUserDir()
-	const ldeHome = os.getenv("LDE_HOME")
-	if ldeHome and ldeHome ~= "" then return ldeHome end
-	return path.join(os.getenv("HOME") or os.getenv("USERPROFILE") or "", ".lde")
+	return util.ldeHome()
 end
 
 function M.getConfigPath()

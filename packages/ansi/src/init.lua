@@ -334,10 +334,11 @@ ansi._core = {
 -- colour/emoji detection) must also re-run ansi.progress's emoji check.
 package.loaded["ansi.progress"] = nil
 const progress = require("ansi.progress")
-ansi.progress        = progress.progress
-ansi.installProgress = progress.installProgress
-ansi.formatBytes     = progress.formatBytes
-ansi.formatElapsed   = progress.formatElapsed
-ansi.supportsEmoji   = progress.supportsEmoji
+ansi.progress         = progress.progress
+ansi.installProgress  = progress.installProgress
+ansi.formatBytes      = progress.formatBytes
+ansi.formatElapsed    = progress.formatElapsed
+ansi.supportsEmoji    = progress.supportsEmoji
+ansi.downloadProgress = progress.downloadProgress
 
 return ansi
