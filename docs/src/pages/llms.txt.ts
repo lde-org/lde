@@ -1,20 +1,10 @@
-import { getCollection } from "astro:content";
 import type { APIContext } from "astro";
 import { SITE_URL } from "../data/info";
+import { blogNewestFirst, docsInSidebarOrder } from "../lib/contentOrder";
 
 export async function GET(_context: APIContext) {
-	const docs = (await getCollection("docs")).sort((a, b) => {
-		const aDir = a.id.split("/").slice(0, -1).join("/");
-		const bDir = b.id.split("/").slice(0, -1).join("/");
-		if (aDir !== bDir) return aDir.localeCompare(bDir);
-		return a.data.order - b.data.order;
-	});
-
-	const blog = (await getCollection("blog")).sort(
-		(a, b) =>
-			new Date(b.data.published).getTime() -
-			new Date(a.data.published).getTime(),
-	);
+	const docs = await docsInSidebarOrder();
+	const blog = await blogNewestFirst();
 
 	const lines: string[] = [
 		`# What is lde?`,
