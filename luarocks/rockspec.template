@@ -1,11 +1,11 @@
 local ldeVersion = "@VERSION@"
 
 package = "lde"
-version = ldeVersion .. "-1"
+version = ldeVersion .. "-@REVISION@"
 
 source = {
-	url = "https://github.com/lde-org/lde/archive/refs/tags/v" .. ldeVersion .. ".tar.gz",
-	dir = "lde-" .. ldeVersion,
+	url = "@SOURCE_URL@",
+	dir = "@SOURCE_DIR@",
 }
 
 description = {
@@ -20,5 +20,10 @@ dependencies = {
 
 build = {
 	type = "command",
-	install_command = "lua luarocks/install.lua --version " .. ldeVersion,
+	install_command = "sh install.sh @INSTALL_ARGS@",
+	platforms = {
+		windows = {
+			install_command = "powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1 @INSTALL_ARGS@",
+		},
+	},
 }
