@@ -27,6 +27,30 @@ const MANIFEST_URL = "https://luarocks.org/manifest-5.1.zip"
 const MANIFEST_ENTRY = MANIFEST_URL:match("([^/]+)%.zip$")
 const MANIFEST_TTL = 60 * 60 * 24
 
+--- The manifest and URL cache are a rocks resolution's only inputs; both paths
+--- are owned here so install receipts and cache freshness cannot drift from them.
+local function manifestPath()
+	return path.join(lde.global.getUserDir(), "luarocks-manifest.raw")
+end
+
+local function urlCachePath()
+	return path.join(lde.global.getUserDir(), "luarocks-url-cache-5.1.json")
+end
+
+--- Receipts compare this stamp instead of the two raw mtimes: it carries the
+--- paths too, so renaming or moving either file invalidates old receipts even
+--- when both stats are missing (the URL cache may legitimately not exist yet).
+function util.getResolutionStamp()
+	const cacheFile = urlCachePath()
+	const manifestFile = manifestPath()
+	local cacheStat = fs.stat(cacheFile)
+	local manifestStat = fs.stat(manifestFile)
+	-- modifyTime is int64 cdata; normalize so the stamp survives json round-trips.
+	local cacheMtime = cacheStat and tonumber(cacheStat.modifyTime) or 0
+	local manifestMtime = manifestStat and tonumber(manifestStat.modifyTime) or 0
+	return string.format("%s\n%d\n%s\n%d", cacheFile, cacheMtime, manifestFile, manifestMtime)
+end
+
 ---@type luarocks.Manifest?
 local cachedManifest
 
@@ -35,7 +59,7 @@ local function getManifest()
 	if cachedManifest then return cachedManifest end
 
 	-- User-level (not per-tree) so --tree installs share one manifest instead of re-downloading.
-	local cacheFile = path.join(lde.global.getUserDir(), "luarocks-manifest.raw")
+	local cacheFile = manifestPath()
 
 	const stat = fs.stat(cacheFile)
 	if stat and (os.time() - stat.modifyTime) < MANIFEST_TTL then
@@ -77,18 +101,14 @@ local urlCache
 --- that are no longer the newest, so they are re-resolved when online
 local isCacheFresh
 
-local function getUrlCachePath()
-	return path.join(lde.global.getUserDir(), "luarocks-url-cache-5.1.json")
-end
-
 ---@param isOffline boolean? # isOffline: trust the persisted cache even if it's
 --- older than the manifest (the manifest can't be refreshed without network)
 local function loadUrlCache(isOffline)
 	if urlCache then return urlCache end
-	local cachePath = getUrlCachePath()
-	local manifestPath = path.join(lde.global.getUserDir(), "luarocks-manifest.raw")
+	local cachePath = urlCachePath()
+	local manifestFile = manifestPath()
 	local cstat = fs.stat(cachePath)
-	local mstat = fs.stat(manifestPath)
+	local mstat = fs.stat(manifestFile)
 	-- Persisted entries are always loaded though the fast path is skipped: saveUrlCache rewrites from memory, so dropping them would lose cached URLs permanently.
 	isCacheFresh = isOffline or not (cstat and mstat and cstat.modifyTime < mstat.modifyTime)
 	urlCache = {}
@@ -109,7 +129,7 @@ local function saveUrlCache()
 		-- Fresh copy: the json decoder's per-table key-order metadata makes encode() silently drop keys added after decode.
 		const fresh = {}
 		for k, v in pairs(urlCache) do fresh[k] = v end
-		fs.write(getUrlCachePath(), json.encode(fresh))
+		fs.write(urlCachePath(), json.encode(fresh))
 	end
 end
 
@@ -183,9 +203,9 @@ end
 --- Names come from a cache rebuilt when the manifest changes; searching then filters ~5k names with memchr instead of re-parsing 4.2MB.
 function util.getManifestNames()
 	local userDir = lde.global.getUserDir()
-	local manifestPath = path.join(userDir, "luarocks-manifest.raw")
+	local manifestFile = manifestPath()
 	local cachePath = path.join(userDir, "luarocks-names-5.1.json")
-	local mstat = fs.stat(manifestPath)
+	local mstat = fs.stat(manifestFile)
 	local cstat = fs.stat(cachePath)
 	-- Strictly newer: same-second writes must not be mistaken for a fresh cache.
 	if mstat and cstat and cstat.modifyTime > mstat.modifyTime then
@@ -196,7 +216,7 @@ function util.getManifestNames()
 		end
 	end
 
-	local content = fs.read(manifestPath)
+	local content = fs.read(manifestFile)
 	const names = content ? collectManifestNames(content) : {}
 	fs.mkdirAll(userDir)
 	fs.write(cachePath, json.encode(names))
