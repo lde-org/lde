@@ -3,6 +3,8 @@ const path = require("path")
 
 const features = require("lde-core.package.features")
 
+const nativeext = require("lde-core.package.nativeext")
+
 const lde = require("lde-core")
 
 const stringEscapes = {
@@ -118,12 +120,6 @@ local function bundlePackage(package, opts)
 	-- Each entry in target/ is filtered by the globs its own features turn on, so a package can ship several platform backends but only deploy the one that runs.
 	const excludesFor = features.resolverFor(package, opts.features)
 
-	-- Native modules (.so/.dll/.dylib) are embedded as raw bytes and extracted next to the bundle at load time so `require` resolves through package.cpath as in a normal project.
-	const nativeExts = jit.os == "Windows" and { "dll" }
-		or (jit.os == "OSX" and { "so", "dylib" } or { "so" })
-	---@type table<string, string> # cpath-relative path ("cmod/core.so") -> bytes
-	const nativeFiles = {}
-
 	for entry in fs.readdir(modulesDir) do
 		local p = path.join(modulesDir, entry.name)
 		if entry.name == "tests" and package:getName() ~= "tests" then
@@ -134,23 +130,6 @@ local function bundlePackage(package, opts)
 		if fs.isdir(p) then
 			const excludes = excludesFor(entry.name)
 			bundleDir(entry.name, p, dirFiles, excludes)
-			-- Native modules are filtered by the same feature globs, so build:feature(...) and the manifest agree on one set of flags that may drop a backend .so as well as its Lua.
-			for _, relativePath in ipairs(fs.scan(p, "**")) do
-				local ext = relativePath:match("%.([^.]+)$")
-				local isNative = false
-				for _, e in ipairs(nativeExts) do
-					if ext == e then isNative = true break end
-				end
-				if isNative and not features.isExcluded(relativePath, excludes) then
-					local absPath = path.join(p, relativePath)
-					local content = fs.read(absPath)
-					if content then
-						const relName = relativePath:gsub("%." .. ext .. "$", "")
-						local moduleName = relName ~= "" and (entry.name .. "." .. relName) or entry.name
-						nativeFiles[moduleName:gsub("%.", "/") .. "." .. ext] = content
-					end
-				end
-			end
 		elseif entry.name:match("%.lua$") and not isTestFile(entry.name) then
 			-- A rock's flat module (target/X.lua) is keyed by its own name, how a dependency alias spells it in the lockfile.
 			if not features.isExcluded(entry.name, excludesFor(entry.name:gsub("%.lua$", ""))) then
@@ -158,20 +137,6 @@ local function bundlePackage(package, opts)
 				if content then
 					local moduleName = entry.name:gsub("%.lua$", "")
 					topFiles[#topFiles + 1] = { names = { moduleName }, content = content }
-				end
-			end
-		else
-			-- Top-level native module (e.g. lfs.so): embedded like the nested ones and filtered by the same globs.
-			local ext = entry.name:match("%.([^.]+)$")
-			local isNative = false
-			for _, e in ipairs(nativeExts) do
-				if ext == e then isNative = true break end
-			end
-			if isNative and not features.isExcluded(entry.name, excludesFor(entry.name:gsub("%." .. ext .. "$", ""))) then
-				local content = fs.read(p)
-				if content then
-					local moduleName = entry.name:gsub("%." .. ext .. "$", "")
-					nativeFiles[moduleName .. "." .. ext] = content
 				end
 			end
 		end
@@ -219,6 +184,20 @@ local function bundlePackage(package, opts)
 			}
 		end
 		return { name = mainName, modules = modules }
+	end
+
+	-- Native modules (.so/.dll/.dylib) are embedded as raw bytes and extracted next to the bundle at load time so `require` resolves through package.cpath as in a normal project. They use the host's suffixes: a source bundle is not cross-compiled.
+	---@type table<string, string> # cpath-relative path ("cmod/core.so") -> bytes
+	const nativeFiles = {}
+	for _, file in ipairs(nativeext.scan(modulesDir, {
+		exts = nativeext.extsFor(nativeext.hostPlatform()),
+		rootName = package:getName(),
+		excludesFor = excludesFor,
+	})) do
+		const content = fs.read(file.path)
+		if content then
+			nativeFiles[file.cpath] = content
+		end
 	end
 
 	local parts = {}

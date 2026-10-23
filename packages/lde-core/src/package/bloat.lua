@@ -1,23 +1,10 @@
 const fs = require("fs")
-const path = require("path")
 
 const features = require("lde-core.package.features")
 
+const nativeext = require("lde-core.package.nativeext")
 
 const bundlePackage = require("lde-core.package.bundle")
-
-const nativeExts = jit.os == "Windows" and { "dll" }
-	or (jit.os == "OSX" and { "so", "dylib" } or { "so" })
-
----@param fileName string
-local function matchNativeExt(fileName)
-	for _, ext in ipairs(nativeExts) do
-		if fileName:match("%." .. ext .. "$") then
-			return ext
-		end
-	end
-	return nil
-end
 
 ---@class lde.bloat.File
 ---@field name string # module name, or native lib name as compile.lua names it
@@ -99,41 +86,15 @@ local function analyze(package)
 	end
 
 	-- Scanned exactly like compile.lua (tests/ excluded, same naming and feature-flag exclusions) so the report answers "what the executable will contain".
-	local modulesDir = package:getModulesDir()
-	const excludesFor = features.resolverFor(package)
-	for entry in fs.readdir(modulesDir) do
-		local p = path.join(modulesDir, entry.name)
-		if entry.name == "tests" and rootName ~= "tests" then
-			goto continue
+	for _, file in ipairs(nativeext.scan(package:getModulesDir(), {
+		exts = nativeext.extsFor(nativeext.hostPlatform()),
+		rootName = rootName,
+		excludesFor = features.resolverFor(package),
+	})) do
+		const stat = fs.stat(file.path)
+		if stat then
+			addFile(file.name, "native", tonumber(stat.size) or 0)
 		end
-
-		const excludes = excludesFor(entry.name)
-
-		if not fs.isdir(p) then
-			local ext = matchNativeExt(entry.name)
-			if ext and not features.isExcluded(entry.name, excludes) then
-				local stat = fs.stat(p)
-				if stat then
-					addFile(entry.name:gsub("%." .. ext .. "$", ""), "native", tonumber(stat.size) or 0)
-				end
-			end
-			goto continue
-		end
-
-		for _, relativePath in ipairs(fs.scan(p, "**")) do
-			local ext = matchNativeExt(relativePath)
-			if ext and not features.isExcluded(relativePath, excludes) then
-				const absPath = path.join(p, relativePath)
-				local stat = fs.stat(absPath)
-				if stat then
-					local moduleName = string.gsub(relativePath, path.separator, "."):gsub("%." .. ext .. "$", "")
-					moduleName = moduleName ~= "" and (entry.name .. "." .. moduleName) or entry.name
-					addFile(moduleName, "native", tonumber(stat.size) or 0)
-				end
-			end
-		end
-
-		::continue::
 	end
 
 	local entries = {}
