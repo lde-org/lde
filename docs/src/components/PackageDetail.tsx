@@ -6,26 +6,7 @@ import { useRegistry } from "../hooks/useRegistry";
 import { highlightCodeBlocks, highlightFile, isViewableFile } from "../lib/highlight";
 import { createReadmeMarked } from "../lib/readmeMarked";
 import { joinRepoPath, resolvePackageDir } from "../lib/packageRoot";
-
-// localStorage cache entries, stamped with the time they were written. Used for
-// the README, manifest, and repo tree fetches so repeat visits don't re-hit the
-// network (or host API rate limits).
-function readCache<T>(key: string, ttlMs: number): T | null {
-	try {
-		const raw = localStorage.getItem(key);
-		if (raw) {
-			const { data, ts } = JSON.parse(raw);
-			if (Date.now() - ts <= ttlMs) return data as T;
-		}
-	} catch {}
-	return null;
-}
-
-function writeCache(key: string, data: unknown) {
-	try {
-		localStorage.setItem(key, JSON.stringify({ data, ts: Date.now() }));
-	} catch {}
-}
+import { readCache, writeCache } from "../lib/cache";
 
 // Fetch with a localStorage cache: returns cached data when fresh, otherwise
 // fetches and stores the result.
@@ -43,11 +24,6 @@ function cachedFetch<T>(
 			if (data != null) writeCache(key, data);
 			return data;
 		});
-}
-
-function getNameFromUrl(): string | null {
-	const match = window.location.pathname.match(/^\/registry\/([^/]+)\/?$/);
-	return match ? match[1] : null;
 }
 
 function parseAuthor(author: string) {
@@ -417,24 +393,12 @@ function buildTree(entries: GitTreeNode[]): TreeNode[] {
 }
 
 export default function PackageDetail({ name: nameProp }: { name: string }) {
-	const [name, setName] = useState(nameProp);
-
-	useEffect(() => {
-		if (nameProp === "_fallback") {
-			const urlName = getNameFromUrl();
-			if (urlName) setName(urlName);
-		}
-	}, [nameProp]);
-
-	const { portfile, loading: portfileLoading } = usePortfile(
-		name !== "_fallback" ? name : "",
-	);
+	const { portfile, loading: portfileLoading } = usePortfile(nameProp);
 	const { packages, loading: registryLoading } = useRegistry();
 
-	const pkg = packages.find((p) => p.name === name) ?? null;
+	const pkg = packages.find((p) => p.name === nameProp) ?? null;
 
-	const loading =
-		name === "_fallback" || portfileLoading || (registryLoading && !pkg);
+	const loading = portfileLoading || (registryLoading && !pkg);
 
 	// Rendered README source plus the directory it was read from, which its
 	// relative links resolve against.
@@ -492,7 +456,7 @@ export default function PackageDetail({ name: nameProp }: { name: string }) {
 		if (!repo) return;
 		let cancelled = false;
 
-		const key = `lde-pkgdir:${repo.host}/${repo.owner}/${repo.repo}/${treeRef}/${name}`;
+		const key = `lde-pkgdir:${repo.host}/${repo.owner}/${repo.repo}/${treeRef}/${nameProp}`;
 		const cached = readCache<string>(key, refTtl);
 		if (cached !== null) {
 			setPkgDir(cached);
@@ -501,7 +465,7 @@ export default function PackageDetail({ name: nameProp }: { name: string }) {
 
 		const manifestUrl = (path: string) => repoFileUrl(repo, treeRef, path);
 		resolvePackageDir({
-			packageName: name,
+			packageName: nameProp,
 			readManifest: (path) =>
 				cachedFetch<string | null>(
 					`lde-manifest:${manifestUrl(path)}`,
@@ -524,7 +488,7 @@ export default function PackageDetail({ name: nameProp }: { name: string }) {
 		return () => {
 			cancelled = true;
 		};
-	}, [repo?.host, repo?.owner, repo?.repo, treeRef, name]);
+	}, [repo?.host, repo?.owner, repo?.repo, treeRef, nameProp]);
 
 	// Try to resolve a README.md from the package's directory at the pinned
 	// commit of the latest version (falling back to the default branch). A
@@ -647,14 +611,14 @@ export default function PackageDetail({ name: nameProp }: { name: string }) {
 			<div class="flex flex-col gap-4 py-12 text-center">
 				<p class="text-2xl font-semibold">Package not found</p>
 				<p class="text-black/50 dark:text-white/50">
-					<code class="font-mono text-sm">{name}</code> doesn't exist
+					<code class="font-mono text-sm">{nameProp}</code> doesn't exist
 					in the registry.
 				</p>
 			</div>
 		);
 	}
 
-	const installCmd = `lde add ${name}`;
+	const installCmd = `lde add ${nameProp}`;
 	const repoName = git
 		.replace(/\.git$/, "")
 		.replace(/\/$/, "")
@@ -796,7 +760,7 @@ export default function PackageDetail({ name: nameProp }: { name: string }) {
 			{/* Header */}
 			<div class="flex flex-col gap-3">
 				<h1 class="text-3xl font-bold flex items-baseline gap-3">
-					{name}
+					{nameProp}
 					{latest && (
 						<span class="text-gray-500 dark:text-gray-400 font-medium">
 							v{latest}
