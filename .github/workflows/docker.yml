@@ -1,8 +1,14 @@
 name: Docker
 
-# The Release workflow dispatches this after it has built and uploaded the
-# release assets (the images download the pinned version's binaries).
+# The Nightly and Release workflows call this after they have built and
+# uploaded the assets (the images download the pinned version's binaries).
 on:
+  workflow_call:
+    inputs:
+      version:
+        description: "lde release tag to package (e.g. v0.11.0)"
+        required: true
+        type: string
   workflow_dispatch:
     inputs:
       version:

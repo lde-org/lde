@@ -1,0 +1,58 @@
+name: Android environment
+description: Build and run inside the cached Termux container.
+
+inputs:
+  command:
+    description: Command to run in the container; /workspace is the working directory.
+    required: true
+  provide_lde:
+    description: Make the workspace writable and copy the installed lde to /workspace/lde.
+    default: "true"
+  release:
+    description: Set LDE_RELEASE=1 inside the container.
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: Cache Android image
+      id: cache-android-image
+      uses: actions/cache@v5
+      with:
+        path: /tmp/termux-android.tar
+        key: termux-android-v4
+
+    - name: Build Android image
+      if: steps.cache-android-image.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        docker build --platform linux/arm64 -f docker/termux.Dockerfile -t termux-android:latest .
+        docker save termux-android:latest -o /tmp/termux-android.tar
+
+    - name: Load Android image
+      shell: bash
+      run: docker load -i /tmp/termux-android.tar
+
+    - name: Make workspace writable
+      shell: bash
+      run: chmod -R a+rw "$GITHUB_WORKSPACE"
+
+    - name: Provide lde
+      if: inputs.provide_lde == 'true'
+      shell: bash
+      run: cp ~/.lde/lde "$GITHUB_WORKSPACE/lde"
+
+    - name: Run in the Android container
+      shell: bash
+      env:
+        RELEASE_FLAG: ${{ inputs.release == 'true' && '-e LDE_RELEASE=1' || '' }}
+        # Keep the command as data: expanding it inside the run script would
+        # resolve container-shell variables like $PATH on the host runner.
+        ANDROID_COMMAND: ${{ inputs.command }}
+      run: |
+        docker run --rm --privileged --platform linux/arm64 \
+          $RELEASE_FLAG \
+          -v "$GITHUB_WORKSPACE":/workspace \
+          -w /workspace \
+          termux-android:latest \
+          bash -c "$ANDROID_COMMAND"

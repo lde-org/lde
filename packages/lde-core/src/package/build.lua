@@ -2,15 +2,15 @@ const fs = require("fs")
 const path = require("path")
 const ansi = require("ansi")
 const json = require("json")
-const util = require("util")
 const process = require("process")
-const ffi = require("ffi")
 local env = require("env")
 const lde = require("lde-core")
 const teal = require("lde-core.teal")
 const moonscript = require("lde-core.moonscript")
 const asyncBuild = require("lde-core.util.async-build")
 const buildLog = require("lde-core.util.build-log")
+const childPool = require("lde-core.util.childpool")
+const stamp = require("lde-core.util.stamp")
 
 ---@type table<lde.Package, boolean>
 const currentlyBuilding = setmetatable({}, { __mode = "k" })
@@ -21,16 +21,6 @@ const alreadyBuilt = {}
 -- Stamp of every build input (size/mtime/rapidhash of src/, lde.json, build.lua) letting the build script be skipped when none changed; the compile target is part of the stamp, so switching --target rebuilds.
 const STAMP_FILE = ".lde-build-stamp"
 local STAMP_VERSION = 1
-
---- Millisecond sleep while waiting for a spawned native compile (fs has no timer).
-local sleep
-if jit.os == "Windows" then
-	pcall(ffi.cdef, "void Sleep(unsigned long dwMilliseconds);")
-	sleep = function(ms) ffi.C.Sleep(ms) end
-else
-	pcall(ffi.cdef, "int usleep(unsigned int usec);")
-	sleep = function(ms) ffi.C.usleep(ms * 1000) end
-end
 
 ---@param package lde.Package
 ---@return table<string, string> relative path -> absolute path
@@ -47,62 +37,15 @@ local function collectInputFiles(package)
 	return inputs
 end
 
----@param stampPath string
----@return table<string, { size: number, mtime: number, hash: string }> files
----@return string target # target key the stamp was built for ("" = native)
-local function readStamp(stampPath)
-	local content = fs.read(stampPath)
-	if not content then return {}, "" end
-	local ok, decoded = pcall(json.decode, content)
-	if not ok or type(decoded) ~= "table" or decoded.version ~= STAMP_VERSION or type(decoded.files) ~= "table" then
-		return {}, ""
-	end
-	return decoded.files, type(decoded.target) == "string" ? decoded.target : ""
-end
-
 --- A stored stamp for a different compile target is always stale.
 ---@param package lde.Package
 ---@param stampPath string
 ---@return boolean hasChanged
----@return table<string, { size: number, mtime: number, hash: string }> current
+---@return table<string, lde.StampFile> current
 local function checkInputs(package, stampPath)
-	const stored, storedTarget = readStamp(stampPath)
-	local current = {}
-	local hasChanged = storedTarget ~= lde.global.getTargetKey()
-
-	for relPath, absPath in pairs(collectInputFiles(package)) do
-		const stat = fs.stat(absPath)
-		if not stat then
-			hasChanged = true
-			goto continue
-		end
-
-		-- fs.stat returns ffi cdata for these fields; coerce to plain numbers.
-		local size, mtime = tonumber(stat.size), tonumber(stat.modifyTime)
-		const prev = stored[relPath]
-		if prev and prev.size == size and prev.mtime == mtime then
-			current[relPath] = prev
-		else
-			local content = fs.read(absPath)
-			if not content then
-				hasChanged = true
-				goto continue
-			end
-			local hash = util.hash(content)
-			hasChanged = hasChanged or not prev or prev.hash ~= hash
-			current[relPath] = { size = size, mtime = mtime, hash = hash }
-		end
-
-		::continue::
-	end
-
-	for relPath in pairs(stored) do
-		if not current[relPath] then
-			hasChanged = true
-		end
-	end
-
-	return hasChanged, current
+	const stored, storedTarget = stamp.read(stampPath, STAMP_VERSION)
+	const changed, current = stamp.check(collectInputFiles(package), stored)
+	return storedTarget ~= lde.global.getTargetKey() or changed, current
 end
 
 ---@param package lde.Package
@@ -288,7 +231,7 @@ local function buildPackage(package, destinationPath, opts)
 		-- Only the install scheduler overlaps builds; every other caller reads the
 		-- tree right after, so it must wait for the linker instead of racing it.
 		if opts?.async then return hasBuilt, deferred end
-		while deferred.poll() == nil do sleep(20) end
+		while deferred.poll() == nil do childPool.sleep(20) end
 		local built, buildErr = deferred.finalize()
 		if not built then
 			lde.error.raise("Build failed for '" .. package:getName() .. "': " .. tostring(buildErr))

@@ -54,15 +54,7 @@ function M.ensureMingw(opts)
 
 	local dlOpts1
 	if p1 then
-		dlOpts1 = {
-			progress = function(dltotal, dlnow)
-				local ratio = dltotal > 0 ? dlnow / dltotal : nil
-				local info = dltotal > 0
-					and (ansi.formatBytes(dlnow) .. " / " .. ansi.formatBytes(dltotal))
-					or ansi.formatBytes(dlnow)
-				p1:update(ratio, info)
-			end
-		}
+		dlOpts1 = { progress = ansi.downloadProgress(p1) }
 	end
 	local ok, dlErr = curl().download(SEVENZ_URL, sevenzPath, dlOpts1)
 	if not ok then
@@ -75,15 +67,7 @@ function M.ensureMingw(opts)
 	const p2 = lde.isVerbose ? ansi.progress("Downloading toolchain") : nil
 	local dlOpts2
 	if p2 then
-		dlOpts2 = {
-			progress = function(dltotal, dlnow)
-				local ratio = dltotal > 0 ? dlnow / dltotal : nil
-				local info = dltotal > 0
-				and (ansi.formatBytes(dlnow) .. " / " .. ansi.formatBytes(dltotal))
-				or ansi.formatBytes(dlnow)
-				p2:update(ratio, info)
-			end
-		}
+		dlOpts2 = { progress = ansi.downloadProgress(p2) }
 	end
 	local ok2, dlErr2 = curl().download(TOOLCHAIN_URL, archivePath, dlOpts2)
 	if not ok2 then

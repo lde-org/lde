@@ -248,7 +248,7 @@ local function makeNode(alias, depInfo, relativeTo, ctx)
 			depInfo = depInfo,
 			kind = "git",
 			sourceKey = gitSourceKey(depInfo.git),
-			repoName = alias,
+			repoName = depInfo.name or alias,
 			gitPlan = gitPlan,
 			isExpandAfter = true, -- monorepo: lde.json location unknown until extracted
 		}

@@ -116,6 +116,28 @@ test.it("getRockspecUrl returns nil for unknown package", function()
 	test.truthy(err)
 end)
 
+test.it("getRockspecUrl only resolves versions that have a rockspec entry", function()
+	local m = Manifest.new([[
+repository = {
+   mypkg = {
+      ["1.8.1-1"] = { { arch = "src" } },
+      ["1.8.0-1"] = { { arch = "rockspec" }, { arch = "src" } }
+   }
+}
+]])
+	-- 1.8 matches 1.8.1-1 first, but only 1.8.0-1 ships a rockspec.
+	local url, err = luarocks.getRockspecUrl(m, "mypkg", "1.8")
+	test.equal(err, nil) ---@cast url -nil
+	test.truthy(url:find("mypkg-1.8.0-1.rockspec", 1, true))
+end)
+
+test.it("getRockspecUrl reports packages without rockspec entries", function()
+	local m = Manifest.new(MANIFEST)
+	local url, err = luarocks.getRockspecUrl(m, "some-pkg")
+	test.equal(url, nil)
+	test.truthy(err and err:find("No rockspec entries", 1, true))
+end)
+
 
 
 

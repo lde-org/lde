@@ -6,11 +6,9 @@ import TerminalDemo from "../components/TerminalDemo";
 import { GITHUB_RELEASES_URL, GITHUB_URL } from "../data/info";
 import BenchmarkChart from "../components/BenchmarkChart";
 import ComparisonTable from "../components/ComparisonTable";
-import { getCollection } from "astro:content";
+import { blogNewestFirst } from "../lib/contentOrder";
 
-const posts = (await getCollection("blog")).sort(
-	(a, b) => b.data.published.valueOf() - a.data.published.valueOf(),
-);
+const posts = await blogNewestFirst();
 const latestRelease = posts.find((p) => p.data.title.toLowerCase().startsWith("release"));
 
 const comparison = [

@@ -3,7 +3,6 @@ const path = require("path")
 const ansi = require("ansi")
 const env = require("env")
 const process = require("process")
-const ffi = require("ffi")
 
 const json = require("json")
 const errorsnippet = require("lde.util.errorsnippet")
@@ -20,15 +19,7 @@ local function defaultJobs()
 end
 
 const lde = require("lde-core")
-
-local sleep
-if jit.os == "Windows" then
-	pcall(ffi.cdef, "void Sleep(unsigned long dwMilliseconds);")
-	sleep = function(ms) ffi.C.Sleep(ms) end
-else
-	pcall(ffi.cdef, "int usleep(unsigned int usec);")
-	sleep = function(ms) ffi.C.usleep(ms * 1000) end
-end
+const childPool = require("lde-core.util.childpool")
 
 ---@param pkgDir string
 ---@param live boolean? # false when other writers share the stream (sharded files)
@@ -348,7 +339,7 @@ local function runWatch(filters, coverage)
 		dirty = false
 		while not dirty do
 			for _, watcher in ipairs(watchers) do watcher.poll() end
-			if not dirty then sleep(100) end
+			if not dirty then childPool.sleep(100) end
 		end
 
 		ansi.printf("{cyan}Change detected, running tests...")
@@ -464,97 +455,70 @@ local function test(args)
 		if jobs > 1 and #packages > 1 and not coverage and not lde.isVerbose then
 			const packageWorkers = math.min(#packages, math.max(2, math.floor(jobs / 4)))
 			const fileJobs = math.max(1, math.floor(jobs / packageWorkers))
-			const scratch = path.join(env.tmpdir(), "lde-pkgs-" .. tostring({}):match("0x(%x+)$"))
-			fs.mkdirAll(scratch)
-			const execPath = assert(env.execPath(), "no executable path")
 
-			---@type { name: string, dir: string, child: process.Child?, results: string }[]
-			const running = {}
 			---@type { name: string, dir: string, files: lde.TestFileResult[]?, total: integer, failures: integer, skipped: integer, error: string? }[]
 			const finished = {}
 			const progress = ansi.progress("Running " .. #packages .. " packages", { stream = "stdout" })
 			local finishedTests, finishedFailures = 0, 0
-			local next = 1
 			local hadFailures = false
 			local totalPassed, totalFailures, totalSkipped = 0, 0, 0
 
-			---@param pkg lde.Package
-			---@param index integer
-			---@return { name: string, dir: string, child: process.Child?, results: string }
-			local function startPackage(pkg, index)
-				const resultsFile = path.join(scratch, index .. ".json")
-				local childArgs = { "-C", pkg:getDir(), "test", "--results", resultsFile, "--jobs", tostring(fileJobs) }
-				if lde.global.getDir() ~= lde.global.getUserDir() then
-					childArgs[#childArgs + 1] = "--tree"
-					childArgs[#childArgs + 1] = lde.global.getDir()
-				end
-				for _, f in ipairs(filters) do childArgs[#childArgs + 1] = f end
-				-- Piped and silent: the worker records results, and this process renders
-				-- them (it owns the terminal, so colors and durations are right).
-				local child = process.spawn(execPath, childArgs, { stdout = "pipe", stderr = "pipe" })
-				if not child then
-					fs.write(resultsFile, json.encode({ total = 0, failures = 1, skipped = 0 }))
-				end
-				return { name = pkg:getName(), dir = pkg:getDir(), child = child, results = resultsFile }
-			end
-
-			local function startNext()
-				if next > #packages then return end
-				const entry = startPackage(packages[next], next)
-				running[#running + 1] = entry
-				next += 1
-			end
-
-			local function reapFinished()
-				for i = #running, 1, -1 do
-					const entry = running[i]
-					if not entry.child or entry.child:poll() ~= nil then
-						local output, exitCode = "", nil
-						if entry.child then
-							exitCode = entry.child:poll()
-							local _, stdout, stderr = entry.child:wait()
-							output = (stdout or "") .. (stderr or "")
-						end
-
-						local decoded
-						if fs.exists(entry.results) then
-							const okDecode, parsed = pcall(json.decode, fs.read(entry.results) or "")
-							if okDecode and type(parsed) == "table" then decoded = parsed end
-						end
-						const skipped = (decoded and decoded.skipped) or 0
-						const failures = (decoded and decoded.failures) or (decoded and 0 or 1)
-						const total = (decoded and decoded.total) or 0
-						finishedTests = finishedTests + total - failures
-						finishedFailures = finishedFailures + failures
-						renderPackage(entry.name, entry.dir,
-							(decoded and decoded.testDir) or path.join(entry.dir, "tests"),
-							decoded, output, progress,
-							#finished / #packages, finishedTests, finishedFailures)
-
-						finished[#finished + 1] = {
-							name = entry.name,
-							dir = entry.dir,
-							files = decoded and decoded.files,
-							total = total,
-							failures = failures,
-							skipped = skipped,
-							error = decoded and decoded.error
-								or (not decoded and ("test process failed"
-									.. (exitCode and (" (exit " .. tostring(exitCode) .. ")") or "")
-									.. (output ~= "" and (": " .. output) or ""))
-									or nil),
-						}
-						table.remove(running, i)
+			childPool.run({
+				items = packages,
+				jobs = packageWorkers,
+				pollMs = 5,
+				prefix = "lde-pkgs",
+				---@param pkg lde.Package
+				---@param resultsFile string
+				argvFor = function(pkg, resultsFile)
+					local childArgs = { "-C", pkg:getDir(), "test", "--results", resultsFile, "--jobs", tostring(fileJobs) }
+					if lde.global.getDir() ~= lde.global.getUserDir() then
+						childArgs[#childArgs + 1] = "--tree"
+						childArgs[#childArgs + 1] = lde.global.getDir()
 					end
-				end
-			end
+					for _, f in ipairs(filters) do childArgs[#childArgs + 1] = f end
+					return childArgs
+				end,
+				---@param pkg lde.Package
+				---@param err string?
+				spawnErrorResult = function(pkg, err)
+					return {
+						total = 0,
+						failures = 1,
+						skipped = 0,
+						error = "failed to start test process for " .. pkg:getName() .. ": " .. (err or "spawn failed"),
+					}
+				end,
+				---@param pkg lde.Package
+				---@param decoded table?
+				---@param output string
+				---@param exitCode number?
+				onDone = function(pkg, decoded, output, exitCode)
+					const skipped = (decoded and decoded.skipped) or 0
+					const failures = (decoded and decoded.failures) or (decoded and 0 or 1)
+					const total = (decoded and decoded.total) or 0
+					finishedTests = finishedTests + total - failures
+					finishedFailures = finishedFailures + failures
+					renderPackage(pkg:getName(), pkg:getDir(),
+						(decoded and decoded.testDir) or path.join(pkg:getDir(), "tests"),
+						decoded, output, progress,
+						#finished / #packages, finishedTests, finishedFailures)
 
-			while next <= #packages and #running < packageWorkers do startNext() end
-			while #running > 0 do
-				reapFinished()
-				while next <= #packages and #running < packageWorkers do startNext() end
-				if #running > 0 then sleep(5) end
-			end
+					finished[#finished + 1] = {
+						name = pkg:getName(),
+						dir = pkg:getDir(),
+						files = decoded and decoded.files,
+						total = total,
+						failures = failures,
+						skipped = skipped,
+						error = decoded and decoded.error
+							or (not decoded and ("test process failed"
+								.. (exitCode and (" (exit " .. tostring(exitCode) .. ")") or "")
+								.. (output ~= "" and (": " .. output) or ""))
+								or nil),
+					}
+				end,
+			})
 
 			progress:clear()
 
@@ -572,8 +536,6 @@ local function test(args)
 					if entry.failures > 0 then hadFailures = true end
 				end
 			end
-
-			fs.rmdir(scratch)
 
 			print()
 			printSummary(totalFailures, totalPassed, totalPassed + totalFailures, totalSkipped)

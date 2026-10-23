@@ -5,7 +5,6 @@
 -- runs each against the binary under test.
 
 local runner = require("fuzzer.runner")
-local ansi = require("ansi")
 
 -- Commands that hit the network (publish, upgrade, registry/luarocks
 -- resolution, bare `x`) are excluded so the suite stays hermetic and fast.
@@ -44,19 +43,8 @@ local TAKES_VALUE = {
 	["-C"] = true, ["--tree"] = true,
 }
 
---- Materialize a value shape: static strings stay, functions generate fresh
---- garbage so the rng advances per call.
----@param rng fuzz.Rng
----@param shapes any[]
----@return string
-local function materialize(rng, shapes)
-	local v = rng.pick(shapes)
-	if type(v) == "function" then return v() end
-	return v
-end
-
 local function randomValue(rng)
-	return materialize(rng, {
+	return rng.value({
 		"", "a", "s", "x", "-", "--", "--flag", "--help",
 		"hello world", "日本語", "\27[31m", "{red}", "{bold}x{reset}",
 		"..", ".", "/", "/tmp/x", "C:\\Windows", "~", "~/x",
@@ -75,10 +63,12 @@ local function randomValue(rng)
 	})
 end
 
-local function randomPath(rng)
-	return materialize(rng, {
+---@param rng fuzz.Rng
+---@param ctx { depA: string, depB: string, cliProject: string }
+local function randomPath(rng, ctx)
+	return rng.value({
 		".", "..", "/tmp", "/nonexistent", "src", "target", "",
-		"../deps/dep-a", "../deps/dep-b", "../cli-project",
+		ctx.depA, ctx.depB, ctx.cliProject,
 	})
 end
 
@@ -97,7 +87,7 @@ local LUA_SNIPPETS = {
 }
 
 local function randomLuaCode(rng)
-	return materialize(rng, {
+	return rng.value({
 		function() return rng.pick(LUA_SNIPPETS) end,
 		function() return rng.pick(LUA_SNIPPETS) end,
 		function() return rng.token(rng.int(40) + 1) end,
@@ -105,8 +95,9 @@ local function randomLuaCode(rng)
 end
 
 ---@param rng fuzz.Rng
+---@param ctx { depA: string, depB: string, cliProject: string }
 ---@return { kind: "cmd" | "eval" | "lua", args: string[], timeoutMs: integer, note: string }
-local function generate(rng)
+local function generate(rng, ctx)
 	local roll = rng.int(100)
 	if roll < 12 then
 		return { kind = "eval", args = { "-e", randomLuaCode(rng) }, timeoutMs = 8000, note = "eval" }
@@ -135,7 +126,7 @@ local function generate(rng)
 		local g = rng.pick({ "-C", "--tree", "--version", "-v", "--help", "--update-path", "--setup" })
 		if TAKES_VALUE[g] then
 			table.insert(args, g)
-			table.insert(args, randomPath(rng))
+			table.insert(args, randomPath(rng, ctx))
 		else
 			table.insert(args, g)
 		end
@@ -148,7 +139,7 @@ local function generate(rng)
 	-- point it at the local deps instead.
 	if cmd == "add" then
 		table.insert(args, "--path")
-		table.insert(args, "../deps/dep-a")
+		table.insert(args, ctx.depA)
 	end
 
 	local flags = COMMAND_FLAGS[cmd]
@@ -168,7 +159,7 @@ local function generate(rng)
 	-- Hidden backends need bare args only.
 	if cmd == "__complete" or cmd == "__build-pkg" then
 		args = { cmd }
-		for _ = 1, rng.int(3) do table.insert(args, randomPath(rng)) end
+		for _ = 1, rng.int(3) do table.insert(args, randomPath(rng, ctx)) end
 	end
 
 	-- Long-running commands get a generous deadline.
@@ -179,16 +170,16 @@ end
 ---@param bin string # binary under test
 ---@param rng fuzz.Rng
 ---@param count integer
----@param contexts { cliEmpty: string, cliProject: string }
+---@param ctx { base: string, cliEmpty: string, cliProject: string, depA: string, depB: string }
 ---@param record fun(case: table, cwd: string, res: fuzz.RunResult, outcome: string, ms: number)
-local function run(bin, rng, count, contexts, record)
+local function run(bin, rng, count, ctx, record)
 	for n = 1, count do
-		local case = generate(rng)
-		local cwd = rng.chance(0.5) and contexts.cliEmpty or contexts.cliProject
-		local start = ansi.now()
-		local res = runner.run(bin, case.args, { cwd = cwd, timeoutMs = case.timeoutMs })
-		local ms = (ansi.now() - start) * 1000
-		local outcome = res.timedOut and "timeout" or runner.classify(case.kind, res.exit, res.out)
+		local case = generate(rng, ctx)
+		-- --lua cases reference scripts/* relative to their cwd, which lives in
+		-- the scratch base dir; everything else runs in one of the projects.
+		local project = rng.chance(0.5) and ctx.cliEmpty or ctx.cliProject
+		local cwd = case.kind == "lua" and ctx.base or project
+		local res, outcome, ms = runner.runCase(bin, case, cwd)
 		record(case, cwd, res, outcome, ms)
 	end
 end

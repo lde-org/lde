@@ -1,11 +1,9 @@
 import rss from "@astrojs/rss";
-import { getCollection } from "astro:content";
 import type { APIContext } from "astro";
+import { blogNewestFirst } from "../lib/contentOrder";
 
 export async function GET(context: APIContext) {
-	const posts = (await getCollection("blog")).sort(
-		(a, b) => b.data.published.valueOf() - a.data.published.valueOf(),
-	);
+	const posts = await blogNewestFirst();
 
 	return rss({
 		title: "lde blog",

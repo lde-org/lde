@@ -10,31 +10,22 @@ ARG BASE=debian:bookworm
 FROM ${BASE} AS downloader
 # Build args are referenced as plain ${VAR}: a RUN is handed to /bin/sh as-is,
 # so "$" belongs to the shell. A compose-style "$$" escape is left untouched and
-# expands to the shell's PID, giving
-#   .../download/2913{LDE_VERSION}/lde-linux-2913{ARCH}.zip
-# which 404s (curl exits 22), and the arch test never matches either.
+# expands to the shell's PID, which the fetch script rejects as an architecture.
 ARG LDE_VERSION
 ARG TARGETARCH
+COPY docker/fetch-lde.sh /usr/local/bin/fetch-lde.sh
 RUN set -eu; \
     apt-get update; \
     apt-get install -y --no-install-recommends curl ca-certificates unzip; \
     rm -rf /var/lib/apt/lists/*; \
-    mkdir -p /out; \
-    case "${TARGETARCH}" in \
-        amd64) ARCH=x86-64 ;; \
-        arm64) ARCH=aarch64 ;; \
-        *) echo "unsupported architecture: '${TARGETARCH}'" >&2; exit 1 ;; \
-    esac; \
-    url="https://github.com/lde-org/lde/releases/download/${LDE_VERSION}/lde-linux-${ARCH}.zip"; \
-    echo "fetching ${url}"; \
-    curl -fSL --retry 5 --retry-all-errors -o /tmp/lde.zip "${url}"; \
-    unzip -q /tmp/lde.zip -d /tmp/lde; \
-    install -m755 "/tmp/lde/lde-linux-${ARCH}" /out/lde
+    fetch-lde.sh "${TARGETARCH}"
 
 FROM ${BASE}
 # lde bundles its LuaJIT runtime and native libs (libcurl, libgit2, ...); the
 # toolchain here is for compiling package dependencies (build.lua scripts,
 # rockspecs, luarocks) which shell out to clang/gcc, cmake and ninja.
+# libgcc-s1: the binary has a hard NEEDED libgcc_s.so.1 (unwinding), so declare
+# it rather than relying on clang pulling it in transitively.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         clang \
         cmake \
@@ -42,6 +33,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         make \
         git \
         ca-certificates \
+        libgcc-s1 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=downloader /out/lde /usr/local/bin/lde

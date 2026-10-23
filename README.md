@@ -1,7 +1,7 @@
 <div align="center">
 
 <a href="https://lde.sh/">
-	<img src="./assets/dist/lde-text-nospace.svg" alt="lde logo" width="256" />
+	<img src="./docs/public/lde-text-nospace.svg" alt="lde logo" width="256" />
 </a>
 
 ---

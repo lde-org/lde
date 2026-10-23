@@ -1,4 +1,5 @@
 import { useState, useEffect } from "preact/hooks";
+import { readCache, writeCache } from "../lib/cache";
 
 /** One entry of the registry index (`dist/index.json`). */
 export interface RegistryPackage {
@@ -26,28 +27,6 @@ const CACHE_KEY = "lde-registry-index";
 const CACHE_VERSION = 2;
 const CACHE_TTL = 5 * 60 * 1000;
 
-function loadCached(): RegistryPackage[] | null {
-	try {
-		const raw = localStorage.getItem(CACHE_KEY);
-		if (!raw) return null;
-		const { data, ts, version } = JSON.parse(raw);
-		if (version !== CACHE_VERSION) return null;
-		if (Date.now() - ts > CACHE_TTL) return null;
-		return data;
-	} catch {
-		return null;
-	}
-}
-
-function saveCache(data: RegistryPackage[]) {
-	try {
-		localStorage.setItem(
-			CACHE_KEY,
-			JSON.stringify({ data, ts: Date.now(), version: CACHE_VERSION }),
-		);
-	} catch {}
-}
-
 /** Milliseconds since epoch for a date, or 0 when it is missing/unparseable. */
 export function timeOf(date: string | null | undefined): number {
 	if (!date) return 0;
@@ -55,7 +34,7 @@ export function timeOf(date: string | null | undefined): number {
 	return Number.isNaN(time) ? 0 : time;
 }
 
-function byName(a: RegistryPackage, b: RegistryPackage) {
+export function byName(a: RegistryPackage, b: RegistryPackage) {
 	return a.name.localeCompare(b.name);
 }
 
@@ -78,7 +57,11 @@ export function useRegistry() {
 	const [error, setError] = useState<string | null>(null);
 
 	useEffect(() => {
-		const cached = loadCached();
+		const cached = readCache<RegistryPackage[]>(
+			CACHE_KEY,
+			CACHE_TTL,
+			CACHE_VERSION,
+		);
 		if (cached) {
 			setPackages(cached);
 			setLoading(false);
@@ -95,7 +78,7 @@ export function useRegistry() {
 				// The index is already sorted newest-first; this keeps the list
 				// correct even if a client gets an older payload.
 				const sorted = sortByDate(data, "lastUpdated");
-				saveCache(sorted);
+				writeCache(CACHE_KEY, sorted, CACHE_VERSION);
 				setPackages(sorted);
 				setLoading(false);
 			})

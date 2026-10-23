@@ -6,29 +6,18 @@ import {
 	useCallback,
 } from "preact/hooks";
 import {
+	byName,
 	sortByDate,
 	timeOf,
 	type RegistryPackage,
+	useRegistry,
 } from "../hooks/useRegistry";
-
-interface Package extends RegistryPackage {}
-
-const REGISTRY_URL =
-	"https://raw.githubusercontent.com/lde-org/registry/refs/heads/dist/index.json";
 
 // Curated order for the "Featured" column. Packages not listed here follow alphabetically.
 const FEATURED = ["hood", "cowsay", "dotenv"];
 
 // Rows reserved per column, filled with skeleton placeholders when empty.
 const COLUMN_SLOTS = 10;
-
-function byName(a: Package, b: Package) {
-	return a.name.localeCompare(b.name);
-}
-
-function byLastUpdated(a: Package, b: Package) {
-	return timeOf(b.lastUpdated) - timeOf(a.lastUpdated) || byName(a, b);
-}
 
 // Short relative age ("3d", "5mo", "2y") for a registry date.
 function formatAge(iso: string): string {
@@ -40,7 +29,13 @@ function formatAge(iso: string): string {
 	return `${Math.floor(days / 365)}y`;
 }
 
-function CompactCard({ pkg, date }: { pkg: Package; date?: string | null }) {
+function CompactCard({
+	pkg,
+	date,
+}: {
+	pkg: RegistryPackage;
+	date?: string | null;
+}) {
 	return (
 		<a
 			href={`/registry/${pkg.name}`}
@@ -126,14 +121,14 @@ function Column({
 	date,
 }: {
 	title: string;
-	packages: Package[];
+	packages: RegistryPackage[];
 	loading?: boolean;
 	/** Which date to show on each row. */
-	date?: (pkg: Package) => string | null;
+	date?: (pkg: RegistryPackage) => string | null;
 }) {
 	// Always reserve COLUMN_SLOTS rows so columns stay balanced even when a
 	// section has fewer packages (or none at all) yet.
-	const rows: (Package | null)[] = loading
+	const rows: (RegistryPackage | null)[] = loading
 		? Array.from({ length: COLUMN_SLOTS }, () => null)
 		: [
 				...packages,
@@ -170,11 +165,9 @@ function Column({
 }
 
 export default function Registry() {
-	const [packages, setPackages] = useState<Package[]>([]);
+	const { packages, loading, error } = useRegistry();
 	const [query, setQuery] = useState("");
 	const [activeIdx, setActiveIdx] = useState(0);
-	const [loading, setLoading] = useState(true);
-	const [error, setError] = useState<string | null>(null);
 	const searchRef = useRef<HTMLInputElement>(null);
 	const searchWrapRef = useRef<HTMLDivElement>(null);
 	const listRef = useRef<HTMLUListElement>(null);
@@ -206,47 +199,35 @@ export default function Registry() {
 		return () => document.removeEventListener("mousedown", handler);
 	}, []);
 
-	useEffect(() => {
-		fetch(REGISTRY_URL)
-			.then((r) => {
-				if (!r.ok) throw new Error(`Failed to fetch registry (${r.status})`);
-				return r.json();
-			})
-			.then((data: Package[]) => {
-				setPackages(data.sort(byName));
-				setLoading(false);
-			})
-			.catch((e) => {
-				setError(e.message);
-				setLoading(false);
-			});
-	}, []);
-
 	const searching = query.trim() !== "";
 
 	const filtered = useMemo(() => {
 		const q = query.trim().toLowerCase();
 		if (!q) return [];
-		return packages.filter(
-			(p) =>
-				p.name.toLowerCase().includes(q) ||
-				(p.description ?? "").toLowerCase().includes(q),
-		);
+		return packages
+			.filter(
+				(p) =>
+					p.name.toLowerCase().includes(q) ||
+					(p.description ?? "").toLowerCase().includes(q),
+			)
+			.sort(byName);
 	}, [packages, query]);
 
 	const featured = useMemo(() => {
 		const byNameMap = new Map(packages.map((p) => [p.name, p]));
 		const ordered = FEATURED.map((n) => byNameMap.get(n)).filter(
 			Boolean,
-		) as Package[];
+		) as RegistryPackage[];
 		const rest = packages
 			.filter((p) => !FEATURED.includes(p.name))
 			.sort(byName);
 		return [...ordered, ...rest];
 	}, [packages]);
 
+	// Re-sorting on every keystroke would repeat this work while the list does
+	// not change, so the time-ordered columns stay memoized.
 	const latestUpdated = useMemo(
-		() => [...packages].sort(byLastUpdated),
+		() => sortByDate(packages, "lastUpdated"),
 		[packages],
 	);
 

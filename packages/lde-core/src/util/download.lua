@@ -2,6 +2,7 @@ const fs = require("fs")
 local ffi = require("ffi")
 local path = require("path")
 const util = require("util")
+const consts = require("lde-core.global.consts")
 
 const curl = util.lazy(|| -> require("curl-sys"))
 
@@ -184,9 +185,6 @@ function download.onTransfer(fn)
 	if session then session.onTransfer = fn end
 end
 
---- A server that accepts the connection but never finishes the body would block the batch forever (curl-sys applies no default timeout).
-const DOWNLOAD_TIMEOUT = 120 -- seconds
-
 --- The path this session downloads `destPath` through: private to the process, and
 --- stable for the session so a retry reuses it instead of leaving another leftover.
 ---@param destPath string
@@ -243,7 +241,7 @@ end
 function download.prefetch(url, destPath)
 	if not session then return "done" end
 	if seedFromCache(destPath) then return "done" end
-	local index = session.batch:add(url, { path = partPath(destPath), timeout = DOWNLOAD_TIMEOUT })
+	local index = session.batch:add(url, { path = partPath(destPath), timeout = consts.DOWNLOAD_TIMEOUT })
 	session.pending[destPath] = index
 	return "pending"
 end
@@ -255,7 +253,7 @@ end
 function download.background(url, destPath)
 	if not session then return "done" end
 	if seedFromCache(destPath) then return "done" end
-	local index = session.batch:add(url, { path = partPath(destPath), timeout = DOWNLOAD_TIMEOUT })
+	local index = session.batch:add(url, { path = partPath(destPath), timeout = consts.DOWNLOAD_TIMEOUT })
 	session.pending[destPath] = index
 	session.background[destPath] = true
 	return "pending"

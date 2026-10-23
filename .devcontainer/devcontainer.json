@@ -1,6 +1,5 @@
 {
 	"name": "Lua Package Manager",
-	"build": {
-		"dockerfile": "Dockerfile",
-	},
+	"image": "ghcr.io/lde-org/lde:nightly-debian",
+	"postCreateCommand": "lde --setup"
 }

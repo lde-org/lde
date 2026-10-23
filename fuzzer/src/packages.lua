@@ -8,7 +8,6 @@
 local fs = require("fs")
 local path = require("path")
 local json = require("json")
-local ansi = require("ansi")
 local runner = require("fuzzer.runner")
 
 ---@param rng fuzz.Rng
@@ -23,7 +22,7 @@ end
 ---@param rng fuzz.Rng
 ---@return any
 local function randomJunk(rng)
-	local v = rng.pick({
+	return rng.value({
 		function() return rng.token(10) end,
 		function() return rng.int(10000) end,
 		function() return rng.chance(0.5) end,
@@ -31,14 +30,12 @@ local function randomJunk(rng)
 		function() return { [rng.token(5)] = rng.token(5) } end,
 		function() return nil end,
 	})
-	if type(v) == "function" then return v() end
-	return v
 end
 
 --- Generate a dependency table. Only path/git kinds (offline-safe); dep dirs
 --- are the real scratch deps most of the time so installs succeed.
 ---@param rng fuzz.Rng
----@param ctx { deps: string[], gitRepo: string }
+---@param ctx { depA: string, depB: string, gitRepo: string }
 ---@return table
 local function randomDeps(rng, ctx)
 	local deps = {}
@@ -48,7 +45,7 @@ local function randomDeps(rng, ctx)
 		local info
 		if kind < 5 then
 			-- Real local path dep (installs cleanly).
-			info = { path = path.join("../deps", rng.pick({ "dep-a", "dep-b" })) }
+			info = { path = rng.pick({ ctx.depA, ctx.depB }) }
 		elseif kind < 6 then
 			-- Local git dep (offline clone).
 			info = { git = ctx.gitRepo }
@@ -56,10 +53,10 @@ local function randomDeps(rng, ctx)
 			info = { path = rng.token(20), optional = rng.chance(0.5) }
 		elseif kind < 8 then
 			-- Dep as a plain string (invalid shape) or junk value.
-			deps[alias] = rng.chance(0.5) and "../deps/dep-a" or randomJunk(rng)
+			deps[alias] = rng.chance(0.5) and ctx.depA or randomJunk(rng)
 			goto continue
 		elseif kind < 9 then
-			info = { path = path.join("../deps", rng.pick({ "dep-a", "dep-b" })), features = { rng.token(8) } }
+			info = { path = rng.pick({ ctx.depA, ctx.depB }), features = { rng.token(8) } }
 		else
 			info = { git = "https://nonexistent.invalid/repo.git" }
 		end
@@ -85,7 +82,7 @@ local function randomScripts(rng)
 end
 
 ---@param rng fuzz.Rng
----@param ctx { deps: string[], gitRepo: string }
+---@param ctx { depA: string, depB: string, gitRepo: string }
 ---@return string # raw lde.json content
 local function generateManifest(rng, ctx)
 	local mode = rng.int(10)
@@ -163,7 +160,7 @@ local function generateSrc(rng, dir)
 	end
 	fs.mkdir(srcDir)
 
-	local entry = rng.pick({
+	local entry = rng.value({
 		'return "pkg"',
 		'error("src boom")',
 		'print("hi")',
@@ -179,7 +176,6 @@ local function generateSrc(rng, dir)
 		"return { name = 42 }",
 		function() return rng.token(60) end,
 	})
-	if type(entry) == "function" then entry = entry() end
 	fs.write(path.join(srcDir, "init.lua"), entry)
 
 	-- Occasional extra files: nested dirs, weird extensions, a test file.
@@ -209,19 +205,19 @@ end
 
 ---@param rng fuzz.Rng
 ---@param dir string
-local function generateLockfile(rng, dir)
+---@param ctx { depA: string }
+local function generateLockfile(rng, dir, ctx)
 	if rng.chance(0.5) then return end -- no lockfile
-	local content = rng.pick({
+	local content = rng.value({
 		"{}",
 		'{"version": "1", "dependencies": {}}',
-		'{"version": "1", "dependencies": {"a": {"path": "../deps/dep-a"}}}',
+		json.encode({ version = "1", dependencies = { a = { path = ctx.depA } } }),
 		'{"version": "999", "dependencies": {}}',
 		"garbage",
 		"{\"version\": \"1\", \"dependencies\":",
 		"[[[]]]]]]",
 		function() return rng.bytes(rng.int(30) + 1) end,
 	})
-	if type(content) == "function" then content = content() end
 	fs.write(path.join(dir, "lde.lock"), content)
 end
 
@@ -239,7 +235,7 @@ local COMMANDS = {
 }
 
 ---@param rng fuzz.Rng
----@param ctx { base: string, deps: string[], gitRepo: string }
+---@param ctx { base: string, depA: string, depB: string, gitRepo: string }
 ---@return string[] args
 local function randomCommandArgs(rng, ctx)
 	local cmd = rng.pick(COMMANDS)
@@ -248,7 +244,7 @@ local function randomCommandArgs(rng, ctx)
 		table.insert(args, randomName(rng))
 		if rng.chance(0.5) then
 			table.insert(args, "--path")
-			table.insert(args, rng.pick({ "../deps/dep-a", "../deps/dep-b", rng.token(10) }))
+			table.insert(args, rng.pick({ ctx.depA, ctx.depB, rng.token(10) }))
 		else
 			table.insert(args, "--git")
 			table.insert(args, rng.pick({ ctx.gitRepo, "https://nonexistent.invalid/x.git" }))
@@ -266,7 +262,7 @@ end
 ---@param bin string
 ---@param rng fuzz.Rng
 ---@param count integer
----@param ctx { base: string, deps: string[], gitRepo: string }
+---@param ctx { base: string, depA: string, depB: string, gitRepo: string }
 ---@param record fun(case: table, cwd: string, res: fuzz.RunResult, outcome: string, ms: number)
 local function run(bin, rng, count, ctx, record)
 	for n = 1, count do
@@ -277,20 +273,17 @@ local function run(bin, rng, count, ctx, record)
 		fs.write(path.join(caseDir, "lde.json"), generateManifest(rng, ctx))
 		generateBuildScript(rng, caseDir)
 		generateSrc(rng, caseDir)
-		generateLockfile(rng, caseDir)
+		generateLockfile(rng, caseDir, ctx)
 
 		local args = randomCommandArgs(rng, ctx)
 		local timeoutMs = (args[1] == "compile" or args[1] == "bundle") and 60000 or 15000
-		local start = ansi.now()
-		local res = runner.run(bin, args, { cwd = caseDir, timeoutMs = timeoutMs })
-		local ms = (ansi.now() - start) * 1000
-		local outcome = res.timedOut and "timeout" or runner.classify("cmd", res.exit, res.out)
-
 		local case = { kind = "cmd", args = args, dir = caseDir, timeoutMs = timeoutMs, note = "package" }
+		local res, outcome, ms = runner.runCase(bin, case, caseDir)
 		record(case, caseDir, res, outcome, ms)
 
 		-- Keep failed cases for inspection; drop the rest to bound disk use.
-		if outcome ~= "crash" and outcome ~= "raw_error" and outcome ~= "timeout" then
+		local _, isFinding = runner.evaluate(case.kind, res)
+		if not isFinding then
 			fs.rmdir(caseDir)
 		end
 	end

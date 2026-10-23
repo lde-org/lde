@@ -146,7 +146,7 @@ local function openRockspec(dir, rockspecPath)
 		const platFallbacks = {
 			darwin = { "macosx", "unix" },
 			linux  = { "linux", "unix" },
-			win32  = { "win32", "mingw32" }
+			win32  = { "win32", "mingw32", "windows" }
 		}
 		const jitPlatform = jit.os == "Windows" ? "win32" : jit.os == "OSX" ? "darwin" : "linux"
 
@@ -154,6 +154,15 @@ local function openRockspec(dir, rockspecPath)
 		for _, key in ipairs(platFallbacks[jitPlatform] or { jitPlatform }) do
 			platBuild = spec.build.platforms?.[key]
 			if platBuild then break end
+		end
+
+		-- The command backend runs the commands in ctx.spec.build, so a platform
+		-- override (e.g. a Windows-only install command) must land in the base
+		-- build table.
+		if platBuild then
+			const platCommands = platBuild --[[@as { build_command: string?, install_command: string? }]]
+			if platCommands.build_command then spec.build.build_command = platCommands.build_command end
+			if platCommands.install_command then spec.build.install_command = platCommands.install_command end
 		end
 
 		-- No platform entry means the base build table applies as-is: a partial
@@ -213,7 +222,7 @@ local function openRockspec(dir, rockspecPath)
 	-- path (the monorepo runner starts one per package), so the same rock got two
 	-- different stamps and every process rebuilt it under the last one's reader.
 	-- Bump this when the build output layout or the backend semantics change.
-	const BUILD_STAMP_VERSION = 1
+	const BUILD_STAMP_VERSION = 2
 	local sourceHash = {} ---@type string[]
 	---@param rel string # package-relative path of a file or directory
 	local function stampSource(rel)

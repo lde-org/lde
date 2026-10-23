@@ -64,13 +64,7 @@ function M.getOrInitArchive(url, isOffline, source)
 
 	local dlOpts = { timeout = consts.DOWNLOAD_TIMEOUT }
 	if bar then
-		dlOpts.progress = function(dltotal, dlnow)
-			local ratio = dltotal > 0 ? dlnow / dltotal : nil
-			local info = dltotal > 0
-				and (ansi.formatBytes(dlnow) .. " / " .. ansi.formatBytes(dltotal))
-				or ansi.formatBytes(dlnow)
-			bar:update(ratio, info)
-		end
+		dlOpts.progress = ansi.downloadProgress(bar)
 	end
 
 	-- One retry: GitHub release assets redirect to expiring CDN URLs, which can

@@ -131,10 +131,11 @@ local function updateLuarocksDependency(package, name, depInfo)
 	local manifest, err = util.getManifest()
 	if not manifest then return false, "manifest error: " .. (err or "") end
 
-	const latestUrl = luarocks.getRockspecUrl(manifest --[[@as luarocks.Manifest]], depInfo.luarocks)
+	const rocksName = depInfo.name or depInfo.luarocks
+	const latestUrl = luarocks.getRockspecUrl(manifest --[[@as luarocks.Manifest]], rocksName)
 	if not latestUrl then return false, "not found in luarocks registry" end
 
-	const latest = latestUrl:match(depInfo.luarocks .. "%-([^/]+)%.rockspec$")
+	const latest = latestUrl:match(rocksName .. "%-([^/]+)%.rockspec$")
 	const current = depInfo.version
 
 	if not latest or latest == current then

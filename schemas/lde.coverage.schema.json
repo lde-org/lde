@@ -21,12 +21,7 @@
 			"minimum": 0,
 			"description": "Total covered lines across all packages"
 		},
-		"percent": {
-			"type": "number",
-			"minimum": 0,
-			"maximum": 100,
-			"description": "Overall coverage percentage (totalCovered / totalExecutable * 100); 0 when nothing was executed"
-		},
+		"percent": { "$ref": "#/definitions/percent" },
 		"packages": {
 			"type": "array",
 			"description": "One report per package that loaded in-scope source files",
@@ -34,6 +29,12 @@
 		}
 	},
 	"definitions": {
+		"percent": {
+			"type": "number",
+			"minimum": 0,
+			"maximum": 100,
+			"description": "Coverage percentage: covered / executable * 100 (totalCovered / totalExecutable at report and package level); 0 when nothing was executed"
+		},
 		"packageReport": {
 			"type": "object",
 			"additionalProperties": false,
@@ -56,11 +57,7 @@
 					"type": "integer",
 					"minimum": 0
 				},
-				"percent": {
-					"type": "number",
-					"minimum": 0,
-					"maximum": 100
-				}
+				"percent": { "$ref": "#/definitions/percent" }
 			}
 		},
 		"fileReport": {
@@ -82,12 +79,7 @@
 					"minimum": 0,
 					"description": "Distinct executable lines executed by the test suite"
 				},
-				"percent": {
-					"type": "number",
-					"minimum": 0,
-					"maximum": 100,
-					"description": "covered / executable * 100; 0 when the file has no executable lines"
-				}
+				"percent": { "$ref": "#/definitions/percent" }
 			}
 		}
 	}

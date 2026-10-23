@@ -142,6 +142,24 @@ function Manifest:package(name)
 	return versions
 end
 
+--- Formats one manifest version's rockspec and src URLs.
+---@param name string
+---@param version string
+---@param entries luarocks.Manifest.Entry[]
+---@return string? rockspecUrl
+---@return string? srcUrl
+local function urlsFor(name, version, entries)
+	local hasSrc, hasRockspec = false, false
+	for _, entry in ipairs(entries) do
+		if entry.arch == "src" then hasSrc = true end
+		if entry.arch == "rockspec" then hasRockspec = true end
+	end
+
+	const rockspecUrl = hasRockspec ? string.format("%s/%s-%s.rockspec", ROCKSPEC_BASE, name, version) : nil
+	const srcUrl = hasSrc ? string.format("%s/%s-%s.src.rock", ROCKSPEC_BASE, name, version) : nil
+	return rockspecUrl, srcUrl
+end
+
 ---@param manifest luarocks.Manifest
 ---@param name string
 ---@return table<string, string>? # version -> url
@@ -154,12 +172,8 @@ function luarocks.getRockspecUrls(manifest, name)
 
 	local urls = {}
 	for ver, entries in pairs(versions) do
-		for _, entry in ipairs(entries) do
-			if entry.arch == "rockspec" then
-				urls[ver] = string.format("%s/%s-%s.rockspec", ROCKSPEC_BASE, name, ver)
-				break
-			end
-		end
+		const rockspecUrl = urlsFor(name, ver, entries)
+		if rockspecUrl then urls[ver] = rockspecUrl end
 	end
 
 	if not next(urls) then
@@ -253,45 +267,81 @@ function luarocks.satisfies(ver, op, constraint)
 	return false
 end
 
+--- Versions of `name` matching `constraint`, newest first. `arch` keeps only versions
+--- with that arch entry, before exact/prefix resolution so the filtered set decides.
+---@param manifest luarocks.Manifest
+---@param name string
+---@param constraint string?
+---@param arch string?
+---@return { version: string, entries: luarocks.Manifest.Entry[] }[]? matches
+---@return string? err
+---@return integer constraintCount # parsed comparison constraints; 0 means exact/prefix
+---@return boolean hasPool # the manifest has at least one version matching the arch filter
+local function matching(manifest, name, constraint, arch)
+	local versions, err = manifest:package(name)
+	if not versions then return nil, err, 0, false end
+
+	local pool = versions
+	if arch then
+		pool = {}
+		for ver, entries in pairs(versions) do
+			for _, entry in ipairs(entries) do
+				if entry.arch == arch then
+					pool[ver] = entries
+					break
+				end
+			end
+		end
+	end
+
+	local sorted = {}
+	for ver in pairs(pool) do sorted[#sorted + 1] = ver end
+	table.sort(sorted, |a, b| -> cmpVer(parseVer(a), parseVer(b)) > 0)
+
+	---@type { op: string, ver: string }[]
+	local constraints = {}
+	if constraint and constraint ~= "" then
+		for op, ver in constraint:gmatch("([><=~!]+)%s*([%d%.%-]+)") do
+			constraints[#constraints + 1] = { op = tostring(op), ver = tostring(ver) }
+		end
+
+		if #constraints == 0 then
+			const ver = matchExactOrPrefix(pool, constraint)
+			sorted = ver ? { ver } : {}
+		end
+	end
+
+	const matches = {}
+	for _, ver in ipairs(sorted) do
+		local isMatch = true
+		for _, c in ipairs(constraints) do
+			if not luarocks.satisfies(ver, c.op, c.ver) then
+				isMatch = false
+				break
+			end
+		end
+		if isMatch then matches[#matches + 1] = { version = ver, entries = pool[ver] } end
+	end
+
+	return matches, nil, #constraints, next(pool) ~= nil
+end
+
 ---@param manifest luarocks.Manifest
 ---@param name string
 ---@param constraint string?
 function luarocks.getRockspecUrl(manifest, name, constraint)
-	local urls, err = luarocks.getRockspecUrls(manifest, name)
-	if not urls then return nil, err end
+	const matches, err, constraintCount, hasPool = matching(manifest, name, constraint, "rockspec")
+	if not matches then return nil, err or ("Package not found in luarocks registry: " .. name) end
+	if not hasPool then return nil, "No rockspec entries found for: " .. name end
 
-	local sorted = {}
-	for v in pairs(urls) do sorted[#sorted + 1] = v end
-	table.sort(sorted, |a, b| -> cmpVer(parseVer(a), parseVer(b)) > 0)
-
-	if not constraint or constraint == "" then
-		return urls[sorted[1]]
-	end
-
-	---@type { op: string, ver: string }[]
-	local constraints = {}
-	for op, ver in constraint:gmatch("([><=~!]+)%s*([%d%.%-]+)") do
-		constraints[#constraints + 1] = { op = tostring(op), ver = tostring(ver) }
-	end
-
-	if #constraints == 0 then
-		local v = matchExactOrPrefix(urls, constraint --[[@as string]])
-		if v then return urls[v] end
-		return nil, "Version '" .. constraint .. "' not found for: " .. name
-	end
-
-	for _, v in ipairs(sorted) do
-		local ok = true
-		for _, c in ipairs(constraints) do
-			if not luarocks.satisfies(v, c.op, c.ver) then
-				ok = false
-				break
-			end
+	if #matches == 0 then
+		if constraintCount == 0 then
+			return nil, "Version '" .. (constraint or "") .. "' not found for: " .. name
 		end
-		if ok then return urls[v] end
+		return nil, "No version of '" .. name .. "' satisfies: " .. constraint
 	end
 
-	return nil, "No version of '" .. name .. "' satisfies: " .. constraint
+	return (urlsFor(name, matches[1].version, matches[1].entries))
 end
 
 ---@param urlMap table<string, string>
@@ -307,53 +357,18 @@ end
 ---@return string? srcUrl       -- https://luarocks.org/<name>-<ver>.src.rock (nil if no src entry)
 ---@return string? err
 function luarocks.getBest(manifest, name, constraint)
-	local versions, err = manifest:package(name)
-	if not versions then return nil, nil, nil, err end
+	const matches, err = matching(manifest, name, constraint)
+	if not matches then return nil, nil, nil, err end
 
-	local sorted = {}
-	for v in pairs(versions) do sorted[#sorted + 1] = v end
-	table.sort(sorted, |a, b| -> cmpVer(parseVer(a), parseVer(b)) > 0)
-
-	---@type { op: string, ver: string }[]
-	local constraints = {}
-	if constraint and constraint ~= "" then
-		for op, ver in constraint:gmatch("([><=~!]+)%s*([%d%.%-]+)") do
-			constraints[#constraints + 1] = { op = tostring(op), ver = tostring(ver) }
-		end
-		if #constraints == 0 then
-			local v = matchExactOrPrefix(versions, constraint)
-			if v then sorted = { v } else sorted = {} end
+	for _, match in ipairs(matches) do
+		const rockspecUrl, srcUrl = urlsFor(name, match.version, match.entries)
+		if rockspecUrl or srcUrl then
+			return match.version, rockspecUrl, srcUrl, nil
 		end
 	end
 
-	for _, v in ipairs(sorted) do
-		if #constraints > 0 then
-			local ok = true
-			for _, c in ipairs(constraints) do
-				if not luarocks.satisfies(v, c.op, c.ver) then ok = false; break end
-			end
-			if not ok then goto continue end
-		end
-
-		local entries = versions[v]
-		if entries then
-			local hasSrc, hasRockspec = false, false
-			for _, entry in ipairs(entries) do
-				if entry.arch == "src" then hasSrc = true end
-				if entry.arch == "rockspec" then hasRockspec = true end
-			end
-
-			local rockspecUrl = hasRockspec ? string.format("%s/%s-%s.rockspec", ROCKSPEC_BASE, name, v) : nil
-			local srcUrl = hasSrc ? string.format("%s/%s-%s.src.rock", ROCKSPEC_BASE, name, v) : nil
-			if rockspecUrl or srcUrl then
-				return v, rockspecUrl, srcUrl, nil
-			end
-		end
-
-		::continue::
-	end
-
-	return nil, nil, nil, "No version of '" .. name .. "'" .. (constraint and (" satisfies: " .. constraint) or " found")
+	return nil, nil, nil,
+		"No version of '" .. name .. "'" .. (constraint and (" satisfies: " .. constraint) or " found")
 end
 
 ---@param manifest luarocks.Manifest
@@ -376,49 +391,13 @@ end
 ---@param constraint string?
 ---@return { version: string, rockspecUrl: string?, srcUrl: string? }[]
 function luarocks.listBest(manifest, name, constraint)
-	local versions, _ = manifest:package(name)
-	if not versions then return {} end
-
-	local sorted = {}
-	for v in pairs(versions) do sorted[#sorted + 1] = v end
-	table.sort(sorted, |a, b| -> cmpVer(parseVer(a), parseVer(b)) > 0)
-
-	---@type { op: string, ver: string }[]
-	local constraints = {}
-	if constraint and constraint ~= "" then
-		for op, ver in constraint:gmatch("([><=~!]+)%s*([%d%.%-]+)") do
-			constraints[#constraints + 1] = { op = tostring(op), ver = tostring(ver) }
-		end
-		if #constraints == 0 then
-			local v = matchExactOrPrefix(versions, constraint)
-			if v then sorted = { v } else sorted = {} end
-		end
-	end
+	const matches = matching(manifest, name, constraint)
+	if not matches then return {} end
 
 	const out = {}
-	for _, v in ipairs(sorted) do
-		if #constraints > 0 then
-			local ok = true
-			for _, c in ipairs(constraints) do
-				if not luarocks.satisfies(v, c.op, c.ver) then ok = false; break end
-			end
-			if not ok then goto continue end
-		end
-
-		local entries = versions[v]
-		if entries then
-			local hasSrc, hasRockspec = false, false
-			for _, entry in ipairs(entries) do
-				if entry.arch == "src" then hasSrc = true end
-				if entry.arch == "rockspec" then hasRockspec = true end
-			end
-			out[#out + 1] = {
-				version = v,
-				rockspecUrl = hasRockspec ? string.format("%s/%s-%s.rockspec", ROCKSPEC_BASE, name, v) : nil,
-				srcUrl = hasSrc ? string.format("%s/%s-%s.src.rock", ROCKSPEC_BASE, name, v) : nil,
-			}
-		end
-		::continue::
+	for _, match in ipairs(matches) do
+		const rockspecUrl, srcUrl = urlsFor(name, match.version, match.entries)
+		out[#out + 1] = { version = match.version, rockspecUrl = rockspecUrl, srcUrl = srcUrl }
 	end
 	return out
 end
