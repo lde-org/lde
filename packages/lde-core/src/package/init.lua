@@ -461,13 +461,8 @@ function Package:runScript(name, isCapture, args)
 		opts.stderr = "inherit"
 	end
 
-	local shellBin, shellFlag, isCmd = global.getScriptShell()
-	-- cmd.exe re-parses the line with its own quote rules, so pass the already
-	-- cmd-quoted script string through verbatim instead of the MSVCRT-style
-	-- per-arg escaping process applies on Windows.
-	if isCmd then opts.unsafe = true end
-
 	local cmd = scripts[name]
+	local _, _, isCmd = global.getScriptShell()
 	if args and #args > 0 then
 		local quoted = {}
 		for i = 1, #args do
@@ -476,7 +471,13 @@ function Package:runScript(name, isCapture, args)
 		cmd = cmd .. " " .. table.concat(quoted, " ")
 	end
 
-	const code, stdout, stderr = process.exec(shellBin, { shellFlag, cmd }, opts)
+	-- cmd.exe re-parses the line with its own quote rules, so pass it through
+	-- verbatim instead of the MSVCRT-style per-arg escaping process applies on
+	-- Windows; getShellExec also compensates for /c's quote stripping.
+	const shellBin, shellArgs, isCmdShell = global.getShellExec(cmd)
+	if isCmdShell then opts.unsafe = true end
+
+	const code, stdout, stderr = process.exec(shellBin, shellArgs, opts)
 	if code == 0 then return true, stdout or stderr end
 	-- process.exec returns empty strings (not nil) when the child wrote nothing;
 	-- treat those as absent so a silent failure reports its exit code.

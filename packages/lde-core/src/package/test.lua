@@ -287,15 +287,22 @@ local function runCommandTests(package, testSpec, flags, luaBin, luaDir, luaPath
 		exitCode = process.exec(luaExec, argv, { cwd = package.dir, env = childEnv, stdout = "inherit", stderr = "inherit" })
 	else
 		if type(command) ~= "string" then return failure("Malformed rockspec: 'command' expects a string") end
-		const shellBin, shellFlag, isCmd = lde.global.getScriptShell()
-		const opts = { cwd = package.dir, env = childEnv, stdout = "inherit", stderr = "inherit" }
-		-- cmd.exe re-parses the line with its own quote rules: pass it verbatim.
-		if isCmd then opts.unsafe = true end
+		local _, _, isCmd = lde.global.getScriptShell()
 		local cmdLine = subst(command)
 		for _, flag in ipairs(flags) do
 			cmdLine = cmdLine .. " " .. lde.Package.quoteShellArg(flag, isCmd)
 		end
-		exitCode = process.exec(shellBin, { shellFlag, cmdLine }, opts)
+		-- cmd.exe re-parses the line with its own quote rules: the helper wraps
+		-- it so /c cannot strip the quotes around the executable path.
+		const shellBin, shellArgs, isCmdShell = lde.global.getShellExec(cmdLine)
+		const opts = { cwd = package.dir, env = childEnv, stdout = "inherit", stderr = "inherit" }
+		if isCmdShell then opts.unsafe = true end
+		exitCode = process.exec(shellBin, shellArgs, opts)
+		if exitCode ~= 0 then
+			-- A failed spawn reports 1 with no output at all, so the exit code alone
+			-- cannot say what went wrong; name the command that produced it.
+			print("command backend exited " .. tostring(exitCode) .. ": " .. cmdLine)
+		end
 	end
 
 	const failed = exitCode ~= 0

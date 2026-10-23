@@ -166,6 +166,24 @@ function M.getScriptShell()
 	return "sh", "-c", false
 end
 
+--- The executable and argv that run one shell command line. On Windows the line
+--- is wrapped in its own quote pair and `/s` is passed: cmd.exe strips the first
+--- and last quote of the line after /c, which would otherwise eat the opening
+--- quote of a quoted executable path (`$(LUA)` expands to one) and leave a
+--- command name cmd cannot resolve. /s makes that stripping unconditional, so
+--- the wrapped line always arrives verbatim.
+---@param cmdLine string
+---@return string bin
+---@return string[] argv
+---@return boolean isCmd # true when the shell is cmd.exe (double-quote escaping)
+function M.getShellExec(cmdLine)
+	local shellBin, shellFlag, isCmd = M.getScriptShell()
+	if isCmd then
+		return shellBin, { "/s", shellFlag, '"' .. cmdLine .. '"' }, true
+	end
+	return shellBin, { shellFlag, cmdLine }, false
+end
+
 --- Absolute path of the POSIX shell, for `#!` lines: a shebang is resolved by the
 --- kernel without PATH, and not every system keeps a shell at /bin/sh — Termux on
 --- Android keeps it under $PREFIX/bin, so a hardcoded /bin/sh silently fails to

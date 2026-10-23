@@ -37,10 +37,17 @@ end
 
 --- Waits for the lock guarding `target`, then holds it until release().
 ---@param target string # directory whose build is serialized
+---@param opts { createParent: boolean? }? # false: never create the parent chain (a cache dir being retired must not be resurrected); returns nil when it is missing
 ---@return lde.install.Lock?
-function lock.acquire(target)
+function lock.acquire(target, opts)
 	const lockDir = target .. ".lde-lock"
-	fs.mkdirAll(path.dirname(lockDir))
+	if opts and opts.createParent == false then
+		-- A missing parent means the tree was retired: creating it would leave an
+		-- empty cache entry that resolution would later trust. Nothing to hold.
+		if not fs.isdir(path.dirname(lockDir)) then return nil end
+	else
+		fs.mkdirAll(path.dirname(lockDir))
+	end
 	const startedAt = os.time()
 	while true do
 		if fs.mkdir(lockDir) then

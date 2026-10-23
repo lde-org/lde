@@ -118,3 +118,21 @@ repository = {
 	test.equal(#rebuilt, 1)
 	test.equal(rebuilt[1], "gamma")
 end)
+
+--
+-- The build lock must not resurrect a retired cache entry
+--
+
+test.it("acquiring a build lock for a retired cache entry does not recreate it", function()
+	-- The compiler retry acquires the in-place build lock before retiring a
+	-- broken archive. If the lock created its parent chain, a concurrent retire
+	-- left an empty directory that resolution then trusted as a valid cache
+	-- entry ("No rockspec found in src rock", intermittently, on every retry).
+	const lock = require("lde-core.package.install.lock")
+	fs.mkdirAll(path.join(userDir, "tar"))
+	local archiveDir = path.join(userDir, "tar", "retired-entry")
+
+	const handle = lock.acquire(path.join(archiveDir, "pkg", "target", "pkg"), { createParent = false })
+	test.equal(handle, nil, "there is nothing to lock when the entry is gone")
+	test.falsy(fs.exists(archiveDir), "lock acquisition must not recreate the retired cache entry")
+end)

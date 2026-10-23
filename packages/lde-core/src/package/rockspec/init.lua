@@ -203,10 +203,17 @@ local function openRockspec(dir, rockspecPath)
 	pkg.hasBuildDeps = buildType ~= "builtin" and buildType ~= "module" and buildType ~= "none"
 		or next(nativeModules) ~= nil
 
-	-- The stamp covers the rockspec text, the lde runtime version (build logic may
-	-- change with an upgrade), the compile target, and the rock's own sources: the
-	-- rockspec text alone does not change when a user edits src/, and serving the
-	-- stale build output on the next `lde run`/`lde test` is a silent trap.
+	-- The stamp covers the rockspec text, the build-logic version, the compile
+	-- target, and the rock's own sources: the rockspec text alone does not change
+	-- when a user edits src/, and serving stale build output on the next `lde
+	-- run`/`lde test` is a silent trap.
+	--
+	-- The running lde version cannot be used here: the shared tar cache is built
+	-- by processes whose project may or may not have lde.version on its package
+	-- path (the monorepo runner starts one per package), so the same rock got two
+	-- different stamps and every process rebuilt it under the last one's reader.
+	-- Bump this when the build output layout or the backend semantics change.
+	const BUILD_STAMP_VERSION = 1
 	local sourceHash = {} ---@type string[]
 	---@param rel string # package-relative path of a file or directory
 	local function stampSource(rel)
@@ -233,8 +240,9 @@ local function openRockspec(dir, rockspecPath)
 	for _, src in pairs(installLibFiles) do stampSource(src) end
 	for _, copyDir in ipairs(spec.build and spec.build.copy_directories or {}) do stampSource(copyDir) end
 	table.sort(sourceHash)
-	const buildStamp = util.hash(content .. "\n" .. tostring(lde.global.currentVersion)
-		.. "\n" .. lde.global.getTargetKey() .. "\n" .. table.concat(sourceHash, ","))
+	const buildStamp = util.hash(content .. "\n" .. tostring(BUILD_STAMP_VERSION)
+		.. "\n" .. tostring(jit.version) .. "\n" .. lde.global.getTargetKey()
+		.. "\n" .. table.concat(sourceHash, ","))
 
 	---@param outputDir string
 	---@return boolean?, string?, lde.install.DeferredBuild?
@@ -244,6 +252,15 @@ local function openRockspec(dir, rockspecPath)
 		const stampFile = path.join(outputDir, ".lde-built")
 		if fs.exists(stampFile) and fs.read(stampFile) == buildStamp then
 			return true
+		end
+
+		-- Rebuilding (new rockspec/source): start from a clean output dir, exactly
+		-- once, here, rather than on every pkg:build() call. A concurrent loader
+		-- keeps the tree it resolved, and a second build only re-enters after the
+		-- new stamp is written.
+		if fs.isdir(outputDir) then
+			fs.rmdir(outputDir)
+			fs.mkdirAll(outputDir)
 		end
 
 		local extVars = {}

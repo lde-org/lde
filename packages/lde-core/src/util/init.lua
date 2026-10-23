@@ -5,8 +5,19 @@ const path = require("path")
 const json = require("json")
 const rocked = require("rocked")
 const ansi = require("ansi")
+const ffi = require("ffi")
 local lde = require("lde-core")
 local luarocks = require("luarocks")
+
+--- Millisecond sleep (fs has no timer): Windows exposes Sleep, POSIX usleep.
+local sleep
+if jit.os == "Windows" then
+	pcall(ffi.cdef, "void Sleep(unsigned long dwMilliseconds);")
+	sleep = function(ms) ffi.C.Sleep(ms) end
+else
+	pcall(ffi.cdef, "int usleep(unsigned int usec);")
+	sleep = function(ms) ffi.C.usleep(ms * 1000) end
+end
 
 const curl = require("util").lazy(function() return require("curl-sys") end)
 const Archive = require("util").lazy(function() return require("archive") end)
@@ -424,14 +435,17 @@ function util.openLuarocksPackage(name, version, isOffline)
 	if arch == "src" then
 		local archiveDir = lde.global.getOrInitArchive(url --[[@as string]], isOffline)
 		-- .src.rock extracts with the rockspec at root; source is a subdir or the nested archive.
-		local pkg, err = util.openSrcRock(archiveDir --[[@as string]], url --[[@as string]])
-		if not pkg and not isOffline then
-			-- A src rock without its rockspec is not a valid cache entry: a killed run
-			-- or a directory another process retired leaves one behind, and trusting it
-			-- fails every later run. Drop it and materialize once more.
-			util.retireCacheDir(archiveDir --[[@as string]])
-			archiveDir = lde.global.getOrInitArchive(url --[[@as string]], isOffline)
+		-- A src rock without its rockspec is not a valid cache entry: a killed run, or
+		-- a directory another process retired between the extraction and this scan,
+		-- leaves one behind. Drop it and materialize again, a few times: parallel
+		-- shards resolve the same compiler at once, so the window can recur.
+		local pkg, err
+		for attempt = 1, 3 do
 			pkg, err = util.openSrcRock(archiveDir --[[@as string]], url --[[@as string]])
+			if pkg or isOffline then break end
+			util.retireCacheDir(archiveDir --[[@as string]])
+			sleep(50 * attempt)
+			archiveDir = lde.global.getOrInitArchive(url --[[@as string]], isOffline)
 		end
 		if not pkg then
 			return nil, nil, "Failed to load src rock '" .. name .. "': " .. (err or "")
@@ -492,9 +506,9 @@ function util.retireCacheDir(dir)
 		fs.rmdir(retired)
 		return
 	end
-	-- A reader holds it open (Windows) or the rename crossed devices: delete in
-	-- place as a last resort rather than leaving the cache entry behind.
-	fs.rmdir(dir)
+	-- A reader holds it open (Windows) or the rename crossed devices. Deleting the
+	-- tree in place here is what makes readers fail with "No rockspec found in src
+	-- rock", so leave it: the caller re-materializes and reports loudly instead.
 end
 
 --- A .src.rock holds the rockspec plus either an unpacked tree or a nested archive; the nested archive is authoritative and extracted over stray subdirs from interrupted runs.

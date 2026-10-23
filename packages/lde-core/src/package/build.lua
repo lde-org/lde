@@ -4,6 +4,7 @@ const ansi = require("ansi")
 const json = require("json")
 const util = require("util")
 const process = require("process")
+const ffi = require("ffi")
 local env = require("env")
 const lde = require("lde-core")
 const teal = require("lde-core.teal")
@@ -20,6 +21,16 @@ const alreadyBuilt = {}
 -- Stamp of every build input (size/mtime/rapidhash of src/, lde.json, build.lua) letting the build script be skipped when none changed; the compile target is part of the stamp, so switching --target rebuilds.
 const STAMP_FILE = ".lde-build-stamp"
 local STAMP_VERSION = 1
+
+--- Millisecond sleep while waiting for a spawned native compile (fs has no timer).
+local sleep
+if jit.os == "Windows" then
+	pcall(ffi.cdef, "void Sleep(unsigned long dwMilliseconds);")
+	sleep = function(ms) ffi.C.Sleep(ms) end
+else
+	pcall(ffi.cdef, "int usleep(unsigned int usec);")
+	sleep = function(ms) ffi.C.usleep(ms * 1000) end
+end
 
 ---@param package lde.Package
 ---@return table<string, string> relative path -> absolute path
@@ -96,11 +107,22 @@ end
 
 ---@param package lde.Package
 ---@param destinationPath string?
+---@param opts { async: boolean? }? # async: return the deferred native builder (install scheduler only)
 ---@return boolean hasBuilt # true when a build script actually ran (and finished)
 ---@return lde.install.DeferredBuild? deferred # finalizer for async native builds (rockspec builtin or a build.lua subprocess)
-local function buildPackage(package, destinationPath)
+local function buildPackage(package, destinationPath, opts)
 	if currentlyBuilding[package] then return false end
 	currentlyBuilding[package] = true
+
+	-- A concurrent cache retirement can remove the source tree between opening the
+	-- package and building it. Creating the build lock then recreates an empty
+	-- directory under the tar cache, which later resolutions would trust as a
+	-- valid cache entry (and fail with "No rockspec found in src rock").
+	if not fs.isdir(package:getDir()) then
+		currentlyBuilding[package] = nil
+		lde.error.raise("Package source directory disappeared while building '"
+			.. package:getName() .. "' (concurrent cache cleanup)")
+	end
 
 	-- The re-entrancy guard must be cleared even on failure: a leaked guard makes every later build silently no-op (pcall reports the returned false as success).
 	-- Serialize builds of the same destination across processes: a cached rock is
@@ -133,7 +155,12 @@ local function buildPackage(package, destinationPath)
 		end
 
 		if inputsChanged then
-			if fs.isdir(dest) then fs.rmdir(dest) end
+			-- build.lua packages are stamped here, so a rebuild starts clean. A
+			-- rockspec buildfn is stamped by its own .lde-built check and cleans
+			-- its output dir only when it actually rebuilds: deleting it here made
+			-- every concurrent build wipe a tree another process was loading, which
+			-- surfaced as "invalid ELF header" or a vanished native module.
+			if package.buildfn == nil and fs.isdir(dest) then fs.rmdir(dest) end
 
 			-- Key by target too: a cross compile after a native build in the same process must not skip the rebuild.
 			const buildKey = dest .. "\n" .. lde.global.getTargetKey()
@@ -258,10 +285,18 @@ local function buildPackage(package, destinationPath)
 			lock.release(buildLock)
 			return finalized, ferr
 		end
-		return hasBuilt, deferred
+		-- Only the install scheduler overlaps builds; every other caller reads the
+		-- tree right after, so it must wait for the linker instead of racing it.
+		if opts?.async then return hasBuilt, deferred end
+		while deferred.poll() == nil do sleep(20) end
+		local built, buildErr = deferred.finalize()
+		if not built then
+			lde.error.raise("Build failed for '" .. package:getName() .. "': " .. tostring(buildErr))
+		end
+		return hasBuilt, nil
 	end
 	lock.release(buildLock)
-	return hasBuilt, deferred
+	return hasBuilt, nil
 end
 
 --- Used by the install fast path so `lde sync`/`lde run` rebuild a path dep whose source changed even when the root .installed marker still matches (a missing stamp counts as stale).
@@ -274,7 +309,7 @@ local function isStale(package, dest)
 end
 
 ---@class lde.packageBuild
----@field build fun(package: lde.Package, destinationPath: string?): boolean?, lde.install.DeferredBuild?
+---@field build fun(package: lde.Package, destinationPath: string?, opts: { async: boolean? }?): boolean?, lde.install.DeferredBuild?
 ---@field isStale fun(package: lde.Package, destinationPath: string): boolean
 
 ---@type lde.packageBuild

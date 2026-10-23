@@ -193,7 +193,7 @@ local function new(ctx)
 		-- The unit spans the real build: from pkg:build() to the deferred
 		-- finalizer (spawned compiles draining) or the synchronous return.
 		const buildHandle = timings.active() ? timings.start("build " .. alias, "build") : nil
-		local hasBuilt, deferred = pkg:build(dest)
+		local hasBuilt, deferred = pkg:build(dest, { async = true })
 		if deferred then
 			pending[#pending + 1] = { alias = alias, build = deferred, handle = buildHandle, lock = deferred.lock }
 		else

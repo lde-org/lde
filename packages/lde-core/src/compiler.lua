@@ -36,7 +36,9 @@ local function mkdirp(dir)
 	fs.mkdir(dir)
 end
 
---- Retries once after clearing the cached archive, in case the first resolution produced a broken install.
+--- Resolves, builds and loads the compiler once, retrying after retiring the
+--- cached src rock when the install or load failed (a concurrent shard may have
+--- cleaned or rewritten the shared cache entry under us).
 ---@return lua.State
 function Compiler:ensure()
 	if self.state then return self.state end
@@ -48,24 +50,38 @@ function Compiler:ensure()
 			errorMod.raise("Failed to resolve the " .. self.spec.name .. " compiler (luarocks:" .. self.spec.packageName .. "): " .. (err or "unknown error"))
 		end ---@cast pkg -nil
 
-		pkg:build()
-		pkg:installDependencies()
+		-- A build can fail when another process retires the shared cache tree
+		-- mid-build; the retry below re-resolves it, so treat that like a load
+		-- failure instead of aborting the shard. build is synchronous here: it
+		-- waits for any spawned native compile before we require the tree.
+		const ok, stateOrErr, loadErr = pcall(function()
+			pkg:build()
+			pkg:installDependencies()
 
-		const luaPath, luaCPath = require("lde-core.package.run").getLuaPaths(pkg)
-		local st = lua.new()
-		const g = st:globals() --[[@as { package: { path: string?, cpath: string? } }]]
-		g.package.path = luaPath
-		g.package.cpath = luaCPath
+			const luaPath, luaCPath = require("lde-core.package.run").getLuaPaths(pkg)
+			local st = lua.new()
+			const g = st:globals() --[[@as { package: { path: string?, cpath: string? } }]]
+			g.package.path = luaPath
+			g.package.cpath = luaCPath
 
-		if pcall(st.eval, st, self.spec.loadExpr) then
-			self.state = st
-			self.chunk = st:load(self.spec.driver, "@lde-" .. self.spec.packageName .. "-compile")
+			const loaded, evalErr = pcall(st.eval, st, self.spec.loadExpr)
+			if not loaded then
+				st:close()
+				return nil, evalErr
+			end
 			return st
+		end)
+
+		if ok and stateOrErr ~= nil then
+			self.state = stateOrErr
+			self.chunk = stateOrErr:load(self.spec.driver, "@lde-" .. self.spec.packageName .. "-compile")
+			return stateOrErr
 		end
-		st:close()
 
 		if attempt == 2 then
-			errorMod.raise("The " .. self.spec.name .. " compiler installed but failed to load")
+			const reason = ok and (loadErr or "unknown error") or stateOrErr
+			errorMod.raise("The " .. self.spec.name .. " compiler could not be installed or loaded: "
+				.. tostring(reason))
 		end
 
 		const url = ldeUtil.resolveLuarocksSource(self.spec.packageName)
@@ -75,11 +91,15 @@ function Compiler:ensure()
 			-- other processes (parallel test shards, another terminal) may be reading
 			-- the same directory — a recursive delete lets them scan a half-emptied
 			-- tree and fail with "No rockspec found in src rock". The build lock
-			-- serializes with the in-place build those processes do in this directory.
+			-- serializes with an in-place build, but only when the entry still exists:
+			-- acquiring it creates the parent chain, and resurrecting a retired cache
+			-- dir would leave an empty entry that resolution trusts as complete.
 			const lock = require("lde-core.package.install.lock")
-			const handle = lock.acquire(path.join(archiveDir, self.spec.packageName, "target", self.spec.packageName))
+			const handle = lock.acquire(path.join(archiveDir, self.spec.packageName, "target", self.spec.packageName),
+				{ createParent = false })
 			ldeUtil.retireCacheDir(archiveDir)
-			fs.delete(archiveDir .. ".archive")
+			-- The downloaded .archive is left in place: it is a shared cache entry and
+			-- another process may be extracting those same bytes right now.
 			lock.release(handle)
 		end
 	end
