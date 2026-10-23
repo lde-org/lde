@@ -6,6 +6,7 @@ const lde = require("lde-core")
 const global = require("lde-core.global")
 
 const fs = require("fs")
+const json = require("json")
 const env = require("env")
 const path = require("path")
 const process = require("process")
@@ -52,6 +53,28 @@ local function resolveDir(dir)
 	end
 
 	return cwd, nil
+end
+
+--- The manifest spells a dependency's source package name `package`, while the
+--- runtime config (install, update, resolve, lockfile merge) reads `name`.
+--- Normalize every dependency entry once, on load, so there is a single
+--- canonical key downstream. An explicit `name` wins when both are present.
+---@param conf lde.Package.Config
+local function normalizeDependencyAliases(conf)
+	if type(conf) ~= "table" then return end
+
+	for _, deps in pairs({ conf.dependencies, conf.devDependencies }) do
+		if type(deps) == "table" then
+			for _, dep in pairs(deps) do
+				if type(dep) == "table" and dep.package ~= nil then
+					-- Decoded tables carry an ordered key slice; plain assignment
+					-- would drop `name` and emit `package = null` on re-encode.
+					if dep.name == nil then json.addField(dep, "name", dep.package) end
+					json.removeField(dep, "package")
+				end
+			end
+		end
+	end
 end
 
 function Package:getDir() return self.dir end
@@ -218,6 +241,7 @@ function Package.openLDE(dir)
 	if not decoded then
 		return nil, "Failed to parse " .. configPath .. ": " .. derr
 	end
+	normalizeDependencyAliases(decoded)
 	if type(decoded.name) ~= "string" or decoded.name == "" then
 		return nil, "Missing or invalid 'name' in " .. configPath
 	end
@@ -309,6 +333,8 @@ function Package:readConfig()
 		lde.error.raise("Failed to parse " .. configPath .. ": " .. derr)
 	end ---@cast decoded -nil
 
+	normalizeDependencyAliases(decoded)
+
 	const newConfig = Package.Config.new(decoded)
 	self.cachedConfig = newConfig
 	self.cachedConfigMtime = s.modifyTime
@@ -352,18 +378,21 @@ local function mergeLockedEntry(depInfo, lockedEntry)
 	return merged
 end
 
-function Package:getDependencies()
-	local config = self:readConfig()
-	local deps = config.dependencies or {}
-
+--- Overlays lockfile pins onto a set of config dependency entries.
+--- A lockfile whose pins don't match the manifest's current declarations must
+--- not override them: the dep re-resolves from lde.json and the next install
+--- rewrites the lockfile (see Lockfile:isStale). Without a usable lockfile the
+--- manifest entries are returned as-is.
+---@param deps table<string, lde.Package.Config.Dependency>
+---@param config lde.Package.Config
+---@return table<string, lde.Package.Config.Dependency>
+local function mergedWithLockfile(self, deps, config)
 	local lockfile = self:readLockfile()
-	-- A lockfile whose pins don't match the manifest's current declarations
-	-- must not override them: the dep re-resolves from lde.json and the next
-	-- install rewrites the lockfile (see Lockfile:isStale).
 	if not lockfile or lockfile:isStale(config) then return deps end
 
-	-- Prefer locked versions (which have pinned commits) over lde.json,
-	-- but preserve config-only flags (optional, features) that aren't stored in the lockfile
+	-- Prefer locked versions (which have pinned commits) over lde.json, but
+	-- preserve config-only flags (optional, features) that aren't stored in
+	-- the lockfile.
 	local merged = {}
 	for name, depInfo in pairs(deps) do
 		local lockedEntry = lockfile:getDependency(name)
@@ -376,26 +405,14 @@ function Package:getDependencies()
 	return merged
 end
 
+function Package:getDependencies()
+	const config = self:readConfig()
+	return mergedWithLockfile(self, config.dependencies or {}, config)
+end
+
 function Package:getDevDependencies()
-	local config = self:readConfig()
-	local deps = config.devDependencies or {}
-
-	local lockfile = self:readLockfile()
-	if not lockfile or lockfile:isStale(config) then return deps end
-
-	-- Prefer locked versions (which have pinned commits) over lde.json, but
-	-- preserve config-only flags (optional, features) that aren't stored in the
-	-- lockfile — mirroring getDependencies().
-	local merged = {}
-	for name, depInfo in pairs(deps) do
-		local lockedEntry = lockfile:getDependency(name)
-		if lockedEntry then
-			merged[name] = mergeLockedEntry(depInfo, lockedEntry)
-		else
-			merged[name] = depInfo
-		end
-	end
-	return merged
+	const config = self:readConfig()
+	return mergedWithLockfile(self, config.devDependencies or {}, config)
 end
 
 function Package:getName()

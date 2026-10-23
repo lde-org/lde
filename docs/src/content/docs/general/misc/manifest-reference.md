@@ -327,10 +327,10 @@ Every dependency spec accepts these optional fields:
 | ---------- | ---------------------------------------------------------------------------------------- |
 | `optional` | If `true`, the dependency is only installed when enabled by a feature (see [features](#features)). |
 | `features` | Feature flags to enable for this dependency. See [optional dependencies](/docs/package-manager/features/optional-dependencies). |
-| `package`  | The actual package name at the source, when it differs from the require key (aliasing).  |
-| `rockspec` | Path to a `.rockspec` file relative to the dependency directory, for rockspec-based dependencies. |
+| `package`  | The actual package name at the source, when it differs from the require key (aliasing). Accepted by every dependency type, including `luarocks` (where it takes precedence over `luarocks` as the source name). |
+| `rockspec` | Path to a `.rockspec` file relative to the dependency directory, for `path`, `git`, registry, and `archive` dependencies. A `luarocks` entry always resolves its rockspec from luarocks.org. |
 
-`package` is how git dependencies point at a specific package inside a monorepo repository, and how local/registry/archive dependencies resolve under an alias:
+`package` is how git dependencies point at a specific package inside a monorepo repository, and how registry and luarocks dependencies resolve under an alias. A `path` or `archive` entry records the source name in the lockfile:
 
 ```json
 {
@@ -342,6 +342,8 @@ Every dependency spec accepts these optional fields:
 	}
 }
 ```
+
+Inside lde, `package` is normalized to the canonical internal `name` field when the manifest is loaded. Write `package` in the manifest; `name` is internal only and the schema rejects it.
 
 ### `devDependencies`
 

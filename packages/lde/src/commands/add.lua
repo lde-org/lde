@@ -188,7 +188,10 @@ local function add(args)
 	if gitLockEntry then
 		json.addField(lockfile.raw.dependencies, name, gitLockEntry)
 	end
-	lockfile:setManifestHash(lde.Lockfile.manifestHash(config))
+	-- Hash the canonical view install compares against: `package` aliases are
+	-- normalized to `name` on read, so the raw decoded table would differ.
+	p.cachedConfig, p.cachedConfigMtime = nil, nil
+	lockfile:setManifestHash(lde.Lockfile.manifestHash(p:readConfig()))
 	lockfile:save()
 
 	fs.delete(path.join(p:getModulesDir(), ".installed"))
