@@ -3,7 +3,6 @@ const path           = require("path")
 local env            = require("env")
 const ffi            = require("ffi")
 const json           = require("json")
-const util           = require("util")
 local lua            = require("lua-sys")
 const process        = require("process")
 local ansi           = require("ansi")
@@ -13,16 +12,8 @@ const teal           = require("lde-core.teal")
 const moonscript     = require("lde-core.moonscript")
 local lde            = require("lde-core")
 const rocked         = require("rocked")
-
--- Poll interval for the sharded scheduler (the children do the waiting).
-local sleep
-if jit.os == "Windows" then
-	pcall(ffi.cdef, "void Sleep(unsigned long dwMilliseconds);")
-	sleep = function(ms) ffi.C.Sleep(ms) end
-else
-	pcall(ffi.cdef, "int usleep(unsigned int usec);")
-	sleep = function(ms) ffi.C.usleep(ms * 1000) end
-end
+const childPool      = require("lde-core.util.childpool")
+const stamp          = require("lde-core.util.stamp")
 
 ---@class lde.TestFileResult
 ---@field file    string
@@ -479,58 +470,20 @@ local function runRockspecTests(package, filters, coverage)
 	}
 end
 
----@class lde.TestsStampFile
----@field size number
----@field mtime number
----@field hash string
-
 --- Records size/mtime/hash of every file under tests/ so the copy refreshes only on real change, mirroring build.lua's build-input stamping.
 const TEST_STAMP_FILE = ".lde-tests-stamp"
 local TEST_STAMP_VERSION = 1
 
----@param stampPath string
----@return table<string, lde.TestsStampFile>
-local function readTestsStamp(stampPath)
-	local content = fs.read(stampPath)
-	if not content then return {} end
-	local ok, decoded = pcall(json.decode, content)
-	if not ok or type(decoded) ~= "table" or decoded.version ~= TEST_STAMP_VERSION or type(decoded.files) ~= "table" then
-		return {}
-	end
-	return decoded.files
-end
-
 ---@param testDir string
----@param stored table<string, lde.TestsStampFile>
+---@param stored table<string, lde.StampFile>
 ---@return boolean hasChanged
----@return table<string, lde.TestsStampFile> current
+---@return table<string, lde.StampFile> current
 local function checkTestsInputs(testDir, stored)
-	local current = {}
-	local hasChanged = false
+	const entries = {}
 	for _, rel in ipairs(fs.scan(testDir, "**")) do
-		const relKey = rel:gsub("\\", "/")
-		const abs = path.join(testDir, rel)
-		const stat = fs.stat(abs)
-		if not stat then
-			hasChanged = true
-			goto continue
-		end
-		local size, mtime = tonumber(stat.size) or 0, tonumber(stat.modifyTime) or 0
-		const prev = stored[relKey]
-		if prev and prev.size == size and prev.mtime == mtime then
-			current[relKey] = prev
-		else
-			local content = fs.read(abs)
-			local hash = content and util.hash(content) or ""
-			hasChanged = hasChanged or not prev or prev.hash ~= hash
-			current[relKey] = { size = size, mtime = mtime, hash = hash }
-		end
-		::continue::
+		entries[rel:gsub("\\", "/")] = path.join(testDir, rel)
 	end
-	for relKey in pairs(stored) do
-		if not current[relKey] then hasChanged = true end
-	end
-	return hasChanged, current
+	return stamp.check(entries, stored)
 end
 
 --- Runs every test file in its own `lde test --shard-file` process so a suite's
@@ -547,45 +500,8 @@ end
 ---@param status boolean? # draw the live line (off when a parent captures this output)
 ---@return lde.TestResults
 local function runSharded(testFiles, package, jobs, reporter, status)
-	const execPath = assert(env.execPath(), "no executable path")
-	const scratch = path.join(env.tmpdir(), "lde-shards-" .. tostring({}):match("0x(%x+)$"))
-	fs.mkdirAll(scratch)
-
-	---@param relPath string
-	---@param index integer
-	---@return process.Child?, string # child (nil when it could not start), result file
-	local function start(relPath, index)
-		const resultFile = path.join(scratch, index .. ".json")
-		local args = { "test", "--shard-file", relPath, "--shard-results", resultFile }
-		-- A --tree run must keep every shard on the same tree.
-		if lde.global.getDir() ~= lde.global.getUserDir() then
-			args[#args + 1] = "--tree"
-			args[#args + 1] = lde.global.getDir()
-		end
-		-- The shard records results and stays quiet; this process renders them, so the
-		-- output is written by whoever owns the terminal (colors and ordering intact).
-		local child, err = process.spawn(execPath, args, { stdout = "pipe", stderr = "pipe" })
-		if not child then
-			fs.write(resultFile, json.encode({
-				files = {},
-				error = "failed to start test shard for " .. relPath .. ": " .. (err or "spawn failed"),
-			}))
-		end
-		return child, resultFile
-	end
-
-	---@type { rel: string, child: process.Child?, resultFile: string }[]
-	const running = {}
 	---@type table<string, { results: lde.test.Result[]?, error: string? }>
 	const shards = {}
-	local next = 1
-
-	local function startNext()
-		if next > #testFiles then return end
-		local child, resultFile = start(testFiles[next], next)
-		running[#running + 1] = { rel = testFiles[next], child = child, resultFile = resultFile }
-		next += 1
-	end
 
 	const progress = status and #testFiles > 1
 		and ansi.progress("Running " .. #testFiles .. " test files", { stream = "stdout" })
@@ -631,57 +547,61 @@ local function runSharded(testFiles, package, jobs, reporter, status)
 		end
 	end
 
-	local function reapFinished()
-		for i = #running, 1, -1 do
-			const entry = running[i]
-			if not entry.child or entry.child:poll() ~= nil then
-				local output, exitCode = "", nil
-				if entry.child then
-					exitCode = entry.child:poll()
-					local _, stdout, stderr = entry.child:wait()
-					output = (stdout or "") .. (stderr or "")
-				end
-
-				local decoded
-				if fs.exists(entry.resultFile) then
-					const okDecode, parsed = pcall(json.decode, fs.read(entry.resultFile) or "")
-					if okDecode and type(parsed) == "table" then decoded = parsed end
-				end
-				if decoded then
-					shards[entry.rel] = {
-						results = decoded.files?.[1]?.results,
-						error = decoded.files?.[1]?.error ?? decoded.error,
-					}
-				else
-					-- The exit code is the only clue when a shard dies without writing
-					-- results or printing anything (a crash, or an os.exit).
-					shards[entry.rel] = {
-						error = "test shard failed" .. (exitCode and (" (exit " .. tostring(exitCode) .. ")") or "")
-							.. (output ~= "" and (": " .. output) or ""),
-					}
-					-- A shard that died printed nothing useful; surface its output instead.
-					output = output ~= "" and ("  " .. entry.rel .. "\n" .. output .. "\n") or ""
-				end
-				finishedFiles += 1
-				for _, r in ipairs(shards[entry.rel].results or {}) do
-					finishedTests += 1
-					if not r.ok then finishedFailures += 1 end
-				end
-				flushBlock(entry.rel, shards[entry.rel], output)
-				table.remove(running, i)
+	childPool.run({
+		items = testFiles,
+		jobs = jobs,
+		pollMs = 2,
+		prefix = "lde-shards",
+		---@param relPath string
+		---@param resultFile string
+		argvFor = function(relPath, resultFile)
+			local args = { "test", "--shard-file", relPath, "--shard-results", resultFile }
+			-- A --tree run must keep every shard on the same tree.
+			if lde.global.getDir() ~= lde.global.getUserDir() then
+				args[#args + 1] = "--tree"
+				args[#args + 1] = lde.global.getDir()
 			end
-		end
-	end
-
-	while next <= #testFiles and #running < jobs do startNext() end
-	while #running > 0 do
-		reapFinished()
-		while next <= #testFiles and #running < jobs do startNext() end
-		if #running > 0 then sleep(2) end
-	end
+			return args
+		end,
+		---@param relPath string
+		---@param err string?
+		spawnErrorResult = function(relPath, err)
+			return {
+				files = {},
+				error = "failed to start test shard for " .. relPath .. ": " .. (err or "spawn failed"),
+			}
+		end,
+		---@param relPath string
+		---@param decoded table?
+		---@param output string
+		---@param exitCode number?
+		onDone = function(relPath, decoded, output, exitCode)
+			if decoded then
+				const first = decoded.files and decoded.files[1]
+				shards[relPath] = {
+					results = first and first.results,
+					error = (first and first.error) or decoded.error,
+				}
+			else
+				-- The exit code is the only clue when a shard dies without writing
+				-- results or printing anything (a crash, or an os.exit).
+				shards[relPath] = {
+					error = "test shard failed" .. (exitCode and (" (exit " .. tostring(exitCode) .. ")") or "")
+						.. (output ~= "" and (": " .. output) or ""),
+				}
+				-- A shard that died printed nothing useful; surface its output instead.
+				output = output ~= "" and ("  " .. relPath .. "\n" .. output .. "\n") or ""
+			end
+			finishedFiles += 1
+			for _, r in ipairs(shards[relPath].results or {}) do
+				finishedTests += 1
+				if not r.ok then finishedFailures += 1 end
+			end
+			flushBlock(relPath, shards[relPath], output)
+		end,
+	})
 
 	if progress then progress:clear() end
-	fs.rmdir(scratch)
 
 	local files         = {}
 	local totalTests    = 0
@@ -779,7 +699,8 @@ local function runTests(package, reporter, filters, opts)
 		testsDir = targetTestsDir
 	elseif package:hasBuildScript() then
 		local stampPath = path.join(targetTestsDir, TEST_STAMP_FILE)
-		local hasChanged, current = checkTestsInputs(testDir, readTestsStamp(stampPath))
+		const stored = stamp.read(stampPath, TEST_STAMP_VERSION)
+		local hasChanged, current = checkTestsInputs(testDir, stored)
 		if hasChanged or not fs.exists(targetTestsDir) then
 			if fs.islink(targetTestsDir) then
 				fs.delete(targetTestsDir)

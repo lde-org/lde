@@ -9,12 +9,22 @@
 				{ "type": "string" }
 			]
 		},
-		"dependencyFeatures": {
-			"features": {
-				"type": "array",
-				"items": { "$ref": "#/definitions/featureFlag" },
-				"description": "Feature flags to enable for this dependency"
-			}
+		"featureList": {
+			"type": "array",
+			"items": { "$ref": "#/definitions/featureFlag" },
+			"description": "Feature flags to enable for this dependency"
+		},
+		"optionalFlag": {
+			"type": "boolean",
+			"description": "If true, the dependency is not required for the project to run"
+		},
+		"packageAlias": {
+			"type": "string",
+			"description": "Actual package name at the source, when it differs from the require key (aliasing)"
+		},
+		"rockspecPath": {
+			"type": "string",
+			"description": "Path to the rockspec file relative to the dependency directory"
 		},
 		"dependencyObject": {
 			"type": "object",
@@ -28,23 +38,10 @@
 								"type": "string",
 								"description": "Local filesystem path to dependency"
 							},
-							"package": {
-								"type": "string",
-								"description": "Actual package name at the path, when aliasing (key is the require name)"
-							},
-							"rockspec": {
-								"type": "string",
-								"description": "Path to the rockspec file relative to the dependency directory"
-							},
-							"features": {
-								"type": "array",
-								"items": { "$ref": "#/definitions/featureFlag" },
-								"description": "Feature flags to enable for this dependency"
-							},
-							"optional": {
-								"type": "boolean",
-								"description": "If true, the dependency is not required for the project to run"
-							}
+							"package": { "$ref": "#/definitions/packageAlias" },
+							"rockspec": { "$ref": "#/definitions/rockspecPath" },
+							"features": { "$ref": "#/definitions/featureList" },
+							"optional": { "$ref": "#/definitions/optionalFlag" }
 						},
 						"additionalProperties": false
 					},
@@ -63,23 +60,10 @@
 								"type": "string",
 								"description": "Git commit hash to pin"
 							},
-							"package": {
-								"type": "string",
-								"description": "Actual package name in the repository, when aliasing (key is the require name)"
-							},
-							"rockspec": {
-								"type": "string",
-								"description": "Path to the rockspec file relative to the dependency directory"
-							},
-							"features": {
-								"type": "array",
-								"items": { "$ref": "#/definitions/featureFlag" },
-								"description": "Feature flags to enable for this dependency"
-							},
-							"optional": {
-								"type": "boolean",
-								"description": "If true, the dependency is not required for the project to run"
-							}
+							"package": { "$ref": "#/definitions/packageAlias" },
+							"rockspec": { "$ref": "#/definitions/rockspecPath" },
+							"features": { "$ref": "#/definitions/featureList" },
+							"optional": { "$ref": "#/definitions/optionalFlag" }
 						},
 						"additionalProperties": false
 					},
@@ -90,19 +74,10 @@
 								"type": "string",
 								"description": "Registry package version or range to install, e.g. '^1.2.3', '1.2' or '>=1.2 <2'"
 							},
-							"package": {
-								"type": "string",
-								"description": "Actual package name in the registry, when aliasing (key is the require name)"
-							},
-							"features": {
-								"type": "array",
-								"items": { "$ref": "#/definitions/featureFlag" },
-								"description": "Feature flags to enable for this dependency"
-							},
-							"optional": {
-								"type": "boolean",
-								"description": "If true, the dependency is not required for the project to run"
-							}
+							"package": { "$ref": "#/definitions/packageAlias" },
+							"rockspec": { "$ref": "#/definitions/rockspecPath" },
+							"features": { "$ref": "#/definitions/featureList" },
+							"optional": { "$ref": "#/definitions/optionalFlag" }
 						},
 						"additionalProperties": false
 					},
@@ -117,15 +92,9 @@
 								"type": "string",
 								"description": "Optional version constraint e.g. '>= 1.0'"
 							},
-							"features": {
-								"type": "array",
-								"items": { "$ref": "#/definitions/featureFlag" },
-								"description": "Feature flags to enable for this dependency"
-							},
-							"optional": {
-								"type": "boolean",
-								"description": "If true, the dependency is not required for the project to run"
-							}
+							"package": { "$ref": "#/definitions/packageAlias" },
+							"features": { "$ref": "#/definitions/featureList" },
+							"optional": { "$ref": "#/definitions/optionalFlag" }
 						},
 						"additionalProperties": false
 					},
@@ -136,23 +105,10 @@
 								"type": "string",
 								"description": "URL to an archive (.zip, .tar.gz, .tar.bz2, etc.)"
 							},
-							"package": {
-								"type": "string",
-								"description": "Actual package name in the archive, when aliasing (key is the require name)"
-							},
-							"rockspec": {
-								"type": "string",
-								"description": "Path to the rockspec file relative to the dependency directory"
-							},
-							"features": {
-								"type": "array",
-								"items": { "$ref": "#/definitions/featureFlag" },
-								"description": "Feature flags to enable for this dependency"
-							},
-							"optional": {
-								"type": "boolean",
-								"description": "If true, the dependency is not required for the project to run"
-							}
+							"package": { "$ref": "#/definitions/packageAlias" },
+							"rockspec": { "$ref": "#/definitions/rockspecPath" },
+							"features": { "$ref": "#/definitions/featureList" },
+							"optional": { "$ref": "#/definitions/optionalFlag" }
 						},
 						"additionalProperties": false
 					}

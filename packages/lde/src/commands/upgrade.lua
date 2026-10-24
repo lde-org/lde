@@ -125,13 +125,7 @@ local function upgrade(args)
 
 	const dlOk, dlErr = curl.download(downloadUrl, tempZipLocation, {
 		url = downloadUrl,
-		progress = function(dltotal, dlnow)
-			local ratio = dltotal > 0 ? (dlnow / dltotal) : nil
-			const info = dltotal > 0
-				and (ansi.formatBytes(dlnow) .. " / " .. ansi.formatBytes(dltotal))
-				or ansi.formatBytes(dlnow)
-			bar:update(ratio, info)
-		end
+		progress = ansi.downloadProgress(bar)
 	})
 	if not dlOk then
 		bar:fail("Downloading " .. artifactName)

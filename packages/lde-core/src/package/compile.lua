@@ -1,25 +1,15 @@
 const sea = require("sea")
 const fs = require("fs")
-const path = require("path")
 
 const features = require("lde-core.package.features")
+
+const nativeext = require("lde-core.package.nativeext")
 
 const lde = require("lde-core")
 
 const timings = require("lde-core.util.timings")
 
 const bundlePackage = require("lde-core.package.bundle")
-
----@param fileName string
----@param exts string[]
-local function matchNativeExt(fileName, exts)
-	for _, ext in ipairs(exts) do
-		if fileName:match("%." .. ext .. "$") then
-			return ext
-		end
-	end
-	return nil
-end
 
 ---@param package lde.Package
 ---@param targetName? string # release target to cross-compile for (e.g. "windows-x86-64"); nil = native
@@ -40,19 +30,8 @@ local function compilePackage(package, targetName)
 	-- The whole pipeline (build.lua, rockspec native modules, sea.compile) reads the current target so native dependencies are built for the target, not the host.
 	lde.global.setTarget(target)
 
-	local nativeExts
-	if target then
-		if target.platform == "windows" then
-			nativeExts = { "dll" }
-		elseif target.platform == "macos" then
-			nativeExts = { "so", "dylib" }
-		else
-			nativeExts = { "so" }
-		end
-	else
-		nativeExts = jit.os == "Windows" and { "dll" }
-			or (jit.os == "OSX" and { "so", "dylib" } or { "so" })
-	end
+	-- Cross-compiling selects the target's suffixes; a native build selects the host's.
+	const nativeExts = nativeext.extsFor(target ? target.platform : nativeext.hostPlatform())
 
 	const ok, result = pcall(function()
 		const rootBuild = timings.active()
@@ -80,45 +59,16 @@ local function compilePackage(package, targetName)
 		end
 
 		local sharedLibs = {}
-		local modulesDir = package:getModulesDir()
 
 		-- Same feature globs as the Lua half of the bundle, so a feature can drop a native backend as well as the Lua driving it.
-		const excludesFor = features.resolverFor(package)
-
-		for entry in fs.readdir(modulesDir) do
-			local p = path.join(modulesDir, entry.name)
-			if entry.name == "tests" and package:getName() ~= "tests" then
-				-- Test code must never end up embedded; a package *named* "tests" has its own module dir at target/tests, so keep it.
-				goto continue
-			end
-
-			const excludes = excludesFor(entry.name)
-
-			if not fs.isdir(p) then
-				local ext = matchNativeExt(entry.name, nativeExts)
-				if ext and not features.isExcluded(entry.name, excludes) then
-					local content = fs.read(p)
-					if not content then lde.error.raise("Could not read file: " .. p) end
-					local moduleName = entry.name:gsub("%." .. ext .. "$", "")
-					table.insert(sharedLibs, { name = moduleName, content = content })
-				end
-				goto continue
-			end
-
-			for _, relativePath in ipairs(fs.scan(p, "**")) do
-				local ext = matchNativeExt(relativePath, nativeExts)
-				if ext and not features.isExcluded(relativePath, excludes) then
-					const absPath = path.join(p, relativePath)
-					local content = fs.read(absPath)
-					if not content then lde.error.raise("Could not read file: " .. absPath) end
-
-					local moduleName = string.gsub(relativePath, path.separator, "."):gsub("%." .. ext .. "$", "")
-					moduleName = moduleName ~= "" and (entry.name .. "." .. moduleName) or entry.name
-					table.insert(sharedLibs, { name = moduleName, content = content })
-				end
-			end
-
-			::continue::
+		for _, file in ipairs(nativeext.scan(package:getModulesDir(), {
+			exts = nativeExts,
+			rootName = package:getName(),
+			excludesFor = features.resolverFor(package),
+		})) do
+			local content = fs.read(file.path)
+			if not content then lde.error.raise("Could not read file: " .. file.path) end
+			table.insert(sharedLibs, { name = file.name, content = content })
 		end
 
 		-- sea.compile raises plain strings, surfaced as clean user-facing errors below, not "lde crashed".

@@ -194,6 +194,44 @@ test.it("Package:getDependencies returns empty table when none defined", functio
 	test.equal(test.count(deps), 0)
 end)
 
+test.it("getDependencies normalizes the manifest's `package` alias into `name`", function()
+	local dir = makePackageDir("alias-pkg", {
+		name = "alias-pkg",
+		version = "0.1.0",
+		dependencies = {
+			json = { version = "1.0.0", package = "json-parser" },
+			-- An explicit internal `name` wins over the manifest alias.
+			tools = { path = "../tools", name = "tools-core", package = "ignored" }
+		}
+	})
+
+	local deps = lde.Package.open(dir):getDependencies()
+	test.equal(deps.json.name, "json-parser")
+	test.falsy(deps.json.package, "package must not leak into the internal config")
+	test.equal(deps.tools.name, "tools-core")
+	test.falsy(deps.tools.package)
+end)
+
+test.it("readConfig normalizes `package` when the manifest changes on disk", function()
+	local dir = makePackageDir("alias-reload-pkg")
+	local pkg = assert(lde.Package.open(dir))
+
+	fs.write(path.join(dir, "lde.json"), json.encode({
+		name = "alias-reload-pkg",
+		version = "0.1.0",
+		dependencies = {
+			json = { version = "1.0.0", package = "json-parser" }
+		}
+	}))
+	-- mtime granularity can hide a same-second rewrite from the cache check.
+	pkg.cachedConfigMtime = -1
+
+	local config = pkg:readConfig()
+	test.equal(config.dependencies.json.name, "json-parser")
+	test.falsy(config.dependencies.json.package)
+end)
+
+
 test.it("Package:getDevDependencies returns devDependencies from config", function()
 	local dir = makePackageDir("devdeps-pkg", {
 		name = "devdeps-pkg",

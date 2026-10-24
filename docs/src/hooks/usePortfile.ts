@@ -1,4 +1,5 @@
 import { useState, useEffect } from "preact/hooks";
+import { readCache, writeCache } from "../lib/cache";
 
 export interface Portfile {
 	name: string;
@@ -17,39 +18,20 @@ function cacheKey(name: string) {
 	return `lde-portfile:${name}`;
 }
 
-function loadCached(name: string): Portfile | null {
-	try {
-		const raw = localStorage.getItem(cacheKey(name));
-		if (!raw) return null;
-		const { data, ts } = JSON.parse(raw);
-		if (Date.now() - ts > CACHE_TTL) return null;
-		return data;
-	} catch {
-		return null;
-	}
-}
-
-function saveCache(name: string, data: Portfile) {
-	try {
-		localStorage.setItem(
-			cacheKey(name),
-			JSON.stringify({ data, ts: Date.now() }),
-		);
-	} catch {}
-}
-
 function portfileUrl(name: string) {
 	return `https://raw.githubusercontent.com/lde-org/registry/master/packages/${name}.json`;
 }
 
 export function usePortfile(name: string) {
 	const [portfile, setPortfile] = useState<Portfile | null>(() =>
-		loadCached(name),
+		readCache<Portfile>(cacheKey(name), CACHE_TTL),
 	);
-	const [loading, setLoading] = useState(() => loadCached(name) === null);
+	const [loading, setLoading] = useState(
+		() => readCache<Portfile>(cacheKey(name), CACHE_TTL) === null,
+	);
 
 	useEffect(() => {
-		const cached = loadCached(name);
+		const cached = readCache<Portfile>(cacheKey(name), CACHE_TTL);
 		if (cached) {
 			setPortfile(cached);
 			setLoading(false);
@@ -60,7 +42,7 @@ export function usePortfile(name: string) {
 			.then((r) => (r.ok ? r.json() : null))
 			.then((data: Portfile | null) => {
 				if (data) {
-					saveCache(name, data);
+					writeCache(cacheKey(name), data);
 					setPortfile(data);
 				}
 				setLoading(false);

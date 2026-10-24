@@ -2,6 +2,10 @@ const util = {}
 
 const rapidhash = require("rapidhash")
 
+-- Same source the `path` module uses, so ldeHome() joins exactly like
+-- path.join() without taking a dependency on it.
+local separator = package.config:sub(1, 1)
+
 ---@param str string
 function util.dedent(str)
 	local lines = {}
@@ -34,6 +38,20 @@ end
 ---@param s string
 function util.hash(s)
 	return rapidhash.hex(s)
+end
+
+--- The lde home directory: `LDE_HOME` when set (its value is the lde dir
+--- itself), otherwise `~/.lde` under the first nonempty of HOME/USERPROFILE.
+--- When neither is set, fall back to a relative `.lde` rather than a root-level
+--- path. Shared by the lde-core dir layout (which also places the registry tree)
+--- and sea's LuaJIT dist cache so both agree on one home.
+function util.ldeHome()
+	const ldeHome = os.getenv("LDE_HOME")
+	if ldeHome and ldeHome ~= "" then return ldeHome end
+	local home = os.getenv("HOME")
+	if not home or home == "" then home = os.getenv("USERPROFILE") end
+	if not home or home == "" then return ".lde" end
+	return home .. separator .. ".lde"
 end
 
 ---@generic T

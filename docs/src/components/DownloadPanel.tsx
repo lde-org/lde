@@ -1,6 +1,7 @@
 import { useState, useEffect } from "preact/hooks";
 import { GITHUB_RELEASES_URL } from "../data/info";
 import { highlightFile } from "../lib/highlight";
+import { CopyButton } from "./CopyButton";
 
 const TerminalIcon = () => (
 	<svg
@@ -45,37 +46,6 @@ const DockerIcon = () => (
 		<path d="M3 7l9-4 9 4-9 4-9-4z" />
 		<path d="M3 12l9 4 9-4" />
 		<path d="M3 17l9 4 9-4" />
-	</svg>
-);
-const CopyIcon = () => (
-	<svg
-		xmlns="http://www.w3.org/2000/svg"
-		width="15"
-		height="15"
-		viewBox="0 0 24 24"
-		fill="none"
-		stroke="currentColor"
-		stroke-width="2"
-		stroke-linecap="round"
-		stroke-linejoin="round"
-	>
-		<rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
-		<path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
-	</svg>
-);
-const CheckIcon = () => (
-	<svg
-		xmlns="http://www.w3.org/2000/svg"
-		width="15"
-		height="15"
-		viewBox="0 0 24 24"
-		fill="none"
-		stroke="currentColor"
-		stroke-width="2.5"
-		stroke-linecap="round"
-		stroke-linejoin="round"
-	>
-		<polyline points="20 6 9 17 4 12" />
 	</svg>
 );
 
@@ -244,24 +214,6 @@ function detectArch(platformId: string) {
 	return "x86-64";
 }
 
-function CopyButton({ text }: { text: string }) {
-	const [copied, setCopied] = useState(false);
-	return (
-		<button
-			type="button"
-			class="cursor-pointer shrink-0 ml-2 text-black/30 dark:text-white/30 hover:text-black/70 dark:hover:text-white/70 transition-colors"
-			onClick={async () => {
-				await navigator.clipboard.writeText(text);
-				setCopied(true);
-				setTimeout(() => setCopied(false), 1500);
-			}}
-			aria-label="Copy"
-		>
-			{copied ? <CheckIcon /> : <CopyIcon />}
-		</button>
-	);
-}
-
 export default function DownloadPanel() {
 	const [platform, setPlatform] = useState("linux");
 	const [arch, setArch] = useState("x86-64");
@@ -369,7 +321,10 @@ export default function DownloadPanel() {
 									<code class="text-gray-800 dark:text-white flex-1 min-w-0 overflow-x-auto whitespace-nowrap">
 										{cmd}
 									</code>
-									<CopyButton text={cmd} />
+									<CopyButton
+										getText={() => cmd}
+										className="shrink-0 ml-2 text-black/30 dark:text-white/30 hover:text-black/70 dark:hover:text-white/70 transition-colors"
+									/>
 								</div>
 								{m.note && (
 									<p class="text-xs text-black/40 dark:text-white/35">
@@ -393,7 +348,10 @@ export default function DownloadPanel() {
 								class="hljs flex-1 min-w-0 whitespace-pre text-gray-800 dark:text-white"
 								dangerouslySetInnerHTML={{ __html: dockerHtml ?? dockerSnippet }}
 							/>
-							<CopyButton text={dockerSnippet} />
+							<CopyButton
+								getText={() => dockerSnippet}
+								className="shrink-0 ml-2 text-black/30 dark:text-white/30 hover:text-black/70 dark:hover:text-white/70 transition-colors"
+							/>
 						</div>
 					</div>
 				)}

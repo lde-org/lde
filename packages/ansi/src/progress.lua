@@ -388,6 +388,21 @@ local function formatBytes(bytes)
 	return string.format("%.2f GB", bytes / (1024 * 1024 * 1024))
 end
 
+-- curl progress adapter: the (dltotal, dlnow) callback that renders one of the
+-- download bars. dltotal is 0 when the server sends no Content-Length, so the
+-- bar stays indeterminate and only the transferred byte count is shown.
+---@param bar ansi.Progress
+---@return fun(dltotal: number, dlnow: number)
+local function downloadProgress(bar)
+	return function(dltotal, dlnow)
+		const ratio = dltotal > 0 ? dlnow / dltotal : nil
+		const info = dltotal > 0
+			and (formatBytes(dlnow) .. " / " .. formatBytes(dltotal))
+			or formatBytes(dlnow)
+		bar:update(ratio, info)
+	end
+end
+
 const M = {}
 
 M.progress = progress
@@ -395,5 +410,6 @@ M.installProgress = installProgress
 M.formatBytes = formatBytes
 M.formatElapsed = formatElapsed
 M.supportsEmoji = supportsEmoji
+M.downloadProgress = downloadProgress
 
 return M

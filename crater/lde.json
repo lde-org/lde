@@ -2,9 +2,21 @@
 	"name": "crater",
 	"version": "0.1.0",
 	"dependencies": {
-		"process": { "version": "^0.1.1" },
-		"fs": { "version": "^0.2.0" },
-		"path": { "version": "^0.1.0" },
-		"ansi": { "path": "../packages/ansi" }
+		"process": {
+			"version": "^0.1.1"
+		},
+		"fs": {
+			"version": "^0.2.0"
+		},
+		"path": {
+			"version": "^0.1.0"
+		},
+		"ansi": {
+			"path": "../packages/ansi"
+		},
+		"json": {
+			"commit": "3d170b54416dc432669e35040e454167c75b9b2c",
+			"git": "https://github.com/lde-org/json"
+		}
 	}
 }

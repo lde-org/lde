@@ -4,36 +4,6 @@ local process = require("process")
 local ansi = require("ansi")
 local fs = require("fs")
 
----@type fun(): number
-local now
-if ffi.os == "Windows" then
-	ffi.cdef [[
-		typedef union { struct { uint32_t lo, hi; }; uint64_t val; } LARGE_INTEGER;
-		int QueryPerformanceCounter(LARGE_INTEGER *lpPerformanceCount);
-		int QueryPerformanceFrequency(LARGE_INTEGER *lpFrequency);
-	]]
-	local freq = ffi.new("LARGE_INTEGER")
-	ffi.C.QueryPerformanceFrequency(freq)
-	local f = tonumber(freq.val)
-
-	now = function()
-		local t = ffi.new("LARGE_INTEGER")
-		ffi.C.QueryPerformanceCounter(t)
-		return tonumber(t.val) * 1e9 / f
-	end
-else
-	ffi.cdef [[
-		typedef struct { long tv_sec; long tv_nsec; } timespec;
-		int clock_gettime(int clk_id, timespec *tp);
-	]]
-
-	now = function()
-		local t = ffi.new("timespec")
-		ffi.C.clock_gettime(1, t) -- CLOCK_MONOTONIC = 1
-		return tonumber(t.tv_sec) * 1e9 + tonumber(t.tv_nsec)
-	end
-end
-
 -- Short sleep for the memory sampling loop.
 local sleep
 if ffi.os == "Windows" then
@@ -205,9 +175,9 @@ local function bench(label, opts)
 	local times, peaks = {}, {}
 	for i = 1, runs do
 		if opts.prepare then opts.prepare() end
-		local start = now()
+		local start = ansi.now()
 		local code, err, peak = runOnce()
-		local elapsed = (now() - start) / 1e9
+		local elapsed = ansi.now() - start
 		if code ~= 0 then
 			p:fail(label .. " run " .. i .. "/" .. runs .. " failed: " .. failureMsg(code, err))
 			return nil, nil
@@ -290,65 +260,75 @@ end
 -- stdout silenced, stderr piped so failure messages can be reported.
 local shh = { stdout = "null", stderr = "pipe" }
 
+-- Tool commands and how each names a rock for install.
+---@class bench.Tool
+---@field bin string
+---@field rockPrefix string
+
+---@type table<string, bench.Tool>
+local TOOLS = {
+	lde = { bin = "lde", rockPrefix = "rocks:" },
+	luarocks = { bin = "luarocks", rockPrefix = "" },
+	lx = { bin = "lx", rockPrefix = "" },
+}
+
+---@class bench.Case
+---@field label string
+---@field rock string
+---@field warmup integer
+---@field runs integer
+---@field isReset boolean? # wipe the tree before warmup/runs
+---@field isLxNoPrompt boolean? # lx asks before repeat installs unless passed --no-prompt
+
+-- Run counts match the reference hyperfine benchmark parameters:
+-- cold installs warmup 0 runs 5, warm installs warmup 2 runs 10.
+---@type bench.Case[]
+local CASES = {
+	{ label = "install busted (cold)", rock = "busted", warmup = 0, runs = 5, isReset = true },
+	{ label = "install busted (warm)", rock = "busted", warmup = 2, runs = 10, isLxNoPrompt = true },
+	{ label = "build C rock (luafilesystem)", rock = "luafilesystem", warmup = 0, runs = 5, isReset = true },
+}
+
+--- Build the install argv for one tool and case.
+---@param tool string
+---@param treeDir string
+---@param case bench.Case
+---@return string[]
+local function installArgv(tool, treeDir, case)
+	local argv = { "--tree", treeDir, "install", TOOLS[tool].rockPrefix .. case.rock }
+	if case.isLxNoPrompt and tool == "lx" then
+		table.insert(argv, 1, "--no-prompt")
+	end
+	return argv
+end
+
 ---@param tool string  -- "lde" | "luarocks" | "lx"
 ---@param tmpdir string
 local function runBenchmarks(tool, tmpdir)
 	ansi.printf("\n{bold}=== %s ==={reset}", tool)
 
 	local treeDir = tmpdir .. (tool == "lde" and "/lde" or "/rocks")
+	local bin = TOOLS[tool].bin
 
-	-- Run counts match the reference hyperfine benchmark parameters:
-	-- cold installs warmup 0 runs 5, warm installs warmup 2 runs 10.
-	bench("install busted (cold)", {
-		tool = tool,
-		warmup = 0,
-		runs = 5,
-		prepare = function()
-			fs.rmdir(treeDir)
-		end,
-		spawn = function()
-			if tool == "lde" then
-				return process.spawn("lde", { "--tree", treeDir, "install", "rocks:busted" }, shh)
-			elseif tool == "luarocks" then
-				return process.spawn("luarocks", { "--tree", treeDir, "install", "busted" }, shh)
-			elseif tool == "lx" then
-				return process.spawn("lx", { "--tree", treeDir, "install", "busted" }, shh)
+	for _, case in ipairs(CASES) do
+		---@type fun()?
+		local prepare
+		if case.isReset then
+			prepare = function()
+				fs.rmdir(treeDir)
 			end
-		end,
-	})
+		end
 
-	bench("install busted (warm)", {
-		tool = tool,
-		warmup = 2,
-		runs = 10,
-		spawn = function()
-			if tool == "lde" then
-				return process.spawn("lde", { "--tree", treeDir, "install", "rocks:busted" }, shh)
-			elseif tool == "luarocks" then
-				return process.spawn("luarocks", { "--tree", treeDir, "install", "busted" }, shh)
-			elseif tool == "lx" then
-				return process.spawn("lx", { "--no-prompt", "--tree", treeDir, "install", "busted" }, shh)
-			end
-		end,
-	})
-
-	bench("build C rock (luafilesystem)", {
-		tool = tool,
-		warmup = 0,
-		runs = 5,
-		prepare = function()
-			fs.rmdir(treeDir)
-		end,
-		spawn = function()
-			if tool == "lde" then
-				return process.spawn("lde", { "--tree", treeDir, "install", "rocks:luafilesystem" }, shh)
-			elseif tool == "luarocks" then
-				return process.spawn("luarocks", { "--tree", treeDir, "install", "luafilesystem" }, shh)
-			elseif tool == "lx" then
-				return process.spawn("lx", { "--tree", treeDir, "install", "luafilesystem" }, shh)
-			end
-		end,
-	})
+		bench(case.label, {
+			tool = tool,
+			warmup = case.warmup,
+			runs = case.runs,
+			prepare = prepare,
+			spawn = function()
+				return process.spawn(bin, installArgv(tool, treeDir, case), shh)
+			end,
+		})
+	end
 end
 
 local tools = {}

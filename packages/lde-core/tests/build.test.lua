@@ -1618,6 +1618,44 @@ build = {
 	test.truthy(fs.exists(path.join(dir, "target", "ssl", "https.lua")))
 end)
 
+test.it("rockspec: platform install_command overrides the base command", function()
+	-- On Windows this also proves the "windows" platform key is found by the
+	-- win32 fallback chain.
+	local platKey = jit.os == "OSX" and "macosx" or jit.os == "Windows" and "windows" or "linux"
+
+	local dir = path.join(tmpBase, "plat-command-rock")
+	fs.mkdir(dir)
+	fs.write(path.join(dir, "write-marker.lua"), [[
+local f = assert(io.open(arg[1] .. ".txt", "w"))
+f:write(arg[1])
+f:close()
+]])
+	fs.write(path.join(dir, "plat-command-1.0-1.rockspec"), string.format([[
+package = "plat-command"
+version = "1.0-1"
+source = { url = "https://example.com" }
+build = {
+  type = "command",
+  install_command = "$(LUA) write-marker.lua base",
+  platforms = {
+    ["%s"] = {
+      install_command = "$(LUA) write-marker.lua platform",
+    }
+  }
+}
+]], platKey))
+
+	local pkg, err = lde.Package.openRockspec(dir)
+	test.truthy(pkg, err) ---@cast pkg -nil
+
+	local outputDir = path.join(dir, "target", "plat-command")
+	local ok, berr = pkg:runBuildScript(outputDir)
+	test.truthy(ok, berr)
+
+	test.truthy(fs.exists(path.join(dir, "platform.txt")), "the platform install_command must run")
+	test.falsy(fs.exists(path.join(dir, "base.txt")), "the base install_command must be overridden")
+end)
+
 --
 -- Regression: rockspec native modules must honor incdirs (LuaSec bundles its
 -- luasocket headers under src/luasocket and includes <luasocket/io.h>).

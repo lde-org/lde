@@ -94,13 +94,19 @@ local function manifestJson(deps)
 	return json.encode({ name = "fuzz-base", version = "0.1.0", dependencies = deps })
 end
 
--- Scratch contexts shared by both fuzzers.
+-- Scratch contexts shared by both fuzzers. depA/depB are the paths the generated
+-- manifests use, so they stay relative to a case dir (one level under base);
+-- the dirs themselves are created below.
+local depADir = path.join(base, "deps", "dep-a")
+local depBDir = path.join(base, "deps", "dep-b")
 local ctx = {
 	base = base,
 	cliEmpty = path.join(base, "cli-empty"),
 	cliProject = path.join(base, "cli-project"),
-	deps = { path.join(base, "deps", "dep-a"), path.join(base, "deps", "dep-b") },
+	depA = path.relative(path.join(base, "cli-project"), depADir),
+	depB = path.relative(path.join(base, "cli-project"), depBDir),
 	gitRepo = path.join(base, "deps", "git-repo"),
+	scriptsDir = path.join(base, "scripts"),
 }
 
 fs.rmdir(ctx.cliEmpty)
@@ -112,11 +118,11 @@ fs.rmdir(ctx.cliProject)
 fs.mkdirAll(path.join(ctx.cliProject, "src"))
 fs.write(path.join(ctx.cliProject, "src", "init.lua"), 'return "cli-project"')
 fs.write(path.join(ctx.cliProject, "lde.json"), manifestJson({
-	["dep-a"] = { path = "../deps/dep-a" },
-	["dep-b"] = { path = "../deps/dep-b" },
+	["dep-a"] = { path = ctx.depA },
+	["dep-b"] = { path = ctx.depB },
 }))
 
-for _, depDir in ipairs(ctx.deps) do
+for _, depDir in ipairs({ depADir, depBDir }) do
 	fs.rmdir(depDir)
 	fs.mkdirAll(path.join(depDir, "src"))
 	fs.write(path.join(depDir, "src", "init.lua"), 'return "' .. path.basename(depDir) .. '"')
@@ -141,13 +147,12 @@ if gitCode ~= 0 then
 end
 
 -- Loose scripts exercised through `lde --lua`.
-local scriptsDir = path.join(base, "scripts")
-fs.rmdir(scriptsDir)
-fs.mkdirAll(scriptsDir)
-fs.write(path.join(scriptsDir, "ok.lua"), 'print("ok")')
-fs.write(path.join(scriptsDir, "boom.lua"), 'error("boom")')
-fs.write(path.join(scriptsDir, "syntax.lua"), "1 +")
-fs.write(path.join(scriptsDir, "loop.lua"), "while true do end")
+fs.rmdir(ctx.scriptsDir)
+fs.mkdirAll(ctx.scriptsDir)
+fs.write(path.join(ctx.scriptsDir, "ok.lua"), 'print("ok")')
+fs.write(path.join(ctx.scriptsDir, "boom.lua"), 'error("boom")')
+fs.write(path.join(ctx.scriptsDir, "syntax.lua"), "1 +")
+fs.write(path.join(ctx.scriptsDir, "loop.lua"), "while true do end")
 
 -- Result recording: CSV rows plus a findings log with full outputs.
 local rows = {}
@@ -176,10 +181,9 @@ local function record(case, cwd, res, outcome, ms)
 		ansi.printf("{gray}  case %d: %s{reset}", #rows, args)
 	end
 
-	-- eval/lua cases run user code, so a hang there is the user's loop, not an
-	-- lde bug — only command cases treat timeouts as findings.
-	local isFinding = outcome == "crash" or outcome == "raw_error"
-		or (outcome == "timeout" and case.kind == "cmd")
+	-- A hang in user-code cases, a spawn failure, a crash screen, or a leaked
+	-- traceback is a finding; the rule lives in runner.evaluate.
+	local _, isFinding = runner.evaluate(case.kind, res)
 	if isFinding then
 		table.insert(findings, {
 			outcome = outcome,
@@ -249,7 +253,7 @@ for _, row in ipairs(rows) do
 end
 
 ansi.printf("\n{bold}== results =={reset}  ({gray}%s{reset})", csvPath)
-for _, outcome in ipairs({ "ok", "clean_error", "crash", "raw_error", "timeout" }) do
+for _, outcome in ipairs(runner.OUTCOMES) do
 	local color = (outcome == "ok" or outcome == "clean_error") and "green" or "red"
 	ansi.printf("  {" .. color .. "}%s{reset}: %d", outcome, counts[outcome] or 0)
 end

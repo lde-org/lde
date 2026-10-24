@@ -22,14 +22,15 @@ local function outdated(_args)
 				goto continue
 			end
 
-			const latestUrl =  luarocks.getRockspecUrl(manifest --[[@as luarocks.Manifest]], depInfo.luarocks)
+			const rocksName = depInfo.name or depInfo.luarocks
+			const latestUrl = luarocks.getRockspecUrl(manifest --[[@as luarocks.Manifest]], rocksName)
 			if not latestUrl then goto continue end
 
-			local latest = latestUrl:match(depInfo.luarocks .. "%-([^/]+)%.rockspec$")
+			local latest = latestUrl:match(rocksName .. "%-([^/]+)%.rockspec$")
 			local current
 			if depInfo.archive then
-				current = depInfo.archive:match(depInfo.luarocks .. "%-([^/]+)%.src%.rock$")
-					or depInfo.archive:match(depInfo.luarocks .. "%-([^/]+)%.tar%.gz$")
+				current = depInfo.archive:match(rocksName .. "%-([^/]+)%.src%.rock$")
+					or depInfo.archive:match(rocksName .. "%-([^/]+)%.tar%.gz$")
 			end
 
 			if latest and current and latest ~= current then

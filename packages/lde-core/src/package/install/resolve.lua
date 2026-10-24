@@ -59,6 +59,80 @@ local function packageDirOf(n, c)
 	return c.kind == "src" and c.dir or (c.srcDir or c.dir)
 end
 
+--- True when an extracted .src.rock directory holds the rockspec it is supposed to
+--- carry. A directory without one is an incomplete cache entry, never a valid tree.
+---@param dir string
+---@return boolean
+local function hasSrcRockRockspec(dir)
+	const iter = fs.readdir(dir)
+	if not iter then return false end
+	for entry in iter do
+		if entry.type == "file" and entry.name:match("%.rockspec$") then return true end
+	end
+	return false
+end
+
+--- Materialize a node's content plan: clone, or download, verify, and extract.
+--- The kinds differ only in the error label and the .src.rock retry; a plan
+--- extracted with the published layout resolves its source directory afterwards.
+---@param n lde.install.Node
+---@param c lde.install.ContentPlan
+local function materializeContent(n, c)
+	if c.kind == "clone" then
+		local plan = n.gitPlan or n._fallbackGit --[[@as lde.install.GitPlan]]
+		local clone = plan.clone --[[@as { repoName: string, repoUrl: string, commit: string, branch: string? }]]
+		local ok, err = lde.global.cloneDir(clone.repoName, clone.repoUrl, clone.commit, clone.branch)
+		if not ok then lde.error.raise("Failed to clone git repository: " .. (err or "unknown error")) end
+		return
+	end
+	local res = download.result(c.file --[[@as string]])
+	if res and not res.ok then
+		const label = c.kind == "archive" and ("archive '" .. c.url --[[@as string]] .. "'") or c.url --[[@as string]]
+		lde.error.raise("Failed to download " .. label .. ": " .. (res.err or ""))
+	end
+	verifyMd5(n, c)
+	-- A git tarball lands in the git cache, whose layout is the repository
+	-- root (the wrapper directory stripped); plain archives keep the published
+	-- layout and resolve their source directory afterwards.
+	local ok, err
+	if c.kind == "git" then
+		ok, err = lde.global.extractGitTarball(c.file --[[@as string]], c.dir --[[@as string]])
+	else
+		ok, err = lde.global.extractArchive(c.url --[[@as string]], c.file --[[@as string]], c.dir --[[@as string]])
+	end
+	if not ok then
+		-- The seeded copy may itself be corrupt; don't let the next run
+		-- re-trust (and re-fail on) it.
+		download.invalidate(c.file --[[@as string]])
+		if c.kind == "git" then
+			lde.error.raise("Failed to extract " .. (n.repoName or c.url or c.dir) .. ": " .. (err or ""))
+		elseif c.kind == "archive" then
+			lde.error.raise("Failed to extract archive '" .. c.url --[[@as string]] .. "': " .. (err or ""))
+		else
+			lde.error.raise("Failed to extract '" .. (c.url or c.dir) .. "': " .. (err or ""))
+		end
+	end
+	-- A src rock's tree must hold its rockspec. An incomplete cache directory
+	-- (a killed run, or a concurrent retirement) would otherwise fail every
+	-- later run with "No rockspec found in src rock": retire it and extract
+	-- once more instead of trusting it forever.
+	if c.kind == "src" and not hasSrcRockRockspec(c.dir --[[@as string]]) then
+		lde.util.retireCacheDir(c.dir --[[@as string]])
+		ok, err = lde.global.extractArchive(c.url --[[@as string]], c.file --[[@as string]], c.dir --[[@as string]])
+		if not ok or not hasSrcRockRockspec(c.dir --[[@as string]]) then
+			download.invalidate(c.file --[[@as string]])
+			lde.error.raise("Failed to load src rock: no rockspec in " .. (c.dir or "?") .. (err and (" (" .. err .. ")") or ""))
+		end
+	end
+	if c.kind ~= "git" then
+		-- Rockspec source.url archive: the package lives in the source
+		-- directory inside the extraction root (source.dir, or the single
+		-- top-level directory), not at the root itself.
+		const source = n.spec?.source
+		c.srcDir = lde.global.sourceDirFor(c.dir --[[@as string]], source?.dir, source?.file)
+	end
+end
+
 ---@type table<string, lde.install.Handler>
 const handlers = {}
 
@@ -232,25 +306,7 @@ handlers.git = {
 		end
 		return nil -- already cached
 	end,
-	---@param n lde.install.Node
-	---@param c lde.install.ContentPlan
-	materialize = function(n, c)
-		if c.kind == "clone" then
-			local clone = n.gitPlan --[[@as lde.install.GitPlan]].clone --[[@as { repoName: string, repoUrl: string, commit: string, branch: string? }]]
-			local ok, err = lde.global.cloneDir(clone.repoName, clone.repoUrl, clone.commit, clone.branch)
-			if not ok then lde.error.raise("Failed to clone git repository: " .. (err or "unknown error")) end
-			return
-		end
-		local res = download.result(c.file --[[@as string]])
-		if res and not res.ok then lde.error.raise("Failed to download " .. c.url .. ": " .. (res.err or "")) end
-		local ok, err = lde.global.extractGitTarball(c.file --[[@as string]], c.dir --[[@as string]])
-		if not ok then
-			-- The seeded copy may itself be corrupt; don't let the next run
-			-- re-trust (and re-fail on) it.
-			download.invalidate(c.file --[[@as string]])
-			lde.error.raise("Failed to extract " .. n.repoName .. ": " .. (err or ""))
-		end
-	end,
+	materialize = materializeContent,
 	---@param n lde.install.Node
 	open = function(n)
 		local gitPlan = n.gitPlan --[[@as lde.install.GitPlan]]
@@ -288,20 +344,7 @@ handlers.archive = {
 		local dir = lde.global.getArchiveDir(n.depInfo.archive)
 		return { url = n.depInfo.archive, file = dir .. ".archive", dir = dir, kind = "archive" }
 	end,
-	---@param n lde.install.Node
-	---@param c lde.install.ContentPlan
-	materialize = function(n, c)
-		local res = download.result(c.file --[[@as string]])
-		if res and not res.ok then lde.error.raise("Failed to download archive '" .. c.url .. "': " .. (res.err or "")) end
-		verifyMd5(n, c)
-		local ok, err = lde.global.extractArchive(c.url --[[@as string]], c.file --[[@as string]], c.dir --[[@as string]])
-		if not ok then
-			download.invalidate(c.file --[[@as string]])
-			lde.error.raise("Failed to extract archive '" .. c.url .. "': " .. (err or ""))
-		end
-		local source = n.spec?.source
-		c.srcDir = lde.global.sourceDirFor(c.dir --[[@as string]], source?.dir, source?.file)
-	end,
+	materialize = materializeContent,
 	---@param n lde.install.Node
 	open = function(n)
 		local c = content(n) --[[@as lde.install.ContentPlan]]
@@ -333,19 +376,6 @@ handlers.archive = {
 		return { archive = n.depInfo.archive, name = n.depInfo.name, rockspec = n.depInfo.rockspec }
 	end,
 }
-
---- True when an extracted .src.rock directory holds the rockspec it is supposed to
---- carry. A directory without one is an incomplete cache entry, never a valid tree.
----@param dir string
----@return boolean
-local function hasSrcRockRockspec(dir)
-	const iter = fs.readdir(dir)
-	if not iter then return false end
-	for entry in iter do
-		if entry.type == "file" and entry.name:match("%.rockspec$") then return true end
-	end
-	return false
-end
 
 --- luarocks: metadata is the published rockspec; content prefers the .src.rock
 --- and falls back to the rockspec's own source artifact.
@@ -394,52 +424,7 @@ handlers.luarocks = {
 		end
 		return n._content
 	end,
-	---@param n lde.install.Node
-	---@param c lde.install.ContentPlan
-	materialize = function(n, c)
-		if c.kind == "clone" then
-			local fallback = n._fallbackGit --[[@as lde.install.GitPlan]]
-			local clone = fallback.clone --[[@as { repoName: string, repoUrl: string, commit: string, branch: string? }]]
-			local ok, err = lde.global.cloneDir(clone.repoName, clone.repoUrl, clone.commit, clone.branch)
-			if not ok then lde.error.raise("Failed to clone git repository: " .. (err or "unknown error")) end
-			return
-		end
-		local res = download.result(c.file --[[@as string]])
-		if res and not res.ok then lde.error.raise("Failed to download " .. c.url .. ": " .. (res.err or "")) end
-		verifyMd5(n, c)
-		-- A git tarball lands in the git cache, whose layout is the repository
-		-- root (the wrapper directory stripped); plain archives keep the published
-		-- layout and resolve their source directory afterwards.
-		local ok, err
-		if c.kind == "git" then
-			ok, err = lde.global.extractGitTarball(c.file --[[@as string]], c.dir --[[@as string]])
-		else
-			ok, err = lde.global.extractArchive(c.url --[[@as string]], c.file --[[@as string]], c.dir --[[@as string]])
-		end
-		if not ok then
-			download.invalidate(c.file --[[@as string]])
-			lde.error.raise("Failed to extract '" .. (c.url or c.dir) .. "': " .. (err or ""))
-		end
-		-- A src rock's tree must hold its rockspec. An incomplete cache directory
-		-- (a killed run, or a concurrent retirement) would otherwise fail every
-		-- later run with "No rockspec found in src rock": retire it and extract
-		-- once more instead of trusting it forever.
-		if c.kind == "src" and not hasSrcRockRockspec(c.dir --[[@as string]]) then
-			lde.util.retireCacheDir(c.dir --[[@as string]])
-			ok, err = lde.global.extractArchive(c.url --[[@as string]], c.file --[[@as string]], c.dir --[[@as string]])
-			if not ok or not hasSrcRockRockspec(c.dir --[[@as string]]) then
-				download.invalidate(c.file --[[@as string]])
-				lde.error.raise("Failed to load src rock: no rockspec in " .. (c.dir or "?") .. (err and (" (" .. err .. ")") or ""))
-			end
-		end
-		if c.kind ~= "git" then
-			-- Rockspec source.url archive: the package lives in the source
-			-- directory inside the extraction root (source.dir, or the single
-			-- top-level directory), not at the root itself.
-			const source = n.spec?.source
-			c.srcDir = lde.global.sourceDirFor(c.dir --[[@as string]], source?.dir, source?.file)
-		end
-	end,
+	materialize = materializeContent,
 	---@param n lde.install.Node
 	consume = function(n)
 		if n.rockspecFile and fs.exists(n.rockspecFile) then
@@ -517,6 +502,30 @@ local function resolveDependencies(dependencies, ctx)
 	---@type lde.install.Node[]
 	const failed = {} -- nodes whose download/extract failed (reported at the end)
 
+	-- Expand a node whose content is already available: read its deps and queue
+	-- them for the next frontier.
+	---@param node lde.install.Node
+	---@param nextFrontier lde.install.Node[]
+	local function expand(node, nextFrontier)
+		consume(node)
+		for _, child in ipairs(addDeps(node.deps or {}, node.expandDir or ctx.relativeTo, ctx, graph, order, node)) do
+			nextFrontier[#nextFrontier + 1] = child
+		end
+	end
+
+	-- Queue a node for content work: count the download and lazily spawn the
+	-- dependency's progress row (marker from the node kind alone; refined to 🛠️
+	-- once a build starts).
+	---@param node lde.install.Node
+	---@param batch lde.install.Node[]
+	local function queueContent(node, batch)
+		ctx.downloads += 1
+		if ctx.progress then
+			ctx.progress:setCurrent(node.alias, node.kind == "luarocks" and "rock" or "wrench")
+		end
+		batch[#batch + 1] = node
+	end
+
 	-- ── Phase 1: graph walk (metadata-only) ────────────────────────────────
 	---@type lde.install.Node[]
 	local frontier = addDeps(dependencies, ctx.relativeTo, ctx, graph, order)
@@ -555,10 +564,7 @@ local function resolveDependencies(dependencies, ctx)
 				metaBatch[#metaBatch + 1] = node
 			elseif not node.isExpandAfter and not content(node) then
 				-- path deps: nothing to download, consume and expand immediately.
-				consume(node)
-				for _, child in ipairs(addDeps(node.deps or {}, node.expandDir or ctx.relativeTo, ctx, graph, order, node)) do
-					nextFrontier[#nextFrontier + 1] = child
-				end
+				expand(node, nextFrontier)
 			end
 
 			-- Luarocks deps with a known .src.rock: start the content download
@@ -582,19 +588,10 @@ local function resolveDependencies(dependencies, ctx)
 					if c.kind ~= "clone" then
 						download.prefetch(c.url --[[@as string]], c.file --[[@as string]])
 					end
-					ctx.downloads += 1
-					-- Lazily spawn the dependency's progress row (marker from
-					-- the node kind alone; refined to 🛠️ once a build starts).
-					if ctx.progress then
-						ctx.progress:setCurrent(node.alias, node.kind == "luarocks" and "rock" or "wrench")
-					end
-					contentBatch[#contentBatch + 1] = node
+					queueContent(node, contentBatch)
 				else
 					-- Content already cached: consume + expand without downloading.
-					consume(node)
-					for _, child in ipairs(addDeps(node.deps or {}, node.expandDir or ctx.relativeTo, ctx, graph, order, node)) do
-						nextFrontier[#nextFrontier + 1] = child
-					end
+					expand(node, nextFrontier)
 				end
 			end
 
@@ -604,10 +601,7 @@ local function resolveDependencies(dependencies, ctx)
 		download.drain()
 
 		for _, node in ipairs(metaBatch) do
-			consume(node)
-			for _, child in ipairs(addDeps(node.deps or {}, node.expandDir or ctx.relativeTo, ctx, graph, order, node)) do
-				nextFrontier[#nextFrontier + 1] = child
-			end
+			expand(node, nextFrontier)
 		end
 
 		for _, node in ipairs(contentBatch) do
@@ -619,10 +613,7 @@ local function resolveDependencies(dependencies, ctx)
 				if ctx.progress then ctx.progress:finish(node.alias) end
 				goto continue
 			end
-			consume(node)
-			for _, child in ipairs(addDeps(node.deps or {}, node.expandDir or ctx.relativeTo, ctx, graph, order, node)) do
-				nextFrontier[#nextFrontier + 1] = child
-			end
+			expand(node, nextFrontier)
 			::continue::
 		end
 
@@ -647,13 +638,7 @@ local function resolveDependencies(dependencies, ctx)
 				end
 				contentByFile[c.file --[[@as string]]] = node
 			end
-			ctx.downloads += 1
-			-- Lazily spawn the dependency's progress row (marker from the node
-			-- kind alone; refined to 🛠️ once a build starts).
-			if ctx.progress then
-				ctx.progress:setCurrent(node.alias, node.kind == "luarocks" and "rock" or "wrench")
-			end
-			contentNodes[#contentNodes + 1] = node
+			queueContent(node, contentNodes)
 		end
 	end
 

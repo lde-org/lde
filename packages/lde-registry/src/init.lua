@@ -31,7 +31,7 @@
 ---@field open fun(dir: string): any?
 
 ---@class lde.RegistryOpts
----@field dirFn? fun(): string
+---@field dirFn fun(): string # registry checkout directory (required: the owner supplies its tree layout)
 ---@field url? string
 ---@field fs? lde.RegistryFs
 ---@field path? lde.RegistryPath
@@ -53,19 +53,6 @@
 const Registry = {}
 Registry.__index = Registry
 
---- Mirrors lde-core.global.getUserDir() so a Registry with no injected dirFn lands in the same tree.
-local function userLdeDir()
-	local path = require("path")
-	const ldeHome = os.getenv("LDE_HOME")
-	if ldeHome and ldeHome ~= "" then return ldeHome end
-	return path.join(os.getenv("HOME") or os.getenv("USERPROFILE") or "", ".lde")
-end
-
-local function defaultDir()
-	local path = require("path")
-	return path.join(userLdeDir(), "registry")
-end
-
 --- Returns nil + message instead of raising, and rejects non-object documents.
 ---@param content string
 ---@return table?, string?
@@ -81,9 +68,8 @@ local function defaultDecodeJson(content)
 	return decoded, nil
 end
 
----@param opts? lde.RegistryOpts
+---@param opts lde.RegistryOpts
 function Registry.new(opts)
-	opts = opts or {}
 	const self = setmetatable({}, Registry)
 	self.fs = opts.fs or (require("fs") --[[@as lde.RegistryFs]])
 	self.path = opts.path or (require("path") --[[@as lde.RegistryPath]])
@@ -91,7 +77,7 @@ function Registry.new(opts)
 	self.git = opts.git
 	self.decodeJson = opts.decodeJson or defaultDecodeJson
 	self.raise = opts.raise or function(message) error(message, 0) end
-	self.dirFn = opts.dirFn or defaultDir
+	self.dirFn = assert(opts.dirFn, "Registry.new requires dirFn")
 	self.url = opts.url or "https://github.com/lde-org/registry"
 	return self
 end

@@ -7,6 +7,7 @@
 
 local ffi = require("ffi")
 local process = require("process")
+local ansi = require("ansi")
 
 --- Child handle shape, declared locally: the `process` class is only reachable
 --- through a symlinked target dir here, which the checker cannot resolve.
@@ -49,8 +50,9 @@ local function run(bin, args, opts)
 	if type(child) ~= "table" then
 		return { exit = nil, timedOut = false, spawnError = serr, out = "" }
 	end
+	---@cast child fuzzer.Child
 
-	local deadline = os.clock() + timeoutMs / 1000
+	local deadline = ansi.now() + timeoutMs / 1000
 	while true do
 		local code = child:poll()
 		if code ~= nil then
@@ -60,9 +62,8 @@ local function run(bin, args, opts)
 			local _, stdout, stderr = child:wait()
 			return { exit = code, timedOut = false, out = (stdout or "") .. (stderr or "") }
 		end
-		if os.clock() > deadline then
-			const proc = child --[[@as fuzzer.Child]]
-			proc:kill(true)
+		if ansi.now() > deadline then
+			child:kill(true)
 			-- Don't wait(): the killed process's grandchildren may still hold the
 			-- pipe write ends (e.g. a compiler or git spawned mid-build), which
 			-- would block the drain forever. Leak the fds instead — timeouts are
@@ -99,4 +100,41 @@ local function csvField(s)
 	return s
 end
 
-return { run = run, classify = classify, csvField = csvField }
+--- Outcomes in the order the summary prints them.
+local OUTCOMES = { "ok", "clean_error", "crash", "raw_error", "timeout", "spawn_error" }
+
+--- Turn a run result into an outcome plus whether it breaks the no-crash
+--- contract. A hang in user-code cases (eval/lua) is the user's own loop, so
+--- only command-case timeouts and any spawn failure are findings.
+---@param kind "cmd" | "eval" | "lua"
+---@param res fuzz.RunResult
+---@return string outcome
+---@return boolean finding
+local function evaluate(kind, res)
+	if res.spawnError then return "spawn_error", true end
+	if res.timedOut then return "timeout", kind == "cmd" end
+	local outcome = classify(kind, res.exit, res.out)
+	return outcome, outcome == "crash" or outcome == "raw_error"
+end
+
+--- Run one case under its deadline, measuring it and classifying the result.
+---@param bin string
+---@param case { kind: "cmd" | "eval" | "lua", args: string[], timeoutMs: integer }
+---@param cwd string
+---@return fuzz.RunResult
+---@return string outcome
+---@return number ms
+local function runCase(bin, case, cwd)
+	local start = ansi.now()
+	local res = run(bin, case.args, { cwd = cwd, timeoutMs = case.timeoutMs })
+	local ms = (ansi.now() - start) * 1000
+	local outcome = evaluate(case.kind, res)
+	return res, outcome, ms
+end
+
+return {
+	runCase = runCase,
+	evaluate = evaluate,
+	OUTCOMES = OUTCOMES,
+	csvField = csvField,
+}

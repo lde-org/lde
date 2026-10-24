@@ -1,6 +1,5 @@
-import { defineMdastPlugin, type MdastVisitorContext } from "satteri";
-import type { Blockquote, Paragraph } from "mdast";
-import { ADMONITION_MARKER_RE, ADMONITION_TITLES } from "./admonitions";
+import { defineMdastPlugin } from "satteri";
+import { ADMONITION_TITLES, parseCalloutMarker } from "./admonitions";
 
 /**
  * Sätteri mdast plugin: turn GitHub-style `> [!NOTE]` blockquotes into callout
@@ -17,15 +16,31 @@ import { ADMONITION_MARKER_RE, ADMONITION_TITLES } from "./admonitions";
 export const githubAdmonitions = defineMdastPlugin({
 	name: "github-admonitions",
 	blockquote(node, ctx) {
-		const first = node.children[0];
-		if (first?.type !== "paragraph") return;
-		const raw = matchMarker(first);
-		if (!raw) return;
-		const type = raw.toUpperCase();
+		const paragraph = node.children[0];
+		if (paragraph?.type !== "paragraph") return;
+		const lead = paragraph.children[0];
+		if (lead?.type !== "text") return;
+		const marker = parseCalloutMarker(
+			lead.value,
+			paragraph.children.length > 1,
+		);
+		if (!marker) return;
+		const type = marker.type.toUpperCase();
 		const title = ADMONITION_TITLES[type];
 		if (!title) return;
 
-		stripMarker(first, ctx, node);
+		if (marker.rest === null) {
+			// The marker is the whole text node — drop it (and the paragraph
+			// itself when it held nothing else).
+			if (paragraph.children.length > 1) {
+				ctx.removeChildAt(paragraph, 0);
+			} else {
+				ctx.removeChildAt(node, 0);
+			}
+		} else {
+			ctx.setProperty(lead, "value", marker.rest);
+		}
+
 		ctx.setProperty(node, "data", {
 			...node.data,
 			hName: "aside",
@@ -41,40 +56,3 @@ export const githubAdmonitions = defineMdastPlugin({
 		});
 	},
 });
-
-/** The marker type if the paragraph's first line is a bare `[!TYPE]` marker. */
-function matchMarker(paragraph: Paragraph): string | null {
-	const first = paragraph.children[0];
-	if (first?.type !== "text") return null;
-	const nl = first.value.search(/\r?\n/);
-	const line = nl === -1 ? first.value : first.value.slice(0, nl);
-	const m = ADMONITION_MARKER_RE.exec(line);
-	if (!m) return null;
-	// Without a newline the marker must be the whole paragraph; more children
-	// means the line continues past the marker (GitHub treats that as a
-	// plain quote).
-	if (nl === -1 && paragraph.children.length > 1) return null;
-	return m[1];
-}
-
-/** Remove the marker line from the paragraph's leading text node. */
-function stripMarker(
-	paragraph: Paragraph,
-	ctx: MdastVisitorContext,
-	blockquote: Readonly<Blockquote>,
-) {
-	const first = paragraph.children[0];
-	if (first?.type !== "text") return;
-	const nl = first.value.search(/\r?\n/);
-	if (nl === -1 || nl === first.value.length - 1) {
-		// The marker is the whole text node — drop it (and the paragraph
-		// itself when it held nothing else).
-		if (paragraph.children.length > 1) {
-			ctx.removeChildAt(paragraph, 0);
-		} else {
-			ctx.removeChildAt(blockquote, 0);
-		}
-	} else {
-		ctx.setProperty(first, "value", first.value.slice(nl + 1));
-	}
-}

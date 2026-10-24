@@ -162,14 +162,8 @@ function Target.getTriple(target, compiler)
 		or (tripleArch .. "-linux-gnu")
 end
 
-local function userLdeDir()
-	const ldeHome = os.getenv("LDE_HOME")
-	if ldeHome and ldeHome ~= "" then return ldeHome end
-	return path.join(os.getenv("HOME") or os.getenv("USERPROFILE") or "", ".lde")
-end
-
 local function getLuajitCacheDir()
-	return path.join(userLdeDir(), "luajit")
+	return path.join(util.ldeHome(), "luajit")
 end
 
 Target.getLuajitCacheDir = getLuajitCacheDir
@@ -220,13 +214,7 @@ local function getLuajitPath(compiler, target)
 
 	const bar = ansi.progress("Downloading " .. ljLabel, { indent = false })
 	local ok, dlErr = curl().download(downloadUrl, tarballPath, {
-		progress = function(dltotal, dlnow)
-			local ratio = dltotal > 0 ? (dlnow / dltotal) : nil
-			const info = dltotal > 0
-				and (ansi.formatBytes(dlnow) .. " / " .. ansi.formatBytes(dltotal))
-				or ansi.formatBytes(dlnow)
-			bar:update(ratio, info)
-		end
+		progress = ansi.downloadProgress(bar)
 	})
 	if not ok then
 		bar:fail("Downloading " .. ljLabel)
