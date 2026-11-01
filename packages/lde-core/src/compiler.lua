@@ -23,6 +23,8 @@ const path = require("path")
 const lua = require("lua-sys")
 
 const errorMod = require("lde-core.error")
+const dirs = require("lde-core.global.dirs")
+const installLock = require("lde-core.package.install.lock")
 
 ---@param spec lde.CompilerSpec
 function Compiler.new(spec)
@@ -39,10 +41,27 @@ end
 --- Resolves, builds and loads the compiler once, retrying after retiring the
 --- cached src rock when the install or load failed (a concurrent shard may have
 --- cleaned or rewritten the shared cache entry under us).
+---
+--- Compiler packages build inside their cached src rock in the shared tar cache.
+--- Parallel test shards must not install or retire that tree at once: a loader
+--- could read a partially written native module, and a retry would then retire
+--- the tree another shard is still building in. Serialize the whole
+--- resolve/build/install/load pass across processes.
 ---@return lua.State
 function Compiler:ensure()
 	if self.state then return self.state end
 
+	const handle = installLock.acquire(path.join(dirs.getDir(), "compilers", self.spec.packageName))
+	local ok, result = pcall(function()
+		return self:ensureLocked()
+	end)
+	installLock.release(handle)
+	if not ok then error(result, 0) end
+	return result
+end
+
+---@return lua.State
+function Compiler:ensureLocked()
 	const ldeUtil = require("lde-core.util")
 	for attempt = 1, 2 do
 		local pkg, _, err = ldeUtil.openLuarocksPackage(self.spec.packageName)
@@ -94,13 +113,13 @@ function Compiler:ensure()
 			-- serializes with an in-place build, but only when the entry still exists:
 			-- acquiring it creates the parent chain, and resurrecting a retired cache
 			-- dir would leave an empty entry that resolution trusts as complete.
-			const lock = require("lde-core.package.install.lock")
-			const handle = lock.acquire(path.join(archiveDir, self.spec.packageName, "target", self.spec.packageName),
+			const retireLock = installLock.acquire(
+				path.join(archiveDir, self.spec.packageName, "target", self.spec.packageName),
 				{ createParent = false })
 			ldeUtil.retireCacheDir(archiveDir)
 			-- The downloaded .archive is left in place: it is a shared cache entry and
 			-- another process may be extracting those same bytes right now.
-			lock.release(handle)
+			installLock.release(retireLock)
 		end
 	end
 

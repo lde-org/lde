@@ -353,23 +353,43 @@ function M.planGitRepo(repoName, repoUrl, branch, commit)
 	return plan
 end
 
---- Extract a downloaded git tarball into its repo cache dir. On success the
---- dir is marked complete (see consts.CACHE_MARKER); on failure the partial dir
---- is removed so a later run re-downloads instead of trusting a
---- half-extracted tree.
+--- Extract a downloaded git tarball into its repo cache dir. The tarball is a
+--- shared cache entry that other processes (parallel test shards, another
+--- terminal) may be extracting at the same time, so it is never deleted and
+--- each process extracts into its own temp dir before moving the tree into
+--- place. On success the dir is marked complete (see consts.CACHE_MARKER).
 ---@param archiveFile string
 ---@param repoDir string
 ---@return boolean? ok
 ---@return string? err
 function M.extractGitTarball(archiveFile, repoDir)
-	local ok, err = Archive().new(archiveFile):extract(repoDir, { stripComponents = true })
-	fs.delete(archiveFile)
-	if ok then
-		M.markGitRepoCached(repoDir)
-	else
-		fs.rmdir(repoDir)
+	const marker = path.join(repoDir, consts.CACHE_MARKER)
+	-- Another process may have materialized this exact repo already.
+	if fs.exists(marker) then return true end
+
+	if not fs.exists(archiveFile) then
+		return nil, "missing downloaded archive: " .. archiveFile
 	end
-	return ok, err
+
+	const tmpDir = repoDir .. ".tmp" .. uniqueSuffix()
+	local ok, err = Archive().new(archiveFile):extract(tmpDir, { stripComponents = true })
+	if not ok then
+		fs.rmdir(tmpDir)
+		return nil, err
+	end
+
+	if fs.move(tmpDir, repoDir) then
+		M.markGitRepoCached(repoDir)
+		return true
+	end
+
+	-- Another process moved its tree in first: its copy of the same tarball wins.
+	fs.rmdir(tmpDir)
+	if fs.isdir(repoDir) then
+		if not fs.exists(marker) then M.markGitRepoCached(repoDir) end
+		return true
+	end
+	return nil, "failed to move extracted repository into " .. repoDir
 end
 
 --- Parses a GitHub /tree/<branch> URL into a clone URL and branch.
