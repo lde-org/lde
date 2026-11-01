@@ -40,9 +40,10 @@ function M.ensureMingw(opts)
 	local mingwDir = dirs.getMingwDir()
 	if fs.exists(path.join(mingwDir, "bin", "gcc.exe")) then return end
 
-	-- If gcc is already available on PATH, no need to download
-	local code = process.exec("gcc", { "--version" })
-	if code == 0 then return end
+	-- A `gcc` on PATH is not a substitute: getCCBin prefers clang for Windows
+	-- builds, and images such as the GitHub Windows runner ship an MSVC-targeted
+	-- clang that cannot link the LuaJIT dist's GNU archive. Only the bundled
+	-- llvm-mingw is known to match that dist, so install it whenever it is absent.
 
 	const p1 = lde.isVerbose ? ansi.progress("Downloading 7z extractor") : nil
 
