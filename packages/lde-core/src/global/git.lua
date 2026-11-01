@@ -442,7 +442,7 @@ end
 ---@return lde.Package? pkg
 ---@return string? err
 function M.findNamedPackageIn(dir, name)
-	for _, config in ipairs(fs.scan(dir, "**" .. path.separator .. "lde.json")) do
+	for config in fs.scan(dir, "**" .. path.separator .. "lde.json") do
 		const parentDir = path.join(dir, path.dirname(config))
 		local pkg = lde.Package.open(parentDir)
 		if pkg and pkg:getName() == name then

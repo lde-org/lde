@@ -84,7 +84,7 @@ function native.autodetectModules(pkgDir, packageName)
 		and (path.relative(pkgDir, base):gsub("\\", "/") .. "/")
 		or ""
 
-	for _, rel in ipairs(fs.scan(base, "**")) do
+	for rel in fs.scan(base, "**") do
 		const first = rel:match("^([^/\\]+)")
 		if first == "target" or first == ".git" or first == "build.luarocks" or first == "install.lde" then
 			goto continue

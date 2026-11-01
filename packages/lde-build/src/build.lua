@@ -168,7 +168,7 @@ function Instance:scan(rel, glob)
 	local prefix = root == "." and "" or root .. path.separator
 	local files = {}
 
-	for _, child in ipairs(fs.scan(full, "**")) do
+	for child in fs.scan(full, "**") do
 		const normalized = child:gsub("\\", "/")
 		const isMatch = not pattern or normalized:find(pattern) ~= nil
 			or (rootPattern ~= nil and normalized:find(rootPattern) ~= nil)

@@ -25,7 +25,10 @@ test.it("fs.scan does not follow directory symlinks", function()
 	const linked = path.join(dir, "loop")
 	fs.mklink(dir, linked)
 
-	local results = fs.scan(dir, "**.lua")
+	local results = {}
+	for file in fs.scan(dir, "**.lua") do
+		results[#results + 1] = file
+	end
 
 	-- Should find file.lua exactly once, without looping
 	test.equal(#results, 1)
@@ -45,7 +48,10 @@ test.it("fs.scan finds files recursively without symlinks", function()
 	fs.write(path.join(b, "two.lua"), "")
 	fs.write(path.join(dir, "three.lua"), "")
 
-	local results = fs.scan(dir, "**.lua")
+	local results = {}
+	for file in fs.scan(dir, "**.lua") do
+		results[#results + 1] = file
+	end
 	table.sort(results)
 
 	test.equal(#results, 3)

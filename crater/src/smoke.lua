@@ -99,7 +99,7 @@ local function discoverModules(targetDir, exclude)
 		end
 	end
 	for _, glob in ipairs({ "**/*.lua", "**/*.so", "**/*.dll" }) do
-		for _, rel in ipairs(fs.scan(targetDir, glob)) do add(rel) end
+		for rel in fs.scan(targetDir, glob) do add(rel) end
 	end
 	table.sort(mods)
 	return mods

@@ -94,7 +94,7 @@ end
 local function findFiles(dir)
 	const files = {}
 	if fs.isdir(dir) then
-		for _, rel in ipairs(fs.scan(dir, "**")) do files[#files + 1] = rel end
+		for rel in fs.scan(dir, "**") do files[#files + 1] = rel end
 	end
 	return unpack(files)
 end

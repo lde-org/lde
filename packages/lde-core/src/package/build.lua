@@ -28,7 +28,7 @@ local function collectInputFiles(package)
 	const inputs = {}
 	local srcDir = package:getSrcDir()
 	if fs.isdir(srcDir) then
-		for _, rel in ipairs(fs.scan(srcDir, "**")) do
+		for rel in fs.scan(srcDir, "**") do
 			inputs["src/" .. rel:gsub("\\", "/")] = path.join(srcDir, rel)
 		end
 	end

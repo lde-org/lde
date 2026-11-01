@@ -47,7 +47,7 @@ function cmake.run(ctx)
 	if code ~= 0 then return nil, "cmake install failed: " .. (stderr or "") end
 
 	const soExt = jit.os == "Windows" ? "**.dll" : jit.os == "OSX" ? "**.dylib" : "**.so"
-	for _, rel in ipairs(fs.scan(installDir, soExt)) do
+	for rel in fs.scan(installDir, soExt) do
 		fs.copy(path.join(installDir, rel), path.join(ctx.modulesDir, path.basename(rel)))
 	end
 

@@ -229,7 +229,7 @@ local function openRockspec(dir, rockspecPath)
 		if rel:match("^https?://") then return end -- remote sources are fetched per build
 		const p = path.isAbsolute(rel) ? rel : path.join(dir, rel)
 		if fs.isdir(p) then
-			for _, f in ipairs(fs.scan(p, "**")) do
+			for f in fs.scan(p, "**") do
 				local c = fs.read(path.join(p, f))
 				if c then sourceHash[#sourceHash + 1] = util.hash(c) end
 			end

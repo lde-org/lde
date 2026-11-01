@@ -499,13 +499,13 @@ function util.findNamedPackage(dir, packageName, rockspec)
 	local pkg = lde.Package.open(dir, rockspec)
 	if pkg and pkg:getName() == packageName then return pkg, nil end
 
-	for _, config in ipairs(fs.scan(dir, "**" .. path.separator .. "lde.json")) do
+	for config in fs.scan(dir, "**" .. path.separator .. "lde.json") do
 		pkg = lde.Package.open(path.join(dir, path.dirname(config)))
 		if pkg and pkg:getName() == packageName then return pkg, nil end
 	end
 
 	-- Compatibility
-	for _, config in ipairs(fs.scan(dir, "**" .. path.separator .. "lpm.json")) do
+	for config in fs.scan(dir, "**" .. path.separator .. "lpm.json") do
 		pkg = lde.Package.open(path.join(dir, path.dirname(config)))
 		if pkg and pkg:getName() == packageName then return pkg, nil end
 	end

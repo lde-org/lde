@@ -57,7 +57,7 @@ function nativeext.scan(modulesDir, opts)
 		local entryPath = path.join(modulesDir, entry.name)
 		if fs.isdir(entryPath) then
 			local excludes = opts.excludesFor(entry.name)
-			for _, relativePath in ipairs(fs.scan(entryPath, "**")) do
+			for relativePath in fs.scan(entryPath, "**") do
 				local ext = matchExt(relativePath)
 				if ext and not features.isExcluded(relativePath, excludes) then
 					const relativeName = relativePath:gsub("%." .. ext .. "$", ""):gsub(path.separator, "/")

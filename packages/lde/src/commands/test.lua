@@ -300,7 +300,7 @@ local function runWatch(filters, coverage)
 		addWatch(package:getDir(), false, configFiles)
 	else
 		local cwd = env.cwd()
-		for _, relativePath in ipairs(fs.scan(cwd, "**" .. path.separator .. "lde.json")) do
+		for relativePath in fs.scan(cwd, "**" .. path.separator .. "lde.json") do
 			local pkgDir = path.dirname(path.join(cwd, relativePath))
 			local pkg = lde.Package.open(pkgDir)
 			if pkg and fs.isdir(path.join(pkgDir, "tests")) then
@@ -409,7 +409,7 @@ local function test(args)
 
 		local packages = {}
 		local coverageReports = {} ---@type lde.CoverageReport[]
-		for _, relativePath in ipairs(fs.scan(cwd, "**" .. path.separator .. "lde.json")) do
+		for relativePath in fs.scan(cwd, "**" .. path.separator .. "lde.json") do
 			-- Hidden dirs (.git, .fuzz, ...) anywhere in the path are VCS internals or scratch, not packages.
 			if relativePath:match("^%.[^/\\\\]*[/\\\\]") or relativePath:match("[/\\\\]%.[^/\\\\]*[/\\\\]") then goto continue end
 			local configPath = path.join(cwd, relativePath)
@@ -423,7 +423,7 @@ local function test(args)
 		end
 
 		-- Rockspec packages whose test spec lives in the rockspec; skip ones with lde.json (handled above).
-		for _, relativePath in ipairs(fs.scan(cwd, "**" .. path.separator .. "*.rockspec")) do
+		for relativePath in fs.scan(cwd, "**" .. path.separator .. "*.rockspec") do
 			if relativePath:match("^%.[^/\\\\]*[/\\\\]") or relativePath:match("[/\\\\]%.[^/\\\\]*[/\\\\]") then goto continue end
 			local configPath = path.join(cwd, relativePath)
 			local pkgDir = path.dirname(configPath)

@@ -112,7 +112,7 @@ end
 ---@return boolean
 function Compiler:hasSource(dir)
 	if not fs.isdir(dir) then return false end
-	for _, rel in ipairs(fs.scan(dir, "**" .. path.separator .. "*" .. self.spec.extension)) do
+	for rel in fs.scan(dir, "**" .. path.separator .. "*" .. self.spec.extension) do
 		if not self.spec.hasSourceFilter or self.spec.hasSourceFilter(rel) then
 			return true
 		end
@@ -146,7 +146,7 @@ end
 ---@param outDir string
 function Compiler:compileDir(srcDir, outDir)
 	self:ensure()
-	for _, rel in ipairs(fs.scan(srcDir, "**")) do
+	for rel in fs.scan(srcDir, "**") do
 		const absSrc = path.join(srcDir, rel)
 		if fs.isdir(absSrc) then
 			mkdirp(path.join(outDir, rel))

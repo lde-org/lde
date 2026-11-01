@@ -55,7 +55,7 @@ end
 ---@param out lde.bundle.File[]
 ---@param excludes string[]? # module-relative globs a feature flag drops
 local function bundleDir(projectName, dir, out, excludes)
-	for _, relativePath in ipairs(fs.scan(dir, "**" .. path.separator .. "*.lua")) do
+	for relativePath in fs.scan(dir, "**" .. path.separator .. "*.lua") do
 		if isTestFile(relativePath) or features.isExcluded(relativePath, excludes) then
 			goto continue
 		end

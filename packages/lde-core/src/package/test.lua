@@ -480,7 +480,7 @@ local TEST_STAMP_VERSION = 1
 ---@return table<string, lde.StampFile> current
 local function checkTestsInputs(testDir, stored)
 	const entries = {}
-	for _, rel in ipairs(fs.scan(testDir, "**")) do
+	for rel in fs.scan(testDir, "**") do
 		entries[rel:gsub("\\", "/")] = path.join(testDir, rel)
 	end
 	return stamp.check(entries, stored)
@@ -718,7 +718,10 @@ local function runTests(package, reporter, filters, opts)
 		fs.mklink(testDir, targetTestsDir)
 	end
 
-	local testFiles = fs.scan(testsDir, "**" .. path.separator .. "*.test.lua")
+	local testFiles = {}
+	for testFile in fs.scan(testsDir, "**" .. path.separator .. "*.test.lua") do
+		testFiles[#testFiles + 1] = testFile
+	end
 
 	if filters and #filters > 0 then
 		-- Fresh list: monorepo `lde test` shares one filters table across packages, each resolving it against its own tests/ dir.

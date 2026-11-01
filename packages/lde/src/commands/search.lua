@@ -51,7 +51,7 @@ local function searchRegistry(query)
 	local results = {}
 	local packagesDir = path.join(lde.global.getRegistryDir(), "packages")
 	if fs.isdir(packagesDir) then
-		for _, rel in ipairs(fs.scan(packagesDir, "**" .. path.separator .. "*.json")) do
+		for rel in fs.scan(packagesDir, "**" .. path.separator .. "*.json") do
 			const content = fs.read(path.join(packagesDir, rel))
 			const ok, portfile = pcall(json.decode, content or "")
 			if ok and type(portfile) == "table" and type(portfile.name) == "string"
