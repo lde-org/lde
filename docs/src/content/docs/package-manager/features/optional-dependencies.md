@@ -17,7 +17,7 @@ Add an `"optional"` field to any dependency in your `lde.json`:
 
 ## Defining features
 
-Features are named groups. You define them under the `"features"` key in `lde.json`, where each key is a feature name and the value is a list of what the feature turns on:
+Features are named groups. You define them under the `"features"` key in `lde.json`, where each key is a feature name and the value is a list of what the feature claims: optional dependency aliases to enable and modules to bundle:
 
 ```json
 "dependencies": {
@@ -33,12 +33,13 @@ Features are named groups. You define them under the `"features"` key in `lde.js
 
 ## Gating files
 
-A feature can also omit files from your bundle. Name the module exactly as you would `require()` it and it will be left out from the bundle.
+A feature can also claim files. Name the module exactly as you would `require()` it and it will only be  bundled only when a flag that names it is on. Files no feature names are always bundled, so you only list the platform-specific ones:
 
 ```json
 "features": {
-  "vulkan": ["mypackage.vulkan"],
-  "unix": ["mypackage.raw.windows"]
+  "vulkan":  ["mypackage.vulkan"],
+  "windows": ["mypackage.raw.windows"],
+  "unix":    ["mypackage.raw.posix"]
 }
 ```
 
@@ -46,11 +47,11 @@ You can mix and match dependencies and specific files.
 
 ```json
 "features": {
-  "unix": ["luaposix", "mypackage.raw.windows"]
+  "unix": ["luaposix", "mypackage.raw.posix"]
 }
 ```
 
-Exclusion matches on the *module* a file implements, not on its filename, so a single entry covers every form that module can ship in. `mypackage.native.core` drops all of:
+Matching is on the *module* a file implements, not on its filename, so a single entry covers every form that module can ship in. `mypackage.native.core` covers all of:
 
 - native/core.lua
 - native/core/init.lua
@@ -60,7 +61,7 @@ Exclusion matches on the *module* a file implements, not on its filename, so a s
 
 
 > [!NOTE]
-> These exclusions only apply during bundling via compile or bundle, so for example ./target during development will still symlink and not respect this.
+> This filtering only applies during bundling via compile or bundle, so ./target during development will still symlink every file.
 
 ## Built-in features
 
@@ -78,8 +79,8 @@ This means you can gate dependencies and files by OS without any extra configura
 
 ```json
 "features": {
-  "windows": ["mypackage.raw.posix", "winapi"],
-  "unix":    ["mypackage.raw.windows"]
+  "windows": ["mypackage.raw.windows", "winapi"],
+  "unix":    ["mypackage.raw.posix"]
 }
 ```
 

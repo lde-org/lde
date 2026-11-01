@@ -9,7 +9,7 @@ const lde = require("lde-core")
 ---@field rockspec string? # URL or relative path to the rockspec file
 ---@field optional boolean? # If true, only installed when enabled via features
 ---@field features lde.Package.Config.FeatureFlag[]? # Feature flags to enable for this dependency
----@field exclude string[]? # module paths the enabled features drop from this dependency's bundle
+---@field exclude string[]? # module paths the dependency's off features drop from its bundle
 
 ---@class lde.Lockfile.GitDependency: lde.Lockfile.BaseDependency
 ---@field git string

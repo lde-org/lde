@@ -4,10 +4,10 @@
 	"dependencies": {},
 	"features": {
 		"windows": [
-			"readline.raw.posix"
+			"readline.raw.windows"
 		],
 		"unix": [
-			"readline.raw.windows"
+			"readline.raw.posix"
 		]
 	}
 }

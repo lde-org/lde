@@ -8,7 +8,7 @@ local features = require("lde-core.package.features")
 
 local lde = require("lde-core")
 
---- onto a lock entry. `exclude` is the resolved file list the enabled features
+--- onto a lock entry. `exclude` is the resolved file list the disabled features
 --- drop from this package's bundle; it is derived from the dependency's own
 --- manifest, so it has to be recorded here for the bundler to see it later --
 --- a dependency materialized as a copy keeps no manifest next to its modules.

@@ -1,4 +1,4 @@
---- Feature flags: a manifest lists per-flag effects -- dependency aliases to enable and `<pkg>.<module>` names to drop from the bundle when bundling (never from `target/` in dev); platform flags are always on.
+--- Feature flags: a manifest lists per-flag effects -- dependency aliases to enable and `<pkg>.<module>` names the flag claims. A claimed module is bundled only when a flag that claims it is on (files no flag names are always bundled); platform flags are always on.
 
 const fs = require("fs")
 const json = require("json")
@@ -17,7 +17,7 @@ const OS_FLAGS = {
 
 ---@class lde.Package.Config.FeatureDefinition
 ---@field deps string[]? # optional dependency aliases this flag enables
----@field modules string[]? # module paths below the module dir that this flag drops
+---@field modules string[]? # module paths below the module dir that this flag claims
 
 ---@alias lde.Package.Config.FeatureDeclarations table<string, string[]>
 
@@ -144,15 +144,25 @@ local function modulePathOf(relativePath)
 	return modulePath
 end
 
---- Sorted, de-duplicated: the result goes into the lockfile, so an unstable list would churn it on every install.
+--- A module named by any feature is claimed: it is dropped unless a flag that names it is on. Modules no feature names are left alone, so a manifest only lists its platform-specific files. Sorted, de-duplicated: the result goes into the lockfile, so an unstable list would churn it on every install.
 ---@param defs table<string, lde.Package.Config.FeatureDefinition>? # normalized
 ---@param requested string[]?
----@return string[]? excludes # nil when nothing is excluded
+---@return string[]? excludes # nil when every claimed module is on
 function features.excludes(defs, requested)
-	local seen, list = {}, {}
+	if not defs then return nil end
+
+	---@type table<string, true>
+	local claimed = {}
 	for _, def in ipairs(features.enabled(defs, requested)) do
 		for _, modulePath in ipairs(def.modules or {}) do
-			if modulePath ~= "" and not seen[modulePath] then
+			claimed[modulePath] = true
+		end
+	end
+
+	local seen, list = {}, {}
+	for _, def in pairs(defs) do
+		for _, modulePath in ipairs(def.modules or {}) do
+			if modulePath ~= "" and not claimed[modulePath] and not seen[modulePath] then
 				seen[modulePath] = true
 				list[#list + 1] = modulePath
 			end

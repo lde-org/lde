@@ -5,7 +5,7 @@
 	"definitions": {
 		"featureFlag": {
 			"anyOf": [
-				{ "type": "string", "enum": ["windows", "linux", "macos"] },
+				{ "type": "string", "enum": ["windows", "linux", "macos", "bsd", "unix"] },
 				{ "type": "string" }
 			]
 		},

@@ -378,4 +378,4 @@ Named groups of optional dependencies. A group lists the dependency keys to enab
 }
 ```
 
-lde activates `windows`, `linux` or `macos` automatically based on the operating system, so optional dependencies can be gated by platform with no extra configuration. Custom feature names can be defined for anything else. See [optional dependencies](/docs/package-manager/features/optional-dependencies) for the full picture.
+lde activates `windows`, `linux`, `macos`, `bsd` or `unix` automatically based on the operating system, so optional dependencies and platform backends can be gated with no extra configuration. Custom feature names can be defined for anything else. See [optional dependencies](/docs/package-manager/features/optional-dependencies) for the full picture.

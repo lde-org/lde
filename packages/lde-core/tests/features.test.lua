@@ -54,18 +54,21 @@ test.it("list: a bare name is a dependency alias", function()
 	test.equal(features.excludes(defs, { "windows" }), nil)
 end)
 
-test.it("list: a <package>. name is one of the package's own modules", function()
+test.it("list: a <package>. name is a module its flag claims", function()
 	-- The documented spelling: the entry is the module name the way require()
 	-- spells it, so it always starts with the declaring package's own name and
 	-- a dot.
 	local defs = features.parse({ vulkan = { "mypackage.vulkan" } }, "mypackage")
 	test.equal(next(features.enabledDependencies(defs, { "vulkan" })), nil)
-	test.equal(table.concat(features.excludes(defs, { "vulkan" }) --[[@as string[] ]], ","), "vulkan")
+	-- On keeps it, off drops it.
+	test.equal(features.excludes(defs, { "vulkan" }), nil)
+	test.equal(table.concat(features.excludes(defs, nil) --[[@as string[] ]], ","), "vulkan")
 end)
 
 test.it("list: nested module names map onto directories", function()
 	local defs = features.parse({ v = { "mypackage.a.b" } }, "mypackage")
-	test.equal(table.concat(features.excludes(defs, { "v" }) --[[@as string[] ]], ","), "a/b")
+	test.equal(features.excludes(defs, { "v" }), nil)
+	test.equal(table.concat(features.excludes(defs, nil) --[[@as string[] ]], ","), "a/b")
 end)
 
 test.it("list: a foreign package's prefix is not a module name here", function()
@@ -75,34 +78,46 @@ test.it("list: a foreign package's prefix is not a module name here", function()
 	-- they can never contain a dot.
 	local defs = features.parse({ v = { "otherpkg.thing" } }, "mypackage")
 	test.truthy(features.enabledDependencies(defs, { "v" })["otherpkg.thing"])
+	test.equal(features.excludes(defs, nil), nil)
 end)
 
 test.it("list: deps and modules can be mixed in one list", function()
-	local defs = features.parse({ unix = { "luaposix", "mypackage.raw.windows" } }, "mypackage")
-	test.truthy(features.enabledDependencies(defs, { "unix" })["luaposix"])
-	test.equal(table.concat(features.excludes(defs, { "unix" }) --[[@as string[] ]], ","), "raw/windows")
+	local defs = features.parse({ v = { "luaposix", "mypackage.raw.vulkan" } }, "mypackage")
+	test.truthy(features.enabledDependencies(defs, { "v" })["luaposix"])
+	test.equal(features.excludes(defs, { "v" }), nil)
+	test.equal(table.concat(features.excludes(defs, nil) --[[@as string[] ]], ","), "raw/vulkan")
 end)
 
 test.it("list: excludes are sorted and de-duplicated for a stable lockfile", function()
-	local defs = features.parse({ x = { "p.b", "p.a", "p.b" } }, "p")
-	test.equal(table.concat(features.excludes(defs, { "x" }) --[[@as string[] ]], ","), "a,b")
+	local defs = features.parse({ a = { "p.b" }, b = { "p.a", "p.b" } }, "p")
+	test.equal(table.concat(features.excludes(defs, nil) --[[@as string[] ]], ","), "a,b")
+end)
+
+test.it("list: a module claimed by an on flag survives another flag naming it", function()
+	local defs = features.parse({ a = { "p.x" }, b = { "p.x" } }, "p")
+	test.equal(features.excludes(defs, { "a" }), nil)
+	test.equal(features.excludes(defs, { "b" }), nil)
+	test.equal(table.concat(features.excludes(defs, nil) --[[@as string[] ]], ","), "x")
 end)
 
 test.it("list: nil when nothing is excluded", function()
-	test.equal(features.excludes(features.parse({ x = { "dep" } }, "p"), { "x" }), nil)
+	-- Every claimed module is on...
+	test.equal(features.excludes(features.parse({ x = { "p.a" } }, "p"), { "x" }), nil)
+	-- ...and a dependency alias is not a module.
+	test.equal(features.excludes(features.parse({ x = { "dep" } }, "p"), nil), nil)
 end)
 
-test.it("list: a flag that is off contributes nothing", function()
+test.it("list: a flag that is off drops its modules", function()
 	-- A platform flag is on for the host, so gate on the other one: this must hold
 	-- on every runner, not just POSIX.
 	const offFlag = jit.os == "Windows" and "linux" or "windows"
 	local defs = features.parse({ [offFlag] = { "p.a" } }, "p")
-	test.equal(features.excludes(defs, nil), nil)
+	test.equal(table.concat(features.excludes(defs, nil) --[[@as string[] ]], ","), "a")
 end)
 
 test.it("list: a non-list feature value is rejected, not silently ignored", function()
 	-- Silently ignoring it would leave a package quietly shipping the files it
-	-- asked to exclude, which is the one failure mode worth being loud about.
+	-- claimed for another flag, which is the one failure mode worth being loud about.
 	test.errors(function()
 		features.parse({ vulkan = { deps = { "x" } } }, "mypackage")
 	end)
@@ -113,9 +128,9 @@ end)
 test.it("match: one module name covers every form the module can ship in", function()
 	-- Exclusion matches on the module a file implements, not its filename, so
 	-- a native module is gated by the same entry as its Lua twin.
-	local excludes = features.excludes(
-		features.parse({ w = { "fs.native.core" } }, "fs"), { "w" })
-		--[[@as string[] ]]
+	const defs = features.parse({ w = { "fs.native.core" } }, "fs")
+	test.equal(features.excludes(defs, { "w" }), nil)
+	local excludes = features.excludes(defs, nil) --[[@as string[] ]]
 
 	test.truthy(features.isExcluded("native/core.lua", excludes))
 	test.truthy(features.isExcluded("native/core.so", excludes))
@@ -128,7 +143,7 @@ end)
 
 test.it("match: a different module is untouched", function()
 	local excludes = features.excludes(
-		features.parse({ w = { "fs.native.core" } }, "fs"), { "w" })
+		features.parse({ w = { "fs.native.core" } }, "fs"), nil)
 		--[[@as string[] ]]
 
 	test.falsy(features.isExcluded("native/other.so", excludes))
@@ -208,14 +223,19 @@ test.it("excludesFor: reads the dependency's own manifest when it is adjacent", 
 	fs.write(path.join(modulesDir, "lde.json"), json.encode({
 		name = "dep",
 		version = "0.1.0",
-		features = { unix = { "dep.raw.windows" } },
+		features = {
+			windows = { "dep.raw.windows" },
+			unix    = { "dep.raw.posix" },
+		},
 	}))
 
+	-- The host keeps its own backend and drops the other one.
 	local excludes = features.excludesFor(modulesDir, "dep", nil)
+	---@cast excludes -nil
 	if isWindows then
-		test.equal(excludes, nil)
+		test.equal(table.concat(excludes, ","), "raw/posix")
 	else
-		test.equal(table.concat(excludes --[[@as string[] ]], ","), "raw/windows")
+		test.equal(table.concat(excludes, ","), "raw/windows")
 	end
 end)
 
@@ -250,14 +270,15 @@ fs.write(path.join(depDir, "lde.json"), json.encode({
 	name = "e2e-dep",
 	version = "0.1.0",
 	-- Symmetric platform gating: exactly one backend survives, whichever
-	-- platform the bundle is built on. This is the shape `fs` would use to stop
+	-- platform the bundle is built on. This is the shape `fs` uses to stop
 	-- being a monorepo.
 	features = {
-		windows = { "e2e-dep.unix", "e2e-dep.sub.nested.win" },
-		-- The plugin is gated by a flag no platform turns on by itself, so the
-		-- "kept" bundle contains it on every host.
-		noPlugin = { "e2e-dep.plugin" },
-		unix    = { "e2e-dep.win", "e2e-dep.sub.nested.win" },
+		windows = { "e2e-dep.win" },
+		-- Claimed by a flag no platform turns on, so it never survives.
+		never   = { "e2e-dep.sub.nested.win" },
+		-- Likewise, unless the caller asks for the flag.
+		plugin  = { "e2e-dep.plugin" },
+		unix    = { "e2e-dep.unix" },
 	},
 }))
 
@@ -284,7 +305,7 @@ test.it("bundle: platform-excluded modules are not in the bundle", function()
 		test.truthy(source:find('package.preload["e2e-dep.unix"]', 1, true))
 		test.falsy(source:find('package.preload["e2e-dep.win"]', 1, true))
 	end
-	-- Excluded under both platform flags, so it never survives.
+	-- Claimed only by a flag no platform turns on, so it never survives.
 	test.falsy(source:find('package.preload["e2e-dep.sub.nested.win"]', 1, true))
 end)
 
@@ -294,17 +315,17 @@ test.it("bundle: the entry point survives exclusion", function()
 	test.truthy(source:find('package.preload["e2e-dep"]', 1, true))
 end)
 
-test.it("bundle: a native module dropped by a feature is not embedded", function()
+test.it("bundle: a native module is embedded only when its feature is on", function()
 	local dep = lde.Package.open(depDir) ---@cast dep -nil
 	dep:installDependencies()
 	dep:build()
 
-	const withNative = bundlePackage(dep, {}) --[[@as string]]
-	const withoutNative = bundlePackage(dep, { features = { "noPlugin" } }) --[[@as string]]
+	const withoutNative = bundlePackage(dep, {}) --[[@as string]]
+	const withNative = bundlePackage(dep, { features = { "plugin" } }) --[[@as string]]
 
-	-- The `noPlugin` flag drops `e2e-dep.plugin`, the fixture's native module.
-	test.truthy(withNative:find("PLUGIN-BYTES-MARKER", 1, true))
+	-- The `plugin` flag claims `e2e-dep.plugin`, the fixture's native module.
 	test.falsy(withoutNative:find("PLUGIN-BYTES-MARKER", 1, true))
+	test.truthy(withNative:find("PLUGIN-BYTES-MARKER", 1, true))
 	-- ...and it is a Lua module list, so the Lua half still behaves.
 	test.truthy(withoutNative:find('package.preload["e2e-dep"]', 1, true))
 end)
