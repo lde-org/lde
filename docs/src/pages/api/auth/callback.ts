@@ -1,7 +1,7 @@
 import type { APIContext } from "astro";
 import {
 	exchangeCode,
-	getEnv,
+	hasGithubConfig,
 	json,
 	setGithubSession,
 	takeOAuthState,
@@ -10,8 +10,7 @@ import {
 export const prerender = false;
 
 export async function GET(context: APIContext) {
-	const env = getEnv(context);
-	if (!env.GITHUB_CLIENT_ID || !env.GITHUB_CLIENT_SECRET) {
+	if (!hasGithubConfig(context)) {
 		return json(
 			{ error: "GitHub login is not configured on this deployment." },
 			503,

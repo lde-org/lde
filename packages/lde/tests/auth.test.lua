@@ -21,7 +21,7 @@ local function fakeFs()
 	}, { files = files }
 end
 
----@param opts { http: function?, now: table?, fs: table? }?
+---@param opts { http: function?, now: table?, fs: table?, getConfig: function?, getEnv: function?, defaultClientId: string? }?
 local function makeAuth(opts)
 	opts = opts or {}
 	local fs = opts.fs or fakeFs()
@@ -32,7 +32,9 @@ local function makeAuth(opts)
 		authPath = function() return "/lde-test/auth.json" end,
 		now = function() return clock.value end,
 		sleep = function(ms) clock.value = clock.value + ms / 1000 end,
-		getConfig = function() return { github = { clientId = "test-client" } } end,
+		getConfig = opts.getConfig or function() return { github = { clientId = "test-client" } } end,
+		getEnv = opts.getEnv or function() return nil end,
+		defaultClientId = opts.defaultClientId,
 		http = opts.http or function() return { status = 500, body = "" }, "no http" end,
 	})
 	return instance, fs, clock
@@ -42,6 +44,27 @@ end
 local function jsonResponse(payload)
 	return { status = 200, body = json.encode(payload) }
 end
+
+test.it("uses the built-in OAuth client ID when none is configured", function()
+	local requests = {}
+	local instance = makeAuth({
+		getConfig = function() return {} end,
+		getEnv = function() return nil end,
+		http = function(request)
+			requests[#requests + 1] = request
+			return { status = 200, body = json.encode({
+				device_code = "device",
+				user_code = "code",
+				verification_uri = "https://github.com/login/device",
+				expires_in = 900,
+				interval = 5,
+			}) }
+		end,
+	})
+	const device, err = instance.startDeviceFlow()
+	test.truthy(device, err)
+	test.includes(requests[1].body, "client_id=" .. auth.DEFAULT_CLIENT_ID)
+end)
 
 test.it("treats tokens inside the 60s skew as expired", function()
 	local instance = makeAuth()
@@ -192,6 +215,8 @@ test.it("reports a missing client ID with setup instructions", function()
 		path = path,
 		authPath = function() return "/lde-test/auth.json" end,
 		getConfig = function() return {} end,
+		getEnv = function() return nil end,
+		defaultClientId = "",
 		http = function() return nil, "unused" end,
 	})
 	const session, err = instance.login()

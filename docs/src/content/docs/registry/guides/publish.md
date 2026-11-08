@@ -26,11 +26,12 @@ Two-factor authentication must be enabled on the GitHub account. `lde publish`
 refuses to run without it, and the registry website rejects namespace and owner
 changes from accounts without 2FA.
 
-`lde login` needs a GitHub OAuth App client ID. The client ID is public and is
-read from `github.clientId` in `~/.lde/config.json` (or
-`LDE_GITHUB_CLIENT_ID`). The CLI requests `public_repo offline_access` and
-stores no client secret. Contributors without write access publish through a
-fork, so the registry never needs to grant them write access.
+`lde login` uses the official lde OAuth App by default; no configuration is
+needed. The client ID is public. Enterprise or self-hosted setups can override
+it with `github.clientId` in `~/.lde/config.json` or `LDE_GITHUB_CLIENT_ID`.
+The CLI requests `public_repo offline_access` and stores no client secret.
+Contributors without write access publish through a fork, so the registry never
+needs to grant them write access.
 
 ## Creating packages
 

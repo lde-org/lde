@@ -29,6 +29,8 @@ end
 ---@field now fun(): number
 ---@field expirySkew integer
 ---@field storeVersion integer
+---@field defaultClientId string?
+---@field getEnv fun(name: string): string?
 
 ---@param opts lde.github.AuthStoreOpts
 ---@return table
@@ -43,12 +45,16 @@ function store.new(opts)
 
 	---@return string?, string?
 	function instance.clientId()
-		local fromEnv = os.getenv("LDE_GITHUB_CLIENT_ID")
+		local fromEnv = opts.getEnv("LDE_GITHUB_CLIENT_ID")
 		if fromEnv and fromEnv ~= "" then return fromEnv end
 
 		local config = opts.getConfig()
 		local configured = config and config.github and config.github.clientId
 		if configured and configured ~= "" then return configured end
+
+		if opts.defaultClientId and opts.defaultClientId ~= "" then
+			return opts.defaultClientId
+		end
 
 		local configPath = path.join(require("lde-core.global.dirs").getUserDir(), "config.json")
 		return nil, table.concat({

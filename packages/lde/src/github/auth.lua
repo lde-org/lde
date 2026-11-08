@@ -18,9 +18,12 @@ const storeModule = require("lde.github.auth.store")
 ---@field getConfig (fun(): lde.global.Config)?
 ---@field authPath (fun(): string)?
 ---@field userAgent string?
+---@field getEnv (fun(name: string): string?)?
+---@field defaultClientId string?
 
 local auth = {}
 
+auth.DEFAULT_CLIENT_ID = constants.DEFAULT_CLIENT_ID
 auth.STORE_VERSION = constants.STORE_VERSION
 auth.EXPIRY_SKEW = constants.EXPIRY_SKEW
 auth.DEVICE_CODE_URL = constants.DEVICE_CODE_URL
@@ -53,6 +56,7 @@ function auth.new(opts)
 		local ok, version = pcall(require, "lde.version")
 		return "lde/" .. (ok and tostring(version) or "0.11.0")
 	end)()
+	local getEnv = opts.getEnv or os.getenv
 
 	local store = storeModule.new({
 		fs = fs,
@@ -62,6 +66,10 @@ function auth.new(opts)
 		now = now,
 		expirySkew = constants.EXPIRY_SKEW,
 		storeVersion = constants.STORE_VERSION,
+		defaultClientId = opts.defaultClientId ~= nil
+			and opts.defaultClientId
+			or constants.DEFAULT_CLIENT_ID,
+		getEnv = getEnv,
 	})
 	---@cast http fun(opts: table): (table?, string?)
 	local httpClient = httpModule.new({

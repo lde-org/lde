@@ -5,6 +5,7 @@ import type { APIContext } from "astro";
 declare const process: { env: Record<string, string | undefined> } | undefined;
 
 const GITHUB_API = "https://api.github.com";
+const DEFAULT_GITHUB_CLIENT_ID = "Ov23li0SXnUlPdSlV5nQ";
 const GITHUB_OAUTH = "https://github.com/login/oauth";
 const SESSION_KEY = "github";
 const STATE_KEY = "oauthState";
@@ -76,12 +77,16 @@ export function getRegistryBranch(context: SessionContext): string {
 
 function requireGithubConfig(context: SessionContext) {
 	const env = getEnv(context);
-	if (!env.GITHUB_CLIENT_ID || !env.GITHUB_CLIENT_SECRET) {
-		throw new Error(
-			"GitHub login is not configured. Set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET.",
-		);
+	const clientId = env.GITHUB_CLIENT_ID ?? DEFAULT_GITHUB_CLIENT_ID;
+	if (!env.GITHUB_CLIENT_SECRET) {
+		throw new Error("GitHub login is not configured. Set GITHUB_CLIENT_SECRET.");
 	}
-	return { clientId: env.GITHUB_CLIENT_ID, clientSecret: env.GITHUB_CLIENT_SECRET };
+	return { clientId, clientSecret: env.GITHUB_CLIENT_SECRET };
+}
+
+export function hasGithubConfig(context: SessionContext): boolean {
+	const env = getEnv(context);
+	return Boolean((env.GITHUB_CLIENT_ID ?? DEFAULT_GITHUB_CLIENT_ID) && env.GITHUB_CLIENT_SECRET);
 }
 
 export function createOAuthState(): string {
