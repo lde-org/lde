@@ -4,7 +4,6 @@ interface GithubUser {
 	login: string;
 	id: number;
 	avatarUrl: string | null;
-	twoFactorAuthentication: boolean;
 }
 
 interface GithubSession {

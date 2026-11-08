@@ -375,7 +375,7 @@ test.it("forks the registry when the user cannot push upstream", function()
 		end,
 		setToken = function() end,
 	}
-	local session = { accessToken = "token", id = 42, login = "user", twoFactor = true }
+	local session = { accessToken = "token", id = 42, login = "user" }
 	local auth = {
 		ensureValid = function() return session end,
 		refresh = function() return session end,
@@ -409,41 +409,6 @@ test.it("forks the registry when the user cannot push upstream", function()
 	end
 	test.truthy(pulled)
 	test.truthy(usedFork)
-end)
-
-test.it("refuses to publish without two-factor authentication", function()
-	local api = {
-		request = function(method, requestPath)
-			if requestPath == "/repos/lde-org/registry" then
-				return { default_branch = "master", permissions = { push = false } }, 200, nil
-			end
-			return nil, 500, "unexpected request"
-		end,
-		fetchRaw = function() return nil, 404, nil end,
-		setToken = function() end,
-	}
-	local auth = {
-		ensureValid = function()
-			return { accessToken = "token", id = 42, login = "user", twoFactor = false }
-		end,
-		refresh = function() return nil, "no" end,
-	}
-
-	local result, err = publish.run({
-		name = "example",
-		version = "1.0.0",
-		commit = COMMIT,
-		gitUrl = "git@github.com:owner/example.git",
-		branch = "main",
-		config = { name = "example", version = "1.0.0" },
-		registryUrl = "https://github.com/lde-org/registry",
-		api = api,
-		auth = auth,
-		emit = function() end,
-	})
-
-	test.falsy(result)
-	test.includes(err, "two-factor authentication")
 end)
 
 test.it("builds an archive-only portfile with a SHA-256 pin", function()

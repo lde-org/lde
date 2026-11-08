@@ -63,7 +63,6 @@ function flow.new(opts)
 				or current.refreshExpiresAt,
 			login = current.login,
 			id = current.id,
-			twoFactor = current.twoFactor,
 		}
 		store.save(session)
 		return session, nil
@@ -130,7 +129,6 @@ function flow.new(opts)
 				if not user then return nil, userErr end
 				session.login = type(user.login) == "string" and user.login or nil
 				session.id = http.asNumber(user.id)
-				session.twoFactor = user.two_factor_authentication == true
 
 				store.save(session)
 				return session, nil

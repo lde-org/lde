@@ -26,7 +26,6 @@ interface ManageData {
 	user: {
 		login: string;
 		id: number;
-		twoFactorAuthentication: boolean;
 	};
 	packages: ManagedPackage[];
 	namespaces: ManagedNamespace[];
@@ -245,11 +244,6 @@ export default function ManageDashboard({ user }: { user: ManageData["user"] }) 
 				</button>
 			</div>
 
-			{!user.twoFactorAuthentication && (
-				<p class="text-sm text-red-500">
-					Enable two-factor authentication on GitHub before making registry changes.
-				</p>
-			)}
 			{error && <p class="text-sm text-red-500">{error}</p>}
 
 			<section id="packages" class="flex flex-col gap-4">

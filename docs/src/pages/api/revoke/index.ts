@@ -24,12 +24,6 @@ export async function POST(context: APIContext) {
 		assertSameOrigin(context);
 		const session = await getGithubSession(context);
 		if (!session) return json({ error: "Sign in with GitHub first." }, 401);
-		if (!session.user.twoFactorAuthentication) {
-			return json(
-				{ error: "Enable two-factor authentication on GitHub before revoking versions." },
-				403,
-			);
-		}
 
 		const body = (await context.request.json()) as {
 			package?: unknown;

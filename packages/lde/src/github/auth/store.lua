@@ -9,7 +9,6 @@ const json = require("json")
 ---@field refreshExpiresAt number?
 ---@field login string?
 ---@field id number?
----@field twoFactor boolean? # GitHub account has 2FA enabled
 
 local store = {}
 

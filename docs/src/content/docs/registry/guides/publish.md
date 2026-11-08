@@ -22,10 +22,6 @@ The command prints a short code and opens `https://github.com/login/device`. The
 stored session expires after eight hours and refreshes automatically; run
 `lde logout` to remove it.
 
-Two-factor authentication must be enabled on the GitHub account. `lde publish`
-refuses to run without it, and the registry website rejects namespace and owner
-changes from accounts without 2FA.
-
 `lde login` uses the official lde OAuth App by default; no configuration is
 needed. The client ID is public. Enterprise or self-hosted setups can override
 it with `github.clientId` in `~/.lde/config.json` or `LDE_GITHUB_CLIENT_ID`.

@@ -23,12 +23,6 @@ export async function POST(context: APIContext) {
 		if (!session) {
 			return json({ error: "Sign in with GitHub first." }, 401);
 		}
-		if (!session.user.twoFactorAuthentication) {
-			return json(
-				{ error: "Enable two-factor authentication on GitHub before requesting a namespace." },
-				403,
-			);
-		}
 
 		const last = await context.session?.get("lastNamespaceRequest");
 		if (last && Date.now() - last < 30_000) {

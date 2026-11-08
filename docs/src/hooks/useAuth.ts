@@ -4,7 +4,6 @@ export interface AuthUser {
 	login: string;
 	id: number;
 	avatarUrl: string | null;
-	twoFactorAuthentication: boolean;
 }
 
 export function useAuth() {

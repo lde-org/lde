@@ -87,9 +87,6 @@ function publish.run(opts)
 		session, authErr = authImpl.ensureValid()
 		if not session then return nil, authErr end
 		---@cast session -nil
-		if session.twoFactor ~= true then
-			return nil, "Enable two-factor authentication on GitHub before publishing; run `lde login` again after enabling it."
-		end
 	end
 
 	local api = opts.api

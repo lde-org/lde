@@ -15,7 +15,6 @@ export interface GithubUser {
 	login: string;
 	id: number;
 	avatarUrl: string | null;
-	twoFactorAuthentication: boolean;
 }
 
 export interface GithubSession {
@@ -259,7 +258,6 @@ async function fetchUser(token: string): Promise<GithubUser> {
 		login?: string;
 		id?: number;
 		avatar_url?: string | null;
-		two_factor_authentication?: boolean;
 	};
 	if (!data.login || typeof data.id !== "number") {
 		throw new Error("GitHub returned a malformed user response.");
@@ -268,7 +266,6 @@ async function fetchUser(token: string): Promise<GithubUser> {
 		login: data.login,
 		id: data.id,
 		avatarUrl: data.avatar_url ?? null,
-		twoFactorAuthentication: data.two_factor_authentication === true,
 	};
 }
 
