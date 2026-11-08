@@ -24,6 +24,16 @@ local function matches(query, s)
 	return s?.:lower():find(query, 1, true) ~= nil
 end
 
+---@param query string # already lowercased
+---@param tags string[]?
+local function matchesTag(query, tags)
+	if type(tags) ~= "table" then return false end
+	for _, tag in ipairs(tags) do
+		if type(tag) == "string" and matches(query, tag) then return true end
+	end
+	return false
+end
+
 ---@param query string
 ---@param name string
 ---@param description string?
@@ -33,7 +43,7 @@ local function rank(query, name, description)
 	if lname == query then return 0 end
 	if lname:sub(1, #query) == query then return 1 end
 	if lname:find(query, 1, true) then return 2 end
-	return 3 -- description match only
+	return 3 -- description or tag match only
 end
 
 ---@param versions table<string, string>?
@@ -55,7 +65,8 @@ local function searchRegistry(query)
 			const content = fs.read(path.join(packagesDir, rel))
 			const ok, portfile = pcall(json.decode, content or "")
 			if ok and type(portfile) == "table" and type(portfile.name) == "string"
-				and (matches(query, portfile.name) or matches(query, portfile.description)) then
+				and (matches(query, portfile.name) or matches(query, portfile.description)
+					or matchesTag(query, portfile.tags)) then
 				results[#results + 1] = {
 					name = portfile.name,
 					description = portfile.description,

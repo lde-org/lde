@@ -1,15 +1,50 @@
 import { useState, useEffect } from "preact/hooks";
 import { readCache, writeCache } from "../lib/cache";
 
+/** A version pinned to a commit, optionally overriding the portfile's source. */
+export interface VersionSource {
+	commit?: string;
+	git?: string;
+	branch?: string;
+	archive?: string;
+	sha256?: string;
+	size?: number;
+}
+
+export type VersionEntry = string | VersionSource;
+
 export interface Portfile {
 	name: string;
 	description?: string;
 	license?: string;
 	authors?: string[];
-	git: string;
+	tags?: string[];
+	git?: string;
 	branch?: string;
-	versions: Record<string, string>;
+	versions: Record<string, VersionEntry>;
+	revoked?: string[];
 	dependencies?: Record<string, string>;
+}
+
+/** Commit for a version entry, regardless of whether it is a legacy string. */
+export function versionCommit(entry: VersionEntry): string | undefined {
+	return typeof entry === "string" ? entry : entry.commit;
+}
+
+/** Source repository for a version, falling back to the portfile default. */
+export function versionGit(
+	portfile: Pick<Portfile, "git">,
+	entry: VersionEntry,
+): string | undefined {
+	return typeof entry === "string" ? portfile.git : entry.git ?? portfile.git;
+}
+
+/** Branch for a version, falling back to the portfile default. */
+export function versionBranch(
+	portfile: Pick<Portfile, "branch">,
+	entry: VersionEntry,
+): string | undefined {
+	return typeof entry === "string" ? portfile.branch : entry.branch ?? portfile.branch;
 }
 
 const CACHE_TTL = 5 * 60 * 1000;

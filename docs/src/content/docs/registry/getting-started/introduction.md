@@ -13,16 +13,16 @@ Packages are portfiles that link to their source git repositories, with a pinned
 
 ## Publishing
 
-You can publish by creating a pull request to add a portfile, which will be reviewed and manually accepted by moderators.
-
-> [!NOTE]
-> This is done manually to avoid issues with lde's early stages in terms of name squatting.
+Sign in once with `lde login`, then run `lde publish` inside your package. It
+creates a pull request for you. A first-time package is reviewed by a moderator;
+updates from the recorded owner are approved and merged automatically.
 
 You can read more on the dedicated [Publishing](/docs/registry/guides/publish) page
 
 ## Updating
 
-Updating packages is simple, just create a pull request to update the portfile.
+Bump the version in `lde.json` and run `lde publish` again. Existing versions are
+immutable; a new version may point at a different git repository or branch.
 
 ## Automation
 

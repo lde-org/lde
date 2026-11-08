@@ -208,7 +208,8 @@ export default function Registry() {
 			.filter(
 				(p) =>
 					p.name.toLowerCase().includes(q) ||
-					(p.description ?? "").toLowerCase().includes(q),
+					(p.description ?? "").toLowerCase().includes(q) ||
+					(p.tags ?? []).some((tag) => tag.toLowerCase().includes(q)),
 			)
 			.sort(byName);
 	}, [packages, query]);
@@ -333,7 +334,7 @@ export default function Registry() {
 			{/* Publish CTA + namespace request */}
 			<div class="flex flex-wrap items-center justify-center gap-4 mb-24">
 				<a
-					href="/registry/publish"
+					href="/registry/manage?intent=publish"
 					class="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium bg-blue-600 text-white hover:bg-blue-500 transition"
 				>
 					<svg
@@ -352,7 +353,7 @@ export default function Registry() {
 					Publish a package
 				</a>
 				<a
-					href="/registry/claim"
+					href="/registry/manage?intent=claim"
 					class="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium border border-blue-600/40 text-blue-600 dark:text-blue-400 hover:bg-blue-600/10 hover:border-blue-600/60 transition"
 				>
 					<svg

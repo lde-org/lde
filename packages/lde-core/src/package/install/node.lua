@@ -64,12 +64,14 @@ end
 ---@field file string? # local cache file to download into (nil for clone)
 ---@field dir string?  # extraction target (nil for clone / isCached git)
 ---@field srcDir string? # dir inside `dir` holding the source (source.dir, or the single root)
+---@field sha256 string? # expected SHA-256 of the downloaded artifact
 
 ---@class lde.install.GitPlan
 ---@field dir string
 ---@field commit string
 ---@field tarballUrl string?
 ---@field archiveFile string?
+---@field sha256 string?
 ---@field url string? # resolved source URL (set when the config entry doesn't carry it: luarocks fallbacks, registry deps)
 ---@field clone { repoName: string, repoUrl: string, commit: string, branch: string? }?
 
@@ -104,7 +106,7 @@ end
 local function sourceKey(entry, pkg)
 	if entry.git then return "git:" .. entry.git .. "@" .. (entry.commit or "") end
 	if entry.path then return "path:" .. pkg.dir end
-	if entry.archive then return "archive:" .. entry.archive end
+	if entry.archive then return "archive:" .. entry.archive .. "@" .. (entry.sha256 or "") end
 	return "unknown"
 end
 
@@ -137,7 +139,7 @@ local function depSourceKey(alias, depInfo, relativeTo)
 		-- lockfile pin), so the source identity is the URL alone.
 		return gitSourceKey(depInfo.git)
 	elseif depInfo.archive then
-		return "archive:" .. depInfo.archive
+		return "archive:" .. depInfo.archive .. "@" .. (depInfo.sha256 or "")
 	elseif depInfo.luarocks then
 		-- Resolve to the concrete version so two parents with different
 		-- constraints that land on the same version don't conflict.
@@ -147,12 +149,21 @@ local function depSourceKey(alias, depInfo, relativeTo)
 		return "luarocks:" .. name .. "@" .. (v or constraint)
 	elseif depInfo.version then
 		-- Registry deps resolve to a git repo, so their identity is the
-		-- resolved repo URL; fall back to the version form when the portfile
-		-- can't be read (e.g. the registry hasn't been synced yet this run).
+		-- effective repo URL for the selected version; fall back to the
+		-- version form when the portfile can't be read (e.g. the registry
+		-- hasn't been synced yet this run) or the constraint doesn't resolve
+		-- (makeNode raises the real error for that later).
 		local packageName = depInfo.name or alias
 		local portfile = lde.global.lookupRegistryPackage(packageName)
-		if portfile and portfile.git then
-			return gitSourceKey(portfile.git)
+		if portfile then
+			local ok, _, _, git, _, archive, sha256 = pcall(
+				lde.global.resolveRegistryVersion, portfile, depInfo.version)
+			if ok then
+				if archive then
+					return "archive:" .. archive .. "@" .. (sha256 or "")
+				end
+				if git then return gitSourceKey(git) end
+			end
 		end
 		return "registry:" .. packageName .. "@" .. (depInfo.version or "")
 	end
@@ -243,6 +254,7 @@ local function makeNode(alias, depInfo, relativeTo, ctx)
 		}
 	elseif depInfo.git then
 		local gitPlan = lde.global.planGitRepo(alias, depInfo.git, depInfo.branch, depInfo.commit)
+		gitPlan.sha256 = depInfo.sha256
 		return {
 			alias = alias,
 			depInfo = depInfo,
@@ -257,34 +269,65 @@ local function makeNode(alias, depInfo, relativeTo, ctx)
 			alias = alias,
 			depInfo = depInfo,
 			kind = "archive",
-			sourceKey = "archive:" .. depInfo.archive,
+			sourceKey = "archive:" .. depInfo.archive .. "@" .. (depInfo.sha256 or ""),
 			isExpandAfter = true, -- deps only known from the extracted content
 		}
 	elseif depInfo.luarocks then
 		return makeLuarocksNode(alias, depInfo --[[@as lde.Package.Config.LuarocksDependency]])
 	elseif depInfo.version then
-		-- Registry packages are git repos (same resolution as a git dep).
+		-- Registry packages are git repos (same resolution as a git dep). The
+		-- selected version may override the portfile's top-level source, so the
+		-- effective git/branch travels with the node from here on.
 		local packageName = depInfo.name or alias
 		lde.global.syncRegistry()
 		local portfile, err = lde.global.lookupRegistryPackage(packageName)
 		if not portfile then
 			lde.error.raise("Registry lookup failed for '" .. alias .. "': " .. err)
 		end ---@cast portfile -nil
-		local _, commit = lde.global.resolveRegistryVersion(portfile, depInfo.version)
-		local gitPlan = lde.global.planGitRepo(packageName, portfile.git, portfile.branch, commit)
+		local _, commit, git, branch, archive, sha256 =
+			lde.global.resolveRegistryVersion(portfile, depInfo.version)
+
+		if archive then
+			local nodeDep = {}
+			for k, v in pairs(depInfo) do nodeDep[k] = v end
+			nodeDep.archive = archive
+			nodeDep.sha256 = sha256
+			nodeDep.name = packageName
+			return {
+				alias = alias,
+				depInfo = nodeDep --[[@as lde.Package.Config.Dependency]],
+				kind = "archive",
+				sourceKey = "archive:" .. archive .. "@" .. (sha256 or ""),
+				isExpandAfter = true,
+			}
+		end
+
+		git = git or portfile.git
+		branch = branch or portfile.branch
+		local gitPlan = lde.global.planGitRepo(packageName, git, branch, commit)
+		gitPlan.sha256 = sha256
 		-- The config entry only carries the version; the repo URL lives in the
 		-- portfile. Record it on the plan so the lockfile entry can pin the git
 		-- source (without it, a later install can't classify the dep).
-		gitPlan.url = portfile.git
+		gitPlan.url = git
+		-- Registry entries have no branch of their own, but the lockfile records
+		-- one as the clone hint. Copy the entry instead of mutating the manifest's
+		-- shared table.
+		local nodeDep = depInfo ---@type any
+		if branch then
+			nodeDep = {}
+			for k, v in pairs(depInfo) do nodeDep[k] = v end
+			nodeDep.branch = branch
+		end
 		return {
 			alias = alias,
-			depInfo = depInfo,
+			depInfo = nodeDep --[[@as lde.Package.Config.Dependency]],
 			kind = "git",
 			-- Registry deps resolve to a git repo; their identity is the
-			-- resolved repo URL (matching depSourceKey), so a second registry
+			-- effective repo URL (matching depSourceKey), so a second registry
 			-- request — or a direct git request for the same repo — doesn't
 			-- false-conflict.
-			sourceKey = gitSourceKey(portfile.git),
+			sourceKey = gitSourceKey(git),
 			repoName = packageName,
 			gitPlan = gitPlan,
 			isExpandAfter = true,

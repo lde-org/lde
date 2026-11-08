@@ -28,9 +28,10 @@ import Layout from "../../layouts/Layout.astro";
 
 		<h1 class="text-4xl font-bold tracking-tight">Publish a package</h1>
 		<p class="mt-4 text-black/60 dark:text-white/60 leading-relaxed max-w-2xl">
-			Getting your package into the lde registry is three steps. Everything
-			flows through GitHub. So no accounts, tokens, or credentials on a
-			third-party website.
+			Getting your package into the lde registry is three steps. Sign in once
+			with GitHub, then <code class="font-mono">lde publish</code> creates the
+			pull request for you. There are no third-party passwords or tokens to
+			manage.
 		</p>
 
 		<ol class="mt-12 flex flex-col gap-10">
@@ -58,10 +59,13 @@ import Layout from "../../layouts/Layout.astro";
 						Run <code class="font-mono">lde publish</code> inside the project
 					</h2>
 					<p class="mt-1.5 text-sm text-black/60 dark:text-white/60 leading-relaxed">
+						Run{" "}
+						<code class="font-mono text-xs px-1.5 py-0.5 bg-black/5 dark:bg-white/10">lde login</code>{" "}
+						once, then{" "}
 						<code class="font-mono text-xs px-1.5 py-0.5 bg-black/5 dark:bg-white/10">lde publish</code>{" "}
 						reads your{" "}
 						<code class="font-mono text-xs px-1.5 py-0.5 bg-black/5 dark:bg-white/10">lde.json</code>{" "}
-						and opens a pre-filled pull request to the{" "}
+						and opens a pull request on the{" "}
 						<a
 							href="https://github.com/lde-org/registry"
 							target="_blank"
@@ -72,7 +76,8 @@ import Layout from "../../layouts/Layout.astro";
 						</a>{" "}
 						repository.
 					</p>
-					<pre class="mt-3 font-mono text-xs text-black/80 dark:text-white/80 bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 px-4 py-3 overflow-x-auto">lde publish</pre>
+					<pre class="mt-3 font-mono text-xs text-black/80 dark:text-white/80 bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 px-4 py-3 overflow-x-auto">lde login
+lde publish</pre>
 				</div>
 			</li>
 			<li class="flex gap-5">
@@ -80,10 +85,11 @@ import Layout from "../../layouts/Layout.astro";
 					class="shrink-0 size-9 flex items-center justify-center bg-blue-600 text-white text-sm font-bold select-none"
 				>3</span>
 				<div class="min-w-0">
-					<h2 class="text-lg font-semibold">Submit the pull request</h2>
+					<h2 class="text-lg font-semibold">Wait for review</h2>
 					<p class="mt-1.5 text-sm text-black/60 dark:text-white/60 leading-relaxed">
-						Once merged, your package goes live in the registry. Publishing
-						updates works the same way. Bump the version and run{" "}
+						A first-time package is reviewed by a moderator. Once you own the
+						package, later version updates are approved and merged
+						automatically. Bump the version and run{" "}
 						<code class="font-mono text-xs px-1.5 py-0.5 bg-black/5 dark:bg-white/10">lde publish</code>{" "}
 						again.
 					</p>

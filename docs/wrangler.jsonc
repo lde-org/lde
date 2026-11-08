@@ -3,6 +3,13 @@
   "compatibility_date": "2026-03-01",
   "main": "@astrojs/cloudflare/entrypoints/server",
   "compatibility_flags": ["nodejs_compat"],
+  // GitHub OAuth App secrets are set with `wrangler secret put`:
+  // GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET.
+  "vars": {
+    "REGISTRY_REPO": "lde-org/registry",
+    "REGISTRY_BRANCH": "master",
+    "SITE_URL": "https://lde.sh",
+  },
   "assets": {
     "directory": "./dist",
     // Serve blog/index.html at /blog and redirect /blog/ to /blog, so every

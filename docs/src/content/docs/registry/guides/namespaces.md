@@ -32,8 +32,9 @@ Upon first publish, if the namespace isn't already registered, the PR will reque
 
 ### Creating Namespaces
 
-You can also create a namespace without first creating a package via submitting an issue.
+You can create a namespace without first creating a package through the
+[claim](/registry/claim) page. Sign in with GitHub there; the page creates the
+request issue for you, and a moderator approves it.
 
-To do this, use the [claim](/registry/claim) page, which will fill out an issue for you to submit.
-
-A moderator will have to approve the namespace, but once approved, you'll be able to publish packages under that namespace without issue.
+Once approved, the namespace is assigned to your GitHub account and you can
+publish packages under it without further review.

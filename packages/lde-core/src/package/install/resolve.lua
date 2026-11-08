@@ -7,6 +7,7 @@
 const fs = require("fs")
 const rocked = require("rocked")
 const md5 = require("lde-core.util.md5")
+const sha256 = require("lde-core.util.sha256")
 local download = require("lde-core.util.download")
 
 local features = require("lde-core.package.features")
@@ -40,6 +41,28 @@ local function verifyMd5(n, c)
 	if content and md5.sumhexa(content) ~= expected:lower() then
 		download.invalidate(c.file --[[@as string]])
 		lde.error.raise("MD5 check for " .. (c.url or c.file or "?") .. " has failed.")
+	end
+end
+
+--- Verify a published SHA-256 commitment before extracting. A mismatch means
+--- the artifact at the URL changed since it was published, so the download is
+--- invalidated and never extracted.
+---@param n lde.install.Node
+---@param c lde.install.ContentPlan
+local function verifySha256(n, c)
+	local expected = c.sha256
+	if not expected or expected == "" then return end
+	-- A cached extraction has no artifact file to re-hash; the cache marker is
+	-- the local trust boundary (same rule as the existing archive cache).
+	if not c.file or not fs.exists(c.file) then return end
+	local content = fs.read(c.file)
+	if not content then
+		lde.error.raise("Could not read downloaded artifact for " .. (n.alias or "?"))
+	end
+	if sha256.sumhexa(content) ~= expected:lower() then
+		download.invalidate(c.file --[[@as string]])
+		lde.error.raise("SHA-256 check for " .. (c.url or c.file or "?")
+			.. " has failed; the source changed after it was published.")
 	end
 end
 
@@ -91,6 +114,7 @@ local function materializeContent(n, c)
 		lde.error.raise("Failed to download " .. label .. ": " .. (res.err or ""))
 	end
 	verifyMd5(n, c)
+	verifySha256(n, c)
 	-- A git tarball lands in the git cache, whose layout is the repository
 	-- root (the wrapper directory stripped); plain archives keep the published
 	-- layout and resolve their source directory afterwards.
@@ -300,8 +324,12 @@ handlers.git = {
 	content = function(n)
 		const g = n.gitPlan --[[@as lde.install.GitPlan]]
 		if g.tarballUrl then
-			return { url = g.tarballUrl, file = g.archiveFile, dir = g.dir, kind = "git" }
+			return { url = g.tarballUrl, file = g.archiveFile, dir = g.dir, kind = "git", sha256 = g.sha256 }
 		elseif g.clone then
+			if g.sha256 then
+				lde.error.raise("Cannot verify the published SHA-256 for '" .. (n.alias or "?")
+					.. "': this host has no archive endpoint, only git clone")
+			end
 			return { kind = "clone" } -- unrecognized host: git clone directly
 		end
 		return nil -- already cached
@@ -330,6 +358,7 @@ handlers.git = {
 			git = gitPlan.url or n.depInfo.git,
 			commit = gitPlan.commit,
 			branch = n.depInfo.branch,
+			sha256 = gitPlan.sha256,
 			name = n.depInfo.name,
 			rockspec = n.depInfo.rockspec,
 		}
@@ -342,7 +371,13 @@ handlers.archive = {
 	---@return lde.install.ContentPlan
 	content = function(n)
 		local dir = lde.global.getArchiveDir(n.depInfo.archive)
-		return { url = n.depInfo.archive, file = dir .. ".archive", dir = dir, kind = "archive" }
+		return {
+			url = n.depInfo.archive,
+			file = dir .. ".archive",
+			dir = dir,
+			kind = "archive",
+			sha256 = n.depInfo.sha256,
+		}
 	end,
 	materialize = materializeContent,
 	---@param n lde.install.Node
@@ -373,7 +408,12 @@ handlers.archive = {
 	---@param n lde.install.Node
 	---@return lde.Lockfile.Dependency
 	lock = function(n)
-		return { archive = n.depInfo.archive, name = n.depInfo.name, rockspec = n.depInfo.rockspec }
+		return {
+			archive = n.depInfo.archive,
+			sha256 = n.depInfo.sha256,
+			name = n.depInfo.name,
+			rockspec = n.depInfo.rockspec,
+		}
 	end,
 }
 

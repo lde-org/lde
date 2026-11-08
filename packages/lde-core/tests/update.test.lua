@@ -179,3 +179,152 @@ test.skipIf(env.var("ANDROID_ROOT") ~= nil)("install re-pins a git dep whose loc
 	test.falsy(fs.exists(path.join(dir, "target", "update-heal", "v2.lua")),
 		"the stray commit must not be installed")
 end)
+
+--
+-- Registry deps: a version's source can move between versions (per-version
+-- git overrides), so the lockfile entry must be cleared when it pins the old
+-- source. Fake registry trees keep these offline.
+--
+
+---@param treeDir string
+---@param portfile table
+local function writeFakeRegistry(treeDir, portfile)
+	const pkgPath = path.join(treeDir, "registry", "packages", portfile.name .. ".json")
+	fs.mkdirAll(path.dirname(pkgPath))
+	fs.write(pkgPath, json.encode(portfile))
+end
+
+---@param treeDir string
+---@param fn fun()
+local function withHome(treeDir, fn)
+	const saved = env.var("LDE_HOME")
+	env.set("LDE_HOME", treeDir)
+	local ok, err = pcall(fn)
+	env.set("LDE_HOME", saved)
+	if not ok then error(err, 0) end
+end
+
+const REG_COMMIT = string.rep("a", 40)
+
+test.it("updateDependencies clears a ranged registry lock entry whose git source moved", function()
+	const treeDir = path.join(tmpBase, "update-reg-source-tree")
+	writeFakeRegistry(treeDir, {
+		name = "update-reg-source",
+		git = "https://old.example/repo",
+		versions = {
+			["1.0.0"] = { commit = REG_COMMIT, git = "https://new.example/repo" },
+		},
+	})
+
+	const dir = makeApp("update-reg-source-app", {
+		["update-reg-source"] = { version = "^1.0.0" },
+	})
+	const pkg = assert(lde.Package.open(dir))
+	const lockfile = lde.Lockfile.new(pkg:getLockfilePath(), {
+		["update-reg-source"] = { git = "https://old.example/repo", commit = REG_COMMIT },
+	})
+	lockfile:setManifestHash(lde.Lockfile.manifestHash(pkg:reloadConfig()))
+	lockfile:save()
+
+	withHome(treeDir, function()
+		const results = pkg:updateDependencies()
+		-- Same commit, different repo: the pin is stale and must be dropped so
+		-- the next install resolves the version's own git URL.
+		test.equal(results["update-reg-source"].updated, true)
+		const saved = assert(pkg:readLockfile())
+		test.falsy(saved:getDependency("update-reg-source"),
+			"the old source must not stay pinned")
+	end)
+end)
+
+test.it("updateDependencies keeps a registry lock entry whose git source matches", function()
+	const treeDir = path.join(tmpBase, "update-reg-same-tree")
+	writeFakeRegistry(treeDir, {
+		name = "update-reg-same",
+		git = "https://new.example/repo",
+		versions = { ["1.0.0"] = REG_COMMIT },
+	})
+
+	const dir = makeApp("update-reg-same-app", {
+		["update-reg-same"] = { version = "^1.0.0" },
+	})
+	const pkg = assert(lde.Package.open(dir))
+	const lockfile = lde.Lockfile.new(pkg:getLockfilePath(), {
+		-- Same repo, spelled with .git: not a source change.
+		["update-reg-same"] = { git = "https://new.example/repo.git", commit = REG_COMMIT },
+	})
+	lockfile:setManifestHash(lde.Lockfile.manifestHash(pkg:reloadConfig()))
+	lockfile:save()
+
+	withHome(treeDir, function()
+		const results = pkg:updateDependencies()
+		test.equal(results["update-reg-same"].updated, false)
+		test.includes(results["update-reg-same"].message, "already up to date")
+		const saved = assert(pkg:readLockfile())
+		test.truthy(saved:getDependency("update-reg-same"))
+	end)
+end)
+
+test.it("updateDependencies clears the lock entry when an exact registry bump changes the source", function()
+	const treeDir = path.join(tmpBase, "update-reg-exact-tree")
+	writeFakeRegistry(treeDir, {
+		name = "update-reg-exact",
+		git = "https://old.example/repo",
+		versions = {
+			["1.0.0"] = REG_COMMIT,
+			["1.0.1"] = { commit = string.rep("b", 40), git = "https://new.example/repo" },
+		},
+	})
+
+	const dir = makeApp("update-reg-exact-app", {
+		["update-reg-exact"] = { version = "1.0.0" },
+	})
+	const pkg = assert(lde.Package.open(dir))
+	const lockfile = lde.Lockfile.new(pkg:getLockfilePath(), {
+		["update-reg-exact"] = { git = "https://old.example/repo", commit = REG_COMMIT },
+	})
+	lockfile:setManifestHash(lde.Lockfile.manifestHash(pkg:reloadConfig()))
+	lockfile:save()
+
+	withHome(treeDir, function()
+		const results = pkg:updateDependencies()
+		test.equal(results["update-reg-exact"].updated, true)
+		test.includes(results["update-reg-exact"].message, "1.0.1")
+		const saved = assert(pkg:readLockfile())
+		test.falsy(saved:getDependency("update-reg-exact"),
+			"the lock entry still names the previous version's repo")
+	end)
+end)
+
+test.it("updateDependencies clears a registry lock entry when only the branch moved", function()
+	const treeDir = path.join(tmpBase, "update-reg-branch-tree")
+	writeFakeRegistry(treeDir, {
+		name = "update-reg-branch",
+		git = "https://same.example/repo",
+		versions = {
+			["1.0.0"] = { commit = REG_COMMIT, branch = "next" },
+		},
+	})
+
+	const dir = makeApp("update-reg-branch-app", {
+		["update-reg-branch"] = { version = "^1.0.0" },
+	})
+	const pkg = assert(lde.Package.open(dir))
+	const lockfile = lde.Lockfile.new(pkg:getLockfilePath(), {
+		["update-reg-branch"] = {
+			git = "https://same.example/repo",
+			commit = REG_COMMIT,
+			branch = "stable",
+		},
+	})
+	lockfile:setManifestHash(lde.Lockfile.manifestHash(pkg:reloadConfig()))
+	lockfile:save()
+
+	withHome(treeDir, function()
+		const results = pkg:updateDependencies()
+		test.equal(results["update-reg-branch"].updated, true)
+		const saved = assert(pkg:readLockfile())
+		test.falsy(saved:getDependency("update-reg-branch"),
+			"the clone hint must be re-resolved from the version entry")
+	end)
+end)

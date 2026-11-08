@@ -56,8 +56,11 @@ end
 ---@param portfile lde.Portfile
 ---@param version string?
 ---@return string version
----@return string repoDir
----@return string commit
+---@return string? commit
+---@return string? git # repository the version installs from
+---@return string? branch
+---@return string? archive # tarball URL for archive versions
+---@return string? sha256 # archive content hash
 function M.resolveRegistryVersion(portfile, version)
 	return getRegistry():resolveVersion(portfile, version)
 end

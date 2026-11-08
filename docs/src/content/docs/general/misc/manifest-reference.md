@@ -156,6 +156,29 @@ A list of the package's authors:
 }
 ```
 
+### `license`
+
+The package's license identifier, included in the registry portfile:
+
+```json
+{
+	"license": "MIT"
+}
+```
+
+### `tags`
+
+Up to 10 unique, lowercase tags used by `lde search` and the registry website.
+Each tag starts with a letter and contains only `a-z`, digits and `-`:
+
+```json
+{
+	"tags": ["json", "parser", "lua"]
+}
+```
+
+Tags are normalized, deduplicated and sorted by `lde publish`.
+
 ### `bin`
 
 The entry point of your package, relative to the package root. Defaults to `src/init.lua` when omitted, which is what `lde run` executes when called without a file argument:

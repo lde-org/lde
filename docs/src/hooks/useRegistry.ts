@@ -6,8 +6,9 @@ export interface RegistryPackage {
 	name: string;
 	description: string | null;
 	authors: string[];
+	tags?: string[];
 	latest: string | null;
-	git: string;
+	git: string | null;
 	/** When a new version was last added to this package. */
 	lastUpdated: string | null;
 	/** When this package was first published to the registry. */
@@ -24,7 +25,7 @@ const REGISTRY_URL =
 
 const CACHE_KEY = "lde-registry-index";
 // Bump when the index shape changes so browsers don't serve an old payload.
-const CACHE_VERSION = 2;
+const CACHE_VERSION = 3;
 const CACHE_TTL = 5 * 60 * 1000;
 
 /** Milliseconds since epoch for a date, or 0 when it is missing/unparseable. */

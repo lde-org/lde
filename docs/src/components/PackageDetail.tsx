@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from "preact/hooks";
 import DOMPurify from "dompurify";
 import { CopyButton } from "./CopyButton";
-import { usePortfile } from "../hooks/usePortfile";
+import OwnerManager from "./OwnerManager";
+import { usePortfile, versionCommit, versionGit, type VersionEntry } from "../hooks/usePortfile";
 import { useRegistry } from "../hooks/useRegistry";
 import { highlightCodeBlocks, highlightFile, isViewableFile } from "../lib/highlight";
 import { createReadmeMarked } from "../lib/readmeMarked";
@@ -32,7 +33,7 @@ function parseAuthor(author: string) {
 	return { name: author, email: null };
 }
 
-function sortedVersions(versions: Record<string, string>) {
+function sortedVersions(versions: Record<string, VersionEntry>) {
 	return Object.entries(versions).sort(([a], [b]) => {
 		const parse = (v: string) => v.split(".").map(Number);
 		const [ma, mia, pa] = parse(a);
@@ -43,7 +44,7 @@ function sortedVersions(versions: Record<string, string>) {
 	});
 }
 
-function computeLatest(versions: Record<string, string>): string | null {
+function computeLatest(versions: Record<string, VersionEntry>): string | null {
 	const sorted = sortedVersions(versions);
 	return sorted.length > 0 ? sorted[0][0] : null;
 }
@@ -424,6 +425,7 @@ export default function PackageDetail({ name: nameProp }: { name: string }) {
 
 	const description = portfile?.description ?? pkg?.description ?? null;
 	const authors = portfile?.authors ?? pkg?.authors ?? [];
+	const tags = portfile?.tags ?? pkg?.tags ?? [];
 	const git = portfile?.git ?? pkg?.git ?? "";
 	const latest =
 		pkg?.latest ?? (portfile ? computeLatest(portfile.versions) : null);
@@ -437,8 +439,10 @@ export default function PackageDetail({ name: nameProp }: { name: string }) {
 		: null;
 	const versions = portfile ? sortedVersions(portfile.versions) : null;
 
-	const latestCommit = portfile?.versions?.[latest ?? ""] ?? null;
-	const repo = parseGitUrl(git);
+	const latestEntry = portfile?.versions?.[latest ?? ""] ?? null;
+	const latestCommit = latestEntry ? versionCommit(latestEntry) : null;
+	const latestGit = latestEntry ? versionGit(portfile ?? { git }, latestEntry) : git;
+	const repo = parseGitUrl(latestGit ?? "");
 	const treeRef = latestCommit ?? portfile?.branch ?? "HEAD";
 
 	// Content at a pinned commit never changes, so it can be cached for a day;
@@ -773,6 +777,19 @@ export default function PackageDetail({ name: nameProp }: { name: string }) {
 						{description}
 					</p>
 				)}
+
+				{tags.length > 0 && (
+					<div class="flex flex-wrap gap-1.5">
+						{tags.map((tag) => (
+							<span
+								key={tag}
+								class="text-[11px] font-medium px-2 py-0.5 border border-black/10 dark:border-white/10 text-black/50 dark:text-white/50"
+							>
+								{tag}
+							</span>
+						))}
+					</div>
+				)}
 			</div>
 
 			{/* Body: tabs + sidebar */}
@@ -835,7 +852,17 @@ export default function PackageDetail({ name: nameProp }: { name: string }) {
 								</p>
 							) : (
 								<div class="flex flex-col divide-y divide-black/8 dark:divide-white/8 border border-black/10 dark:border-white/10">
-									{versions.map(([version, commit]) => (
+									{versions.map(([version, entry]) => {
+										const commit = versionCommit(entry);
+										const archive = typeof entry === "object" ? entry.archive : undefined;
+										const hash = typeof entry === "object" ? entry.sha256 : undefined;
+										const source = versionGit(
+											portfile ?? { git },
+											entry,
+										) ?? "";
+										const movedSource = !archive && source !== portfile?.git;
+										const isRevoked = (portfile?.revoked ?? []).includes(version);
+										return (
 										<div
 											key={version}
 											class="flex items-center justify-between px-4 py-3 bg-black/[0.01] dark:bg-white/[0.01]"
@@ -844,22 +871,36 @@ export default function PackageDetail({ name: nameProp }: { name: string }) {
 												<span class="font-mono text-sm font-medium">
 													v{version}
 												</span>
-												{version === latest && (
+												{version === latest && !isRevoked && (
 													<span class="text-[10px] font-medium px-1.5 py-0.5 bg-green-500/10 text-green-500 border border-green-500/20">
 														latest
 													</span>
 												)}
+												{isRevoked && (
+													<span class="text-[10px] font-medium px-1.5 py-0.5 bg-red-500/10 text-red-500 border border-red-500/20">
+														revoked
+													</span>
+												)}
+												{movedSource && (
+													<span
+														class="text-[10px] text-black/35 dark:text-white/35"
+														title={source}
+													>
+														source changed
+													</span>
+												)}
 											</div>
 											<a
-												href={`${git.replace(/\.git$/, "")}/commit/${commit}`}
+												href={archive ?? `${source.replace(/\.git$/, "")}/commit/${commit ?? ""}`}
 												target="_blank"
 												rel="noopener noreferrer"
 												class="font-mono text-xs text-black/30 dark:text-white/30 hover:text-blue-500 transition-colors"
 											>
-												{commit.slice(0, 7)}
+												{archive ? `sha256:${(hash ?? "").slice(0, 7)}` : (commit ?? "").slice(0, 7)}
 											</a>
 										</div>
-									))}
+										);
+									})}
 								</div>
 							)}
 						</div>
@@ -1062,6 +1103,9 @@ export default function PackageDetail({ name: nameProp }: { name: string }) {
 								)}
 						</div>
 					)}
+
+					{/* Owners */}
+					<OwnerManager packageName={nameProp} />
 
 					{/* Repository */}
 					{git && (

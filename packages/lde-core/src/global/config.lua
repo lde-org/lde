@@ -1,8 +1,13 @@
 const fs = require("fs")
 const json = require("json")
 
+---@class lde.global.Config.GitHub
+---@field clientId string? # GitHub OAuth App client ID for device-flow login
+---@field apiUrl string? # GitHub API base URL (enterprise or tests)
+
 ---@class lde.global.Config
 ---@field registry string # Registry URL
+---@field github lde.global.Config.GitHub?
 const Config = {}
 Config.__index = Config
 
@@ -39,7 +44,11 @@ local function getConfig()
 	end
 
 	cache = Config.new({
-		registry = type(data.registry) == "string" ? data.registry : defaults.registry
+		registry = type(data.registry) == "string" ? data.registry : defaults.registry,
+		github = type(data.github) == "table" ? {
+			clientId = type(data.github.clientId) == "string" ? data.github.clientId : nil,
+			apiUrl = type(data.github.apiUrl) == "string" ? data.github.apiUrl : nil,
+		} : nil,
 	})
 
 	return cache

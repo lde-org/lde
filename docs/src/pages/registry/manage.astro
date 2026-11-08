@@ -1,0 +1,16 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import ManageDashboard from "../../components/ManageDashboard.tsx";
+import { getGithubSession } from "../../lib/server/github";
+
+export const prerender = false;
+
+const session = await getGithubSession(Astro);
+if (!session) {
+	return Astro.redirect("/api/auth/login?returnTo=/registry/manage");
+}
+---
+
+<Layout title="Manage registry" description="Manage your lde registry packages and namespaces.">
+	<ManageDashboard client:load user={session.user} />
+</Layout>

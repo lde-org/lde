@@ -1,5 +1,5 @@
 // @ts-check
-import { defineConfig } from "astro/config";
+import { defineConfig, sessionDrivers } from "astro/config";
 
 import tailwindcss from "@tailwindcss/vite";
 import preact from "@astrojs/preact";
@@ -26,6 +26,12 @@ export default defineConfig({
 					prerenderEnvironment: "node",
 				})
 			: undefined,
+	// Production uses the Cloudflare adapter's auto-provisioned KV driver.
+	// Local dev has no adapter, so keep sessions in a local directory.
+	session:
+		process.env.NODE_ENV == "production"
+			? undefined
+			: { driver: sessionDrivers.fsLite({ base: ".astro/sessions" }) },
 	vite: {
 		plugins: [tailwindcss()],
 	},

@@ -151,8 +151,21 @@ local commands = {
 		description = "Show dependencies with newer versions available.",
 	},
 	publish = {
-		usage = "lde publish",
-		description = "Create a PR to add your package to the registry.",
+		usage = "lde publish [--archive <url>] [--sha256 <hash>] [--dry-run]",
+		description = "Publish the current package to the lde registry by opening a pull request on GitHub.",
+		options = {
+			["--archive"] = { arg = "url", desc = "Publish this version from a tarball URL instead of the current git commit" },
+			["--sha256"] = { arg = "hash", desc = "Expected SHA-256 of --archive (computed when omitted)" },
+			["--dry-run"] = { desc = "Print the authorization check and generated portfile without pushing anything" },
+		},
+	},
+	login = {
+		usage = "lde login",
+		description = "Log in to GitHub with the device flow. Required to publish packages.",
+	},
+	logout = {
+		usage = "lde logout",
+		description = "Remove the stored GitHub session.",
 	},
 	compile = {
 		usage = "lde compile [--outfile <path>] [--target <target>] [--timings [--json]]",
@@ -220,7 +233,7 @@ local dirFlags = { "-C", "--cwd", "--tree", "--path" }
 local fileFlags = { "--outfile" }
 
 -- Value-taking flags: completion suppresses suggestions at the value position.
-local valueFlags = { "-C", "--cwd", "--tree", "--path", "--git", "--branch", "--commit", "--version", "--outfile", "--flamegraph", "--type", "--language", "--name", "--target" }
+local valueFlags = { "-C", "--cwd", "--tree", "--path", "--git", "--branch", "--commit", "--version", "--outfile", "--flamegraph", "--type", "--language", "--name", "--target", "--archive", "--sha256" }
 
 -- Known values for these flags; the completion backend offers them at the value position.
 ---@type table<string, string[]>
@@ -229,7 +242,7 @@ local flagValues = {
 }
 
 -- Canonical command names in display order.
-local names = { "help", "run", "x", "search", "repl", "test", "new", "init", "upgrade", "sync", "install", "uninstall", "add", "remove", "tree", "update", "outdated", "publish", "compile", "bundle", "bloat", "completion" }
+local names = { "help", "run", "x", "search", "repl", "test", "new", "init", "upgrade", "sync", "install", "uninstall", "add", "remove", "tree", "update", "outdated", "publish", "login", "logout", "compile", "bundle", "bloat", "completion" }
 
 local completionNames = {}
 for _, name in ipairs(names) do

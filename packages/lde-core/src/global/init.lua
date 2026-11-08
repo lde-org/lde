@@ -52,6 +52,7 @@ global.cloneDir = git.cloneDir
 global.resolveGitRef = git.resolveGitRef
 global.getOrInitGitRepo = git.getOrInitGitRepo
 global.planGitRepo = git.planGitRepo
+global.gitTarballUrl = git.tarballUrl
 global.extractGitTarball = git.extractGitTarball
 global.parseGitUrl = git.parseGitUrl
 global.repoNameFromUrl = git.repoNameFromUrl

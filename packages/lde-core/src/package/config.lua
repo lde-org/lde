@@ -4,7 +4,9 @@
 ---@field name string
 ---@field version string
 ---@field description string?
+---@field license string?
 ---@field authors string[]?
+---@field tags string[]? # search keywords, lowercase (max 10)
 ---@field bin string?
 ---@field engine string?
 ---@field scripts table<string, string>?
@@ -44,6 +46,7 @@ end
 
 ---@class lde.Package.Config.ArchiveDependency: lde.Package.Config.BaseDependency
 ---@field archive string # URL to a .zip, .tar.gz, .tar.bz2, etc.
+---@field sha256 string? # expected SHA-256 of the archive
 
 ---@alias lde.Package.Config.Dependency
 --- | lde.Package.Config.GitDependency

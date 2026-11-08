@@ -1,15 +1,29 @@
 --- lde's package registry client: a git repo whose `packages/<name>.json`
 --- portfiles map versions to commits. Dependencies are injected so tests can fake them.
 
+--- A version's source: either the bare commit hash (which inherits the
+--- portfile's top-level git/branch) or an object overriding them per version.
+---@class lde.Portfile.VersionEntry
+---@field commit string? # commit hash for a git version
+---@field git string? # repository override for this version
+---@field branch string? # branch override for this version
+---@field archive string? # tarball URL for an archive version
+---@field sha256 string? # SHA-256 of the archive (required for archive versions)
+---@field size integer? # archive size in bytes, when published
+
+---@alias lde.Portfile.Version string | lde.Portfile.VersionEntry
+
 ---@class lde.Portfile
 ---@field name string
----@field git string
----@field versions table<string, string>? # version -> commit hash
+---@field git string?
+---@field versions table<string, lde.Portfile.Version>? # version -> commit hash or source object
 ---@field branch string?
 ---@field description string?
 ---@field license string?
 ---@field authors string[]?
+---@field tags string[]? # search keywords, lowercase (max 10)
 ---@field dependencies table<string, string>?
+---@field revoked string[]? # versions that must not resolve
 
 ---@class lde.RegistryFs
 ---@field read fun(p: string): string?
@@ -186,10 +200,58 @@ function Registry:lookup(name)
 	return portfile, nil
 end
 
+---@class lde.Registry.Source
+---@field kind "git"|"archive"
+---@field commit string? # git commit
+---@field git string? # git repository
+---@field branch string? # git branch hint
+---@field archive string? # tarball URL
+---@field sha256 string? # tarball content hash
+---@field size integer?
+
+--- Normalizes a `versions` entry to the source it is fetched from. A bare
+--- commit string inherits the portfile's top-level source; an object may
+--- override git/branch per version, or point at a hash-pinned tarball.
+---@param portfile lde.Portfile
+---@param entry lde.Portfile.Version
+---@return lde.Registry.Source
+function Registry:versionSource(portfile, entry)
+	if type(entry) == "table" then
+		if entry.archive then
+			return {
+				kind = "archive",
+				archive = entry.archive,
+				sha256 = entry.sha256,
+				size = entry.size,
+			}
+		end
+		return {
+			kind = "git",
+			commit = entry.commit,
+			git = entry.git or portfile.git,
+			branch = entry.branch or portfile.branch,
+			sha256 = entry.sha256,
+		}
+	end
+	return {
+		kind = "git",
+		commit = entry,
+		git = portfile.git,
+		branch = portfile.branch,
+	}
+end
+
+--- Selects a version and returns the commit and the effective git/branch for
+--- it, so a caller can install from a different repository than the portfile's
+--- top-level one. The first two returns keep working for existing callers.
 ---@param portfile lde.Portfile
 ---@param version string? # nil or "latest" means the newest version
 ---@return string version
----@return string commit
+---@return string? commit
+---@return string? git
+---@return string? branch
+---@return string? archive
+---@return string? sha256
 function Registry:resolveVersion(portfile, version)
 	if version == "latest" then version = nil end
 	local versions = portfile.versions
@@ -197,14 +259,32 @@ function Registry:resolveVersion(portfile, version)
 		self.raise("Package '" .. portfile.name .. "' has no versions in registry")
 	end ---@cast versions -nil
 
+	local revoked = {}
+	for _, revokedVersion in ipairs(portfile.revoked or {}) do
+		revoked[revokedVersion] = true
+	end
+
 	if version then
-		const commit = versions[version]
-		if commit then return version, commit end
+		const entry = versions[version]
+		if entry then
+			if revoked[version] then
+				self.raise("Version '" .. version .. "' of '" .. portfile.name .. "' has been revoked")
+			end
+			const source = self:versionSource(portfile, entry)
+			return version, source.commit, source.git, source.branch, source.archive, source.sha256
+		end
 
 		-- A pin that looks exact never resolves elsewhere, so only ranges pick a nearby release.
 		if not self.semver.isExact(version) then
-			local best = self.semver.maxSatisfying(versions, version)
-			if best then return best, versions[best] end
+			local available = {}
+			for candidate in pairs(versions) do
+				if not revoked[candidate] then available[candidate] = versions[candidate] end
+			end
+			local best = self.semver.maxSatisfying(available, version)
+			if best then
+				const source = self:versionSource(portfile, versions[best])
+				return best, source.commit, source.git, source.branch, source.archive, source.sha256
+			end
 			self.raise("No version of '" .. portfile.name .. "' satisfies: " .. version)
 		end
 
@@ -212,17 +292,21 @@ function Registry:resolveVersion(portfile, version)
 	end
 
 	local latest = nil
-	for v in pairs(versions) do
-		if latest == nil or self.semver.compare(v, latest) > 0 then
-			latest = v
+	for candidate in pairs(versions) do
+		if not revoked[candidate] and (latest == nil or self.semver.compare(candidate, latest) > 0) then
+			latest = candidate
 		end
 	end
 
 	if not latest then
+		if next(revoked) then
+			self.raise("All versions of '" .. portfile.name .. "' have been revoked")
+		end
 		self.raise("No versions available for package '" .. portfile.name .. "'")
 	end
 
-	return latest, versions[latest]
+	const source = self:versionSource(portfile, versions[latest])
+	return latest, source.commit, source.git, source.branch, source.archive, source.sha256
 end
 
 return Registry

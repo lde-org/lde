@@ -15,12 +15,14 @@ const lde = require("lde-core")
 ---@field git string
 ---@field commit string # Always resolved to a specific commit hash
 ---@field branch string?
+---@field sha256 string? # archive hash, when the portfile pins one
 
 ---@class lde.Lockfile.PathDependency: lde.Lockfile.BaseDependency
 ---@field path string
 
 ---@class lde.Lockfile.ArchiveDependency: lde.Lockfile.BaseDependency
 ---@field archive string # URL to the archive
+---@field sha256 string? # SHA-256 of the archive
 
 ---@alias lde.Lockfile.Dependency
 --- | lde.Lockfile.GitDependency

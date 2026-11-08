@@ -281,3 +281,169 @@ test.it("resolveVersion treats 'latest' as the highest version", function()
 	test.equal(version, "2.1.0")
 	test.equal(commit, "def")
 end)
+
+--
+-- Version source resolution (portfile v2)
+--
+
+test.it("versionSource inherits the portfile source for a bare commit string", function()
+	local registry = newRegistry()
+	local portfile = { name = "foo", git = "https://top/repo", branch = "stable", versions = {} }
+	test.deepEqual(registry:versionSource(portfile, "abc"), {
+		kind = "git",
+		commit = "abc",
+		git = "https://top/repo",
+		branch = "stable",
+	})
+end)
+
+test.it("versionSource falls back field by field for an object entry", function()
+	local registry = newRegistry()
+	local portfile = { name = "foo", git = "https://top/repo", branch = "stable", versions = {} }
+	-- No overrides: both inherited.
+	test.deepEqual(registry:versionSource(portfile, { commit = "def" }), {
+		kind = "git",
+		commit = "def",
+		git = "https://top/repo",
+		branch = "stable",
+	})
+	-- git override only: the branch still comes from the portfile.
+	test.deepEqual(registry:versionSource(portfile, { commit = "ghi", git = "https://new/repo" }), {
+		kind = "git",
+		commit = "ghi",
+		git = "https://new/repo",
+		branch = "stable",
+	})
+	-- branch override only: the git URL still comes from the portfile.
+	test.deepEqual(registry:versionSource(portfile, { commit = "jkl", branch = "next" }), {
+		kind = "git",
+		commit = "jkl",
+		git = "https://top/repo",
+		branch = "next",
+	})
+end)
+
+test.it("resolveVersion returns the portfile git/branch for a legacy string entry", function()
+	local registry = newRegistry()
+	local portfile = {
+		name = "foo",
+		git = "https://top/repo",
+		branch = "stable",
+		versions = { ["1.0.0"] = "abc" },
+	}
+	local version, commit, git, branch = registry:resolveVersion(portfile, "1.0.0")
+	test.equal(version, "1.0.0")
+	test.equal(commit, "abc")
+	test.equal(git, "https://top/repo")
+	test.equal(branch, "stable")
+end)
+
+test.it("resolveVersion returns an object entry's git/branch override", function()
+	local registry = newRegistry()
+	local portfile = {
+		name = "foo",
+		git = "https://top/repo",
+		branch = "stable",
+		versions = {
+			["1.0.0"] = "abc",
+			["2.0.0"] = { commit = "def", git = "https://new/repo", branch = "main" },
+		},
+	}
+	local version, commit, git, branch = registry:resolveVersion(portfile, "2.0.0")
+	test.equal(version, "2.0.0")
+	test.equal(commit, "def")
+	test.equal(git, "https://new/repo")
+	test.equal(branch, "main")
+end)
+
+test.it("resolveVersion resolves a range across mixed entries and returns that source", function()
+	local registry = newRegistry()
+	local portfile = {
+		name = "foo",
+		git = "https://top/repo",
+		branch = "stable",
+		versions = {
+			["1.0.0"] = "abc",
+			["1.5.0"] = { commit = "def" },
+			["2.0.0"] = { commit = "ghi", git = "https://new/repo", branch = "main" },
+		},
+	}
+	local version, commit, git, branch = registry:resolveVersion(portfile, "^1.0.0")
+	test.equal(version, "1.5.0")
+	test.equal(commit, "def")
+	test.equal(git, "https://top/repo", "a partial object inherits the portfile git")
+	test.equal(branch, "stable")
+end)
+
+test.it("resolveVersion picks the latest across mixed string and object entries", function()
+	local registry = newRegistry()
+	local portfile = {
+		name = "foo",
+		git = "https://top/repo",
+		versions = {
+			["1.0.0"] = "abc",
+			["1.5.0"] = { commit = "def" },
+			["2.0.0"] = { commit = "ghi", git = "https://new/repo" },
+		},
+	}
+	local version, commit, git = registry:resolveVersion(portfile, nil)
+	test.equal(version, "2.0.0")
+	test.equal(commit, "ghi")
+	test.equal(git, "https://new/repo")
+end)
+
+test.it("lookup keeps object version entries intact", function()
+	local registry = newRegistry({
+		["/fake/registry/packages/foo.json"] = '{"name":"foo","git":"https://top/repo","tags":["parser"],'
+			.. '"versions":{"2.0.0":{"commit":"def","git":"https://new/repo","branch":"main"}}}',
+	})
+	local portfile, err = registry:lookup("foo")
+	test.falsy(err)
+	test.truthy(portfile, "portfile must be returned") ---@cast portfile lde.Portfile
+	const tags = assert(portfile.tags)
+	test.equal(tags[1], "parser")
+	const versions = assert(portfile.versions)
+	local entry = versions["2.0.0"] ---@cast entry lde.Portfile.VersionEntry
+	test.equal(entry.commit, "def")
+	test.equal(entry.git, "https://new/repo")
+	test.equal(entry.branch, "main")
+end)
+
+test.it("skips revoked versions for latest and ranges", function()
+	local registry = newRegistry()
+	local portfile = {
+		name = "foo",
+		git = "https://x/y.git",
+		versions = { ["1.0.0"] = "a", ["1.1.0"] = "b", ["2.0.0"] = "c" },
+		revoked = { "1.1.0", "2.0.0" },
+	}
+	test.equal(registry:resolveVersion(portfile, nil), "1.0.0")
+	test.equal(registry:resolveVersion(portfile, "1"), "1.0.0")
+	test.equal(registry:resolveVersion(portfile, "^1.0.0"), "1.0.0")
+end)
+
+test.it("refuses an exact revoked version", function()
+	local registry = newRegistry()
+	local portfile = {
+		name = "foo",
+		git = "https://x/y.git",
+		versions = { ["1.0.0"] = "a" },
+		revoked = { "1.0.0" },
+	}
+	test.errors(function()
+		registry:resolveVersion(portfile, "1.0.0")
+	end, "Version '1.0.0' of 'foo' has been revoked")
+end)
+
+test.it("reports when every version is revoked", function()
+	local registry = newRegistry()
+	local portfile = {
+		name = "foo",
+		git = "https://x/y.git",
+		versions = { ["1.0.0"] = "a" },
+		revoked = { "1.0.0" },
+	}
+	test.errors(function()
+		registry:resolveVersion(portfile, nil)
+	end, "All versions of 'foo' have been revoked")
+end)

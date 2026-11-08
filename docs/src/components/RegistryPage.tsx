@@ -25,7 +25,7 @@ const DOC_LINKS = [
 
 const COMPARISON = [
 	"You get to choose your own host. The registry is just a convenience to find your package.",
-	"No server means no data is logged, and security is delegated to GitHub.",
+	"Reads are static; writes go through GitHub, so GitHub owns authentication, audit, and abuse protection.",
 	"You go straight to the sauce instead of relying on a slow middleman.",
 	"The simplicity of lde projects is not well supported by LuaRocks' explicit per-file listings.",
 ];

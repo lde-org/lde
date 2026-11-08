@@ -271,6 +271,8 @@ end
 		outdated  = "lde.commands.outdated",
 		uninstall = "lde.commands.uninstall",
 		publish   = "lde.commands.publish",
+		login     = "lde.commands.login",
+		logout    = "lde.commands.logout",
 		completion = "lde.commands.completion",
 		repl      = "lde.commands.repl"
 	}

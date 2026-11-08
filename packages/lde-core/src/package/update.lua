@@ -19,6 +19,65 @@ local function declaredDependency(package, name)
 	return config.devDependencies?.[name]
 end
 
+--- A git URL in comparable form: the same repository spelled with/without
+--- `.git`, or with `git://` instead of `https://`, is not a source change.
+---@param url string?
+---@return string?
+local function gitUrlKey(url)
+	return url and util.normalizeGitUrl(url)
+end
+
+--- Whether a lockfile entry already pins the source a registry version
+--- resolves to. An entry without a git URL predates registry deps recording
+--- one: its commit came from the portfile's top-level git, so the commit alone
+--- decides (clearing it would only force a no-op re-resolve).
+---@param isLocked lde.Lockfile.Dependency
+---@param commit string?
+---@param git string?
+---@param branch string?
+---@param archive string?
+---@param sha256 string?
+local function lockMatchesSource(isLocked, commit, git, branch, archive, sha256)
+	local locked = isLocked --[[@as {
+		commit: string?, git: string?, branch: string?, archive: string?, sha256: string?
+	}]]
+	if archive then
+		return locked.archive == archive and locked.sha256 == sha256
+	end
+	if locked.commit ~= commit then return false end
+	if sha256 and locked.sha256 ~= sha256 then return false end
+	if locked.git and git and gitUrlKey(locked.git) ~= gitUrlKey(git) then return false end
+	-- The branch is only a clone hint, so a one-sided value (a legacy entry
+	-- without one) is not a source change.
+	if locked.branch and branch and locked.branch ~= branch then return false end
+	return true
+end
+
+--- Drops a dependency's lockfile entry when it pins a source the resolved
+--- version no longer uses, so the next install re-resolves from the registry.
+---@param package lde.Package
+---@param name string
+---@param commit string?
+---@param git string?
+---@param branch string?
+---@param archive string?
+---@param sha256 string?
+---@return boolean cleared
+local function clearStaleLock(package, name, commit, git, branch, archive, sha256)
+	const lockfile = package:readLockfile()
+	const isLocked = lockfile and lockfile:getDependency(name)
+	if not (lockfile and isLocked)
+		or lockMatchesSource(isLocked, commit, git, branch, archive, sha256) then
+		return false
+	end
+	const deps = lockfile:getDependencies()
+	-- Decoded tables carry a key store, so a plain nil assignment would encode
+	-- as "name": null instead of removing the entry.
+	json.removeField(deps, name)
+	lockfile:save()
+	return true
+end
+
 ---@param package lde.Package
 ---@param name string
 ---@param depInfo lde.Package.Config.GitDependency
@@ -76,25 +135,36 @@ local function updateRegistryDependency(package, name, depInfo)
 
 	-- A range floats: the lockfile is what pins it, so dropping its entry lets the next install resolve the newest allowed version.
 	if not semver.isExact(depInfo.version) then
-		const resolved = semver.maxSatisfying(versions, depInfo.version)
+		local revoked = {}
+		for _, revokedVersion in ipairs(portfile.revoked or {}) do
+			revoked[revokedVersion] = true
+		end
+		local available = {}
+		for candidate, entry in pairs(versions) do
+			if not revoked[candidate] then available[candidate] = entry end
+		end
+		const resolved = semver.maxSatisfying(available, depInfo.version)
 		if not resolved then
 			return false, "no version satisfies " .. depInfo.version
 		end ---@cast resolved -nil
 
-		local lockfile = package:readLockfile()
-		local isLocked = lockfile and lockfile:getDependency(name)
-		if lockfile and isLocked and isLocked.commit ~= versions[resolved] then
-			const deps = lockfile:getDependencies()
-			deps[name] = nil
-			lockfile:save()
+		-- Compare against the selected version's effective source: a per-version
+		-- git/branch override means the commit alone no longer identifies it.
+		local _, commit, git, branch, archive, sha256 =
+			global.resolveRegistryVersion(portfile, resolved)
+		if clearStaleLock(package, name, commit, git, branch, archive, sha256) then
 			return true, depInfo.version .. " -> " .. resolved
 		end
 		return false, "already up to date (" .. resolved .. ")"
 	end
 
 	local best = depInfo.version
+	local revoked = {}
+	for _, revokedVersion in ipairs(portfile.revoked or {}) do
+		revoked[revokedVersion] = true
+	end
 	for v in pairs(versions) do
-		if semver.isCompatibleUpdate(best, v) then
+		if not revoked[v] and semver.isCompatibleUpdate(best, v) then
 			best = v
 		end
 	end
@@ -118,6 +188,14 @@ local function updateRegistryDependency(package, name, depInfo)
 	end
 
 	fs.write(configPath, json.encode(config))
+
+	-- A bump can move the package to a different repository or branch
+	-- (per-version overrides), so drop a lock entry pinning the old source.
+	-- The rewritten manifest already invalidates the lockfile, but the entry
+	-- must not keep claiming the previous git URL.
+	local _, commit, git, branch, archive, sha256 =
+		global.resolveRegistryVersion(portfile, best)
+	clearStaleLock(package, name, commit, git, branch, archive, sha256)
 
 	return true, depInfo.version .. " -> " .. best
 end

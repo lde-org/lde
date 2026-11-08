@@ -6,7 +6,9 @@
 		"dev": "astro dev",
 		"build": "astro build",
 		"preview": "astro preview",
-		"astro": "astro"
+		"astro": "astro",
+		"worker:dev": "bun run build && bunx wrangler dev --config dist/server/wrangler.json --ip 127.0.0.1 --port 8787",
+		"worker:dev:remote": "bun run build && bunx wrangler dev --remote --config dist/server/wrangler.json"
 	},
 	"dependencies": {
 		"@astrojs/cloudflare": "^14.2.0",

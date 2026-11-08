@@ -94,7 +94,20 @@ local function resolvePackage(args, parsed)
 			return nil, err, lde.util.suggestPackage(packageName, false)
 		end
 
-		local _, commit = lde.global.resolveRegistryVersion(portfile, versionStr or nil)
+		local _, commit, git, branch, archive, sha256 =
+			lde.global.resolveRegistryVersion(portfile, versionStr or nil)
+
+		if archive then
+			local ok, archiveDir, sourceDir = pcall(
+				lde.global.getOrInitArchive, archive, isOffline == true, nil, sha256)
+			if not ok then
+				return nil, tostring(archiveDir)
+			end
+			return lde.util.findNamedPackage(sourceDir or archiveDir, packageName)
+		end
+
+		git = git or portfile.git
+		branch = branch or portfile.branch
 		local repoDir
 		if isOffline then
 			repoDir = lde.global.getGitRepoDir(packageName, commit --[[@as string]])
@@ -102,7 +115,7 @@ local function resolvePackage(args, parsed)
 				return nil, "offline: '" .. packageName .. "' is not cached locally (run `lde x " .. packageName .. "` online once to cache it)"
 			end
 		else
-			repoDir = lde.global.getOrInitGitRepo(packageName, portfile.git, portfile.branch, commit)
+			repoDir = lde.global.getOrInitGitRepo(packageName, git, branch, commit)
 		end
 
 		return lde.util.findNamedPackage(repoDir, packageName)

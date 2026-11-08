@@ -312,6 +312,18 @@ end
 --- needed) and compute where the repo tarball must be downloaded to.
 --- The tarball itself is not downloaded here — callers enqueue it into the
 --- parallel download session (or fall back to `getOrInitGitRepo`).
+--- The tarball URL lde would download for a recognized host, or nil when the
+--- host has no archive endpoint. Publishing uses it to pin the exact artifact
+--- a client will verify against the published SHA-256.
+---@param repoUrl string
+---@param commit string
+---@return string?
+function M.tarballUrl(repoUrl, commit)
+	local hostType = isRecognizedGitHost(repoUrl)
+	if not hostType then return nil end
+	return buildTarballUrl(repoUrl, commit, hostType)
+end
+
 ---@param repoName string
 ---@param repoUrl string
 ---@param branch string?

@@ -4,6 +4,7 @@ const fs = require("fs")
 const path = require("path")
 const ansi = require("ansi")
 const md5 = require("lde-core.util.md5")
+const sha256 = require("lde-core.util.sha256")
 const util = require("util")
 
 const lde = require("lde-core")
@@ -32,9 +33,10 @@ end
 ---@param url string
 ---@param isOffline boolean?
 ---@param source rocked.raw.Source? # rockspec source section: md5/dir/file
+---@param expectedSha256 string? # published content hash for registry archives
 ---@return string archiveDir
 ---@return string sourceDir # dir holding the source (see sourceDirFor)
-function M.getOrInitArchive(url, isOffline, source)
+function M.getOrInitArchive(url, isOffline, source, expectedSha256)
 	local archiveDir = M.getArchiveDir(url)
 	const marker = path.join(archiveDir, consts.CACHE_MARKER)
 	if fs.exists(marker) then
@@ -86,6 +88,16 @@ function M.getOrInitArchive(url, isOffline, source)
 			fs.delete(archiveFile)
 			if bar then bar:fail("Downloading " .. filename) end
 			lde.error.raise("MD5 check for " .. filename .. " has failed.")
+		end
+	end
+
+	if expectedSha256 and expectedSha256 ~= "" then
+		const content = fs.read(archiveFile)
+		if not content or sha256.sumhexa(content) ~= expectedSha256:lower() then
+			fs.delete(archiveFile)
+			if bar then bar:fail("Downloading " .. filename) end
+			lde.error.raise("SHA-256 check for " .. filename
+				.. " has failed; the source changed after it was published.")
 		end
 	end
 
