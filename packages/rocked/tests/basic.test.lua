@@ -524,7 +524,7 @@ test.it("runBackend exercises the extended polyfill surface", function()
 			local listed = fs.list_dir(cwd)
 			assert(type(listed) == "table", "list_dir returns a table")
 
-			local found = fs.find(base)
+			local found = fs.find(cwd)
 			assert(type(found) == "table", "find returns a table")
 
 			local tmp = fs.make_temp_dir("rocked-surface-tmp")
