@@ -69,9 +69,9 @@ end
 ---@param branch string
 ---@param filePath string
 ---@return string
-function plan.rawUrl(owner, repository, branch, filePath)
-	return "https://raw.githubusercontent.com/" .. owner .. "/" .. repository .. "/"
-		.. branch .. "/" .. filePath
+function plan.contentsPath(owner, repository, branch, filePath)
+	return "/repos/" .. owner .. "/" .. repository .. "/contents/" .. filePath
+		.. "?ref=" .. branch
 end
 
 ---@param value any
@@ -242,18 +242,18 @@ function plan.prBody(info)
 end
 
 ---@param api table
----@param url string
+---@param path string
 ---@return table?
 ---@return integer
 ---@return string? err
-function plan.fetchJson(api, url)
-	local body, status, err = api.fetchRaw(url)
+function plan.fetchJson(api, path)
+	local body, status, err = api.fetchFile(path)
 	if status == 404 then return nil, 404, nil end
-	if err then return nil, status, "Could not read " .. url .. ": " .. err end
+	if err then return nil, status, "Could not read " .. path .. ": " .. err end
 
 	local ok, decoded = pcall(json.decode, body or "")
 	if not ok or type(decoded) ~= "table" then
-		return nil, status, "Malformed JSON from " .. url
+		return nil, status, "Malformed JSON from " .. path
 	end
 	return decoded, status, nil
 end

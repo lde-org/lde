@@ -299,6 +299,7 @@ end)
 
 test.it("dry-run prints the preflight, portfile and pull request title", function()
 	local emitted = {}
+	local fetched = {}
 	local api = {
 		request = function(method, requestPath)
 			if requestPath == "/repos/lde-org/registry" then
@@ -306,7 +307,8 @@ test.it("dry-run prints the preflight, portfile and pull request title", functio
 			end
 			return nil, 500, "unexpected request"
 		end,
-		fetchRaw = function()
+		fetchFile = function(path)
+			fetched[#fetched + 1] = path
 			return nil, 404, nil
 		end,
 		setToken = function() end,
@@ -332,6 +334,7 @@ test.it("dry-run prints the preflight, portfile and pull request title", functio
 	test.truthy(result, err)
 	test.equal(result.dryRun, true)
 	test.equal(result.portfile.git, "https://github.com/owner/example.git")
+	test.equal(fetched[1], "/repos/lde-org/registry/contents/packages/example.json?ref=master")
 
 	local output = table.concat(emitted, "\n")
 	test.includes(output, "First publish of example.")
@@ -367,8 +370,8 @@ test.it("forks the registry when the user cannot push upstream", function()
 			end
 			return nil, 500, "unexpected request " .. requestPath
 		end,
-		fetchRaw = function(url)
-			if url:find("/packages/example.json", 1, true) then
+		fetchFile = function(path)
+			if path:find("/contents/packages/example.json?", 1, true) then
 				return nil, 404, nil
 			end
 			return '{"top":{},"namespaces":{}}', 200, nil
@@ -463,7 +466,7 @@ test.it("dry-runs an archive publish without a git repository", function()
 			end
 			return nil, 500, "unexpected request"
 		end,
-		fetchRaw = function() return nil, 404, nil end,
+		fetchFile = function() return nil, 404, nil end,
 		setToken = function() end,
 	}
 	local auth = { load = function() return nil, nil end }

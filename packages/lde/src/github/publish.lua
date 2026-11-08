@@ -17,7 +17,7 @@ local publish = {}
 publish.toHttpsUrl = plan.toHttpsUrl
 publish.parseRepo = plan.parseRepo
 publish.packagePath = plan.packagePath
-publish.rawUrl = plan.rawUrl
+publish.contentsPath = plan.contentsPath
 publish.preflight = plan.preflight
 publish.branchName = plan.branchName
 publish.prBody = plan.prBody
@@ -138,14 +138,14 @@ function publish.run(opts)
 	end
 
 	local existing, portfileStatus, portfileErr = plan.fetchJson(api,
-		plan.rawUrl(owner, repository, baseBranch, plan.packagePath(opts.name)))
+		plan.contentsPath(owner, repository, baseBranch, plan.packagePath(opts.name)))
 	if portfileErr then return nil, portfileErr end
 	if portfileStatus ~= 404 and existing == nil then
 		return nil, "Could not read the registry portfile for " .. opts.name
 	end
 
 	local authority, authorityStatus, authorityErr = plan.fetchJson(api,
-		plan.rawUrl(owner, repository, baseBranch, "authority.json"))
+		plan.contentsPath(owner, repository, baseBranch, "authority.json"))
 	if authorityErr then return nil, authorityErr end
 	if authorityStatus ~= 404 and authority == nil then
 		authority = {}

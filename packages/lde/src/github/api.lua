@@ -51,6 +51,7 @@ end
 ---@class lde.github.Api
 ---@field request fun(method: string, path: string, body: table?, opts?: table?): (table?, integer, string?)
 ---@field fetchRaw fun(url: string, opts?: table?): (string?, integer, string?)
+---@field fetchFile fun(path: string, opts?: table?): (string?, integer, string?)
 ---@field setToken fun(token: string?)
 
 ---@param opts lde.github.ApiOptions?
@@ -165,6 +166,59 @@ function api.new(opts)
 		return res.body or "", status, nil
 	end
 
+	--- Fetch a repository file through the Contents API. Unlike
+	--- raw.githubusercontent.com this is authenticated and not CDN-cached, so a
+	--- just-merged portfile is visible immediately.
+	---@param path string
+	---@param requestOpts table?
+	---@return string?, integer, string?
+	local function fetchFile(path, requestOpts)
+		requestOpts = requestOpts or {}
+		local useToken = requestOpts.token
+		if useToken == nil then useToken = token end
+
+		local function sendFile(authToken)
+			local headers = {
+				["Accept"] = "application/vnd.github.raw+json",
+				["User-Agent"] = userAgent,
+				["X-GitHub-Api-Version"] = "2022-11-28",
+			}
+			if authToken then
+				headers["Authorization"] = "Bearer " .. authToken
+			end
+			local res, transportErr = http({
+				url = absolute(path),
+				method = "GET",
+				headers = headers,
+				timeout = requestOpts.timeout or 30,
+			})
+			if not res then
+				return nil, 0, transportErr or ("request to " .. path .. " failed")
+			end
+			local status = res.status or 0
+			if status == 404 then return nil, 404, nil end
+			if status ~= 200 then
+				return nil, status, "HTTP " .. tostring(status)
+			end
+			return res.body or "", status, nil
+		end
+
+		local body, status, err = sendFile(useToken)
+		if status == 401 and onUnauthorized and not requestOpts.retried then
+			local fresh, refreshErr = onUnauthorized()
+			if fresh then
+				local retryOpts = {}
+				for k, v in pairs(requestOpts) do retryOpts[k] = v end
+				retryOpts.token = fresh
+				retryOpts.retried = true
+				token = fresh
+				return fetchFile(path, retryOpts)
+			end
+			if refreshErr then return nil, status, refreshErr end
+		end
+		return body, status, err
+	end
+
 	---@param freshToken string?
 	local function setToken(freshToken)
 		token = freshToken
@@ -173,6 +227,7 @@ function api.new(opts)
 	return {
 		request = request,
 		fetchRaw = fetchRaw,
+		fetchFile = fetchFile,
 		setToken = setToken,
 	}
 end
