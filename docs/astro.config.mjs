@@ -1,5 +1,6 @@
 // @ts-check
 import { defineConfig, sessionDrivers } from "astro/config";
+import { fileURLToPath } from "node:url";
 
 import tailwindcss from "@tailwindcss/vite";
 import preact from "@astrojs/preact";
@@ -33,6 +34,18 @@ export default defineConfig({
 			? undefined
 			: { driver: sessionDrivers.fsLite({ base: ".astro/sessions" }) },
 	vite: {
+		resolve: {
+			// `cloudflare:workers` only exists inside workerd. Local `astro dev`
+			// has no adapter, so point it at process.env instead.
+			alias:
+				process.env.NODE_ENV === "production"
+					? {}
+					: {
+							"cloudflare:workers": fileURLToPath(
+								new URL("./src/lib/server/cloudflare-workers.mock.ts", import.meta.url),
+							),
+						},
+		},
 		plugins: [tailwindcss()],
 	},
 	markdown: {

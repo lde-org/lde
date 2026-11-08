@@ -22,16 +22,8 @@ declare namespace App {
 		lastNamespaceRequest?: number;
 		lastOwnerRequest?: number;
 	}
+}
 
-	interface Locals {
-		runtime?: {
-			env?: {
-				GITHUB_CLIENT_ID?: string;
-				GITHUB_CLIENT_SECRET?: string;
-				REGISTRY_REPO?: string;
-				REGISTRY_BRANCH?: string;
-				SITE_URL?: string;
-			};
-		};
-	}
+declare module "cloudflare:workers" {
+	export const env: Record<string, string | undefined>;
 }

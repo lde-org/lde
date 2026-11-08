@@ -1,4 +1,5 @@
 import type { APIContext } from "astro";
+import { env as workerEnv } from "cloudflare:workers";
 
 // Local dev has no Cloudflare runtime. The website build runs under Node, so
 // fall back to process.env there without pulling in @types/node.
@@ -49,11 +50,8 @@ interface TokenResponse {
 	error_description?: string;
 }
 
-export function getEnv(context: SessionContext): GithubEnv {
-	return (
-		context.locals.runtime?.env ??
-		(typeof process === "undefined" ? {} : process.env)
-	);
+export function getEnv(_context: SessionContext): GithubEnv {
+	return workerEnv as GithubEnv;
 }
 
 export function getOrigin(context: SessionContext): string {
