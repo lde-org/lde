@@ -70,7 +70,7 @@ local function makeLocalGitRepo(name, packageName)
 	assert(process.exec("git", { "init", "-q" }, { cwd = repoDir }), "git init failed")
 	process.exec("git", { "add", "-A" }, { cwd = repoDir })
 	local code = process.exec(
-		"git", { "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "init" },
+		"git", { "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit", "-q", "-m", "init" },
 		{ cwd = repoDir })
 	assert(code == 0, "git commit failed: " .. tostring(code))
 	return repoDir
@@ -394,7 +394,7 @@ test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde sync re-resolves a dev registry
 		}))
 		assert(process.exec("git", { "add", "-A" }, { cwd = repoDir }), "git add failed")
 		local code = process.exec(
-			"git", { "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", version },
+			"git", { "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit", "-q", "-m", version },
 			{ cwd = repoDir })
 		assert(code == 0, "git commit failed: " .. tostring(code))
 		return headCommit(repoDir)
@@ -548,7 +548,7 @@ test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde sync re-resolves a dep switched
 	}))
 	assert(process.exec("git", { "add", "-A" }, { cwd = parentRepo }), "git add failed")
 	local code = process.exec(
-		"git", { "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "registry dep" },
+		"git", { "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit", "-q", "-m", "registry dep" },
 		{ cwd = parentRepo })
 	assert(code == 0, "git commit failed: " .. tostring(code))
 	local parentCommit = headCommit(parentRepo)

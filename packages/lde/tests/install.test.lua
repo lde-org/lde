@@ -54,7 +54,7 @@ local function makeLocalGitRepo(name)
 	assert(process.exec("git", { "init", "-q" }, { cwd = repoDir }), "git init failed")
 	process.exec("git", { "add", "-A" }, { cwd = repoDir })
 	local code = process.exec(
-		"git", { "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "init" },
+		"git", { "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit", "-q", "-m", "init" },
 		{ cwd = repoDir })
 	assert(code == 0, "git commit failed: " .. tostring(code))
 	return repoDir

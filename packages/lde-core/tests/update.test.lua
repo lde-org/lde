@@ -47,7 +47,7 @@ local function makeLocalGitRepo(name)
 	assert(process.exec("git", { "init", "-q" }, { cwd = repoDir }), "git init failed")
 	process.exec("git", { "add", "-A" }, { cwd = repoDir })
 	local code = process.exec(
-		"git", { "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "init" },
+		"git", { "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit", "-q", "-m", "init" },
 		{ cwd = repoDir })
 	assert(code == 0, "git commit failed: " .. tostring(code))
 	return repoDir
@@ -68,7 +68,7 @@ local function commitMore(repoDir, file, content)
 	fs.write(path.join(repoDir, file), content)
 	process.exec("git", { "add", "-A" }, { cwd = repoDir })
 	local code = process.exec(
-		"git", { "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "more" },
+		"git", { "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit", "-q", "-m", "more" },
 		{ cwd = repoDir })
 	assert(code == 0, "second commit failed: " .. tostring(code))
 end
@@ -111,7 +111,7 @@ test.skipIf(env.var("ANDROID_ROOT") ~= nil)("updateDependencies re-pins a git de
 	fs.write(path.join(repoDir, "src", "extra.lua"), 'return "v2"')
 	process.exec("git", { "add", "-A" }, { cwd = repoDir })
 	local code = process.exec(
-		"git", { "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "more" },
+		"git", { "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit", "-q", "-m", "more" },
 		{ cwd = repoDir })
 	assert(code == 0, "second commit failed")
 
