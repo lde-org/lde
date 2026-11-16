@@ -86,6 +86,28 @@ test.it("Package:build is idempotent (can be called twice)", function()
 	test.truthy(fs.exists(pkg:getTargetDir()))
 end)
 
+test.it("Package:build replaces a link that points elsewhere without leaving a staging link", function()
+	local dir = makePackageWithSrc("build-relink", {
+		["init.lua"] = 'return "current"'
+	})
+	local stale = path.join(tmpBase, "build-relink-stale")
+	fs.mkdir(stale)
+	fs.write(path.join(stale, "old.lua"), "return 1")
+
+	local pkg = assert(lde.Package.open(dir))
+	pkg:build()
+	local targetDir = pkg:getTargetDir()
+	fs.delete(targetDir)
+	fs.mklink(stale, targetDir)
+
+	pkg:build()
+
+	test.truthy(fs.islink(targetDir))
+	test.truthy(fs.exists(path.join(targetDir, "init.lua")), "the link points at src again")
+	test.falsy(fs.exists(path.join(targetDir, "old.lua")))
+	test.falsy(fs.exists(targetDir .. ".lde-link"), "the staging link is renamed away")
+end)
+
 --
 -- Package:build input invalidation (build.lua packages)
 --

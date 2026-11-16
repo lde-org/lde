@@ -48,6 +48,27 @@ local function checkInputs(package, stampPath)
 	return storedTarget ~= lde.global.getTargetKey() or changed, current
 end
 
+--- Points `dest` at `src` with no moment where `dest` is missing. Every `lde run` relinks the
+--- package, and another process (a test file running in parallel, a server) may be requiring a
+--- module through the link at that instant: deleting and recreating it made those requires fail.
+--- The new link is made beside the old one and renamed over it, which POSIX does atomically;
+--- where rename cannot replace the link (a Windows junction), it is deleted and made again.
+---@param src string
+---@param dest string
+local function relink(src, dest)
+	if not fs.islink(dest) then
+		fs.mklink(src, dest)
+		return
+	end
+	-- The build lock on `dest` is held here, so one staging name per destination is enough.
+	const staged = dest .. ".lde-link"
+	if fs.islink(staged) then fs.delete(staged) end
+	if fs.mklink(src, staged) and fs.move(staged, dest) then return end
+	if fs.islink(staged) then fs.delete(staged) end
+	fs.delete(dest)
+	fs.mklink(src, dest)
+end
+
 ---@param package lde.Package
 ---@param destinationPath string?
 ---@param opts { async: boolean? }? # async: return the deferred native builder (install scheduler only)
@@ -196,18 +217,22 @@ local function buildPackage(package, destinationPath, opts)
 			end
 		end
 	else
+		const srcDir = package:getSrcDir()
+		const isTeal = teal:hasSource(srcDir)
+		const isMoonscript = not isTeal and moonscript:hasSource(srcDir)
 		if fs.islink(dest) then
-			fs.delete(dest)
+			-- A plain package is relinked in place below; only compiled output needs the link gone first.
+			if isTeal or isMoonscript then fs.delete(dest) end
 		elseif fs.isdir(dest) then
 			fs.rmdir(dest)
 		end
-		if teal:hasSource(package:getSrcDir()) then
+		if isTeal then
 			-- Teal: compile .tl sources to .lua (instead of symlinking) so the rest of the pipeline only sees Lua.
-			teal:compileDir(package:getSrcDir(), dest)
-		elseif moonscript:hasSource(package:getSrcDir()) then
-			moonscript:compileDir(package:getSrcDir(), dest)
+			teal:compileDir(srcDir, dest)
+		elseif isMoonscript then
+			moonscript:compileDir(srcDir, dest)
 		else
-			fs.mklink(package:getSrcDir(), dest)
+			relink(srcDir, dest)
 		end
 	end
 
