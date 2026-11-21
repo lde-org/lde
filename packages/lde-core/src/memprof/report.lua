@@ -16,13 +16,15 @@ function report.formatBytes(bytes)
 	return string.format("%.1f GiB", bytes / (1024 * 1024 * 1024))
 end
 
+--- Shorten a sampled location: drop the cwd and a package's target/<name>/ prefix. Windows locations use backslashes, and the cwd may use either separator.
 ---@param loc string
 ---@param cwd string?
 function report.relativize(loc, cwd)
-	if cwd and loc:sub(1, #cwd + 1) == cwd .. "/" then
-		loc = loc:sub(#cwd + 2)
+	if cwd and loc:sub(1, #cwd):gsub("\\", "/") == cwd:gsub("\\", "/") then
+		const separator = loc:sub(#cwd + 1, #cwd + 1)
+		if separator == "/" or separator == "\\" then loc = loc:sub(#cwd + 2) end
 	end
-	return (loc:gsub("^target/[^/]+/", ""))
+	return (loc:gsub("^target[/\\][^/\\]+[/\\]", ""))
 end
 
 ---@class lde.memprof.Frame

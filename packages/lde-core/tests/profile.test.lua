@@ -366,6 +366,16 @@ test.it("memprof charges allocations to the function and line that ran", functio
 		"expected most growth at grow@mem_sites.lua:<line>, got " .. growBytes .. " of " .. mem.allocated)
 end)
 
+test.it("memprof shortens Windows and POSIX locations the same way", function()
+	const report = require("lde-core.memprof.report")
+	test.equal(report.relativize([[C:\work\app\target\app\main.lua:3]], [[C:\work\app]]), "main.lua:3")
+	test.equal(report.relativize([[C:\work\app\target\app\main.lua:3]], "C:/work/app"), "main.lua:3",
+		"the cwd can come with forward slashes while LuaJIT reports backslashes")
+	test.equal(report.relativize("/work/app/target/app/main.lua:3", "/work/app"), "main.lua:3")
+	test.equal(report.relativize("/work/application/main.lua:3", "/work/app"), "/work/application/main.lua:3",
+		"a sibling directory that shares the cwd's prefix is not inside it")
+end)
+
 test.it("memprof timeline keeps its bucket count bounded and its totals exact", function()
 	const Memory = require("lde-core.memprof")
 	const state = require("lua-sys").new()
