@@ -227,6 +227,166 @@ test.it("executeFile with profileJson writes decodable profile data", function()
 	test.truthy(work.count > 0)
 end)
 
+test.it("executeFile with memprof records retained memory and allocation sites", function()
+	local scriptPath = path.join(tmpBase, "mem_script.lua")
+	local outPath    = path.join(tmpBase, "mem_out.json")
+	fs.write(scriptPath, [[
+		-- Unique strings so they cannot be interned into one shared object.
+		local keep = {}
+		for i = 1, 2000 do keep[i] = string.rep("x", 1024) .. i end
+		_G.memprof_keep = keep
+
+		-- ffi.new is GC memory too; it must be part of the retained figure.
+		local ffi = require("ffi")
+		_G.memprof_cdata = ffi.new("char[?]", 1024 * 1024)
+
+		local function work(n)
+			local s = 0
+			for i = 1, n do s = s + i end
+			return s
+		end
+		for i = 1, 200 do work(500000) end
+	]])
+
+	local ok = lde.runtime.executeFile(scriptPath, {
+		memprof = true,
+		profileJson = outPath,
+	})
+	test.truthy(ok)
+	test.truthy(fs.exists(outPath), "profile JSON not written")
+
+	const json = require("json")
+	const raw = fs.read(outPath) ---@cast raw -nil
+	local data = json.decode(raw) ---@cast data table<string, any>
+	local mem = data.memory --[[@as lde.MemoryProfile]]
+	test.truthy(mem, "memory section missing from profile JSON")
+	test.equal(mem.intervalMs, 1)
+	test.truthy(mem.retained > 2000000,
+		"expected the retained strings + ffi.new cdata to survive, got " .. tostring(mem.retained))
+	test.truthy(mem.peak >= mem.retained)
+	test.truthy(mem.final >= mem.baseline)
+	test.truthy(type(mem.stacks) == "table")
+end)
+
+---@param name string
+---@param source string
+local function runMemprof(name, source)
+	local scriptPath = path.join(tmpBase, name .. ".lua")
+	local outPath    = path.join(tmpBase, name .. ".json")
+	fs.write(scriptPath, source)
+	local ok = lde.runtime.executeFile(scriptPath, { memprof = true, profileJson = outPath })
+	test.truthy(ok)
+	const content = fs.read(outPath) ---@cast content -nil
+	const data = require("json").decode(content) ---@cast data table<string, any>
+	const mem = data.memory --[[@as lde.MemoryProfile]]
+	return assert(mem.snapshots, "memory.snapshots missing"), assert(mem.leaks, "memory.leaks missing")
+end
+
+test.it("memprof reports a growing main-chunk local as a leak suspect", function()
+	-- The store is only reachable from a local of the entry chunk, so it is gone by exit:
+	-- only snapshots taken while the chunk runs can see it.
+	const snapshots, leaks = runMemprof("mem_leak", [[
+		local store = {}
+		local function work(n)
+			local s = 0
+			for i = 1, n do s = s + i end
+			return s
+		end
+		for round = 1, 400 do
+			store[#store + 1] = string.rep("x", 1024) .. round
+			work(1000000)
+		end
+	]])
+	test.truthy(#snapshots >= 2, "expected automatic heap snapshots during the run")
+	const leak = leaks[1]
+	test.truthy(leak, "no leak suspect reported")
+	test.equal(leak.path, "mem_leak.lua:local store")
+	test.truthy(leak.items > 0, "expected the store's element count to grow")
+end)
+
+test.it("memprof compares labeled snapshots and names the upvalue that holds the leak", function()
+	const snapshots, leaks = runMemprof("mem_labeled", [[
+		local memprof = require("lde.memprof")
+		local cache = (function()
+			local entries = {}
+			return { put = function(k, v) entries[k] = v end }
+		end)()
+		for round = 1, 4 do
+			memprof.snapshot("round " .. round)
+			for i = 1, 500 do cache.put(round * 1000 + i, string.rep("y", 256) .. round .. ":" .. i) end
+		end
+	]])
+	test.equal(#snapshots, 4)
+	test.equal(snapshots[1].label, "round 1")
+	const leak = leaks[1]
+	test.truthy(leak, "no leak suspect reported")
+	test.equal(leak.path, "mem_labeled.lua:local cache.put<upvalue entries>")
+	test.equal(leak.items, 1500)
+end)
+
+test.it("memprof does not report churn that is released between snapshots", function()
+	const snapshots, leaks = runMemprof("mem_churn", [[
+		local memprof = require("lde.memprof")
+		local current = {}
+		for round = 1, 4 do
+			current = {}
+			for i = 1, 2000 do current[i] = string.rep("z", 256) .. i end
+			memprof.snapshot("round " .. round)
+		end
+	]])
+	test.equal(#snapshots, 4)
+	test.equal(#leaks, 0, "a replaced table must not look like a leak")
+end)
+
+---@param name string
+---@param source string
+local function memoryProfile(name, source)
+	local scriptPath = path.join(tmpBase, name .. ".lua")
+	local outPath    = path.join(tmpBase, name .. ".json")
+	fs.write(scriptPath, source)
+	test.truthy(lde.runtime.executeFile(scriptPath, { memprof = true, profileJson = outPath }))
+	const content = fs.read(outPath) ---@cast content -nil
+	const data = require("json").decode(content) ---@cast data table<string, any>
+	return data.memory --[[@as lde.MemoryProfile]]
+end
+
+test.it("memprof charges allocations to the function and line that ran", function()
+	local mem = memoryProfile("mem_sites", [[
+		local keep = {}
+		local function grow(n)
+			for i = 1, n do keep[#keep + 1] = { i } end
+		end
+		for _ = 1, 300 do grow(2000) end
+	]])
+	local growBytes = 0
+	for stack, bytes in pairs(mem.stacks) do
+		if stack:find("^grow@.-mem_sites%.lua:%d+") then growBytes += bytes end
+	end
+	test.truthy(growBytes > mem.allocated / 2,
+		"expected most growth at grow@mem_sites.lua:<line>, got " .. growBytes .. " of " .. mem.allocated)
+end)
+
+test.it("memprof timeline keeps its bucket count bounded and its totals exact", function()
+	const Memory = require("lde-core.memprof")
+	const state = require("lua-sys").new()
+	const mem = Memory.new(state, 1)
+	local allocated = 0
+	for ms = 0, 2999 do
+		allocated += ms % 7
+		mem:record(ms, 1000 + ms, ms % 7, ms % 2 == 0 and "a" or "b")
+	end
+	state:close()
+	test.truthy(#mem.timeline <= 400, "got " .. #mem.timeline .. " buckets")
+	test.equal(mem.bucketMs, 8, "3000ms at 1ms needs three halvings to fit 400 buckets")
+	local sum = 0
+	for i, bucket in ipairs(mem.timeline) do
+		sum += bucket.allocated
+		test.equal(bucket.atMs, (i - 1) * mem.bucketMs)
+	end
+	test.equal(sum, allocated)
+	test.equal(mem.timeline[#mem.timeline].bytes, 1000 + 2999, "a bucket keeps the heap size of its last sample")
+end)
+
 test.it("executeFile with flamegraph: no crash when script errors", function()
 	local scriptPath = path.join(tmpBase, "fg_error.lua")
 	local outPath    = path.join(tmpBase, "fg_error_out.html")

@@ -27,6 +27,8 @@ local commands = {
 			["--profile"] = { desc = "Print a flat call profile on exit" },
 			["--flamegraph"] = { arg = "file", desc = "Also write a flamegraph HTML file (default: profile.html)" },
 			["--json"] = { arg = "file", desc = "Also write the profile data as JSON (default: profile.json)" },
+			["--memprof"] = { desc = "Report allocation sites, leak suspects and retained memory" },
+			["--memgraph"] = { arg = "file", desc = "Also write an HTML graph of memory over time (default: memory.html)" },
 			["--jit"] = { desc = "JIT diagnostics: report trace aborts (code that could not be JIT-compiled) with source locations and reasons, plus a summary on exit" },
 		},
 	},

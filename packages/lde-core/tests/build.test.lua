@@ -321,6 +321,36 @@ test.it("installDependencies re-installs when a dep symlink is dangling", functi
 	test.equal(fs.read(path.join(mainDir, "target", "dangling-dep", "init.lua")), 'return "dangling"')
 end)
 
+test.it("installDependencies relinks a path dep whose link points at another source", function()
+	makePackageWithSrc("moved-dep", {
+		["init.lua"] = 'return "local"'
+	})
+	local stale = path.join(tmpBase, "moved-dep-stale")
+	fs.mkdir(stale)
+	fs.write(path.join(stale, "init.lua"), 'return "stale"')
+
+	local mainDir = path.join(tmpBase, "moved-main")
+	fs.mkdir(mainDir)
+	fs.mkdir(path.join(mainDir, "src"))
+	fs.write(path.join(mainDir, "src", "init.lua"), 'return true')
+	fs.write(path.join(mainDir, "lde.json"), json.encode({
+		name = "moved-main",
+		version = "0.1.0",
+		dependencies = {
+			["moved-dep"] = { path = "../moved-dep" }
+		}
+	}))
+
+	-- The link a git version of the dependency left behind: a dep switched to a local path kept it,
+	-- because an existing link was taken as already installed.
+	fs.mkdir(path.join(mainDir, "target"))
+	fs.mklink(stale, path.join(mainDir, "target", "moved-dep"))
+
+	local pkg = assert(lde.Package.open(mainDir))
+	pkg:installDependencies()
+	test.equal(fs.read(path.join(mainDir, "target", "moved-dep", "init.lua")), 'return "local"')
+end)
+
 --
 -- installDependencies: build.lua input invalidation for path deps
 --

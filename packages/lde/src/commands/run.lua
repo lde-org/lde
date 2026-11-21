@@ -162,11 +162,15 @@ local function run(args)
 	if not flamegraph and args:flag("flamegraph") then flamegraph = "profile.html" end
 	local profileJson = args:option("json")
 	if not profileJson and args:flag("json") then profileJson = "profile.json" end
+	-- Allocation sites, leak suspects and retained bytes; --memgraph also writes them over time as HTML.
+	local memgraph = args:option("memgraph")
+	if not memgraph and args:flag("memgraph") then memgraph = "memory.html" end
+	local memprof = args:flag("memprof") or memgraph ~= nil
 	-- JIT diagnostics (LuaJIT -jv style): report trace aborts with source locations and reasons.
 	local jitDiag = args:flag("jit")
 
-	if (hot or watch) and (profile or flamegraph or profileJson) then
-		ansi.printf("{red}--profile/--flamegraph/--json cannot be combined with --hot or --watch")
+	if (hot or watch) and (profile or flamegraph or profileJson or memprof) then
+		ansi.printf("{red}--profile/--flamegraph/--json/--memprof/--memgraph cannot be combined with --hot or --watch")
 		return
 	end
 
@@ -196,6 +200,9 @@ local function run(args)
 				cwd = env.cwd(),
 				profile = profile,
 				flamegraph = flamegraph,
+				profileJson = profileJson,
+				memprof = memprof,
+				memgraph = memgraph,
 				jit = jitDiag,
 			})
 
@@ -230,7 +237,7 @@ local function run(args)
 			end
 			return nil
 		end
-		ok, err = pkg:runFile(name, scriptArgs, nil, nil, profile, flamegraph, profileJson, nil, jitDiag)
+		ok, err = pkg:runFile(name, scriptArgs, nil, nil, profile, flamegraph, profileJson, nil, jitDiag, memprof, memgraph)
 		if not ok then
 			raiseRunError(err or "Script exited with a non-zero exit code", pkg:getDir(), nil, remap)
 		end

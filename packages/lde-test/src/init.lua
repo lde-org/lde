@@ -23,7 +23,6 @@
 ---@field run fun(reporter?: lde.TestReporter): lde.test.Result[]
 ---@field equal fun(a: any, b: any, msg?: string)
 ---@field notEqual fun(a: any, b: any, msg?: string)
----@field truthy fun(value: any, msg?: string)
 ---@field falsy fun(value: any, msg?: string)
 ---@field includes fun(haystack: string, needle: string, msg?: string)
 ---@field greater fun(a: number, b: number, msg?: string)
@@ -34,8 +33,13 @@
 ---@field deepEqual fun(a: any, b: any, msg?: string)
 ---@field match fun(actual: table, expected: table, msg?: string)
 ---@field errors fun(fn: fun(), expected?: any, msg?: string) # fn must throw; with expected, the error must match it
+local test = {}
 
----@return lde.test
-local function create() end
+--- Fails the test unless `value` is truthy. Like `assert`, the call only comes back when it holds,
+--- so the code after it may rely on `value` being neither `nil` nor `false`.
+---@param value unknown
+---@param msg string?
+---@return value is -false|nil
+function test.truthy(value, msg) end
 
-return create()
+return test

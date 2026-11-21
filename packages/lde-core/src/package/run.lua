@@ -33,7 +33,9 @@ end
 ---@param preload table<string, function>?
 ---@param profileJson string?
 ---@param jit boolean? # JIT diagnostics (trace-abort report)
-local function runFileWithLDE(package, scriptPath, args, vars, cwd, profile, flamegraph, preload, profileJson, jit)
+---@param memprof boolean? # memory sampling report
+---@param memgraph string? # path of the HTML memory graph
+local function runFileWithLDE(package, scriptPath, args, vars, cwd, profile, flamegraph, preload, profileJson, jit, memprof, memgraph)
 	local luaPath, luaCPath = getLuaPathsForPackage(package)
 
 	return runtime.executeFile(scriptPath, {
@@ -46,6 +48,8 @@ local function runFileWithLDE(package, scriptPath, args, vars, cwd, profile, fla
 		flamegraph = flamegraph,
 		preload = preload,
 		profileJson = profileJson,
+		memprof = memprof,
+		memgraph = memgraph,
 		jit = jit,
 	})
 end
@@ -133,9 +137,11 @@ end
 ---@param profileJson string?
 ---@param preload table<string, function>?
 ---@param jit boolean?
+---@param memprof boolean?
+---@param memgraph string?
 ---@return boolean?
 ---@return string
-local function runFile(package, scriptPath, args, vars, cwd, profile, flamegraph, profileJson, preload, jit)
+local function runFile(package, scriptPath, args, vars, cwd, profile, flamegraph, profileJson, preload, jit, memprof, memgraph)
 	package:build()
 	local config = package:readConfig()
 
@@ -155,7 +161,7 @@ local function runFile(package, scriptPath, args, vars, cwd, profile, flamegraph
 
 	if fs.isfile(scriptPath) and isForeignEntry(scriptPath) then
 		-- Profiling, JIT diagnostics and hot reload live in the lde runtime, which a spawned program doesn't have.
-		if profile or flamegraph or profileJson or jit or preload then
+		if profile or flamegraph or profileJson or memprof or memgraph or jit or preload then
 			return nil, "Profiling, JIT diagnostics and hot reload are only supported for Lua entry points"
 		end
 		local luaPath, luaCPath = getLuaPathsForPackage(package)
@@ -171,9 +177,9 @@ local function runFile(package, scriptPath, args, vars, cwd, profile, flamegraph
 
 	local engine = config.engine or "lde"
 	if engine == "lde" or engine == "lpm" --[[ compat ]] then
-		return runFileWithLDE(package, scriptPath, args, vars, cwd --[[@as string]], profile, flamegraph, preload, profileJson, jit)
+		return runFileWithLDE(package, scriptPath, args, vars, cwd --[[@as string]], profile, flamegraph, preload, profileJson, jit, memprof, memgraph)
 	end
-	if profile or flamegraph or profileJson then
+	if profile or flamegraph or profileJson or memprof or memgraph then
 		return nil, "Profiling is only supported when engine is 'lde'"
 	end
 	return runFileWithLuaCLI(package, scriptPath, args, vars, engine, cwd --[[@as string]])

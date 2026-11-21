@@ -1,4 +1,5 @@
 const lua  = require("lua-sys")
+const raw  = require("lua-sys.raw")
 local env  = require("env")
 const fs   = require("fs")
 const path = require("path")
@@ -6,8 +7,13 @@ const ansi = require("ansi")
 const lde  = require("lde-core")
 const teal = require("lde-core.teal")
 const moonscript = require("lde-core.moonscript")
+const Memory = require("lde-core.memprof")
+const memprofReport = require("lde-core.memprof.report")
+const memprofGraph = require("lde-core.memprof.graph")
 
 local PROFILER_MS_PER_SAMPLE = 1
+
+const relativize = memprofReport.relativize
 
 ---@param counts   table<string, number>  stack → sample count
 ---@param vmstates table<string, number>  vmstate char → sample count
@@ -41,14 +47,6 @@ local function printProfileReport(counts, vmstates, total, cwd)
 		const s = filled > 0 ? ansi.colorize(color, string.rep("█", filled)) : ""
 		const empty = BAR_WIDTH - filled
 		return empty > 0 ? s .. ansi.colorize("gray", string.rep("░", empty)) : s
-	end
-
-	---@param loc string
-	local function relativize(loc)
-		if cwd and loc:sub(1, #cwd + 1) == cwd .. "/" then
-			loc = loc:sub(#cwd + 2)
-		end
-		return (loc:gsub("^target/[^/]+/", ""))
 	end
 
 	const sep = ansi.colorize("gray", string.rep("─", 54))
@@ -86,68 +84,88 @@ local function printProfileReport(counts, vmstates, total, cwd)
 		wln("  "
 			.. ansi.colorize(color, string.format("%5.1f%%", pct))
 			.. "  " .. ansi.colorize("gray", string.format("%-7s", fmtTime(e.count * PROFILER_MS_PER_SAMPLE)))
-			.. "  " .. relativize(e.loc))
+			.. "  " .. relativize(e.loc, cwd))
 	end
 
 	io.write("\n")
 end
 
+-- lde internals / Lua builtins that top every stack and make poor hotspot keys.
+const SKIP_FRAMES = {
+	["require"]    = true,
+	["pcall"]      = true,
+	["xpcall"]     = true,
+	["[string]"]   = true,
+	["chunk"]      = true,
+}
+
+-- Each sampled frame is "name@/full/path.lua:line": the function and the line running in it. Without a derivable name LuaJIT writes the function's file:firstline as the name.
+const STACK_FORMAT = "pf@l;"
+
+--- The CPU profile groups by function: the name without its location, and a bare file name for nameless functions ("init.lua:0" → "init.lua").
+---@param frame string
+local function frameName(frame)
+	const name = frame:match("^(.-)@") or frame
+	return ((name:match("[^/\\]+$") or name):gsub(":%d+$", ""))
+end
+
 ---@param state lua.State
----@return fun(): table, table, table, number
-local function startProfiler(state)
+---@param collectMemory boolean?
+---@return fun(): table, table, table, number, lde.MemoryProfile?
+---@return fun()
+local function startProfiler(state, collectMemory)
+	const L = assert(state.L, "state is closed")
 	local counts   = {}
 	local vmstates = {}
 	local stacks   = {}
 	local total    = 0
 
-	-- lde internals / Lua builtins that top every stack and make poor hotspot keys.
-	const skipFrames = {
-		["require"]    = true,
-		["pcall"]      = true,
-		["xpcall"]     = true,
-		["[string]"]   = true,
-		["chunk"]      = true,
-	}
+	---@type lde.MemoryProfile?
+	const memory = collectMemory and Memory.new(state, PROFILER_MS_PER_SAMPLE) or nil
 
-	-- Strip the name:line suffix luajit appends in "f;" mode (e.g. "foo:42" → "foo").
-	---@param f string
-	local function frameName(f)
-		return (f:gsub(":%d+$", ""))
-	end
+	-- Line mode adds a profiler check per source line of compiled code, so memory growth is charged to the line that ran; function mode is cheaper and enough for the CPU profile.
+	const mode = (collectMemory and "li" or "fi") .. PROFILER_MS_PER_SAMPLE
 
-	lua.profiler.start(state, "fi" .. PROFILER_MS_PER_SAMPLE, function(stack, samples, vmstate)
+	---@type fun(data: ffi.cdata*, thread: lua.raw.State, samples: integer, vmstate: integer)
+	const onSample = function(_, thread, samples, vmstateCode)
+		const heap = memory and memory.heap
+		if heap then
+			if heap.isWalking then return end
+			samples = heap:discount(samples, PROFILER_MS_PER_SAMPLE)
+			if samples == 0 then return end
+		end
+		const vmstate = string.char(vmstateCode)
 		total += samples
 		vmstates[vmstate] = (vmstates[vmstate] or 0) + samples
-		if vmstate == "G" or not stack or stack == "" then return end
 
-		local cleanParts = {}
-		for frame in stack:gmatch("([^;]+)") do
+		const isGC = vmstate == "G"
+		const stack = isGC and "" or raw.jit_profile_dumpstack(thread, STACK_FORMAT, 32)
+		if memory then memory:sample(total * PROFILER_MS_PER_SAMPLE, stack ~= "" and stack:sub(1, -2) or nil) end
+		if isGC or stack == "" then return end
+
+		const names = {}
+		local key
+		for frame in stack:gmatch("[^;]+") do
 			const name = frameName(frame)
 			if name ~= "" and name ~= "?" then
-				cleanParts[#cleanParts + 1] = name
+				names[#names + 1] = name
+				if not key and not SKIP_FRAMES[name] then key = name end
 			end
 		end
-		const cleanStack = table.concat(cleanParts, ";")
-		if cleanStack ~= "" then
-			stacks[cleanStack] = (stacks[cleanStack] or 0) + samples
-		end
-
-		local key
-		for _, part in ipairs(cleanParts) do
-			if not skipFrames[part] then
-				key = part
-				break
-			end
-		end
-		key = key or cleanParts[1]
-		if key then
-			counts[key] = (counts[key] or 0) + samples
-		end
-	end)
+		if #names == 0 then return end
+		key = key or names[1]
+		const nameStack = table.concat(names, ";")
+		stacks[nameStack] = (stacks[nameStack] or 0) + samples
+		counts[key] = (counts[key] or 0) + samples
+	end
+	raw.jit_profile_start(L, mode, onSample, nil)
 
 	return function()
-		lua.profiler.stop(state)
-		return counts, vmstates, stacks, total
+		raw.jit_profile_stop(L)
+		if memory then memory:finish(total * PROFILER_MS_PER_SAMPLE) end
+		return counts, vmstates, stacks, total, memory
+	end, function()
+		if memory then memory:arm() end
 	end
 end
 
@@ -157,17 +175,18 @@ end
 ---@param vmstates table<string, number> # vmstate char -> sample count
 ---@param stacks table<string, number> # folded stack -> sample count
 ---@param total number
+---@param memory lde.MemoryProfile?
 ---@return boolean? ok
 ---@return string? err
-local function writeProfileJson(filePath, counts, vmstates, stacks, total)
+local function writeProfileJson(filePath, counts, vmstates, stacks, total, memory)
 	local hotspots = {}
 	for loc, count in pairs(counts) do
 		hotspots[#hotspots + 1] = { loc = loc, count = count }
 	end
 	table.sort(hotspots, |a, b| -> a.count > b.count)
 
-	const json = require("json")
-	const content = json.encode({
+	---@type table<string, any>
+	const payload = {
 		version = 1,
 		intervalMs = PROFILER_MS_PER_SAMPLE,
 		total = total,
@@ -175,7 +194,45 @@ local function writeProfileJson(filePath, counts, vmstates, stacks, total)
 		vmstates = vmstates,
 		hotspots = hotspots,
 		stacks = stacks,
-	})
+	}
+	if memory then
+		const snapshots = {}
+		for i, snapshot in ipairs(memory.snapshots or {}) do
+			snapshots[i] = {
+				label = snapshot.label,
+				atMs = snapshot.atMs,
+				attributed = snapshot.attributed,
+				objects = snapshot.objects,
+			}
+		end
+		const timeline = {}
+		for i, bucket in ipairs(memory.timeline) do
+			timeline[i] = {
+				atMs = bucket.atMs,
+				bytes = bucket.bytes,
+				peak = bucket.peak,
+				allocated = bucket.allocated,
+				sites = bucket.sites,
+			}
+		end
+		payload.memory = {
+			intervalMs = memory.intervalMs,
+			baseline = memory.baseline,
+			final = memory.final,
+			retained = memory.retained,
+			peak = memory.peak,
+			allocated = memory.allocated,
+			stacks = memory.stacks,
+			bucketMs = memory.bucketMs,
+			timeline = timeline,
+			snapshots = snapshots,
+			leaks = memory.leaks or {},
+			heapError = memory.heapError,
+		}
+	end
+
+	const json = require("json")
+	const content = json.encode(payload)
 	if not content then return nil, "failed to encode profile data" end
 	if not fs.write(filePath, content) then
 		return nil, "failed to write " .. filePath
@@ -194,6 +251,8 @@ end
 ---@field profile      boolean?
 ---@field flamegraph   string?
 ---@field profileJson  string? # path: also write the sampled data as JSON
+---@field memprof      boolean? # sample allocation sites, report retained memory, and find leaks with heap snapshots
+---@field memgraph     string?  # path: write an HTML graph of memory over time (collects memory like memprof)
 ---@field jit          boolean? # JIT diagnostics: report trace aborts with reasons and locations
 
 --- Single source of truth for the guest environment; callers keep the state open to drive it (eval chunks, a REPL loop, ...). Call cleanup() to restore the host cwd/env and state:close() to free the guest.
@@ -290,24 +349,41 @@ local function executeSource(source, chunkName, opts)
 		end
 	end
 
-	local stopProfiler
-	if opts.profile or opts.flamegraph or opts.profileJson then
-		stopProfiler = startProfiler(state)
+	const collectMemory = opts.memprof or opts.memgraph ~= nil
+	local stopProfiler, armMemory
+	if opts.profile or opts.flamegraph or opts.profileJson or collectMemory then
+		stopProfiler, armMemory = startProfiler(state, collectMemory)
 	end
 
 	local chunk = state:load(source, chunkName)
+	if armMemory then armMemory() end
 	local ok, a, b, c, d, e, f = pcall(chunk.eval, chunk, unpack(args))
 
 	if stopProfiler then
-		local counts, vmstates, stacks, total = stopProfiler()
+		local counts, vmstates, stacks, total, memory = stopProfiler()
 		-- Artifacts are always written (the caller requested them), but the report/status lines are suppressed while lde.isQuiet (the test runner sets it so library calls under `lde test` don't spam the suite).
 		const isQuiet = lde.isQuiet
+		const cwd = opts.cwd or env.cwd()
+		const title = chunkName and chunkName:match("[^/\\\\]+$")
 		if not isQuiet and opts.profile then
-			printProfileReport(counts, vmstates, total, opts.cwd or env.cwd())
+			printProfileReport(counts, vmstates, total, cwd)
+		end
+		if not isQuiet and opts.memprof and memory then
+			memprofReport.print(memory, cwd)
+		end
+		const memgraph = opts.memgraph
+		if memgraph and memory then
+			const mgOk, mgErr = memprofGraph.write(memory, memgraph --[[@as string]], title, cwd)
+			if not isQuiet then
+				if mgOk then
+					ansi.printf("{cyan}Memory graph written to %s", memgraph)
+				else
+					ansi.printf("{red}Memory graph error: %s", mgErr or "unknown error")
+				end
+			end
 		end
 		const flamegraph = opts.flamegraph
 		if flamegraph then
-			const title = chunkName and chunkName:match("[^/\\\\]+$")
 			const fgOk, fgErr = lde.flamegraph.write(
 				stacks, total, PROFILER_MS_PER_SAMPLE, flamegraph --[[@as string]], title)
 			if not isQuiet then
@@ -320,7 +396,7 @@ local function executeSource(source, chunkName, opts)
 		end
 		const profileJson = opts.profileJson
 		if profileJson then
-			const jOk, jErr = writeProfileJson(profileJson --[[@as string]], counts, vmstates, stacks, total)
+			const jOk, jErr = writeProfileJson(profileJson --[[@as string]], counts, vmstates, stacks, total, memory)
 			if not isQuiet then
 				if jOk then
 					ansi.printf("{cyan}Profile JSON written to %s", opts.profileJson)

@@ -793,6 +793,54 @@ test.it("lde run --json writes programmatically checkable profile data", functio
 		"expected folded stack data")
 end)
 
+test.it("lde run --memprof prints a memory report", function()
+	local dir = makeProject("memprof-cli", nil, {
+		name = "memprof-cli",
+		bin = "main.lua"
+	})
+	fs.write(path.join(dir, "src", "main.lua"), [[
+		-- Keep unique strings alive so the retained figure is unambiguous.
+		local keep = {}
+		for i = 1, 2000 do keep[i] = string.rep("x", 1024) .. i end
+		_G.keep = keep
+
+		local function work(n)
+			local s = 0
+			for i = 1, n do s = s + i end
+			return s
+		end
+		for i = 1, 200 do work(500000) end
+		print("memprof-done")
+	]])
+
+	local ok, out = cli({ "run", "--memprof" }, dir)
+	test.truthy(ok, "lde run --memprof failed: " .. tostring(out))
+	test.includes(plain(out or ""), "Memory")
+	test.includes(plain(out or ""), "retained")
+	test.includes(out or "", "memprof-done")
+end)
+
+test.it("lde run --memgraph writes the HTML memory graph", function()
+	local dir = makeProject("memgraph-cli", nil, {
+		name = "memgraph-cli",
+		bin = "main.lua"
+	})
+	fs.write(path.join(dir, "src", "main.lua"), [[
+		local keep = {}
+		local function grow(n)
+			for i = 1, n do keep[#keep + 1] = { i } end
+		end
+		for _ = 1, 300 do grow(2000) end
+	]])
+
+	local ok, out = cli({ "run", "--memgraph", "mem.html" }, dir)
+	test.truthy(ok, "lde run --memgraph failed: " .. tostring(out))
+	const html = fs.read(path.join(dir, "mem.html"))
+	test.truthy(html, "mem.html was not written") ---@cast html -nil
+	test.includes(html, "grow main.lua:", "the allocating function and its line must be in the graph data")
+	test.includes(plain(out or ""), "Allocation sites", "--memgraph also prints the memory report")
+end)
+
 --
 -- lde -e in project context
 --

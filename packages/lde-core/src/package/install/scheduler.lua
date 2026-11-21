@@ -166,9 +166,11 @@ local function new(ctx)
 			fs.delete(dest)
 		end
 
-		-- Already a symlink (path deps / no-build git deps): nothing to build.
-		-- Clear any download-time row the resolver spawned for this dep.
-		if fs.islink(dest) then
+		-- Already a symlink (no-build git deps): nothing to build. Clear any download-time row the
+		-- resolver spawned for this dep. A path dep is built anyway: its link may still point at the
+		-- source an earlier lock named (a dep switched from git to a local path kept the git link),
+		-- and its build relinks by renaming over the old link, so nothing reading it sees a gap.
+		if fs.islink(dest) and not entry.lock.path then
 			done[alias] = true
 			if ctx.progress then
 				ctx.progress:finish(alias)
