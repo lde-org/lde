@@ -20,7 +20,7 @@ end
 const verboseRequested = args:flag("verbose")
 
 -- Parsed up front so --version is seen even with -C/--tree, applied after the check.
-const cwdOverride  = args:option("cwd") or args:short("C")
+const cwdOverride = args:option("cwd") or args:short("C")
 const treeOverride = args:option("tree")
 
 -- Separate so the --version path can apply -C/--tree; heavy modules load lazily.
@@ -35,7 +35,9 @@ local function applyOverrides()
 		if not cwd then
 			-- nil cwd = the process's cwd was deleted; only an absolute -C still works.
 			if not path.isAbsolute(cwdOverride) then
-				ansi.printf("{red}error{gray}:{reset} Current working directory no longer exists (it may have been deleted); use an absolute path with -C or cd to an existing directory")
+				ansi.printf(
+					"{red}error{gray}:{reset} Current working directory no longer exists (it may have been deleted); use an absolute path with -C or cd to an existing directory"
+				)
 				os.exit(1)
 			end
 
@@ -73,15 +75,15 @@ if versionRequested and args:count() == 0 then
 		applyOverrides()
 	end
 	local ok, v = pcall(require, "lde.version")
-	print(ok and v or "0.11.0")
+	print(ok and v or "0.11.2")
 	return
 end
 
 const evalCode = args:short("e")
 
-	-- Inside the boundary so unknown targets render cleanly; help.lua lazy-loads
-	-- lde-core.
-	const helpRequested = args:flag("help")
+-- Inside the boundary so unknown targets render cleanly; help.lua lazy-loads
+-- lde-core.
+const helpRequested = args:flag("help")
 
 -- Hidden completion backend for the generated shell scripts, kept off lde-core.
 if args:peek() == "__complete" then
@@ -100,7 +102,7 @@ end
 
 -- Known errors render as one clean message; anything unexpected gets the
 -- "lde crashed" traceback screen.
-	local ok, boundaryErr = xpcall(function()
+local ok, boundaryErr = xpcall(function()
 	applyOverrides()
 
 	-- Through the boundary so `lde --help <unknown>` renders a clean error.
@@ -132,9 +134,15 @@ end
 	---@return boolean
 	local function cwdHasPackageManifest()
 		local f = io.open("lpm.json", "rb")
-		if f then f:close() return true end
+		if f then
+			f:close()
+			return true
+		end
 		f = io.open("lde.json", "rb")
-		if f then f:close() return true end
+		if f then
+			f:close()
+			return true
+		end
 		local fs = require("fs")
 		const iter = fs.readdir(".")
 		if iter then
@@ -250,31 +258,31 @@ end
 	end
 
 	const commandFiles = {
-		help      = "lde.commands.help",
-		init      = "lde.commands.initialize",
-		new       = "lde.commands.new",
-		upgrade   = "lde.commands.upgrade",
-		add       = "lde.commands.add",
-		remove    = "lde.commands.remove",
-		run       = "lde.commands.run",
-		x         = "lde.commands.x",
-		search    = "lde.commands.search",
-		install   = "lde.commands.install",
-		i         = "lde.commands.install",
-		sync      = "lde.commands.sync",
-		bundle    = "lde.commands.bundle",
-		compile   = "lde.commands.compile",
-		bloat     = "lde.commands.bloat",
-		test      = "lde.commands.test",
-		tree      = "lde.commands.tree",
-		update    = "lde.commands.update",
-		outdated  = "lde.commands.outdated",
+		help = "lde.commands.help",
+		init = "lde.commands.initialize",
+		new = "lde.commands.new",
+		upgrade = "lde.commands.upgrade",
+		add = "lde.commands.add",
+		remove = "lde.commands.remove",
+		run = "lde.commands.run",
+		x = "lde.commands.x",
+		search = "lde.commands.search",
+		install = "lde.commands.install",
+		i = "lde.commands.install",
+		sync = "lde.commands.sync",
+		bundle = "lde.commands.bundle",
+		compile = "lde.commands.compile",
+		bloat = "lde.commands.bloat",
+		test = "lde.commands.test",
+		tree = "lde.commands.tree",
+		update = "lde.commands.update",
+		outdated = "lde.commands.outdated",
 		uninstall = "lde.commands.uninstall",
-		publish   = "lde.commands.publish",
-		login     = "lde.commands.login",
-		logout    = "lde.commands.logout",
+		publish = "lde.commands.publish",
+		login = "lde.commands.login",
+		logout = "lde.commands.logout",
 		completion = "lde.commands.completion",
-		repl      = "lde.commands.repl"
+		repl = "lde.commands.repl"
 	}
 
 	-- A path-shaped arg on a missing file must report the missing path, not fall
@@ -308,7 +316,8 @@ end
 		local pkg = lde.Package.open()
 		const scripts = pkg and pkg:readConfig().scripts
 
-		if scripts and scripts[commandName] then ---@cast pkg -nil
+		if scripts and scripts[commandName] then
+			---@cast pkg -nil
 
 			-- npm-style: everything after `--` is passed to the script as its args.
 			local scriptArgs = {}
@@ -330,13 +339,14 @@ end
 			end
 
 			local hint = suggest.command(commandName, usage.names)
-			lde.error.raise("Unknown command " .. require("ansi").colorize("yellow", '"' .. tostring(commandName) .. '"'), { hint = hint })
+			lde.error.raise("Unknown command " .. require("ansi").colorize("yellow", '"' .. tostring(commandName) .. '"'), {
+				hint = hint
+			})
 		end
 	end
-end, function(e)
-	return { value = e, trace = debug.traceback(tostring(e), 2) }
-end)
+end, e -> { value = e, trace = debug.traceback(tostring(e), 2) })
 
-if not ok then ---@cast boundaryErr { value: any, trace: string? }
+if not ok then
+	---@cast boundaryErr { value: any, trace: string? }
 	require("lde-core.error").show(boundaryErr.value, boundaryErr.trace)
 end

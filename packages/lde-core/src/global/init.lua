@@ -20,7 +20,7 @@ const mingw = require("lde-core.global.mingw")
 global.getConfig = require("lde-core.global.config")
 global.currentVersion = (function()
 	const ok, v = pcall(require, "lde.version")
-	return ok and v or "0.11.0"
+	return ok and v or "0.11.2"
 end)()
 
 global.setDir = dirs.setDir

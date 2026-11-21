@@ -46,15 +46,11 @@ function auth.new(opts)
 		---@cast ms number
 		require("lde-core.util.childpool").sleep(ms)
 	end
-	local getConfig = opts.getConfig or function()
-		return require("lde-core.global").getConfig()
-	end
-	local authPath = opts.authPath or function()
-		return path.join(require("lde-core.global.dirs").getUserDir(), "auth.json")
-	end
+	local getConfig = opts.getConfig or (|| -> require("lde-core.global").getConfig())
+	local authPath = opts.authPath or (|| -> path.join(require("lde-core.global.dirs").getUserDir(), "auth.json"))
 	local userAgent = opts.userAgent or (function()
 		local ok, version = pcall(require, "lde.version")
-		return "lde/" .. (ok and tostring(version) or "0.11.0")
+		return "lde/" .. (ok and tostring(version) or "0.11.2")
 	end)()
 	local getEnv = opts.getEnv or os.getenv
 
@@ -66,24 +62,12 @@ function auth.new(opts)
 		now = now,
 		expirySkew = constants.EXPIRY_SKEW,
 		storeVersion = constants.STORE_VERSION,
-		defaultClientId = opts.defaultClientId ~= nil
-			and opts.defaultClientId
-			or constants.DEFAULT_CLIENT_ID,
-		getEnv = getEnv,
+		defaultClientId = opts.defaultClientId ~= nil and opts.defaultClientId or constants.DEFAULT_CLIENT_ID,
+		getEnv = getEnv
 	})
 	---@cast http fun(opts: table): (table?, string?)
-	local httpClient = httpModule.new({
-		http = http,
-		userAgent = userAgent,
-		apiUrl = constants.API_URL,
-	})
-	local flow = flowModule.new({
-		store = store,
-		http = httpClient,
-		now = now,
-		sleep = sleep,
-		constants = constants,
-	})
+	local httpClient = httpModule.new({ http = http, userAgent = userAgent, apiUrl = constants.API_URL })
+	local flow = flowModule.new({ store = store, http = httpClient, now = now, sleep = sleep, constants = constants })
 
 	local instance = {
 		isExpired = store.isExpired,
@@ -95,7 +79,7 @@ function auth.new(opts)
 		startDeviceFlow = flow.startDeviceFlow,
 		pollDeviceFlow = flow.pollDeviceFlow,
 		login = flow.login,
-		ensureValid = flow.ensureValid,
+		ensureValid = flow.ensureValid
 	}
 	instance.needsRefresh = store.isExpired
 	return instance
@@ -123,7 +107,7 @@ for _, name in ipairs({
 	"pollDeviceFlow",
 	"login",
 	"ensureValid",
-	"needsRefresh",
+	"needsRefresh"
 }) do
 	auth[name] = function(...)
 		return default()[name](...)

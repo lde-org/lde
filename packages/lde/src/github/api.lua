@@ -20,7 +20,7 @@ local api = {}
 ---@return string
 local function defaultUserAgent()
 	local ok, version = pcall(require, "lde.version")
-	return "lde/" .. (ok and tostring(version) or "0.11.0")
+	return "lde/" .. (ok and tostring(version) or "0.11.2")
 end
 
 ---@param opts curl.CurlOptions
@@ -84,7 +84,7 @@ function api.new(opts)
 		local headers = {
 			["Accept"] = "application/vnd.github+json",
 			["User-Agent"] = userAgent,
-			["X-GitHub-Api-Version"] = "2022-11-28",
+			["X-GitHub-Api-Version"] = "2022-11-28"
 		}
 		if useToken then
 			headers["Authorization"] = "Bearer " .. useToken
@@ -101,7 +101,7 @@ function api.new(opts)
 			method = method,
 			headers = headers,
 			body = encoded,
-			timeout = (requestOpts and requestOpts.timeout) or 30,
+			timeout = (requestOpts and requestOpts.timeout) or 30
 		})
 		if not res then
 			return nil, 0, transportErr or ("request to " .. path .. " failed")
@@ -149,11 +149,8 @@ function api.new(opts)
 		local res, transportErr = http({
 			url = url,
 			method = "GET",
-			headers = {
-				["Accept"] = "*/*",
-				["User-Agent"] = userAgent,
-			},
-			timeout = requestOpts.timeout or 30,
+			headers = { ["Accept"] = "*/*", ["User-Agent"] = userAgent },
+			timeout = requestOpts.timeout or 30
 		})
 		if not res then
 			return nil, 0, transportErr or ("request to " .. url .. " failed")
@@ -181,7 +178,7 @@ function api.new(opts)
 			local headers = {
 				["Accept"] = "application/vnd.github.raw+json",
 				["User-Agent"] = userAgent,
-				["X-GitHub-Api-Version"] = "2022-11-28",
+				["X-GitHub-Api-Version"] = "2022-11-28"
 			}
 			if authToken then
 				headers["Authorization"] = "Bearer " .. authToken
@@ -190,7 +187,7 @@ function api.new(opts)
 				url = absolute(path),
 				method = "GET",
 				headers = headers,
-				timeout = requestOpts.timeout or 30,
+				timeout = requestOpts.timeout or 30
 			})
 			if not res then
 				return nil, 0, transportErr or ("request to " .. path .. " failed")
@@ -224,12 +221,7 @@ function api.new(opts)
 		token = freshToken
 	end
 
-	return {
-		request = request,
-		fetchRaw = fetchRaw,
-		fetchFile = fetchFile,
-		setToken = setToken,
-	}
+	return { request = request, fetchRaw = fetchRaw, fetchFile = fetchFile, setToken = setToken }
 end
 
 return api

@@ -6,7 +6,7 @@
 
 const build = require("lde-build")
 
-const BASE_VERSION = "0.11.0"
+const BASE_VERSION = "0.11.2"
 
 const releaseEnv = os.getenv("LDE_RELEASE")
 const release = releaseEnv ~= nil and releaseEnv ~= ""

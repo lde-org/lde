@@ -35,8 +35,17 @@ end
 
 -- Assertion names, longest first so e.g. "greaterEqual" wins over "equal".
 const ASSERT_NAMES = {
-	"greaterEqual", "lessEqual", "notEqual", "deepEqual",
-	"includes", "truthy", "falsy", "greater", "less", "match", "equal",
+	"greaterEqual",
+	"lessEqual",
+	"notEqual",
+	"deepEqual",
+	"includes",
+	"truthy",
+	"falsy",
+	"greater",
+	"less",
+	"match",
+	"equal"
 }
 
 --- Finds the failing assertion call, or the variable named in the error message.
@@ -158,8 +167,7 @@ local function parseError(err)
 	if not file then return nil, nil, nil, err end
 
 	-- The last bracketed chunk name is the innermost source; real files are chunk-named by path, eval chunks ("-e", "...") keep their brackets.
-	local inner = file:match(".*%[string \"(.-)\"%]$")
-		or file:match(".*%[(.-)%]$")
+	local inner = file:match(".*%[string \"(.-)\"%]$") or file:match(".*%[(.-)%]$")
 
 	if inner and inner:match("[/\\]") then
 		return inner, tonumber(line), nil, msg
@@ -242,11 +250,11 @@ local function printSnippet(src, line, msg)
 	if line < 1 or line > #lines then return end
 
 	local startLine = math.max(1, line - CONTEXT)
-	local endLine   = math.min(#lines, line + CONTEXT)
-	local width     = #tostring(endLine)
-	const indent    = "     "
-	const bar       = ansi.colorize("gray", "│")
-	const pad       = string.rep(" ", width)
+	local endLine = math.min(#lines, line + CONTEXT)
+	local width = #tostring(endLine)
+	const indent = "     "
+	const bar = ansi.colorize("gray", "│")
+	const pad = string.rep(" ", width)
 
 	-- Every line (bars, caret) reuses the same prefix so the gutter stays aligned.
 	local prefix = indent .. pad .. " " .. bar .. " "
@@ -323,7 +331,7 @@ end
 --- The version line under run errors; separate so trace frames can slot in.
 local function versionFooter()
 	const ok, v = pcall(require, "lde.version")
-	return string.format("lde v%s", ok and v or "0.11.0")
+	return string.format("lde v%s", ok and v or "0.11.2")
 end
 
 --- Render a run/x error Bun-style (left-aligned source, caret, error line, at file:line:col, footer); false when the error has no position.

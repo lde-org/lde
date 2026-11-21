@@ -5,7 +5,7 @@ const usage = require("lde.commands.usage")
 const suggest = require("lde.util.suggest")
 
 local ok, currentVersion = pcall(require, "lde.version")
-currentVersion = ok and currentVersion or "0.11.0"
+currentVersion = ok and currentVersion or "0.11.2"
 
 -- Lazy-load lde-core: it is only needed to raise the unknown-command error, so fast help paths skip it.
 const lde = util.lazy(|| -> require("lde-core"))
@@ -34,8 +34,7 @@ local function forCommand(name)
 	const canonical = usage.aliases[name] or name
 	const spec = usage.commands[canonical]
 	if not spec then
-		local hint = suggest.command(name, usage.names)
-			or "Run 'lde help' to see all commands."
+		local hint = suggest.command(name, usage.names) or "Run 'lde help' to see all commands."
 		lde().error.raise("Unknown command " .. ansi.colorize("yellow", '"' .. name .. '"'), { hint = hint })
 	end
 
@@ -86,36 +85,36 @@ local function main(args)
 
 	---@type lde.HelpCommand[]
 	const commands = {
-			{ cmd = "help",      ex = nil,           color = "green",   desc = "Show help for a command" },
-			{ cmd = "run",       ex = nil,           color = "green",   desc = "Execute a project" },
-			{ cmd = "x",         ex = "--git <url>", color = "green",   desc = "Run a package from a git repo or path" },
-			{ cmd = "repl",      ex = nil,           color = "green",   desc = "Start an interactive LuaJIT REPL" },
-			{ cmd = "test",      ex = nil,           color = "green",   desc = "Run project tests" },
-			{},
-			{ cmd = "new",       ex = "myproject",   color = "red",     desc = "Create a new project" },
-			{ cmd = "init",      ex = nil,           color = "red",     desc = "Initialize current directory as a project" },
-			{ cmd = "upgrade",   ex = nil,           color = "red",     desc = "Upgrade lde to the latest version" },
-			{},
-			{ cmd = "sync",      ex = nil,           color = "yellow",  desc = "Install dependencies (--locked: from lockfile only)" },
-			{ cmd = "install",   ex = "rocks:tl", color = "yellow",  desc = "Install a tool to PATH with --git/--path/rocks:" },
-			{ cmd = "uninstall", ex = "tl",      color = "yellow",  desc = "Uninstall a tool from PATH" },
-			{ cmd = "add",       ex = "hood",        color = "yellow",  desc = "Add a dependency (--path <path> or --git <url>)" },
-			{ cmd = "remove",    ex = "json",        color = "yellow",  desc = "Remove a dependency" },
-			{ cmd = "tree",      ex = nil,           color = "yellow",  desc = "Show the dependency tree" },
-			{ cmd = "update",    ex = "clap",        color = "yellow",  desc = "Update dependencies to their latest versions" },
-			{ cmd = "outdated",  ex = nil,           color = "yellow",  desc = "Show dependencies with newer versions available" },
-			{ cmd = "publish",   ex = "--dry-run",   color = "yellow",  desc = "Publish the package to the registry (opens a PR)" },
-			{ cmd = "login",     ex = nil,           color = "yellow",  desc = "Log in to GitHub" },
-			{ cmd = "logout",    ex = nil,           color = "yellow",  desc = "Remove the stored GitHub session" },
-			{ cmd = "search",    ex = "json",        color = "yellow",   desc = "Search the lde registry and luarocks" },
-			{},
-			{ cmd = "compile",   ex = nil,           color = "magenta", desc = "Compile current project into an executable" },
-			{ cmd = "bundle",    ex = nil,           color = "magenta", desc = "Bundle current project into a single lua file" },
-			{ cmd = "bloat",     ex = nil,           color = "magenta", desc = "Show what makes up the compiled binary" },
-			{},
-			{ cmd = "completion", ex = "bash",       color = "cyan", desc = "Print a shell completion script (bash|zsh|fish)" },
-			{ cmd = "<command>", ex = "--help", color = "gray", exColor = "cyan", desc = "Print help text for command." }
-		}
+		{ cmd = "help", ex = nil, color = "green", desc = "Show help for a command" },
+		{ cmd = "run", ex = nil, color = "green", desc = "Execute a project" },
+		{ cmd = "x", ex = "--git <url>", color = "green", desc = "Run a package from a git repo or path" },
+		{ cmd = "repl", ex = nil, color = "green", desc = "Start an interactive LuaJIT REPL" },
+		{ cmd = "test", ex = nil, color = "green", desc = "Run project tests" },
+		{},
+		{ cmd = "new", ex = "myproject", color = "red", desc = "Create a new project" },
+		{ cmd = "init", ex = nil, color = "red", desc = "Initialize current directory as a project" },
+		{ cmd = "upgrade", ex = nil, color = "red", desc = "Upgrade lde to the latest version" },
+		{},
+		{ cmd = "sync", ex = nil, color = "yellow", desc = "Install dependencies (--locked: from lockfile only)" },
+		{ cmd = "install", ex = "rocks:tl", color = "yellow", desc = "Install a tool to PATH with --git/--path/rocks:" },
+		{ cmd = "uninstall", ex = "tl", color = "yellow", desc = "Uninstall a tool from PATH" },
+		{ cmd = "add", ex = "hood", color = "yellow", desc = "Add a dependency (--path <path> or --git <url>)" },
+		{ cmd = "remove", ex = "json", color = "yellow", desc = "Remove a dependency" },
+		{ cmd = "tree", ex = nil, color = "yellow", desc = "Show the dependency tree" },
+		{ cmd = "update", ex = "clap", color = "yellow", desc = "Update dependencies to their latest versions" },
+		{ cmd = "outdated", ex = nil, color = "yellow", desc = "Show dependencies with newer versions available" },
+		{ cmd = "publish", ex = "--dry-run", color = "yellow", desc = "Publish the package to the registry (opens a PR)" },
+		{ cmd = "login", ex = nil, color = "yellow", desc = "Log in to GitHub" },
+		{ cmd = "logout", ex = nil, color = "yellow", desc = "Remove the stored GitHub session" },
+		{ cmd = "search", ex = "json", color = "yellow", desc = "Search the lde registry and luarocks" },
+		{},
+		{ cmd = "compile", ex = nil, color = "magenta", desc = "Compile current project into an executable" },
+		{ cmd = "bundle", ex = nil, color = "magenta", desc = "Bundle current project into a single lua file" },
+		{ cmd = "bloat", ex = nil, color = "magenta", desc = "Show what makes up the compiled binary" },
+		{},
+		{ cmd = "completion", ex = "bash", color = "cyan", desc = "Print a shell completion script (bash|zsh|fish)" },
+		{ cmd = "<command>", ex = "--help", color = "gray", exColor = "cyan", desc = "Print help text for command." }
+	}
 
 	ansi.printf("{blue}{bold}lde{reset} is a package manager for Lua, written in Lua. {gray}(%s)\n", currentVersion)
 	ansi.printf("{bold}Usage:{reset} lde <command> {magenta}[options]")
@@ -141,8 +140,12 @@ local function main(args)
 			print("")
 		else
 			-- The {reset} after each cell keeps the example's color off the description.
-			ansi.printf("  {bold}{" .. command.color .. "}%-" .. cmdW .. "s{reset}" .. string.rep(" ", gap) .. "{" .. (command.exColor or "gray") .. "}%-" .. exW .. "s{reset} %s",
-				command.cmd, command.ex or "", command.desc)
+			ansi.printf(
+				"  {bold}{" .. command.color .. "}%-" .. cmdW .. "s{reset}" .. string.rep(" ", gap) .. "{" .. (command.exColor or "gray") .. "}%-" .. exW .. "s{reset} %s",
+				command.cmd,
+				command.ex or "",
+				command.desc
+			)
 		end
 	end
 
@@ -153,9 +156,6 @@ end
 ---@class lde.help
 ---@field main fun(args?: clap.Args)
 ---@field forCommand fun(name: string)
-const help = {
-	main = main,
-	forCommand = forCommand,
-}
+const help = { main = main, forCommand = forCommand }
 
 return help
