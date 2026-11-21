@@ -54,7 +54,8 @@ end
 ---@param dir string
 ---@param out lde.bundle.File[]
 ---@param excludes string[]? # module-relative globs a feature flag drops
-local function bundleDir(projectName, dir, out, excludes)
+---@param transform (fun(content: string, chunkName: string): string)?
+local function bundleDir(projectName, dir, out, excludes, transform)
 	for relativePath in fs.scan(dir, "**" .. path.separator .. "*.lua") do
 		if isTestFile(relativePath) or features.isExcluded(relativePath, excludes) then
 			goto continue
@@ -65,6 +66,7 @@ local function bundleDir(projectName, dir, out, excludes)
 		if not content then
 			lde.error.raise("Could not read file: " .. absPath)
 		end ---@cast content -nil
+		if transform then content = transform(content, absPath) end
 
 		local dotted   = relativePath:gsub(path.separator, "."):gsub("%.lua$", "")
 		const stripped = dotted:gsub("%.?init$", "")
@@ -98,7 +100,7 @@ local function entryModuleName(package)
 end
 
 ---@param package lde.Package
----@param opts { bytecode: boolean?, raw: boolean?, features: lde.Package.Config.FeatureFlag[]? }?
+---@param opts { bytecode: boolean?, raw: boolean?, features: lde.Package.Config.FeatureFlag[]?, transform: (fun(content: string, chunkName: string): string)? }? # transform rewrites each of the package's own modules (not its dependencies) before bundling
 ---@return string|{ name: string, modules: { name: string, code: string }[] }
 local function bundlePackage(package, opts)
 	opts = opts or {}
@@ -129,7 +131,7 @@ local function bundlePackage(package, opts)
 
 		if fs.isdir(p) then
 			const excludes = excludesFor(entry.name)
-			bundleDir(entry.name, p, dirFiles, excludes)
+			bundleDir(entry.name, p, dirFiles, excludes, entry.name == package:getName() and opts.transform or nil)
 		elseif entry.name:match("%.lua$") and not isTestFile(entry.name) then
 			-- A rock's flat module (target/X.lua) is keyed by its own name, how a dependency alias spells it in the lockfile.
 			if not features.isExcluded(entry.name, excludesFor(entry.name:gsub("%.lua$", ""))) then

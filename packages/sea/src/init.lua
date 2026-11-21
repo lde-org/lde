@@ -10,6 +10,7 @@ const jit = require("jit")
 
 const seaTarget = require("sea.target")
 const emit = require("sea.emit")
+const glue = require("sea.glue")
 
 const sea = {}
 package.loaded[(...)] = sea
@@ -64,12 +65,13 @@ local function crossLinkArgs(compiler, target)
 	return extra
 end
 
----@param main string # name used as the chunk label
----@param source string|{ name: string, modules: { name: string, code: string }[] } # bundled lua: source string, LuaJIT bytecode string, or a raw bytecode table (bundlePackage { raw = true }) — raw tables are linked as a .incbin blob with lazy preload loaders
----@param sharedLibs? { name: string, content: string }[]
----@param compiler? string # path to compiler binary; defaults to SEA_CC env var, a clang on PATH, then gcc
----@param targetName? string # release target (e.g. "windows-x86-64") to cross-compile for; nil or a host-matching target = native build
-function sea.compile(main, source, sharedLibs, compiler, targetName)
+---@param main string
+---@param source string|{ name: string, modules: { name: string, code: string }[] }
+---@param sharedLibs { name: string, content: string }[]?
+---@param compiler string?
+---@param targetName string?
+---@param exports sea.Export[]? # non-nil: link a shared library exporting these instead of an executable
+local function build(main, source, sharedLibs, compiler, targetName, exports)
 	-- Private to this process: a fixed name means two concurrent compiles (parallel
 	-- test shards, two terminals) link into the same file, and the loser's caller
 	-- picks up the winner's binary.
@@ -77,6 +79,7 @@ function sea.compile(main, source, sharedLibs, compiler, targetName)
 		"sea.out-" .. (tostring({}):match("0x(%x+)$") or tostring(os.time())))
 	sharedLibs = sharedLibs or {}
 	local compiler = compiler or env.var("SEA_CC") or "gcc"
+	const isShared = exports ~= nil
 
 	-- Resolve the compile target. A --target matching the host is a native
 	-- build: same LuaJIT dist, same flags, no -target flag.
@@ -104,7 +107,8 @@ function sea.compile(main, source, sharedLibs, compiler, targetName)
 	-- the host's otherwise. Drives lib naming, the ffi shim, and link flags.
 	local platform = target?.platform
 		or (jit.os == "Windows" and "windows" or jit.os == "OSX" and "macos" or jit.os == "BSD" and "freebsd" or "linux")
-	local code = emit.buildSource(main, source, sharedLibs, platform)
+	local code = exports ? glue.buildSource(main, source, sharedLibs, platform, exports)
+		: emit.buildSource(main, source, sharedLibs, platform)
 
 	local ljPath = seaTarget.getLuajitPath(compiler, target)
 	local includePath = path.join(ljPath, "include")
@@ -116,6 +120,14 @@ function sea.compile(main, source, sharedLibs, compiler, targetName)
 		"-o", outPath,
 		"-xnone",
 	}
+
+	if isShared then
+		args[#args + 1] = "-shared"
+		-- The glue runs on every exported call; the launcher is cold code and stays unoptimized.
+		args[#args + 1] = "-O2"
+		-- clang rejects -fPIC for Windows targets, where DLL code is position independent anyway.
+		if platform ~= "windows" then args[#args + 1] = "-fPIC" end
+	end
 
 	-- Cross compilation: clang targets a foreign platform via -target. The
 	-- target's LuaJIT headers/libs come from the downloaded dist; the compiler
@@ -129,7 +141,7 @@ function sea.compile(main, source, sharedLibs, compiler, targetName)
 		end
 	end
 
-	if platform == "windows" then
+	if platform == "windows" and not isShared then
 		-- Wrap libluajit.a in --whole-archive: link in ALL of its object
 		-- files, not just the ones lde itself references. Symbols only ever
 		-- called by C modules at runtime (e.g. luaJIT_profile_*) must be
@@ -145,9 +157,17 @@ function sea.compile(main, source, sharedLibs, compiler, targetName)
 	if platform == "linux" then
 		args[#args + 1] = "-lm"
 		args[#args + 1] = "-ldl"
-		args[#args + 1] = "-Wl,--export-dynamic" -- expose lua symbols for lua dependencies
 	elseif platform == "freebsd" then
 		args[#args + 1] = "-lm" -- freebsd's dlopen is in libc
+	end
+
+	if isShared then
+		-- A host that embeds its own Lua exports lua_* too: bind the library's
+		-- references to its own LuaJIT instead of letting the host's interpose.
+		if platform == "linux" or platform == "freebsd" then
+			args[#args + 1] = "-Wl,-Bsymbolic"
+		end
+	elseif platform == "linux" or platform == "freebsd" then
 		args[#args + 1] = "-Wl,--export-dynamic" -- expose lua symbols for lua dependencies
 	elseif platform == "macos" then
 		args[#args + 1] = "-Wl,-export_dynamic" -- expose lua symbols for lua dependencies
@@ -187,6 +207,28 @@ function sea.compile(main, source, sharedLibs, compiler, targetName)
 	end
 
 	return outPath
+end
+
+---@param main string # name used as the chunk label
+---@param source string|{ name: string, modules: { name: string, code: string }[] } # bundled lua: source string, LuaJIT bytecode string, or a raw bytecode table (bundlePackage { raw = true }) — raw tables are linked as a .incbin blob with lazy preload loaders
+---@param sharedLibs? { name: string, content: string }[]
+---@param compiler? string # path to compiler binary; defaults to SEA_CC env var, a clang on PATH, then gcc
+---@param targetName? string # release target (e.g. "windows-x86-64") to cross-compile for; nil or a host-matching target = native build
+function sea.compile(main, source, sharedLibs, compiler, targetName)
+	return build(main, source, sharedLibs, compiler, targetName, nil)
+end
+
+--- Link a shared library (.so/.dll/.dylib) whose exported C symbols call the
+--- Lua functions registered under `exports` (see sea.glue). The first call to
+--- any export creates the Lua state and runs `main`.
+---@param main string # entry module, run on first use
+---@param source string|{ name: string, modules: { name: string, code: string }[] } # see sea.compile
+---@param sharedLibs { name: string, content: string }[]?
+---@param exports sea.Export[]
+---@param compiler string?
+---@param targetName string?
+function sea.compileShared(main, source, sharedLibs, exports, compiler, targetName)
+	return build(main, source, sharedLibs, compiler, targetName, exports)
 end
 
 return sea

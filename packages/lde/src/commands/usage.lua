@@ -170,10 +170,11 @@ local commands = {
 		description = "Remove the stored GitHub session.",
 	},
 	compile = {
-		usage = "lde compile [--outfile <path>] [--target <target>] [--timings [--json]]",
-		description = "Compile the current project into a single executable.",
+		usage = "lde compile [--outfile <path>] [--target <target>] [--shared] [--timings [--json]]",
+		description = "Compile the current project into a single executable, or a shared library with --shared.",
 		options = {
 			["--outfile"] = { arg = "path", desc = "Output path (defaults to ./<project-name>)" },
+			["--shared"] = { desc = "Build a shared library (.so/.dll/.dylib) exporting the project's ---@export functions" },
 			["--target"] = { arg = "target", desc = "Cross-compile for a release target (linux-x86-64, linux-aarch64, windows-x86-64, windows-aarch64, macos-x86-64, macos-aarch64, freebsd-x86-64, freebsd-aarch64, android-aarch64); defaults to the host" },
 			["--timings"] = { desc = "Write a build timings HTML report to target/timings.html" },
 			["--json"] = { desc = "With --timings: write the report as JSON (target/timings.json) instead of HTML" },

@@ -10,10 +10,13 @@ const lde = require("lde-core")
 const timings = require("lde-core.util.timings")
 
 const bundlePackage = require("lde-core.package.bundle")
+const exportScanner = require("lde-core.package.exports")
 
 ---@param package lde.Package
 ---@param targetName? string # release target to cross-compile for (e.g. "windows-x86-64"); nil = native
-local function compilePackage(package, targetName)
+---@param opts? { shared: boolean? } # shared: link a shared library exporting the package's `---@export` functions
+local function compilePackage(package, targetName, opts)
+	const isShared = opts ~= nil and opts.shared == true
 	-- Resolved up front so a typo'd --target fails before any build/install work; a target matching the host is a native build.
 	local target
 	if targetName then
@@ -43,8 +46,37 @@ local function compilePackage(package, targetName)
 		-- Raw bytecode: sea embeds it as a blob and registers lazy preload loaders, so startup only deserializes the modules a command actually requires.
 		const bundleHandle = timings.active()
 			? timings.start("bundle " .. package:getName(), "bundle") : nil
-		local source = bundlePackage(package, { raw = true })
+		---@type sea.Export[]
+		const exports = {}
+		---@type table<string, string>
+		const exportOrigin = {}
+		---@type (fun(content: string, chunkName: string): string)?
+		local transform
+		if isShared then
+			---@param content string
+			---@param chunkName string
+			transform = function(content, chunkName)
+				local rewritten, found, err = exportScanner.process(content, chunkName)
+				if not rewritten or not found then lde.error.raise(err) end ---@cast rewritten -nil
+				---@cast found -nil
+				for _, export in ipairs(found) do
+					if exportOrigin[export.name] then
+						lde.error.raise("export '" .. export.name .. "' is declared twice: in "
+							.. exportOrigin[export.name] .. " and " .. chunkName)
+					end
+					exportOrigin[export.name] = chunkName
+					exports[#exports + 1] = export
+				end
+				return rewritten
+			end
+		end
+		local source = bundlePackage(package, { raw = true, transform = transform })
 		if bundleHandle then timings.finish(bundleHandle) end
+
+		if isShared and #exports == 0 then
+			lde.error.raise('Cannot compile a shared library: no `---@export "C" name fn(...): type` annotations found in '
+				.. package:getName())
+		end
 
 		-- sea.compile throws a raw string when the main module is missing; check first so a broken project fails cleanly. Packages named "tests" skip the entry dir via the test-fixture filter, hence the name comparison in bundlePackage.
 		local mainName = source.name
@@ -73,7 +105,9 @@ local function compilePackage(package, targetName)
 
 		-- sea.compile raises plain strings, surfaced as clean user-facing errors below, not "lde crashed".
 		const seaHandle = timings.active() ? timings.start("sea compile", "compile") : nil
-		const executable = sea.compile(mainName, source, sharedLibs, lde.global.getCCBin(), targetName)
+		const executable = isShared
+			? sea.compileShared(mainName, source, sharedLibs, exports, lde.global.getCCBin(), targetName)
+			: sea.compile(mainName, source, sharedLibs, lde.global.getCCBin(), targetName)
 		if seaHandle then timings.finish(seaHandle) end
 		return executable
 	end)

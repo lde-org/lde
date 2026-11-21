@@ -27,11 +27,22 @@ local function safeIdent(name)
 	return (string.gsub(name, "[^%w]", "_"))
 end
 
+---@class sea.emit.Parts
+---@field includes string # extra #includes the declarations need
+---@field decls string # file-scope declarations: embedded blobs, module table, loader helpers
+---@field startup string # statements run before the lua_State exists (extract embedded libs); `return 1` on failure
+---@field shim string # statements run right after luaL_openlibs (ffi.load remap); `return 1` on failure
+---@field preloads string # statements registering every module in package.preload, which must be at the stack top
+---@field main string # main module name, C-escaped
+
+--- The launcher pieces shared by the executable (emit.buildSource) and the
+--- shared library (sea.glue) entry points.
 ---@param main string # name used as the chunk label
 ---@param source string|{ name: string, modules: { name: string, code: string }[] } # bundled lua: source string, LuaJIT bytecode string, or a raw bytecode table (bundlePackage { raw = true })
 ---@param sharedLibs { name: string, content: string }[]
 ---@param platform string # "linux" | "windows" | "macos" | "freebsd"
-function emit.buildSource(main, source, sharedLibs, platform)
+---@return sea.emit.Parts
+function emit.buildParts(main, source, sharedLibs, platform)
 	const libExt = platform == "windows" and "dll" or "so"
 
 	-- For each shared library, emit a uint8_t array and the write+preload logic.
@@ -377,16 +388,30 @@ static int lde_loadlib_loader(lua_State* L) {
 }
 ]]
 	end
+	return {
+		includes = stdintInclude,
+		decls = libDeclsStr .. bundleDecls .. loaderHelper .. "\n" .. loadlibHelper,
+		startup = libStartupStr,
+		shim = shimStartup,
+		preloads = table.concat(filePreloads, "\n\t") .. table.concat(preloadSetup, "\n\t") .. mainLoad
+			.. "\n\t" .. libPreloadsStr,
+		main = (main:gsub(".", CEscapes)),
+	}
+end
 
+---@param main string # name used as the chunk label
+---@param source string|{ name: string, modules: { name: string, code: string }[] } # see emit.buildParts
+---@param sharedLibs { name: string, content: string }[]
+---@param platform string # "linux" | "windows" | "macos" | "freebsd"
+function emit.buildSource(main, source, sharedLibs, platform)
+	const parts = emit.buildParts(main, source, sharedLibs, platform)
 
-	local code = stdintInclude .. [[
+	return parts.includes .. [[
 #include <stdio.h>
 #include "lauxlib.h"
 #include "lualib.h"
 
-	]] .. libDeclsStr .. bundleDecls .. loaderHelper .. [[
-
-]] .. loadlibHelper .. [[
+	]] .. parts.decls .. [[
 
 int traceback(lua_State* L) {
 	const char* msg = lua_tostring(L, 1);
@@ -399,12 +424,12 @@ int traceback(lua_State* L) {
 }
 
 int main(int argc, char** argv) {
-]] .. libStartupStr .. [[
+]] .. parts.startup .. [[
 
 	lua_State* L = luaL_newstate();
 	luaL_openlibs(L);
 
-	]] .. shimStartup .. [[
+	]] .. parts.shim .. [[
 
 	lua_createtable(L, argc, 0);
 	for (int i = 0; i < argc; i++) {
@@ -416,11 +441,9 @@ int main(int argc, char** argv) {
 	lua_getglobal(L, "package");
 	lua_getfield(L, -1, "preload");
 
-	]] .. table.concat(filePreloads, "\n\t") .. table.concat(preloadSetup, "\n\t") .. mainLoad .. [[
+	]] .. parts.preloads .. [[
 
-	]] .. libPreloadsStr .. [[
-
-	lua_getfield(L, -1, "]] .. main:gsub(".", CEscapes) .. [[");
+	lua_getfield(L, -1, "]] .. parts.main .. [[");
 
 	for (int i = 1; i < argc; i++) {
 		lua_pushstring(L, argv[i]);
@@ -452,8 +475,6 @@ int main(int argc, char** argv) {
 #endif
 }
 ]]
-
-	return code
 end
 
 return emit

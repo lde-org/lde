@@ -15,6 +15,7 @@ local function compile(args)
 
 	local outFile = args:option("outfile")
 	const targetName = args:option("target")
+	const isShared = args:flag("shared")
 
 	-- Validate the target first so a typo fails before any build work.
 	local target
@@ -51,7 +52,6 @@ local function compile(args)
 		if isCross then outFile = outFile .. "-" .. targetName end
 	end
 
-	-- Windows targets get .exe whether native or cross.
 	const hostPlatform = jit.os == "Windows" and "windows"
 		or jit.os == "OSX" and "macos"
 		or jit.os == "BSD" and "freebsd"
@@ -62,11 +62,15 @@ local function compile(args)
 	else
 		platform = hostPlatform
 	end
-	if platform == "windows" and string.sub(outFile, -4) ~= ".exe" then
-		outFile = outFile .. ".exe"
+	-- Windows targets get .exe whether native or cross; shared libraries get the platform's library suffix.
+	const ext = isShared
+		and (platform == "windows" and ".dll" or platform == "macos" and ".dylib" or ".so")
+		or (platform == "windows" and ".exe" or "")
+	if ext ~= "" and string.sub(outFile, -#ext) ~= ext then
+		outFile = outFile .. ext
 	end
 
-	local executable = pkg:compile(targetName)
+	local executable = pkg:compile(targetName, { shared = isShared })
 
 	-- Stage beside the destination so the final move is a same-device rename (a cross-device copy would fail with ETXTBSY).
 	local staged = outFile .. ".tmp"
@@ -99,7 +103,7 @@ local function compile(args)
 		ansi.printf("{green}Timings report: {bold}%s", reportPath)
 	end
 
-	ansi.printf("{green}Executable created: %s", outFile)
+	ansi.printf(isShared and "{green}Shared library created: %s" or "{green}Executable created: %s", outFile)
 end
 
 return compile
