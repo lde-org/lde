@@ -127,6 +127,64 @@ local function checkSymbol(name)
 	return nil
 end
 
+--- Line number and text of every `---@export` line comment in `src`, skipping strings and long comments.
+---@param src string
+local function annotationLines(src)
+	---@type { line: integer, text: string }[]
+	const found = {}
+	local pos = 1
+	while true do
+		const s = src:find("[\"'%-%[]", pos)
+		if not s then break end
+		const c = src:byte(s)
+		if c == 34 or c == 39 then
+			pos = skipShortString(src, s)
+		elseif c == 91 then -- '['
+			pos = skipLongBracket(src, s) or s + 1
+		elseif src:byte(s + 1) ~= 45 then
+			pos = s + 1
+		else
+			const afterLong = src:byte(s + 2) == 91 and skipLongBracket(src, s + 2)
+			if afterLong then
+				pos = afterLong
+			else
+				const eol = src:find("\n", s, true) or #src + 1
+				if src:find("^%-%-%-@export%f[^%w_]", s) then
+					found[#found + 1] = { line = lineAt(src, s), text = (src:sub(s, eol - 1):gsub("%s+$", "")) }
+				end
+				pos = eol + 1
+			end
+		end
+	end
+	return found
+end
+
+--- Copies the `---@export` annotations of a Teal source into the Lua that tl
+--- generated from it. tl drops comments but keeps every line where it was (a
+--- dropped comment becomes a blank line), so each annotation goes back on its
+--- own, now blank, line and `exports.process` can scan the result.
+---@param luaSrc string # tl output
+---@param tealSrc string
+---@param tealName string # used in error messages
+---@return string? source
+---@return string? err
+function exports.transplant(luaSrc, tealSrc, tealName)
+	if not tealSrc:find("---@export", 1, true) then return luaSrc end
+
+	const lines = {}
+	for line in (luaSrc .. "\n"):gmatch("([^\n]*)\n") do lines[#lines + 1] = line end
+
+	for _, annotation in ipairs(annotationLines(tealSrc)) do
+		const target = lines[annotation.line]
+		if not target or target:find("%S") then
+			return nil, tealName .. ":" .. annotation.line
+				.. ": tl generated code on this line, so the ---@export cannot be placed; put it on its own line directly above the `local function`"
+		end
+		lines[annotation.line] = annotation.text
+	end
+	return table.concat(lines, "\n")
+end
+
 --- Rewrites `src` to register its exported functions. Returns `src` unchanged
 --- and an empty list when it has no annotations.
 ---@param src string

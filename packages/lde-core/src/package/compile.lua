@@ -56,6 +56,15 @@ local function compilePackage(package, targetName, opts)
 			---@param content string
 			---@param chunkName string
 			transform = function(content, chunkName)
+				-- The Teal build keeps each .tl next to the .lua it generated; its annotations live only there.
+				const tealPath = chunkName:gsub("%.lua$", ".tl")
+				const tealSource = tealPath ~= chunkName and fs.read(tealPath)
+				if tealSource then
+					local transplanted, terr = exportScanner.transplant(content, tealSource, tealPath)
+					if not transplanted then lde.error.raise(terr) end ---@cast transplanted -nil
+					content, chunkName = transplanted, tealPath
+				end
+
 				local rewritten, found, err = exportScanner.process(content, chunkName)
 				if not rewritten or not found then lde.error.raise(err) end ---@cast rewritten -nil
 				---@cast found -nil
@@ -74,8 +83,7 @@ local function compilePackage(package, targetName, opts)
 		if bundleHandle then timings.finish(bundleHandle) end
 
 		if isShared and #exports == 0 then
-			lde.error.raise('Cannot compile a shared library: no `---@export "C" name fn(...): type` annotations found in '
-				.. package:getName())
+			lde.error.raise('Cannot compile a shared library: no `---@export "C"` annotations found in ' .. package:getName())
 		end
 
 		-- sea.compile throws a raw string when the main module is missing; check first so a broken project fails cleanly. Packages named "tests" skip the entry dir via the test-fixture filter, hence the name comparison in bundlePackage.

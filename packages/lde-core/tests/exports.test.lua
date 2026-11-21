@@ -70,3 +70,10 @@ test.it("exports: an annotation not directly above a local function is rejected"
 	test.falsy(out)
 	test.includes(tostring(err), "must be directly followed by a `local function name(...)`")
 end)
+
+test.it("exports: a Teal annotation that would land on generated code is rejected", function()
+	const out, err = exportScanner.transplant("local x = 1\nlocal function f() end",
+		'---@export "C" f fn()\nlocal function f() end', "init.tl")
+	test.falsy(out)
+	test.includes(tostring(err), "init.tl:1: tl generated code on this line")
+end)

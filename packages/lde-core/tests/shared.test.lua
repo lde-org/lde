@@ -128,6 +128,28 @@ end
 	test.equal(lib.reenter_inner(5), 50, "the fast path still works after a re-entrant call")
 end)
 
+test.it("compile --shared: exports in Teal sources are found even though tl drops comments", function()
+	const pkg = makePackage("shared-teal", {
+		["init.tl"] = [[
+local record Pair
+	a: integer
+	b: integer
+end
+
+-- tl turns every comment line into a blank line.
+---@export "C" tealtest_add fn(a: i32, b: i32): i32
+local function add(a: integer, b: integer): integer
+	local pair: Pair = { a = a, b = b }
+	return pair.a + pair.b
+end
+]],
+	})
+
+	const lib = ffi.load(compileShared(pkg))
+	ffi.cdef("int32_t tealtest_add(int32_t a, int32_t b);")
+	test.equal(lib.tealtest_add(40, 2), 42)
+end)
+
 test.it("compile --shared: a package without ---@export annotations fails cleanly", function()
 	const pkg = makePackage("shared-none", { ["init.lua"] = "return {}" })
 	const ok, err = pcall(compileShared, pkg)
