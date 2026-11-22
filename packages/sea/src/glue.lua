@@ -14,6 +14,7 @@
 --- registry refs (re-entrant calls, see lde_depth) afterwards.
 
 const emit = require("sea.emit")
+const util = require("util")
 
 const glue = {}
 
@@ -172,7 +173,17 @@ end
 ---@param platform string # "linux" | "windows" | "macos" | "freebsd"
 ---@param exports sea.Export[]
 function glue.buildSource(main, source, sharedLibs, platform, exports)
-	const parts = emit.buildParts(main, source, sharedLibs, platform)
+	-- Two lde libraries in one host (two plugins) each resolve their bundled
+	-- native modules against their own LuaJIT, so they must not share a copy.
+	const bundled = { main }
+	if type(source) == "table" then
+		for _, m in ipairs(source.modules) do bundled[#bundled + 1] = m.code end
+	else
+		bundled[#bundled + 1] = source
+	end
+	-- Sorted: the bundle lists modules in no fixed order, and a rebuild of the same code should reuse its files.
+	table.sort(bundled)
+	const parts = emit.buildParts(main, source, sharedLibs, platform, util.hash(table.concat(bundled)))
 
 	local uses64, usesPtr, maxParams = false, false, 0
 	const anchorDecls, anchorInit, wrappers, names = {}, {}, {}, {}

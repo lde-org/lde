@@ -141,11 +141,11 @@ local function build(main, source, sharedLibs, compiler, targetName, exports)
 		end
 	end
 
-	if platform == "windows" and not isShared then
+	if platform == "windows" then
 		-- Wrap libluajit.a in --whole-archive: link in ALL of its object
 		-- files, not just the ones lde itself references. Symbols only ever
 		-- called by C modules at runtime (e.g. luaJIT_profile_*) must be
-		-- physically present in the exe for --export-all-symbols below to
+		-- physically present in the binary for --export-all-symbols below to
 		-- be able to export them.
 		args[#args + 1] = "-Wl,--whole-archive"
 		args[#args + 1] = path.join(libPath, "libluajit.a")
@@ -162,10 +162,15 @@ local function build(main, source, sharedLibs, compiler, targetName, exports)
 	end
 
 	if isShared then
-		-- A host that embeds its own Lua exports lua_* too: bind the library's
-		-- references to its own LuaJIT instead of letting the host's interpose.
+		-- LuaJIT's API stays exported so code inside the library (lua-sys,
+		-- bundled C modules) can look up its own LuaJIT by handle. A host loads
+		-- the library locally, so those names never enter the host's lookups,
+		-- and -Bsymbolic keeps a host's own lua_* from overriding the
+		-- library's internal calls (a GMod or Lua 5.4 host has its own Lua).
 		if platform == "linux" or platform == "freebsd" then
 			args[#args + 1] = "-Wl,-Bsymbolic"
+		elseif platform == "windows" then
+			args[#args + 1] = "-Wl,--export-all-symbols"
 		end
 	elseif platform == "linux" or platform == "freebsd" then
 		args[#args + 1] = "-Wl,--export-dynamic" -- expose lua symbols for lua dependencies

@@ -157,11 +157,16 @@ local function buildPackage(package, destinationPath, opts)
 				const child, serr = process.spawn(ldeBin,
 					{ "__build-pkg", package:getDir(), dest, targetName },
 					-- cwd = dest so the worker's build:sh os.execute calls resolve relative paths against the output dir.
+					-- LDE_FEATURES carries the flags the resolver recorded for this dependency:
+					-- the worker opens the package fresh, so it cannot see the in-process instance's setFeatures().
 					{
 						stdout = "inherit",
 						stderr = "inherit",
 						cwd = dest,
-						env = lde.isVerbose ? { LDE_VERBOSE = "1" } : nil,
+						env = {
+							LDE_VERBOSE = lde.isVerbose ? "1" : nil,
+							LDE_FEATURES = json.encode(package:getFeatures()),
+						},
 					})
 				if not child then ---@cast child -nil
 				end

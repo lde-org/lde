@@ -52,10 +52,18 @@ const char* greet(const char* name);
 
 - Variadic functions cannot be exported.
 - Exports may live in any module of your package. The entry point has to `require` that module.
-- Names starting with `lua_`, `luaL_`, `luaJIT_`, `luaopen_` or `lde_` are reserved as they are exposed by lde.
 
 > [!WARNING]
 > Lua is still single threaded. Do not call into exported functions from multiple threads at once.
+
+### Hosts with their own Lua
+
+The library carries its own LuaJIT, and the host may have a Lua of its own (Garry's Mod, a Lua 5.4 host). The two never mix:
+
+- The library's internal calls always go to its own LuaJIT, whatever the host loaded first.
+- The library's `lua_*` are exported, but a host loads the library locally, so the host's own lookups never find them.
+- `ffi.C.lua_*` inside the library is ambiguous: it finds the host's Lua when the host loaded it globally, and the library's own LuaJIT otherwise. Don't rely on it.
+- Use [lua-sys](https://github.com/lde-org/lua-sys) for either side: `require("lua-sys"):lde()` is the library's own LuaJIT (new states, sandboxes), and `:vendored("luajit")` / `:vendored("lua54")` / `:open(path)` is the host's Lua (e.g. Garry's Mod's `lua_shared`). Both give raw C API bindings and high-level states.
 
 ## Types
 

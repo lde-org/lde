@@ -29,17 +29,20 @@ end
 --- (lsRemote + clone both work on local paths). Returns the repo dir.
 ---@param name string # repo dir name
 ---@param pkgName string? # package name in the repo's lde.json (defaults to name)
-local function makeGitRepo(name, pkgName)
+---@param features table<string, string[]>? # features object for the repo's lde.json
+local function makeGitRepo(name, pkgName, features)
 	local repoDir = path.join(tmpBase, name)
 	fs.rmdir(repoDir)
 	fs.mkdir(repoDir)
 	fs.mkdir(path.join(repoDir, "src"))
 	fs.write(path.join(repoDir, "src", "init.lua"), 'return "from ' .. name .. '"')
-	fs.write(path.join(repoDir, "lde.json"), json.encode({
+	local config = {
 		name = pkgName or name,
 		version = "0.1.0",
 		dependencies = {}
-	}))
+	}
+	if features then config.features = features end
+	fs.write(path.join(repoDir, "lde.json"), json.encode(config))
 	assert(process.exec("git", { "init", "-q" }, { cwd = repoDir }), "git init failed")
 	process.exec("git", { "add", "-A" }, { cwd = repoDir })
 	const code = process.exec(
@@ -84,6 +87,111 @@ test.it("lde add creates dependencies field when config has none", function()
 	test.truthy(config.dependencies, "dependencies field should be created")
 	test.truthy(config.dependencies["mylib"], "mylib should be in dependencies")
 	test.equal(config.dependencies["mylib"].path, "../mylib")
+end)
+
+test.it("lde add --path pre-fills features from the dependency's default list", function()
+	local depDir = path.join(tmpBase, "defaults-dep")
+	fs.mkdirAll(path.join(depDir, "src"))
+	fs.write(path.join(depDir, "src", "init.lua"), "return true")
+	fs.write(path.join(depDir, "lde.json"), json.encode({
+		name = "defaults-dep",
+		version = "0.1.0",
+		features = {
+			default = { "hi", "extra" },
+			hi = { "defaults-dep.hi" },
+			extra = { "defaults-dep.extra" },
+		},
+	}))
+
+	local dir = makeProject("add-defaults-test")
+	local ok, out = ldecli({ "add", "defaults-dep", "--path", depDir }, dir)
+	test.truthy(ok, "lde add failed: " .. tostring(out))
+
+	local raw = fs.read(path.join(dir, "lde.json")) ---@cast raw -nil
+	local config = json.decode(raw) ---@cast config table<string, any>
+	local deps = config.dependencies --[[@as table<string, table<string, any>>]]
+	local dep = deps["defaults-dep"]
+	test.deepEqual(dep.features, { "hi", "extra" })
+end)
+
+test.it("lde add --path leaves features out when the dependency has no default list", function()
+	local depDir = path.join(tmpBase, "nodefaults-dep")
+	fs.mkdirAll(path.join(depDir, "src"))
+	fs.write(path.join(depDir, "src", "init.lua"), "return true")
+	fs.write(path.join(depDir, "lde.json"), json.encode({
+		name = "nodefaults-dep",
+		version = "0.1.0",
+	}))
+
+	local dir = makeProject("add-nodefaults-test")
+	local ok, out = ldecli({ "add", "nodefaults-dep", "--path", depDir }, dir)
+	test.truthy(ok, "lde add failed: " .. tostring(out))
+
+	local raw = fs.read(path.join(dir, "lde.json")) ---@cast raw -nil
+	local config = json.decode(raw) ---@cast config table<string, any>
+	local deps = config.dependencies --[[@as table<string, table<string, any>>]]
+	test.falsy(deps["nodefaults-dep"].features, "no defaults means no features field")
+end)
+
+test.skipIf(env.var("ANDROID_ROOT") ~= nil)("lde add --git pre-fills features from the fetched manifest", function()
+	local repoDir = makeGitRepo("add-defaults-git-repo", "add-defaults-git", {
+		default = { "hi" },
+		hi = { "add-defaults-git.hi" },
+	})
+
+	local dir = makeProject("add-defaults-git-test")
+	local ok, out = ldecli({ "add", "add-defaults-git", "--git", repoDir }, dir)
+	test.truthy(ok, "lde add failed: " .. tostring(out))
+
+	local raw = fs.read(path.join(dir, "lde.json")) ---@cast raw -nil
+	local config = json.decode(raw) ---@cast config table<string, any>
+	local deps = config.dependencies --[[@as table<string, table<string, any>>]]
+	test.deepEqual(deps["add-defaults-git"].features, { "hi" })
+
+	-- The manifest came from the installer's cache, not a second fetch: the
+	-- source can vanish and sync still materializes the pinned commit.
+	fs.rmdir(repoDir)
+	local ok2, out2 = ldecli({ "sync" }, dir)
+	test.truthy(ok2, "sync failed: " .. tostring(out2))
+	test.truthy(fs.exists(path.join(dir, "target", "add-defaults-git", "init.lua")))
+end)
+
+test.it("lde add registry dep pre-fills features from its fetched manifest", function()
+	local repoDir = makeGitRepo("add-defaults-reg-repo", "add-defaults-reg", {
+		default = { "hi" },
+		hi = { "add-defaults-reg.hi" },
+	})
+	const _, head = process.exec("git", { "rev-parse", "HEAD" }, { cwd = repoDir })
+	const commit = (head or ""):gsub("%s+$", "")
+	test.truthy(commit:match("^%x+$"), "repo must have a commit")
+
+	local treeDir = path.join(tmpBase, "add-defaults-reg-tree")
+	fs.mkdirAll(path.join(treeDir, "registry", "packages"))
+	fs.write(path.join(treeDir, "registry", "packages", "add-defaults-reg.json"), json.encode({
+		name = "add-defaults-reg",
+		description = "offline test package",
+		-- A file URL is not a directory, so add must materialize it the same way
+		-- install does instead of reading the working tree.
+		git = "file://" .. repoDir,
+		branch = "master",
+		versions = { ["1.0.0"] = commit },
+	}))
+
+	local dir = makeProject("add-defaults-reg-test")
+	local ok, out = ldecli({ "--tree", treeDir, "add", "add-defaults-reg" }, dir)
+	test.truthy(ok, "lde add failed: " .. tostring(out))
+
+	local raw = fs.read(path.join(dir, "lde.json")) ---@cast raw -nil
+	local config = json.decode(raw) ---@cast config table<string, any>
+	local deps = config.dependencies --[[@as table<string, table<string, any>>]]
+	test.deepEqual(deps["add-defaults-reg"].features, { "hi" })
+
+	-- The fetch filled the installer's cache: the source can vanish and sync
+	-- still materializes the pinned commit.
+	fs.rmdir(repoDir)
+	local ok2, out2 = ldecli({ "--tree", treeDir, "sync" }, dir)
+	test.truthy(ok2, "sync failed: " .. tostring(out2))
+	test.truthy(fs.exists(path.join(dir, "target", "add-defaults-reg", "init.lua")))
 end)
 
 test.it("lde add --dev --path adds to devDependencies not dependencies", function()

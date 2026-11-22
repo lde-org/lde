@@ -215,6 +215,15 @@ local ok, boundaryErr = xpcall(function()
 			if not pkg then
 				error("__build-pkg: " .. (perr or "failed to open package"), 0)
 			end ---@cast pkg -nil
+			-- The parent resolved this dependency's flags; a fresh open knows none
+			-- of them (and must not fall back to the package's `default` list).
+			const encodedFeatures = require("env").var("LDE_FEATURES")
+			if encodedFeatures then
+				local ok, flags = pcall(require("json").decode, encodedFeatures)
+				if ok and type(flags) == "table" then
+					pkg:setFeatures(flags --[[@as string[] ]])
+				end
+			end
 			const bok, berr = pkg:runBuildScript(outDir, capture)
 			if not bok then error(berr or "build failed", 0) end
 		end)

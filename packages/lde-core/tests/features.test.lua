@@ -215,6 +215,50 @@ test.it("of(pkg): a package with no features yields nil", function()
 	test.equal(features.of(pkg), nil)
 end)
 
+-- ── default: flags a package turns on for itself ─────────────────────────────
+
+test.it("default: is not a flag and enables nothing by itself", function()
+	local defs, defaults = features.parse({ default = { "hi" }, hi = { "dep", "p.hi" } }, "p")
+
+	-- The list is returned separately, never as a declared flag.
+	test.equal(defs.default, nil)
+	test.equal(table.concat(defaults --[[@as string[] ]], ","), "hi")
+
+	-- `hi` stays off until someone asks for it: default is not a request.
+	test.equal(next(features.enabledDependencies(defs, nil)), nil)
+	test.equal(table.concat(features.excludes(defs, nil) --[[@as string[] ]], ","), "hi")
+end)
+
+test.it("default: platform flags are valid even when undeclared", function()
+	local defs, defaults = features.parse({ default = { "linux", "unix" } }, "p")
+	test.equal(next(defs or {}), nil)
+	test.equal(table.concat(defaults --[[@as string[] ]], ","), "linux,unix")
+end)
+
+test.it("default: an empty list is allowed", function()
+	local _, defaults = features.parse({ default = {}, hi = { "p.hi" } }, "p")
+	test.equal(defaults and #defaults, 0)
+end)
+
+test.it("default: a non-list value is rejected", function()
+	test.errors(function()
+		features.parse({ default = { hi = { "p.hi" } } }, "p")
+	end)
+	test.errors(function()
+		features.parse({ default = "hi" }, "p")
+	end)
+end)
+
+test.it("default: an entry that is not a declared or platform flag is rejected", function()
+	test.errors(function()
+		features.parse({ default = { "nope" } }, "p")
+	end)
+	-- The entry cannot name itself.
+	test.errors(function()
+		features.parse({ default = { "default" } }, "p")
+	end)
+end)
+
 -- ── excludesFor: manifest beside the modules, then the lockfile ──────────────
 
 test.it("excludesFor: reads the dependency's own manifest when it is adjacent", function()
@@ -250,6 +294,40 @@ test.it("excludesFor: falls back to the locked list when there is no manifest", 
 	test.equal(excludes[1], "a")
 
 	test.equal(features.excludesFor(modulesDir, "dep", nil), nil)
+end)
+
+-- ── default does not leak into resolution of dependencies ────────────────────
+
+local defdepDir = path.join(tmpBase, "defdep")
+fs.mkdirAll(path.join(defdepDir, "src"))
+fs.write(path.join(defdepDir, "src", "init.lua"), "return true")
+fs.write(path.join(defdepDir, "src", "hi.lua"), "return true")
+fs.write(path.join(defdepDir, "lde.json"), json.encode({
+	name = "defdep",
+	version = "0.1.0",
+	features = {
+		default = { "hi" },
+		hi = { "defdep.hi" },
+	},
+}))
+
+local noDefaultsAppDir = path.join(tmpBase, "no-defaults-app")
+fs.mkdirAll(path.join(noDefaultsAppDir, "src"))
+fs.write(path.join(noDefaultsAppDir, "src", "init.lua"), "return true")
+fs.write(path.join(noDefaultsAppDir, "lde.json"), json.encode({
+	name = "no-defaults-app",
+	version = "0.1.0",
+	dependencies = { defdep = { path = "../defdep" } }
+}))
+
+test.it("default: a dependency installed without features gets none", function()
+	local app = lde.Package.open(noDefaultsAppDir) ---@cast app -nil
+	app:installDependencies()
+
+	const lockfile = lde.Lockfile.open(app:getLockfilePath()) ---@cast lockfile -nil
+	const entry = lockfile:getDependency("defdep") ---@cast entry -nil
+	test.equal(entry.features, nil, "resolution must not write defaults into the lock entry")
+	test.truthy((table.concat(entry.exclude or {}, ",")):find("hi", 1, true), "the module claimed by the dependency's default flag stays off")
 end)
 
 -- ── end to end: a real bundle ────────────────────────────────────────────────
@@ -407,4 +485,114 @@ test.it("build:feature sees a flag the caller asked for", function()
 
 	local written = fs.read(path.join(bfeatDir, "target", "bfeat", "features.txt")) ---@cast written -nil
 	test.truthy(written:find("custom=true", 1, true))
+end)
+
+-- ── default flags of the root package ────────────────────────────────────────
+
+local rootDefaultsDir = path.join(tmpBase, "rootdefaults")
+fs.mkdirAll(path.join(rootDefaultsDir, "src"))
+fs.write(path.join(rootDefaultsDir, "src", "init.lua"), "return true")
+fs.write(path.join(rootDefaultsDir, "src", "hi.lua"), "return true")
+fs.write(path.join(rootDefaultsDir, "lde.json"), json.encode({
+	name = "rootdefaults",
+	version = "0.1.0",
+	features = {
+		default = { "hi" },
+		hi = { "rootdefaults.hi" },
+	},
+}))
+fs.write(path.join(rootDefaultsDir, "build.lua"), [[
+local build = require("lde-build")
+build:write("features.txt", table.concat({
+	"hi=" .. tostring(build:feature("hi")),
+	"default=" .. tostring(build:feature("default")),
+}, "\n"))
+]])
+
+test.it("default: the root build script sees the package's default flags", function()
+	local pkg = lde.Package.open(rootDefaultsDir) ---@cast pkg -nil
+	pkg:build()
+
+	local written = fs.read(path.join(rootDefaultsDir, "target", "rootdefaults", "features.txt")) ---@cast written -nil
+	test.truthy(written:find("hi=true", 1, true))
+	test.truthy(written:find("default=false", 1, true), "`default` is not itself a flag")
+end)
+
+test.it("default: installing the root records its default flags", function()
+	local pkg = lde.Package.open(rootDefaultsDir) ---@cast pkg -nil
+	pkg:installDependencies()
+
+	const flags = pkg:getFeatures()
+	local found = false
+	for _, flag in ipairs(flags) do
+		if flag == "hi" then found = true end
+	end
+	test.truthy(found, "the root's default flag is on for its build")
+end)
+
+test.it("default: the root's default flags keep their modules in a bundle", function()
+	local pkg = lde.Package.open(rootDefaultsDir) ---@cast pkg -nil
+	test.equal(features.resolverFor(pkg)(pkg:getName()), nil)
+end)
+
+-- ── dependency build workers inherit the resolved flags ──────────────────────
+-- The install scheduler runs a dependency's build.lua in a fresh process, so the
+-- parent must pass the flags the resolver recorded or the worker only sees the
+-- package's defaults/platform flags.
+
+local buildWorkerDepDir = path.join(tmpBase, "buildworker-dep")
+fs.mkdirAll(path.join(buildWorkerDepDir, "src"))
+fs.write(path.join(buildWorkerDepDir, "src", "init.lua"), "return true")
+fs.write(path.join(buildWorkerDepDir, "lde.json"), json.encode({
+	name = "buildworker-dep",
+	version = "0.1.0",
+	features = {
+		default = { "hi" },
+		hi = { "buildworker-dep.hi" },
+		alpha = { "buildworker-dep.alpha" },
+		beta = { "buildworker-dep.beta" },
+	},
+}))
+fs.write(path.join(buildWorkerDepDir, "build.lua"), [[
+local build = require("lde-build")
+local flags = {}
+for flag in pairs(build.features) do flags[#flags + 1] = flag end
+table.sort(flags)
+build:write("features.txt", table.concat(flags, ","))
+]])
+
+---@param name string
+---@param depFeatures string[]?
+local function makeBuildWorkerApp(name, depFeatures)
+	local dir = path.join(tmpBase, name)
+	fs.mkdirAll(path.join(dir, "src"))
+	fs.write(path.join(dir, "src", "init.lua"), "return true")
+	local dep = { path = "../buildworker-dep" } ---@type lde.Package.Config.PathDependency
+	if depFeatures then dep.features = depFeatures end
+	fs.write(path.join(dir, "lde.json"), json.encode({
+		name = name,
+		version = "0.1.0",
+		dependencies = { ["buildworker-dep"] = dep },
+	}))
+	return dir
+end
+
+test.it("build:feature sees a dependency entry's features in the build worker", function()
+	local app = lde.Package.open(makeBuildWorkerApp("buildworker-requested", { "alpha" })) ---@cast app -nil
+	app:installDependencies()
+
+	local written = fs.read(path.join(app:getModulesDir(), "buildworker-dep", "features.txt")) ---@cast written -nil
+	test.truthy(written:find("alpha", 1, true), "the requested feature must reach the build script")
+	test.falsy(written:find("beta", 1, true), "an unrequested feature must stay off")
+	test.falsy(written:find("hi", 1, true), "the dependency's default must not be applied")
+	test.falsy(written:find("default", 1, true))
+end)
+
+test.it("default: a dependency build worker gets no implicit defaults", function()
+	local app = lde.Package.open(makeBuildWorkerApp("buildworker-plain")) ---@cast app -nil
+	app:installDependencies()
+
+	local written = fs.read(path.join(app:getModulesDir(), "buildworker-dep", "features.txt")) ---@cast written -nil
+	test.falsy(written:find("hi", 1, true), "the default flag must stay off without a dependent request")
+	test.falsy(written:find("default", 1, true))
 end)

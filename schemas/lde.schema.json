@@ -176,11 +176,18 @@
 		},
 		"features": {
 			"type": "object",
-			"description": "Named feature groups, each containing a list of dependency names",
+			"description": "Named feature groups, each listing the optional dependency aliases and `<package>.<module>` names its flag claims. The special `default` key lists feature flags enabled for this package by `lde add` and by root development builds.",
+			"properties": {
+				"default": {
+					"type": "array",
+					"items": { "type": "string" },
+					"description": "Feature flags enabled by default when this package is added as a dependency or built as the project root"
+				}
+			},
 			"additionalProperties": {
 				"type": "array",
 				"items": { "type": "string" },
-				"description": "List of dependency names included in this feature"
+				"description": "Dependency aliases and `<package>.<module>` names this feature flag claims"
 			}
 		}
 	},

@@ -150,6 +150,30 @@ end
 	test.equal(lib.tealtest_add(40, 2), 42)
 end)
 
+-- lua-sys and bundled C modules look up the library's own LuaJIT by handle, while a host
+-- with its own Lua (Garry's Mod, Lua 5.4, this test runner) keeps resolving lua_* to its own.
+test.skipIf(jit.os == "Windows")("compile --shared: the library's LuaJIT is reachable by handle but not from the host", function()
+	const lib = ffi.load(compileShared(makePackage("shared-own-luajit", {
+		["init.lua"] = '---@export "C" ownjit_one fn(): i32\nlocal function one() return 1 end\n',
+	})))
+	ffi.cdef([[
+		int32_t ownjit_one(void);
+		int lua_gettop(void* L);
+		typedef struct { const char* fname; void* fbase; const char* sname; void* saddr; } ownjit_DlInfo;
+	]])
+	pcall(ffi.cdef, "int dladdr(const void* addr, void* info);")
+	---@param fn ffi.cdata*
+	local function imageOf(fn)
+		const info = ffi.new("ownjit_DlInfo")
+		ffi.C.dladdr(ffi.cast("void*", fn), info)
+		return tostring(info.fbase)
+	end
+
+	test.equal(lib.ownjit_one(), 1)
+	test.equal(imageOf(lib.lua_gettop), imageOf(lib.ownjit_one), "the handle finds the library's own lua_gettop")
+	test.truthy(imageOf(ffi.C.lua_gettop) ~= imageOf(lib.ownjit_one), "the host's lookups keep finding its own LuaJIT")
+end)
+
 test.it("compile --shared: a package without ---@export annotations fails cleanly", function()
 	const pkg = makePackage("shared-none", { ["init.lua"] = "return {}" })
 	const ok, err = pcall(compileShared, pkg)

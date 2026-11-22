@@ -1,10 +1,27 @@
 --- Feature flags: a manifest lists per-flag effects -- dependency aliases to enable and `<pkg>.<module>` names the flag claims. A claimed module is bundled only when a flag that claims it is on (files no flag names are always bundled); platform flags are always on.
+---
+--- `default` is not a flag: it names the package's own flags that `lde add` writes
+--- into a new dependency entry and that a root build turns on. It never claims a
+--- module or enables a dependency by itself.
 
 const fs = require("fs")
 const json = require("json")
 const path = require("path")
 
 const features = {}
+
+const DEFAULT_FLAG = "default"
+
+--- Every platform flag on every host: a `default` list may name another platform's
+--- flag even though that flag is off here.
+---@type table<string, true>
+const PLATFORM_FLAG_NAMES = {
+	windows = true,
+	linux = true,
+	macos = true,
+	bsd = true,
+	unix = true,
+}
 
 --- Platform flag by jit.os. BSD is listed although no flag existed for it before, so a manifest gating on `bsd` can turn it on.
 ---@type table<string, string>
@@ -42,39 +59,67 @@ end
 --- A flag whose value is not a list is rejected rather than ignored: dropping it would silently ship files the package asked to exclude.
 ---@param declared table<string, any>?
 ---@param packageName string? # the declaring package, needed to read module names
+---@return table<string, lde.Package.Config.FeatureDefinition>?
+---@return string[]? defaults # the `default` list, validated against declared and platform flags
 function features.parse(declared, packageName)
 	if type(declared) ~= "table" then return nil end
+
+	local defaults ---@type string[]?
+	local rawDefaults = declared[DEFAULT_FLAG]
+	if rawDefaults ~= nil then
+		const where = "Feature 'default' in " .. (packageName or "the manifest")
+		-- An empty list is fine: the package just has no defaults.
+		if type(rawDefaults) ~= "table" or (rawDefaults[1] == nil and next(rawDefaults) ~= nil) then
+			require("lde-core.error").raise(where
+				.. " must be a list of feature flags, e.g. \"default\": [\"windows\", \"high\"]")
+		end
+		defaults = {}
+		for _, flag in ipairs(rawDefaults --[[@as any[] ]]) do
+			-- Naming the entry itself is meaningless, and a flag must exist as a
+			-- declaration (or be a platform flag) or the list has a typo.
+			if type(flag) ~= "string" or flag == DEFAULT_FLAG
+				or (declared[flag] == nil and not PLATFORM_FLAG_NAMES[flag]) then
+				require("lde-core.error").raise(where .. " names '" .. tostring(flag)
+					.. "', which is not a declared feature flag or platform flag")
+			end
+			defaults[#defaults + 1] = flag
+		end
+	end
 
 	---@type table<string, lde.Package.Config.FeatureDefinition>
 	local normalized = {}
 	for flag, def in pairs(declared) do
-		if type(def) ~= "table" or def[1] == nil then
-			require("lde-core.error").raise(
-				"Feature '" .. tostring(flag) .. "' in " .. (packageName or "the manifest")
-				.. " must be a list, e.g. \"" .. tostring(flag) .. "\": [\"dep\", \""
-				.. (packageName or "package") .. ".some.module\"]"
-			)
-		end
-
-		---@type lde.Package.Config.FeatureDefinition
-		const split = {}
-		for _, entry in ipairs(def) do
-			if isModuleName(entry, packageName) then
-				-- Offset is always in range: only reachable with a prefix.
-				local modulePath = entry:sub(#packageName + 2):gsub("%.", "/")
-				split.modules = split.modules or {}
-				split.modules[#split.modules + 1] = modulePath
-			else
-				split.deps = split.deps or {}
-				split.deps[#split.deps + 1] = entry
+		if flag ~= DEFAULT_FLAG then
+			if type(def) ~= "table" or def[1] == nil then
+				require("lde-core.error").raise(
+					"Feature '" .. tostring(flag) .. "' in " .. (packageName or "the manifest")
+					.. " must be a list, e.g. \"" .. tostring(flag) .. "\": [\"dep\", \""
+					.. (packageName or "package") .. ".some.module\"]"
+				)
 			end
+
+			---@type lde.Package.Config.FeatureDefinition
+			const split = {}
+			for _, entry in ipairs(def) do
+				if isModuleName(entry, packageName) then
+					-- Offset is always in range: only reachable with a prefix.
+					local modulePath = entry:sub(#packageName + 2):gsub("%.", "/")
+					split.modules = split.modules or {}
+					split.modules[#split.modules + 1] = modulePath
+				else
+					split.deps = split.deps or {}
+					split.deps[#split.deps + 1] = entry
+				end
+			end
+			normalized[flag] = split
 		end
-		normalized[flag] = split
 	end
-	return normalized
+	return normalized, defaults
 end
 
 ---@param pkg lde.Package
+---@return table<string, lde.Package.Config.FeatureDefinition>?
+---@return string[]? defaults
 function features.of(pkg)
 	return features.parse(pkg:readConfig().features, pkg:getName())
 end
@@ -89,8 +134,10 @@ function features.enabled(defs, requested)
 	---@param flags string[]
 	local function turnOn(flags)
 		for _, flag in ipairs(flags) do
-			const def = defs[flag]
-			if def then on[#on + 1] = def end
+			if flag ~= DEFAULT_FLAG then
+				const def = defs[flag]
+				if def then on[#on + 1] = def end
+			end
 		end
 	end
 
@@ -129,7 +176,9 @@ function features.enabledFlags(defs, requested)
 	end
 
 	for _, flag in ipairs(features.platformFlags()) do add(flag) end
-	for _, flag in ipairs(requested or {}) do add(flag) end
+	for _, flag in ipairs(requested or {}) do
+		if flag ~= DEFAULT_FLAG then add(flag) end
+	end
 
 	table.sort(flags)
 	return flags
@@ -188,13 +237,14 @@ end
 
 ---@param relativePaths string[]
 
---- Fallback for a package built outside an install (`lde compile` on itself), where only platform flags are known; inside an install `Package:getFeatures` has the recorded flags.
+--- Fallback for a package built outside an install (`lde compile` on itself), where only the package's `default` list and platform flags are known; inside an install `Package:getFeatures` has the recorded flags.
 ---@param pkg lde.Package
 ---@return string[] flags
 function features.ofPackage(pkg)
 	const explicit = pkg.features
 	if explicit then return explicit end
-	return features.enabledFlags(features.of(pkg), nil)
+	const defs, defaults = features.of(pkg)
+	return features.enabledFlags(defs, defaults)
 end
 
 --- An alias rather than a class so both `lde.Lockfile.Dependency` and a hand-built `{ exclude = {...} }` satisfy it.
@@ -230,7 +280,11 @@ function features.resolverFor(package, requested)
 	const mainName = package:getName()
 	local lockfile = package:readLockfile()
 	const lockDeps = lockfile?.raw?.dependencies ?? {}
-	const rootExcludes = features.excludes(features.of(package), requested)
+	const defs, defaults = features.of(package)
+	-- The root has no dependent to name its flags, so its own `default` list is
+	-- the baseline; an explicit list (bundle/compile options) still wins.
+	const rootRequested = (requested and #requested > 0) ? requested : defaults
+	const rootExcludes = features.excludes(defs, rootRequested)
 
 	return function(alias)
 		if alias == mainName then return rootExcludes end

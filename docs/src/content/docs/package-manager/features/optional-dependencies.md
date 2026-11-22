@@ -33,7 +33,7 @@ Features are named groups. You define them under the `"features"` key in `lde.js
 
 ## Gating files
 
-A feature can also claim files. Name the module exactly as you would `require()` it and it will only be  bundled only when a flag that names it is on. Files no feature names are always bundled, so you only list the platform-specific ones:
+A feature can also claim files. Name the module exactly as you would `require()` it and it will only be bundled only when a flag that names it is on. Files no feature names are always bundled, so you only list the platform-specific ones:
 
 ```json
 "features": {
@@ -51,14 +51,13 @@ You can mix and match dependencies and specific files.
 }
 ```
 
-Matching is on the *module* a file implements, not on its filename, so a single entry covers every form that module can ship in. `mypackage.native.core` covers all of:
+Matching is on the _module_ a file implements, not on its filename, so a single entry covers every form that module can ship in. `mypackage.native.core` covers all of:
 
 - native/core.lua
 - native/core/init.lua
 - native/core.so
 - native/core.dll
 - native/core.dylib
-
 
 > [!NOTE]
 > This filtering only applies during bundling via compile or bundle, so ./target during development will still symlink every file.
@@ -67,13 +66,13 @@ Matching is on the *module* a file implements, not on its filename, so a single 
 
 lde automatically activates feature flags based on the current operating system:
 
-| Feature flag | Platform                      |
-| ------------ | ----------------------------- |
-| `windows`    | Windows                       |
-| `linux`      | Linux                         |
-| `macos`      | macOS                         |
-| `bsd`        | FreeBSD and other BSDs        |
-| `unix`       | any non-Windows platform      |
+| Feature flag | Platform                 |
+| ------------ | ------------------------ |
+| `windows`    | Windows                  |
+| `linux`      | Linux                    |
+| `macos`      | macOS                    |
+| `bsd`        | FreeBSD and other BSDs   |
+| `unix`       | any non-Windows platform |
 
 This means you can gate dependencies and files by OS without any extra configuration. `unix` is what you usually want when there is one POSIX backend and one Windows backend:
 
@@ -116,3 +115,40 @@ The features you define are for your own package. When you depend on a package t
 ```
 
 You never have to name a platform flag: lde turns the right one on for every package by itself.
+
+## Default features
+
+A package can choose which of its flags should be on when it is used. The special `default` key lists flags that are turned on by default:
+
+```json
+"features": {
+  "default": ["jit", "high"],
+  "jit": ["mypackage.abi.jit"],
+  "high": ["mypackage.high"]
+}
+```
+
+When you run `lde add` for a dependency that declares `default`, lde writes those flags into the new dependency entry in your `lde.json`:
+
+```json
+"dependencies": {
+  "my-package": {
+    "git": "https://github.com/example/my-package",
+    "features": ["jit", "high"]
+  }
+}
+```
+
+The list is copied once. You can edit or remove it afterwards like any other feature list. lde does not apply defaults during resolution or installation, so a dependency added or installed without a `features` list gets none of its flags.
+
+For a registry or git dependency, lde fetches the package into the same cache a later install uses, so reading the defaults does not cause a second download. An explicit `--git --commit` pin stays offline: lde does not fetch that source just to read its defaults.
+
+`default` also applies to the package itself when it is the project root. Building, testing, or running it from its own directory turns its default flags on, plus the platform flags, so `build:feature` sees them:
+
+```lua
+if build:feature("high") then
+	-- the root build has `high` on because the manifest lists it in `default`
+end
+```
+
+Defaults never apply to a dependency's own build. Only the flags its dependents name in the dependency entry do.

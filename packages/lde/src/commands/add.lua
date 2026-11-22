@@ -5,7 +5,62 @@ local path = require("path")
 const semver = require("semver")
 
 const lde = require("lde-core")
+const featureFlags = require("lde-core.package.features")
 const gitShorthand = require("lde.util.gitShorthand")
+
+--- A manifest's `features.default`, read without failing the add: a dependency
+--- with a malformed manifest is a problem the next install reports.
+---@param dir string
+---@return { name: string?, defaults: string[]? }?
+local function readFeatures(dir)
+	const raw = fs.read(path.join(dir, "lde.json"))
+	if not raw then return nil end
+	local ok, config = pcall(json.decode, raw)
+	if not ok or type(config) ~= "table" then return nil end
+	---@cast config table<string, any>
+	local okParse, _, defaults = pcall(featureFlags.parse, config.features, config.name)
+	if not okParse then return { name = config.name } end
+	return { name = config.name, defaults = defaults }
+end
+
+--- The default flags of the named package at `dir`, which may be a monorepo
+--- root. Resolution never applies defaults to a dependency by itself, so the
+--- only source is the manifest read here.
+---@param dir string?
+---@param name string
+local function defaultsOf(dir, name)
+	if not dir or not fs.isdir(dir) then return nil end
+	const direct = readFeatures(dir)
+	if direct and (direct.name == name or direct.name == nil) then return direct.defaults end
+
+	const pkg = lde.global.findNamedPackageIn(dir, name)
+	if pkg then
+		const nested = readFeatures(pkg.dir)
+		if nested then return nested.defaults end
+	end
+	return nil
+end
+
+--- A local directory a dependency source is readable from without fetching.
+---@param value string
+---@return string?
+local function localSourceDir(value)
+	if fs.isdir(value) then return path.normalize(value) end
+	return nil
+end
+
+--- Materializes a git source into the same cache the installer uses, so the
+--- later sync/install is a cache hit. Best-effort: a failed fetch leaves the
+--- add intact, just without the dependency's defaults.
+---@param repoName string
+---@param repoUrl string
+---@param branch string?
+---@param commit string?
+local function fetchGitSource(repoName, repoUrl, branch, commit)
+	local ok, repoDir = pcall(lde.global.getOrInitGitRepo, repoName, repoUrl, branch, commit)
+	if not ok then return nil end
+	return repoDir --[[@as string]]
+end
 
 ---@param args clap.Args
 local function add(args)
@@ -104,11 +159,14 @@ local function add(args)
 	end
 
 	local dep
+	---@type string?
+	local depSourceDir
 	---@type lde.Lockfile.GitDependency?
 	local gitLockEntry
 	local verb = isUpdate ? "Updated" : "Added"
 	if depType == "path" then
 		dep = { path = depValue }
+		depSourceDir = path.resolve(p.dir, path.normalize(depValue --[[@as string]]))
 	elseif depType == "git" then
 		---@cast depValue -nil
 		local branch = args:option("branch")
@@ -131,11 +189,18 @@ local function add(args)
 		gitLockEntry = lockEntry
 
 		dep = { git = depValue, branch = branch, commit = commit }
+		if commit then
+			-- --commit is an explicit offline pin: never reach the network for it.
+			depSourceDir = localSourceDir(depValue)
+		else
+			depSourceDir = fetchGitSource(name, depValue, branch, pin) or localSourceDir(depValue)
+		end
 	elseif isRocks then
-		local _, _, err = lde.util.openLuarocksPackage(name, registryVersion)
+		local rocksPkg, _, err = lde.util.openLuarocksPackage(name, registryVersion)
 		if err then
 			lde.error.raise(err, { hint = lde.util.suggestPackage(name, true) })
 		end
+		depSourceDir = rocksPkg?.dir
 
 		-- @latest pins the concrete newest version now; other constraints stored as given.
 		local pinnedVersion = registryVersion
@@ -155,7 +220,23 @@ local function add(args)
 		end ---@cast portfile -nil
 
 		-- "latest" means "newest", so a bare name and @latest resolve the same here.
-		const resolvedVersion = lde.global.resolveRegistryVersion(portfile, registryVersion)
+		local resolvedVersion, resolvedCommit, registryGit, registryBranch, registryArchive, registrySha256 =
+			lde.global.resolveRegistryVersion(portfile, registryVersion)
+
+		-- Read the manifest from the source install would use, and leave it in the
+		-- cache so the later sync/install does not fetch it again. Fall back to a
+		-- local source when the fetch fails (offline fake registries).
+		if registryArchive then
+			local ok, archiveDir, sourceDir = pcall(
+				lde.global.getOrInitArchive, registryArchive, nil, nil, registrySha256)
+			if ok then depSourceDir = sourceDir or archiveDir end
+		elseif registryGit then
+			depSourceDir = fetchGitSource(name, registryGit --[[@as string]], registryBranch --[[@as string?]],
+				resolvedCommit --[[@as string?]])
+		end
+		if not depSourceDir and registryGit then
+			depSourceDir = localSourceDir(registryGit --[[@as string]])
+		end
 
 		-- A single version is saved as a caret range so later installs move to compatible releases.
 		local storedVersion = "^" .. resolvedVersion
@@ -169,6 +250,17 @@ local function add(args)
 
 	if depType then
 		ansi.printf("{green}%s %s: %s{reset} ({cyan}%s: %s{reset})", verb, isDevelopment and "dev dependency" or "dependency", name, depType, depValue)
+	end
+
+	-- Explicit features on an existing entry are the user's choice and survive a
+	-- re-pin. Otherwise pre-fill the dependency's own `default` list. Resolution
+	-- never applies defaults, so without this the entry gets nothing.
+	local featuresToWrite = existing?.features
+	if not featuresToWrite then
+		featuresToWrite = defaultsOf(depSourceDir, name)
+	end
+	if featuresToWrite then
+		(dep --[[@as lde.Package.Config.Dependency]]).features = featuresToWrite
 	end
 
 	-- removeField first: addField appends to the encoder's key store, so re-adding would duplicate.

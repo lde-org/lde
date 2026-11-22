@@ -14,8 +14,24 @@ const exports = {}
 const OPENERS = { ["function"] = true, ["if"] = true, ["do"] = true, ["repeat"] = true }
 const CLOSERS = { ["end"] = true, ["until"] = true }
 
--- These collide with the LuaJIT symbols or the glue's own statics in the same library.
-const RESERVED_PREFIXES = { "lua_", "luaL_", "luaJIT_", "luaopen_", "lde_" }
+-- Global symbols of libluajit.a and the glue's own statics. Linking an export with one of these
+-- names either fails or silently replaces LuaJIT's definition.
+const RESERVED_PREFIXES = { "lua_", "luaL_", "luaJIT_", "lj_", "recff_", "lde_" }
+-- Only LuaJIT's own library openers: any other luaopen_<name> is free, so a library can be a Lua C module.
+const RESERVED_NAMES = {
+	luaopen_base = true,
+	luaopen_bit = true,
+	luaopen_debug = true,
+	luaopen_ffi = true,
+	luaopen_io = true,
+	luaopen_jit = true,
+	luaopen_math = true,
+	luaopen_os = true,
+	luaopen_package = true,
+	luaopen_string = true,
+	luaopen_string_buffer = true,
+	luaopen_table = true,
+}
 
 -- `fn` is the documented spelling; `fun` matches LuaCATS and `function` matches Lua.
 const SIGNATURE_KEYWORDS = { fn = true, fun = true, ["function"] = true }
@@ -119,6 +135,9 @@ end
 
 ---@param name string
 local function checkSymbol(name)
+	if RESERVED_NAMES[name] then
+		return "export name '" .. name .. "' is already defined by LuaJIT"
+	end
 	for _, prefix in ipairs(RESERVED_PREFIXES) do
 		if name:sub(1, #prefix) == prefix then
 			return "export name '" .. name .. "' uses the reserved prefix '" .. prefix .. "'"

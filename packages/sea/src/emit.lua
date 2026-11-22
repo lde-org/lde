@@ -27,6 +27,30 @@ local function safeIdent(name)
 	return (string.gsub(name, "[^%w]", "_"))
 end
 
+--- C declarations linking the file at `asmPath` into the binary between
+--- `<sym>_start` and `<sym>_end`. Mach-O prefixes C symbols with `_`. On ELF
+--- the symbols are hidden so a shared library never exports them (two
+--- lde-built libraries in one process would otherwise both define them).
+--- The leading blank line puts the `#if` at the start of a line.
+---@param sym string
+---@param asmPath string # forward slashes, quotes escaped
+local function incbinDecl(sym, asmPath)
+	const template = [[
+
+#if defined(__APPLE__)
+__asm__(".globl _SYM_start\n_SYM_start:\n.incbin \"PATH\"\n.globl _SYM_end\n_SYM_end:\n");
+#elif defined(__ELF__)
+__asm__(".globl SYM_start\n.hidden SYM_start\nSYM_start:\n.incbin \"PATH\"\n.globl SYM_end\n.hidden SYM_end\nSYM_end:\n");
+#else
+__asm__(".globl SYM_start\nSYM_start:\n.incbin \"PATH\"\n.globl SYM_end\nSYM_end:\n");
+#endif
+extern const unsigned char SYM_start[];
+extern const unsigned char SYM_end[];
+]]
+	-- Function replacements: a `%` in the path must stay literal.
+	return (template:gsub("SYM", || -> sym):gsub("PATH", || -> asmPath))
+end
+
 ---@class sea.emit.Parts
 ---@field includes string # extra #includes the declarations need
 ---@field decls string # file-scope declarations: embedded blobs, module table, loader helpers
@@ -41,13 +65,16 @@ end
 ---@param source string|{ name: string, modules: { name: string, code: string }[] } # bundled lua: source string, LuaJIT bytecode string, or a raw bytecode table (bundlePackage { raw = true })
 ---@param sharedLibs { name: string, content: string }[]
 ---@param platform string # "linux" | "windows" | "macos" | "freebsd"
+---@param salt string? # mixed into extracted library names, so two binaries never share one copy of a native module
 ---@return sea.emit.Parts
-function emit.buildParts(main, source, sharedLibs, platform)
+function emit.buildParts(main, source, sharedLibs, platform, salt)
 	const libExt = platform == "windows" and "dll" or "so"
 
 	-- For each shared library, emit a uint8_t array and the write+preload logic.
 	-- The path is deterministic: /tmp/lde-lib-<name>-<hash>.so so that
 	-- the file is only written once across runs with identical content.
+	-- The OS loads one copy per path, and a native module that resolved its
+	-- lua_* from one lde library's LuaJIT must not be reused by another's.
 	local libDecls = {}    -- top-level C declarations (arrays + path strings)
 	local libStartup = {}  -- code that runs before lua_State is created
 	local libPreloads = {} -- package.preload registrations
@@ -55,7 +82,7 @@ function emit.buildParts(main, source, sharedLibs, platform)
 
 	for _, lib in ipairs(sharedLibs or {}) do
 		local id                            = safeIdent(lib.name)
-		local hash                          = util.hash(lib.content)
+		local hash                          = util.hash(lib.content .. (salt or ""))
 		const libFileName                   = string.format("lde-lib-%s-%s.%s", lib.name, hash, libExt)
 		ffiShimEntries[#ffiShimEntries + 1] = string.format('["%s"]="%s"', lib.name, libFileName)
 		-- alias as libcurl, libcurl.so/libcurl.dylib, and curl
@@ -90,16 +117,7 @@ function emit.buildParts(main, source, sharedLibs, platform)
 		end
 
 		local asmPath = libPath:gsub("\\", "/"):gsub('"', '\\"')
-		libDecls[#libDecls + 1]             = string.format([[
-
-#if defined(__APPLE__)
-__asm__(".globl _%s_lib_start\n_%s_lib_start:\n.incbin \"%s\"\n.globl _%s_lib_end\n_%s_lib_end:\n");
-#else
-__asm__(".globl %s_lib_start\n%s_lib_start:\n.incbin \"%s\"\n.globl %s_lib_end\n%s_lib_end:\n");
-#endif
-extern const unsigned char %s_lib_start[];
-extern const unsigned char %s_lib_end[];
-]], id, id, asmPath, id, id, id, id, asmPath, id, id, id, id)
+		libDecls[#libDecls + 1]             = incbinDecl(id .. "_lib", asmPath)
 		libDecls[#libDecls + 1]             = string.format(
 			'static const char %sLibraryName[] = "%s";',
 			id, libFileName
@@ -214,21 +232,9 @@ char lde_tmpdir[4096];
 			end
 		end
 
-		-- Forward slashes keep the path valid in .incbin on Windows; the asm
-		-- symbol name differs on macOS (Mach-O prefixes C symbols with _).
-		-- Blank line after [[ so the #if lands at the start of a line (Lua
-		-- long brackets swallow the first newline).
+		-- Forward slashes keep the path valid in .incbin on Windows.
 		local asmPath = bcPath:gsub("\\", "/"):gsub('"', '\\"')
-		return string.format([[
-
-#if defined(__APPLE__)
-__asm__(".globl _lde_bundle_start\n_lde_bundle_start:\n.incbin \"%s\"\n.globl _lde_bundle_end\n_lde_bundle_end:\n");
-#else
-__asm__(".globl lde_bundle_start\nlde_bundle_start:\n.incbin \"%s\"\n.globl lde_bundle_end\nlde_bundle_end:\n");
-#endif
-extern const unsigned char lde_bundle_start[];
-extern const unsigned char lde_bundle_end[];
-]], asmPath, asmPath)
+		return incbinDecl("lde_bundle", asmPath)
 	end
 
 	local bundleDecls  = ""

@@ -133,6 +133,12 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 
 	features = features or {}
 
+	-- The root has no dependent to name its flags, so its own `default` list is
+	-- the baseline for a development install; an explicit list still wins.
+	-- Dependencies never get this (see features.resolverFor).
+	const defs, defaults = featureFlags.of(package)
+	if #features == 0 then features = defaults or {} end
+
 	local modulesDir = package:getModulesDir()
 
 	-- The root's own optional deps: which of them the features it was asked for turn
@@ -144,7 +150,7 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 
 	-- Likewise record the root's own flags, so its build script asks the same
 	-- questions about itself that the resolver answers for each dependency.
-	package:setFeatures(featureFlags.enabledFlags(featureFlags.of(package), features))
+	package:setFeatures(featureFlags.enabledFlags(defs, features))
 
 	-- Nothing to do (or already done): report the direct dep count so callers
 	-- can still print a "No changes" summary line. cached = the install was a

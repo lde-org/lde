@@ -205,11 +205,11 @@ The interpreter used to run your package. Defaults to `lde`:
 }
 ```
 
-| Value    | Meaning                                                                                                 |
-| -------- | ------------------------------------------------------------------------------------------------------- |
-| `lde`    | The lde runtime                                                                                         |
-| `luajit` | A bare `luajit` binary on your PATH                                                                     |
-| `lua`    | A bare `lua` binary on your PATH                                                                        |
+| Value    | Meaning                             |
+| -------- | ----------------------------------- |
+| `lde`    | The lde runtime                     |
+| `luajit` | A bare `luajit` binary on your PATH |
+| `lua`    | A bare `lua` binary on your PATH    |
 
 ### `scripts`
 
@@ -263,7 +263,10 @@ A git repository URL. `lde add <name> --git <url>` resolves the ref up front and
 {
 	"dependencies": {
 		"hood": { "git": "https://github.com/codebycruz/hood", "commit": "abc123" },
-		"hood-dev": { "git": "https://github.com/codebycruz/hood", "branch": "next" }
+		"hood-dev": {
+			"git": "https://github.com/codebycruz/hood",
+			"branch": "next"
+		}
 	}
 }
 ```
@@ -295,16 +298,16 @@ The version may be a range, in which case installs resolve it to the newest vers
 }
 ```
 
-| Form | Meaning |
-|------|---------|
-| `1.2.3` | exactly `1.2.3` |
-| `1.2`, `1`, `1.2.x` | the whole prefix: `1.2.0 <= v < 1.3.0`, `1.0.0 <= v < 2.0.0` |
-| `^1.2.3` | `>=1.2.3 <2.0.0`; the leftmost non-zero part is fixed, so `^0.2.3` is `>=0.2.3 <0.3.0` |
-| `~1.2.3` | `>=1.2.3 <1.3.0` (patch-only changes); `~>` is accepted as an alias |
-| `>=1.2`, `>1.2`, `<2`, `<=2` | comparison bounds; a partial version bounds its whole prefix |
-| `>=1.2 <2`, `>=1.2, <2` | space- or comma-joined bounds, all of which must hold |
-| `^1.2 \|\| ^2` | either range may match |
-| `latest`, `*` | any version |
+| Form                         | Meaning                                                                                |
+| ---------------------------- | -------------------------------------------------------------------------------------- |
+| `1.2.3`                      | exactly `1.2.3`                                                                        |
+| `1.2`, `1`, `1.2.x`          | the whole prefix: `1.2.0 <= v < 1.3.0`, `1.0.0 <= v < 2.0.0`                           |
+| `^1.2.3`                     | `>=1.2.3 <2.0.0`; the leftmost non-zero part is fixed, so `^0.2.3` is `>=0.2.3 <0.3.0` |
+| `~1.2.3`                     | `>=1.2.3 <1.3.0` (patch-only changes); `~>` is accepted as an alias                    |
+| `>=1.2`, `>1.2`, `<2`, `<=2` | comparison bounds; a partial version bounds its whole prefix                           |
+| `>=1.2 <2`, `>=1.2, <2`      | space- or comma-joined bounds, all of which must hold                                  |
+| `^1.2 \|\| ^2`               | either range may match                                                                 |
+| `latest`, `*`                | any version                                                                            |
 
 Since the lockfile pins the commit a range resolved to, bump within the range with `lde update`, which re-resolves it (the range in `lde.json` is left as written).
 
@@ -346,12 +349,12 @@ This will be downloaded and extracted.
 
 Every dependency spec accepts these optional fields:
 
-| Field      | Description                                                                              |
-| ---------- | ---------------------------------------------------------------------------------------- |
-| `optional` | If `true`, the dependency is only installed when enabled by a feature (see [features](#features)). |
-| `features` | Feature flags to enable for this dependency. See [optional dependencies](/docs/package-manager/features/optional-dependencies). |
+| Field      | Description                                                                                                                                                                                                     |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `optional` | If `true`, the dependency is only installed when enabled by a feature (see [features](#features)).                                                                                                              |
+| `features` | Feature flags to enable for this dependency. See [optional dependencies](/docs/package-manager/features/optional-dependencies).                                                                                 |
 | `package`  | The actual package name at the source, when it differs from the require key (aliasing). Accepted by every dependency type, including `luarocks` (where it takes precedence over `luarocks` as the source name). |
-| `rockspec` | Path to a `.rockspec` file relative to the dependency directory, for `path`, `git`, registry, and `archive` dependencies. A `luarocks` entry always resolves its rockspec from luarocks.org. |
+| `rockspec` | Path to a `.rockspec` file relative to the dependency directory, for `path`, `git`, registry, and `archive` dependencies. A `luarocks` entry always resolves its rockspec from luarocks.org.                    |
 
 `package` is how git dependencies point at a specific package inside a monorepo repository, and how registry and luarocks dependencies resolve under an alias. A `path` or `archive` entry records the source name in the lockfile:
 
@@ -385,12 +388,15 @@ Same shape as [`dependencies`](#dependencies), but only needed to develop the pa
 
 ### `features`
 
-Named groups of optional dependencies. A group lists the dependency keys to enable when its flag is active:
+Named feature groups. Each key is a feature flag, and its value lists what the flag claims: optional dependency aliases it turns on and `<package>.<module>` names it keeps in the bundle:
 
 ```json
 {
 	"dependencies": {
-		"winapi": { "git": "https://github.com/codebycruz/winapi", "optional": true },
+		"winapi": {
+			"git": "https://github.com/codebycruz/winapi",
+			"optional": true
+		},
 		"luaposix": { "luarocks": "luaposix", "optional": true }
 	},
 	"features": {
@@ -402,3 +408,15 @@ Named groups of optional dependencies. A group lists the dependency keys to enab
 ```
 
 lde activates `windows`, `linux`, `macos`, `bsd` or `unix` automatically based on the operating system, so optional dependencies and platform backends can be gated with no extra configuration. Custom feature names can be defined for anything else. See [optional dependencies](/docs/package-manager/features/optional-dependencies) for the full picture.
+
+The special `default` lists feature flags that are used by default when no `features` list is specified / when `lde add` populates it.
+
+```json
+{
+	"features": {
+		"default": ["jit", "high"],
+		"jit": ["mypackage.abi.jit"],
+		"high": ["mypackage.high"]
+	}
+}
+```
