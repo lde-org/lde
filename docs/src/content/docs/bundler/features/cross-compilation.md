@@ -52,6 +52,7 @@ brings itself:
     "label": "Example",
     "versionCode": 1,
     "icon": "assets/icon.png",
+    "fullscreen": false,
     "permissions": ["android.permission.READ_MEDIA_AUDIO"],
     "libs": ["libs/libfreetype.so", "libs/libharfbuzz.so"]
   }
@@ -69,6 +70,11 @@ granted from the system settings (`adb shell pm grant <package> <permission>`).
 
 `icon` is a PNG, relative to the package, shown in the launcher and the recent
 apps list. It is packaged as the app's one mipmap, so give it at least 192×192.
+
+The app is laid out edge to edge: it draws under the status bar and the
+navigation bar, which stay visible, so it should pad its UI by their heights.
+`fullscreen: true` hides the status bar instead, for a game or a video player
+that wants the whole screen.
 
 ## Using another compiler
 

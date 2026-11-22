@@ -366,6 +366,32 @@ local function xmlEscape(value)
 	return (tostring(value):gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;"):gsub('"', "&quot;"))
 end
 
+-- The theme the manifest names. By default the system bars stay visible while the window is
+-- laid out under them, which is what an app that pads its own UI by the bar heights expects.
+-- Android 15 enforces that layout for apps targeting 35; on older releases the translucent bars
+-- make it so, and the material base keeps the action bar and title out of the way. A fullscreen
+-- app (a game, a video player) hides the status bar instead and takes its space as well.
+--
+-- The window may draw into the display cutout from Android 9 on (`cutout`), so the app's own
+-- padding is the only thing between its UI and a notch. Before 9 the attribute does not exist.
+---@param fullscreen boolean
+---@param cutout boolean
+---@return string
+local function themeStyle(fullscreen, cutout)
+	return string.format([[
+<resources>
+	<style name="LdeTheme" parent="android:Theme.Material.NoActionBar">
+		<item name="android:windowTranslucentStatus">true</item>
+		<item name="android:windowTranslucentNavigation">true</item>
+		<item name="android:windowActionBar">false</item>
+		<item name="android:windowNoTitle">true</item>
+		<item name="android:windowFullscreen">%s</item>
+%s	</style>
+</resources>
+]], fullscreen and "true" or "false",
+		cutout and '\t\t<item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>\n' or "")
+end
+
 ---@param opts table
 local function manifest(opts)
 	local permissions = {}
@@ -378,7 +404,7 @@ local function manifest(opts)
 %s	<uses-feature android:name="android.hardware.vulkan.version" android:required="false" />
 	<uses-feature android:name="android.hardware.touchscreen" android:required="false" />
 	<application android:hasCode="false" android:extractNativeLibs="true"%s
-		android:label="%s" android:theme="@android:style/Theme.NoTitleBar.Fullscreen">
+		android:label="%s" android:theme="@style/LdeTheme">
 		<activity android:name="android.app.NativeActivity" android:exported="true"
 			android:screenOrientation="fullSensor"
 			android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|smallestScreenSize|uiMode">
@@ -501,7 +527,7 @@ end
 ---@param source string # Lua source bundle, without native libraries
 ---@param compiler string
 ---@param targetName string
----@param opts? { packageName: string?, label: string?, versionName: string?, versionCode: number?, icon: string?, permissions: string[]?, libs: string[]?, modules: { name: string, path: string }[]? } # icon: a PNG shown in the launcher; permissions: `uses-permission` names for the manifest; modules: native modules of the dependency tree, shipped in the APK and reached through require/ffi.load
+---@param opts? { packageName: string?, label: string?, versionName: string?, versionCode: number?, icon: string?, fullscreen: boolean?, permissions: string[]?, libs: string[]?, modules: { name: string, path: string }[]? } # icon: a PNG shown in the launcher; fullscreen: hide the status bar; permissions: `uses-permission` names for the manifest; modules: native modules of the dependency tree, shipped in the APK and reached through require/ffi.load
 ---@return string apkPath
 function android.compileAPK(main, source, compiler, targetName, opts)
 	opts = opts or {}
@@ -559,20 +585,28 @@ lde_bundle_end:
 	local zip = findTool("zip", { "-h" })
 	local jarPath = androidJar()
 
-	-- The launcher icon is a resource: compiled into the flat form aapt2 links, as the one mipmap
-	-- the launcher scales down from.
-	local resources = {}
+	-- The app's resources: the theme the manifest names, always, and the launcher icon when one
+	-- is given -- the one mipmap the launcher scales down from. Both are compiled into the flat
+	-- form aapt2 links, in a single pass over the directory.
+	local res = path.join(stage, "res")
+	fs.mkdirAll(path.join(res, "values"))
+	fs.mkdirAll(path.join(res, "values-v28"))
+	local fullscreen = opts.fullscreen == true
+	fs.write(path.join(res, "values", "styles.xml"), themeStyle(fullscreen, false))
+	fs.write(path.join(res, "values-v28", "styles.xml"), themeStyle(fullscreen, true))
 	if opts.icon ~= nil then
 		if not fs.exists(opts.icon) then
 			error("android: icon not found: " .. tostring(opts.icon))
 		end
-		local mipmap = path.join(stage, "res", "mipmap-xxxhdpi")
+		local mipmap = path.join(res, "mipmap-xxxhdpi")
 		fs.mkdirAll(mipmap)
 		fs.copy(opts.icon, path.join(mipmap, "ic_launcher.png"))
-		local compiled = path.join(stage, "res.zip")
-		run(aapt2, { "compile", "--dir", path.join(stage, "res"), "-o", compiled }, { cwd = stage })
-		resources = { "-R", compiled }
 	end
+	local compiled = path.join(stage, "res.zip")
+	run(aapt2, { "compile", "--dir", res, "-o", compiled }, { cwd = stage })
+	-- aapt2 links `-R` units with overlay rules, under which a style has to exist already;
+	-- this app's are new, so the overlay is allowed to add them.
+	local resources = { "--auto-add-overlay", "-R", compiled }
 
 	local unsigned = path.join(stage, "unsigned.apk")
 	local linkArgs = {

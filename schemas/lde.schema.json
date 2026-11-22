@@ -198,6 +198,7 @@
 				"label": { "type": "string", "description": "Name shown under the launcher icon" },
 				"versionCode": { "type": "integer", "minimum": 1, "description": "Android version code" },
 				"icon": { "type": "string", "description": "PNG launcher icon, relative to the package; 192x192 or larger" },
+				"fullscreen": { "type": "boolean", "default": false, "description": "Hide the status bar. By default the system bars stay visible and the app is laid out under them" },
 				"permissions": {
 					"type": "array",
 					"items": { "type": "string" },
