@@ -165,6 +165,10 @@ test.it("lde add registry dep pre-fills features from its fetched manifest", fun
 	const commit = (head or ""):gsub("%s+$", "")
 	test.truthy(commit:match("^%x+$"), "repo must have a commit")
 
+	-- file:///C:/... on Windows: "file://" .. "C:\..." puts the drive letter in the host part.
+	local repoUrlPath = repoDir:gsub("\\", "/")
+	if repoUrlPath:sub(1, 1) ~= "/" then repoUrlPath = "/" .. repoUrlPath end
+
 	local treeDir = path.join(tmpBase, "add-defaults-reg-tree")
 	fs.mkdirAll(path.join(treeDir, "registry", "packages"))
 	fs.write(path.join(treeDir, "registry", "packages", "add-defaults-reg.json"), json.encode({
@@ -172,7 +176,7 @@ test.it("lde add registry dep pre-fills features from its fetched manifest", fun
 		description = "offline test package",
 		-- A file URL is not a directory, so add must materialize it the same way
 		-- install does instead of reading the working tree.
-		git = "file://" .. repoDir,
+		git = "file://" .. repoUrlPath,
 		branch = "master",
 		versions = { ["1.0.0"] = commit },
 	}))
