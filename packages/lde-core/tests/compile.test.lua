@@ -26,11 +26,21 @@ local function hostTargetName()
 	return nil
 end
 
---- Any release target that is not the host (a genuine cross compile).
+--- Whether a target is a genuine cross compile through a plain clang
+--- (`--target=<triple>`). Android targets are left out: their native code
+--- needs the NDK's clang wrapper (it carries the bionic sysroot), which CI
+--- hosts and most dev machines don't install.
+---@param target sea.Target
+local function isPlainCrossTarget(target)
+	return not target.android and target.libc ~= "android" and not sea.isHostTarget(target)
+end
+
+--- Any release target that is not the host and cross-compiles through a plain
+--- clang (a genuine cross compile).
 ---@return string
 local function crossTargetName()
 	for name, target in pairs(sea.targets) do
-		if not sea.isHostTarget(target) then return name end
+		if isPlainCrossTarget(target) then return name end
 	end
 	error("no cross target available on this host", 0)
 end
@@ -398,7 +408,7 @@ build:write("target-info.txt", build.target)
 
 	local secondTarget
 	for name, target in pairs(sea.targets) do
-		if name ~= firstTarget and not sea.isHostTarget(target) then secondTarget = name break end
+		if name ~= firstTarget and isPlainCrossTarget(target) then secondTarget = name break end
 	end
 	test.truthy(secondTarget, "need a second cross target") ---@cast secondTarget -nil
 	withFakeLdeHome("target-switch-2", function()
