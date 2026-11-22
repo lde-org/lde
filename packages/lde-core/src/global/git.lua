@@ -193,6 +193,9 @@ local function shallowClone(repoUrl, repoDir, branch, progress)
 		return nil, "clone failed: " .. tostring(err)
 	end
 
+	-- Windows cannot rename a directory while libgit2 still holds its pack and
+	-- index files open; the moved repo is reopened below anyway.
+	repo:free()
 	if not fs.move(tmpDir, repoDir) then
 		fs.rmdir(tmpDir)
 		local won = fs.exists(repoDir) and git2().open(repoDir)
