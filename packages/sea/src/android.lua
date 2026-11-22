@@ -324,10 +324,14 @@ end
 
 ---@param opts table
 local function manifest(opts)
+	local permissions = {}
+	for _, name in ipairs(opts.permissions or {}) do
+		permissions[#permissions + 1] = string.format('\t<uses-permission android:name="%s" />\n', xmlEscape(name))
+	end
 	return string.format([[
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
 	package="%s" android:versionCode="%d" android:versionName="%s">
-	<uses-feature android:name="android.hardware.vulkan.version" android:required="false" />
+%s	<uses-feature android:name="android.hardware.vulkan.version" android:required="false" />
 	<uses-feature android:name="android.hardware.touchscreen" android:required="false" />
 	<application android:hasCode="false" android:extractNativeLibs="true"
 		android:label="%s" android:theme="@android:style/Theme.NoTitleBar.Fullscreen">
@@ -342,7 +346,7 @@ local function manifest(opts)
 		</activity>
 	</application>
 </manifest>
-]], opts.packageName, opts.versionCode, xmlEscape(opts.versionName), xmlEscape(opts.label))
+]], opts.packageName, opts.versionCode, xmlEscape(opts.versionName), table.concat(permissions), xmlEscape(opts.label))
 end
 
 ---@param keystore string
@@ -452,7 +456,7 @@ end
 ---@param source string # Lua source bundle, without native libraries
 ---@param compiler string
 ---@param targetName string
----@param opts? { packageName: string?, label: string?, versionName: string?, versionCode: number?, libs: string[]?, modules: { name: string, path: string }[]? } # modules: native modules of the dependency tree, shipped in the APK and reached through require/ffi.load
+---@param opts? { packageName: string?, label: string?, versionName: string?, versionCode: number?, permissions: string[]?, libs: string[]?, modules: { name: string, path: string }[]? } # permissions: `uses-permission` names for the manifest; modules: native modules of the dependency tree, shipped in the APK and reached through require/ffi.load
 ---@return string apkPath
 function android.compileAPK(main, source, compiler, targetName, opts)
 	opts = opts or {}
@@ -498,6 +502,7 @@ lde_bundle_end:
 		label = label,
 		versionName = versionName,
 		versionCode = versionCode,
+		permissions = opts.permissions,
 	}))
 
 	compileShim(target, compiler, stage)

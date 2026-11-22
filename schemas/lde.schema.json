@@ -197,6 +197,11 @@
 				"package": { "type": "string", "description": "Android application id, e.g. dev.example.app" },
 				"label": { "type": "string", "description": "Name shown under the launcher icon" },
 				"versionCode": { "type": "integer", "minimum": 1, "description": "Android version code" },
+				"permissions": {
+					"type": "array",
+					"items": { "type": "string" },
+					"description": "Permissions the app asks for, written as `uses-permission` entries, e.g. android.permission.READ_MEDIA_AUDIO"
+				},
 				"libs": {
 					"type": "array",
 					"items": { "type": "string" },

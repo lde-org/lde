@@ -51,6 +51,7 @@ brings itself:
     "package": "dev.example.app",
     "label": "Example",
     "versionCode": 1,
+    "permissions": ["android.permission.READ_MEDIA_AUDIO"],
     "libs": ["libs/libfreetype.so", "libs/libharfbuzz.so"]
   }
 }
@@ -60,6 +61,10 @@ brings itself:
 loader finds them by `SONAME`, the same way it finds `libvulkan.so`. The app has
 no Java code and no console: it runs the bundled Lua program from a
 NativeActivity.
+
+`permissions` are written to the manifest as `uses-permission` entries. A
+runtime permission is still the user's to grant: the app asks for it, or it is
+granted from the system settings (`adb shell pm grant <package> <permission>`).
 
 ## Using another compiler
 

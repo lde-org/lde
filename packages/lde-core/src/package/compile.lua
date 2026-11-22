@@ -85,6 +85,7 @@ local function compilePackage(package, targetName, opts)
 				label = androidConfig.label or package:getName(),
 				versionName = config.version,
 				versionCode = androidConfig.versionCode,
+				permissions = androidConfig.permissions,
 				libs = libs,
 				modules = modules,
 			})
