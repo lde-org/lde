@@ -394,13 +394,28 @@ static int lde_loadlib_loader(lua_State* L) {
 }
 ]]
 	end
+	-- The ffi.load remap as a chunk run in a state, reporting failure to the caller: see
+	-- `emit.buildSource`'s lde_register.
+	local shimRun = ""
+	if shimSource ~= "" then
+		shimRun = string.format(
+			'if (luaL_loadbuffer(L, "%s", %d, "@shim") != LUA_OK || lua_pcall(L, 0, 0, 0) != LUA_OK) return 1;',
+			shimSource:gsub(".", CEscapes),
+			#shimSource
+		)
+	end
+
 	return {
 		includes = stdintInclude,
 		decls = libDeclsStr .. bundleDecls .. loaderHelper .. "\n" .. loadlibHelper,
 		startup = libStartupStr,
 		shim = shimStartup,
+		shimRun = shimRun,
 		preloads = table.concat(filePreloads, "\n\t") .. table.concat(preloadSetup, "\n\t") .. mainLoad
 			.. "\n\t" .. libPreloadsStr,
+		-- Whether `preloads` registers every module itself (a raw bundle), or only the main chunk,
+		-- which registers the rest when it runs.
+		registersAll = isRawBundle,
 		main = (main:gsub(".", CEscapes)),
 	}
 end
@@ -429,13 +444,54 @@ int traceback(lua_State* L) {
 	return 1;
 }
 
+/* Registers the program's modules in a state: the ffi.load remap, then every module in
+ * package.preload, without running the program. `whole` also runs a bundle chunk that registers
+ * its modules when it runs, in the mode where it stops there. Returns nonzero with the error on
+ * the stack when the remap fails. */
+static int lde_register(lua_State* L, int whole) {
+	]] .. parts.shimRun .. [[
+
+	lua_getglobal(L, "package");
+	lua_getfield(L, -1, "preload");
+
+	]] .. parts.preloads .. [[
+
+	]] .. (parts.registersAll and "" or [[
+	if (whole) {
+		lua_pushboolean(L, 1);
+		lua_setglobal(L, "LDE_PRELOAD_ONLY");
+		lua_getfield(L, -1, "]] .. parts.main .. [[");
+		if (lua_pcall(L, 0, 0, 0) != LUA_OK) lua_pop(L, 1);
+		lua_pushnil(L);
+		lua_setglobal(L, "LDE_PRELOAD_ONLY");
+	}
+	]]) .. [[
+	(void)whole;
+	lua_pop(L, 2);
+	return 0;
+}
+
+/* The program's modules, for a state the program makes for itself -- a worker thread's: its
+ * `require` finds what the program's does. Exported, so a library finds it in the process. */
+#ifdef _WIN32
+__declspec(dllexport)
+#else
+__attribute__((visibility("default")))
+#endif
+void lde_preload(lua_State* L) {
+	if (lde_register(L, 1) != 0) lua_pop(L, 1);
+}
+
 int main(int argc, char** argv) {
 ]] .. parts.startup .. [[
 
 	lua_State* L = luaL_newstate();
 	luaL_openlibs(L);
 
-	]] .. parts.shim .. [[
+	if (lde_register(L, 0) != 0) {
+		fprintf(stderr, "%s\n", lua_tostring(L, -1));
+		return 1;
+	}
 
 	lua_createtable(L, argc, 0);
 	for (int i = 0; i < argc; i++) {
@@ -446,9 +502,6 @@ int main(int argc, char** argv) {
 
 	lua_getglobal(L, "package");
 	lua_getfield(L, -1, "preload");
-
-	]] .. parts.preloads .. [[
-
 	lua_getfield(L, -1, "]] .. parts.main .. [[");
 
 	for (int i = 1; i < argc; i++) {

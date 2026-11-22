@@ -273,6 +273,9 @@ local function bundlePackage(package, opts)
 		end
 	end
 
+	-- A state that only wants the modules -- a worker thread a compiled program started, through the
+	-- `lde_preload` it exports -- has them registered now and does not run the program again.
+	parts[#parts + 1] = 'if rawget(_G, "LDE_PRELOAD_ONLY") then return end'
 	parts[#parts + 1] = string.format('return package.preload["%s"](...)', mainName)
 
 	local result = table.concat(parts, "\n") .. "\n"

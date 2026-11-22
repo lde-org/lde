@@ -19,10 +19,36 @@ local SHIM_C = [==[
 #include <lua.h>
 #include <lauxlib.h>
 #include <lualib.h>
+#include <string.h>
 
 extern const unsigned char lde_bundle_start[];
 extern const unsigned char lde_bundle_end[];
 
+/* Where the native modules are, kept for the states the program makes for itself. */
+static char lde_libdir[4096];
+
+/* The program's modules, for a state the program makes for itself -- a worker thread's: the
+ * bundle is run in the mode where it registers its modules and stops, so the state's `require`
+ * finds what the program's does and its ffi.load finds the APK's native modules. Exported, so a
+ * library finds it in the process. */
+__attribute__((visibility("default")))
+void lde_preload(lua_State* L)
+{
+	if (lde_libdir[0] != '\0') {
+		lua_pushstring(L, lde_libdir);
+		lua_setglobal(L, "LDE_ANDROID_LIBDIR");
+	}
+	lua_pushboolean(L, 1);
+	lua_setglobal(L, "LDE_PRELOAD_ONLY");
+	if (luaL_loadbuffer(L, (const char*)lde_bundle_start,
+			(size_t)(lde_bundle_end - lde_bundle_start), "@bundle") != LUA_OK
+		|| lua_pcall(L, 0, 0, 0) != LUA_OK) {
+		__android_log_write(ANDROID_LOG_ERROR, "lde", lua_tostring(L, -1));
+		lua_pop(L, 1);
+	}
+	lua_pushnil(L);
+	lua_setglobal(L, "LDE_PRELOAD_ONLY");
+}
 /* The directory the package manager installed the APK's native libraries in, from
  * getApplicationInfo().nativeLibraryDir. Native modules are loaded from there. */
 static void lde_push_native_library_dir(lua_State* L, struct android_app* app)
@@ -75,6 +101,9 @@ void android_main(struct android_app* app)
 	lua_pushlightuserdata(L, app);
 	lua_setglobal(L, "LDE_ANDROID_APP");
 	lde_push_native_library_dir(L, app);
+	if (lua_isstring(L, -1)) {
+		strncpy(lde_libdir, lua_tostring(L, -1), sizeof(lde_libdir) - 1);
+	}
 	lua_setglobal(L, "LDE_ANDROID_LIBDIR");
 
 	if (luaL_loadbuffer(L, (const char*)lde_bundle_start,
@@ -83,6 +112,10 @@ void android_main(struct android_app* app)
 		__android_log_write(ANDROID_LOG_ERROR, "lde", lua_tostring(L, -1));
 	}
 
+	/* The program's callbacks are Lua functions, gone with the state: the glue must not call
+	 * them while the activity winds down below. */
+	app->onAppCmd = NULL;
+	app->onInputEvent = NULL;
 	lua_close(L);
 
 	/* Lua code may attach this thread to the VM for JNI calls; ART aborts the
@@ -93,7 +126,18 @@ void android_main(struct android_app* app)
 		(*vm)->DetachCurrentThread(vm);
 	}
 
+	/* Finishing pauses, stops and destroys the activity, and the glue's callbacks for each of
+	 * those wait on this thread to take the command: it keeps taking them until the activity is
+	 * destroyed. Returning first leaves the activity's main thread waiting forever, and the next
+	 * launch is handed that frozen activity. */
 	ANativeActivity_finish(app->activity);
+	while (!app->destroyRequested) {
+		struct android_poll_source* source = NULL;
+		int events = 0;
+		if (ALooper_pollOnce(-1, NULL, &events, (void**)&source) >= 0 && source != NULL) {
+			source->process(app, source);
+		}
+	}
 }
 ]==]
 
