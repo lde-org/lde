@@ -86,6 +86,7 @@ local function compilePackage(package, targetName, opts)
 				versionName = config.version,
 				versionCode = androidConfig.versionCode,
 				permissions = androidConfig.permissions,
+				icon = androidConfig.icon and path.join(package:getDir(), androidConfig.icon) or nil,
 				libs = libs,
 				modules = modules,
 			})

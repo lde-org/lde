@@ -51,6 +51,7 @@ brings itself:
     "package": "dev.example.app",
     "label": "Example",
     "versionCode": 1,
+    "icon": "assets/icon.png",
     "permissions": ["android.permission.READ_MEDIA_AUDIO"],
     "libs": ["libs/libfreetype.so", "libs/libharfbuzz.so"]
   }
@@ -65,6 +66,9 @@ NativeActivity.
 `permissions` are written to the manifest as `uses-permission` entries. A
 runtime permission is still the user's to grant: the app asks for it, or it is
 granted from the system settings (`adb shell pm grant <package> <permission>`).
+
+`icon` is a PNG, relative to the package, shown in the launcher and the recent
+apps list. It is packaged as the app's one mipmap, so give it at least 192×192.
 
 ## Using another compiler
 

@@ -333,7 +333,7 @@ local function manifest(opts)
 	package="%s" android:versionCode="%d" android:versionName="%s">
 %s	<uses-feature android:name="android.hardware.vulkan.version" android:required="false" />
 	<uses-feature android:name="android.hardware.touchscreen" android:required="false" />
-	<application android:hasCode="false" android:extractNativeLibs="true"
+	<application android:hasCode="false" android:extractNativeLibs="true"%s
 		android:label="%s" android:theme="@android:style/Theme.NoTitleBar.Fullscreen">
 		<activity android:name="android.app.NativeActivity" android:exported="true"
 			android:screenOrientation="fullSensor"
@@ -346,7 +346,8 @@ local function manifest(opts)
 		</activity>
 	</application>
 </manifest>
-]], opts.packageName, opts.versionCode, xmlEscape(opts.versionName), table.concat(permissions), xmlEscape(opts.label))
+]], opts.packageName, opts.versionCode, xmlEscape(opts.versionName), table.concat(permissions),
+		opts.icon and ' android:icon="@mipmap/ic_launcher"' or "", xmlEscape(opts.label))
 end
 
 ---@param keystore string
@@ -456,7 +457,7 @@ end
 ---@param source string # Lua source bundle, without native libraries
 ---@param compiler string
 ---@param targetName string
----@param opts? { packageName: string?, label: string?, versionName: string?, versionCode: number?, permissions: string[]?, libs: string[]?, modules: { name: string, path: string }[]? } # permissions: `uses-permission` names for the manifest; modules: native modules of the dependency tree, shipped in the APK and reached through require/ffi.load
+---@param opts? { packageName: string?, label: string?, versionName: string?, versionCode: number?, icon: string?, permissions: string[]?, libs: string[]?, modules: { name: string, path: string }[]? } # icon: a PNG shown in the launcher; permissions: `uses-permission` names for the manifest; modules: native modules of the dependency tree, shipped in the APK and reached through require/ffi.load
 ---@return string apkPath
 function android.compileAPK(main, source, compiler, targetName, opts)
 	opts = opts or {}
@@ -503,6 +504,7 @@ lde_bundle_end:
 		versionName = versionName,
 		versionCode = versionCode,
 		permissions = opts.permissions,
+		icon = opts.icon ~= nil,
 	}))
 
 	compileShim(target, compiler, stage)
@@ -513,8 +515,23 @@ lde_bundle_end:
 	local zip = findTool("zip", { "-h" })
 	local jarPath = androidJar()
 
+	-- The launcher icon is a resource: compiled into the flat form aapt2 links, as the one mipmap
+	-- the launcher scales down from.
+	local resources = {}
+	if opts.icon ~= nil then
+		if not fs.exists(opts.icon) then
+			error("android: icon not found: " .. tostring(opts.icon))
+		end
+		local mipmap = path.join(stage, "res", "mipmap-xxxhdpi")
+		fs.mkdirAll(mipmap)
+		fs.copy(opts.icon, path.join(mipmap, "ic_launcher.png"))
+		local compiled = path.join(stage, "res.zip")
+		run(aapt2, { "compile", "--dir", path.join(stage, "res"), "-o", compiled }, { cwd = stage })
+		resources = { "-R", compiled }
+	end
+
 	local unsigned = path.join(stage, "unsigned.apk")
-	run(aapt2, {
+	local linkArgs = {
 		"link",
 		"-o", unsigned,
 		"-I", jarPath,
@@ -523,7 +540,9 @@ lde_bundle_end:
 		"--target-sdk-version", "35",
 		"--version-code", tostring(versionCode),
 		"--version-name", versionName,
-	}, { cwd = stage })
+	}
+	for _, arg in ipairs(resources) do linkArgs[#linkArgs + 1] = arg end
+	run(aapt2, linkArgs, { cwd = stage })
 
 	local libDir = path.join(stage, "lib", abi)
 	fs.mkdirAll(libDir)
