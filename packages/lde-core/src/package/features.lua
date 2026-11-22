@@ -40,7 +40,32 @@ const OS_FLAGS = {
 
 ---@alias lde.Package.Config.FeatureDefinitions table<string, lde.Package.Config.FeatureDefinition>
 
-function features.platformFlags()
+---@type sea.Target?
+local currentTarget = nil
+
+--- Tell feature resolution which target is being built. `lde compile --target`
+--- sets this beside the compiler target, so an Android APK does not enable the
+--- host's `linux` dependencies.
+---@param target sea.Target?
+function features.setTarget(target)
+	currentTarget = target
+end
+
+--- @param defs table<string, lde.Package.Config.FeatureDefinition>? # the package's own flags, when known
+function features.platformFlags(defs)
+	if currentTarget and currentTarget.android then
+		-- Android runs Linux, but not every Linux dependency is an Android one:
+		-- an X11 window backend is not. A package that names an `android` flag
+		-- chooses its Android dependencies there and gets no Linux ones. A
+		-- package that only knows `linux` -- POSIX file APIs, for example --
+		-- gets that flag, because it is what runs on this kernel. Generic
+		-- packages get neither, only the platform name and `unix`.
+		if defs and defs.android == nil and defs.linux ~= nil then
+			return { "linux", "unix" }
+		end
+		return { "android", "unix" }
+	end
+
 	local os = OS_FLAGS[jit.os]
 	if not os then return {} end
 	if os == "windows" then return { os } end
@@ -141,7 +166,7 @@ function features.enabled(defs, requested)
 		end
 	end
 
-	turnOn(features.platformFlags())
+	turnOn(features.platformFlags(defs))
 	if requested then turnOn(requested) end
 
 	return on
@@ -175,7 +200,7 @@ function features.enabledFlags(defs, requested)
 		end
 	end
 
-	for _, flag in ipairs(features.platformFlags()) do add(flag) end
+	for _, flag in ipairs(features.platformFlags(defs)) do add(flag) end
 	for _, flag in ipairs(requested or {}) do
 		if flag ~= DEFAULT_FLAG then add(flag) end
 	end

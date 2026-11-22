@@ -5,7 +5,7 @@
 	"definitions": {
 		"featureFlag": {
 			"anyOf": [
-				{ "type": "string", "enum": ["windows", "linux", "macos", "bsd", "unix"] },
+				{ "type": "string", "enum": ["windows", "linux", "android", "macos", "bsd", "unix"] },
 				{ "type": "string" }
 			]
 		},
@@ -189,6 +189,21 @@
 				"items": { "type": "string" },
 				"description": "Dependency aliases and `<package>.<module>` names this feature flag claims"
 			}
+		},
+		"android": {
+			"type": "object",
+			"description": "Android APK metadata for `lde compile --target android-aarch64-apk`",
+			"properties": {
+				"package": { "type": "string", "description": "Android application id, e.g. dev.example.app" },
+				"label": { "type": "string", "description": "Name shown under the launcher icon" },
+				"versionCode": { "type": "integer", "minimum": 1, "description": "Android version code" },
+				"libs": {
+					"type": "array",
+					"items": { "type": "string" },
+					"description": "Shared libraries to ship in the APK native library directory, relative to the package"
+				}
+			},
+			"additionalProperties": false
 		}
 	},
 	"additionalProperties": false

@@ -47,9 +47,15 @@ local function compile(args)
 		isCross = true
 	end
 
+	const isAPK = target ~= nil and target.kind == "apk"
+
 	if not outFile then
 		outFile = path.join(pkg:getDir(), pkg:getName())
-		if isCross then outFile = outFile .. "-" .. targetName end
+		if isAPK then
+			outFile = outFile .. ".apk"
+		elseif isCross then
+			outFile = outFile .. "-" .. targetName
+		end
 	end
 
 	const hostPlatform = jit.os == "Windows" and "windows"
@@ -85,7 +91,13 @@ local function compile(args)
 		lde.error.raise("Failed to move executable: " .. finalErr)
 	end
 
-	if jit.os ~= "Windows" then ---@cast fs fs.raw.posix
+	if isAPK then
+		if jit.os ~= "Windows" then ---@cast fs fs.raw.posix
+			fs.chmod(outFile, tonumber("644", 8))
+		end
+		ansi.printf("{green}APK created: %s", outFile)
+		return
+	elseif jit.os ~= "Windows" then ---@cast fs fs.raw.posix
 		fs.chmod(outFile, tonumber("755", 8))
 	end
 

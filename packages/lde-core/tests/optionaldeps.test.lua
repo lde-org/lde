@@ -128,3 +128,92 @@ test.it("optional deps: a dependency's own optional deps are gated by its platfo
 		end
 	end
 end)
+
+-- A dependency installed by an earlier install and not wanted by this one is removed from
+-- target/, so it can't end up in a bundle: switching to an Android target, or dropping it from
+-- lde.json. The source a path dependency links to is never touched.
+const features = require("lde-core.package.features")
+const sea = require("sea")
+
+local androidDir = path.join(tmpBase, "android-dep")
+fs.mkdir(androidDir)
+fs.mkdir(path.join(androidDir, "src"))
+fs.write(path.join(androidDir, "src", "init.lua"), 'return "android-dep"')
+fs.write(path.join(androidDir, "lde.json"), json.encode({ name = "android-dep", version = "0.1.0" }))
+
+local backendsDir = path.join(tmpBase, "backends")
+fs.mkdir(backendsDir)
+fs.write(path.join(backendsDir, "lde.json"), json.encode({
+	name = "backends",
+	version = "0.1.0",
+	dependencies = {
+		["linux-dep"]   = { path = "../linux-dep",   optional = true },
+		["windows-dep"] = { path = "../windows-dep", optional = true },
+		["macos-dep"]   = { path = "../macos-dep",   optional = true },
+		["android-dep"] = { path = "../android-dep", optional = true },
+	},
+	features = {
+		linux   = { "linux-dep" },
+		windows = { "windows-dep" },
+		macos   = { "macos-dep" },
+		android = { "android-dep" },
+	}
+}))
+
+---@param fn fun()
+local function withAndroidTarget(fn)
+	const target = assert(sea.getTarget("android-x86-64-apk"))
+	lde.global.setTarget(target)
+	features.setTarget(target)
+	local ok, err = pcall(fn)
+	lde.global.setTarget(nil)
+	features.setTarget(nil)
+	if not ok then error(err, 0) end
+end
+
+test.it("optional deps: switching to an Android target removes the desktop backend from target/", function()
+	local app = lde.Package.open(backendsDir) ---@cast app -nil
+	const targetDir = app:getModulesDir()
+	const hostDep = osDep[jit.os]
+
+	app:installDependencies()
+	test.truthy(fs.exists(path.join(targetDir, hostDep)), "host backend installed first")
+
+	withAndroidTarget(function() app:installDependencies() end)
+	test.truthy(fs.exists(path.join(targetDir, "android-dep")), "the Android backend is installed")
+	test.falsy(fs.exists(path.join(targetDir, hostDep)), "the host backend is gone from target/")
+	test.truthy(fs.exists(path.join(tmpBase, hostDep, "src", "init.lua")), "its source is untouched")
+
+	app:installDependencies()
+	test.truthy(fs.exists(path.join(targetDir, hostDep)), "switching back brings it back")
+	test.falsy(fs.exists(path.join(targetDir, "android-dep")))
+end)
+
+test.it("deps: a dependency removed from lde.json is removed from target/, dev deps are kept", function()
+	local dir = path.join(tmpBase, "dropper")
+	fs.mkdir(dir)
+	fs.write(path.join(dir, "lde.json"), json.encode({
+		name = "dropper",
+		version = "0.1.0",
+		dependencies = { ["linux-dep"] = { path = "../linux-dep" } },
+		devDependencies = { ["macos-dep"] = { path = "../macos-dep" } },
+	}))
+	local app = lde.Package.open(dir) ---@cast app -nil
+	app:installDependencies()
+	app:installDevDependencies()
+	test.truthy(fs.exists(path.join(app:getModulesDir(), "linux-dep")))
+	test.truthy(fs.exists(path.join(app:getModulesDir(), "macos-dep")))
+
+	fs.write(path.join(dir, "lde.json"), json.encode({
+		name = "dropper",
+		version = "0.1.0",
+		dependencies = { ["windows-dep"] = { path = "../windows-dep" } },
+		devDependencies = { ["macos-dep"] = { path = "../macos-dep" } },
+	}))
+	app = lde.Package.open(dir) ---@cast app -nil
+	app:installDependencies()
+
+	test.truthy(fs.exists(path.join(app:getModulesDir(), "windows-dep")))
+	test.falsy(fs.exists(path.join(app:getModulesDir(), "linux-dep")), "the dropped dependency is gone")
+	test.truthy(fs.exists(path.join(app:getModulesDir(), "macos-dep")), "the dev dependency is kept")
+end)

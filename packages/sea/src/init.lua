@@ -23,6 +23,18 @@ sea.getTriple = seaTarget.getTriple
 sea.getLuajitCacheDir = seaTarget.getLuajitCacheDir
 sea.getLuajitPath = seaTarget.getLuajitPath
 
+--- Compile a package to an Android APK. Kept lazy so the host build path does
+--- not load the APK toolchain until an APK target asks for it.
+---@param main string
+---@param source string
+---@param compiler string
+---@param targetName string
+---@param opts table?
+---@return string
+function sea.compileAPK(main, source, compiler, targetName, opts)
+	return require("sea.android").compileAPK(main, source, compiler, targetName, opts)
+end
+
 ---@param compiler string
 local function isClang(compiler)
 	local _, out = process.exec(compiler, { "--version" })

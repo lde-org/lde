@@ -22,6 +22,24 @@ local build = require("lde-build")
 
 The path of the output directory: where lde copied your sources and where everything the script writes ends up. Relative to your package, this will be `/target/<yourpackage>`.
 
+### `Build.cacheDir: string`
+
+A directory for what the script wants to keep across rebuilds: downloaded sources, or a compiled library per target triple. It is relative to the output directory (`../.lde-cache/<yourpackage>`), so it works with every method below. lde clears the output directory when it rebuilds, but not this one.
+
+Nothing in it is bundled or compiled into an executable, so a library cached for every target ships only as the copy the script installs into the output directory:
+
+```lua
+local cached = build.cacheDir .. "/mylib-" .. build.target .. ".so"
+
+if build:exists(cached) then
+	build:copy(cached, "mylib.so")
+	return
+end
+
+build:cc({ "-shared", "-fPIC", "native/mylib.c", "-o", "mylib.so" })
+build:copy("mylib.so", cached)
+```
+
 ### `Build.target: string`
 
 The compiler target triple of the current build: the target platform's triple when cross-compiling with `lde compile --target`, the host triple otherwise. Useful for naming artifacts, e.g. `build:write("lib-" .. build.target .. ".so", ...)`.

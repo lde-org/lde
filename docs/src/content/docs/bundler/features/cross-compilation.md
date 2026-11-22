@@ -21,9 +21,45 @@ This is desirable when you don't care about running the binary and want fast bui
 - `freebsd-x86-64`
 - `freebsd-aarch64`
 - `android-aarch64`
+- `android-aarch64-apk`
+- `android-x86-64`
+- `android-x86-64-apk`
 
 > [!NOTE]
 > You will likely require some additional setup or dependencies on your system such as Windows libraries when targeting that platform.
+
+## Android APK
+
+`android-aarch64-apk` and `android-x86-64-apk` package the program as a
+NativeActivity app rather than a standalone binary. The x86-64 APK runs in the
+Android emulator:
+
+```sh
+lde compile --target android-aarch64-apk --outfile app.apk
+```
+
+The build needs the Android SDK (`aapt2`, `apksigner`, `zipalign`), an Android
+NDK (`ANDROID_NDK_HOME`), and a JDK's `keytool`/`jar`. It produces a signed,
+installable APK; `adb install -r app.apk` runs it.
+
+The manifest carries the application identity and any shared libraries the app
+brings itself:
+
+```json
+{
+  "android": {
+    "package": "dev.example.app",
+    "label": "Example",
+    "versionCode": 1,
+    "libs": ["libs/libfreetype.so", "libs/libharfbuzz.so"]
+  }
+}
+```
+
+`libs` are copied into the APK's `lib/arm64-v8a` directory, where Android's
+loader finds them by `SONAME`, the same way it finds `libvulkan.so`. The app has
+no Java code and no console: it runs the bundled Lua program from a
+NativeActivity.
 
 ## Using another compiler
 

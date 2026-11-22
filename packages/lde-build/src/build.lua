@@ -16,6 +16,7 @@ const process = require("process")
 
 ---@class lde.build.Instance
 ---@field outDir string
+---@field cacheDir string # Relative path at output dir to a directory kept across rebuilds and never bundled: `../.lde-cache/<package>`
 ---@field gccBin string
 ---@field target string # clang triple for the current build (target triple when cross-compiling, host triple otherwise)
 ---@field targetFlag string? # clang -target flag when cross-compiling, nil when native
@@ -32,6 +33,10 @@ Instance.__index = Instance
 function Instance.new(outDir, gccBin, target, targetFlag, captureLog)
 	return setmetatable({
 		outDir = outDir,
+		-- Beside the output dir rather than in it: a rebuild clears the output dir, and what a build
+		-- caches (downloads, a library per target) outlives it. A dot entry of target/, so no bundle,
+		-- compile or require ever sees it.
+		cacheDir = "../.lde-cache/" .. path.basename(outDir),
 		gccBin = gccBin or "gcc",
 		target = target or "unknown",
 		targetFlag = targetFlag,
@@ -238,7 +243,7 @@ end
 
 -- Host methods can't be called across the state boundary with the instance as self.
 local GUEST_SOURCE = [==[
-	local outDir, gccBin, target, features, fetch, write, read, extract, copy, delete, move, exists, scan, sh, cc = ...
+	local outDir, cacheDir, gccBin, target, features, fetch, write, read, extract, copy, delete, move, exists, scan, sh, cc = ...
 	-- Enabled feature flags, newline-joined: only primitives cross the boundary,
 	-- so the host joins the list and the guest splits it back into a set.
 	local featureSet = {}
@@ -247,6 +252,7 @@ local GUEST_SOURCE = [==[
 	end
 	local build = {
 		outDir   = outDir,
+		cacheDir = cacheDir,
 		gccBin   = gccBin,
 		target   = target,
 		features = featureSet,
@@ -295,7 +301,7 @@ function Instance.setup(state, outputDir, gccBin, target, targetFlag, captureLog
 	table.sort(featureFlags or {})
 	inst:setFeatures(featureFlags or {})
 	state:load(GUEST_SOURCE, "@lde-build"):call(
-		inst.outDir, inst.gccBin, inst.target, table.concat(featureFlags or {}, "\n"),
+		inst.outDir, inst.cacheDir, inst.gccBin, inst.target, table.concat(featureFlags or {}, "\n"),
 		function(url)          return inst:fetch(url)     end,
 		function(rel, content) inst:write(rel, content)   end,
 		rel -> inst:read(rel),

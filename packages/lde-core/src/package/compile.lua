@@ -1,5 +1,6 @@
 const sea = require("sea")
 const fs = require("fs")
+const path = require("path")
 
 const features = require("lde-core.package.features")
 
@@ -32,6 +33,7 @@ local function compilePackage(package, targetName, opts)
 
 	-- The whole pipeline (build.lua, rockspec native modules, sea.compile) reads the current target so native dependencies are built for the target, not the host.
 	lde.global.setTarget(target)
+	features.setTarget(target)
 
 	-- Cross-compiling selects the target's suffixes; a native build selects the host's.
 	const nativeExts = nativeext.extsFor(target ? target.platform : nativeext.hostPlatform())
@@ -42,6 +44,53 @@ local function compilePackage(package, targetName, opts)
 		package:build()
 		if rootBuild then timings.finish(rootBuild) end
 		package:installDependencies()
+
+		if target and target.kind == "apk" then
+			const bundleHandle = timings.active()
+				? timings.start("bundle " .. package:getName(), "bundle") : nil
+			-- Native libraries are not embedded in the bundle: Android only maps code from the
+			-- APK's native library directory, so compileAPK ships them there itself.
+			local bundle = bundlePackage(package, { native = false })
+			if bundleHandle then timings.finish(bundleHandle) end
+			if type(bundle) ~= "string" then
+				lde.error.raise("Cannot compile APK: bundle did not produce a Lua chunk")
+			end
+			assert(type(bundle) == "string")
+			local source = bundle
+
+			const config = package:readConfig()
+			const androidConfig = config.android or {}
+			local packageName = androidConfig.package
+				or ("dev.lde." .. package:getName():gsub("[^%w_]", "_"):lower())
+			const seaHandle = timings.active() ? timings.start("android apk", "compile") : nil
+			assert(target ~= nil)
+			local libs = {}
+			for _, lib in ipairs(androidConfig.libs or {}) do
+				libs[#libs + 1] = path.join(package:getDir(), lib)
+			end
+
+			---@type { name: string, path: string }[]
+			local modules = {}
+			for _, file in ipairs(nativeext.scan(package:getModulesDir(), {
+				exts = nativeExts,
+				rootName = package:getName(),
+				excludesFor = features.resolverFor(package),
+			})) do
+				---@cast file lde.nativeext.File
+				modules[#modules + 1] = { name = file.name, path = file.path }
+			end
+
+			local apk = sea.compileAPK(package:getName(), source, lde.global.getCCBin(), target.name, {
+				packageName = packageName,
+				label = androidConfig.label or package:getName(),
+				versionName = config.version,
+				versionCode = androidConfig.versionCode,
+				libs = libs,
+				modules = modules,
+			})
+			if seaHandle then timings.finish(seaHandle) end
+			return apk
+		end
 
 		-- Raw bytecode: sea embeds it as a blob and registers lazy preload loaders, so startup only deserializes the modules a command actually requires.
 		const bundleHandle = timings.active()
@@ -106,6 +155,7 @@ local function compilePackage(package, targetName, opts)
 			rootName = package:getName(),
 			excludesFor = features.resolverFor(package),
 		})) do
+			---@cast file lde.nativeext.File
 			local content = fs.read(file.path)
 			if not content then lde.error.raise("Could not read file: " .. file.path) end
 			table.insert(sharedLibs, { name = file.name, content = content })
@@ -120,6 +170,7 @@ local function compilePackage(package, targetName, opts)
 		return executable
 	end)
 	lde.global.setTarget(nil)
+	features.setTarget(nil)
 
 	if not ok then
 		local msg = tostring(result)

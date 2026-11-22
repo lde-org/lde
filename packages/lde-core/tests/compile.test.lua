@@ -486,6 +486,9 @@ test.it("compile: sea targets match the LuaJIT dist release assets", function()
 		["freebsd-x86-64"]  = "libluajit-freebsd-x86-64",
 		["freebsd-aarch64"] = "libluajit-freebsd-aarch64",
 		["android-aarch64"] = "libluajit-linux-aarch64-android",
+		["android-aarch64-apk"] = "libluajit-linux-aarch64-android",
+		["android-x86-64"] = "libluajit-linux-x86-64-android",
+		["android-x86-64-apk"] = "libluajit-linux-x86-64-android",
 	}
 
 	for name in pairs(sea.targets) do

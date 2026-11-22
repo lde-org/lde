@@ -100,7 +100,7 @@ local function entryModuleName(package)
 end
 
 ---@param package lde.Package
----@param opts { bytecode: boolean?, raw: boolean?, features: lde.Package.Config.FeatureFlag[]?, transform: (fun(content: string, chunkName: string): string)? }? # transform rewrites each of the package's own modules (not its dependencies) before bundling
+---@param opts { bytecode: boolean?, raw: boolean?, native: boolean?, features: lde.Package.Config.FeatureFlag[]?, transform: (fun(content: string, chunkName: string): string)? }? # transform rewrites each of the package's own modules (not its dependencies) before bundling; native = false leaves native libraries out, for a caller that ships them itself
 ---@return string|{ name: string, modules: { name: string, code: string }[] }
 local function bundlePackage(package, opts)
 	opts = opts or {}
@@ -126,6 +126,10 @@ local function bundlePackage(package, opts)
 		local p = path.join(modulesDir, entry.name)
 		if entry.name == "tests" and package:getName() ~= "tests" then
 			-- target/tests is the package's test-only dir and must never end up in a bundle; a package *named* "tests" owns its own module dir there — keep it.
+			goto continue
+		end
+		if entry.name:sub(1, 1) == "." then
+			-- Dot entries are lde's markers and build scripts' caches (a library built for each target): no require names them.
 			goto continue
 		end
 
@@ -191,7 +195,7 @@ local function bundlePackage(package, opts)
 	-- Native modules (.so/.dll/.dylib) are embedded as raw bytes and extracted next to the bundle at load time so `require` resolves through package.cpath as in a normal project. They use the host's suffixes: a source bundle is not cross-compiled.
 	---@type table<string, string> # cpath-relative path ("cmod/core.so") -> bytes
 	const nativeFiles = {}
-	for _, file in ipairs(nativeext.scan(modulesDir, {
+	for _, file in ipairs(opts.native == false and {} or nativeext.scan(modulesDir, {
 		exts = nativeext.extsFor(nativeext.hostPlatform()),
 		rootName = package:getName(),
 		excludesFor = excludesFor,

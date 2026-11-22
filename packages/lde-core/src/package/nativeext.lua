@@ -31,7 +31,8 @@ end
 
 --- Walks a package's module dir for native libraries, skipping the same
 --- entries a bundle skips: the top-level `tests` dir unless the package is
---- named tests, and paths a feature flag excludes.
+--- named tests, dot entries (lde's markers and build scripts' caches), and
+--- paths a feature flag excludes.
 ---@param modulesDir string
 ---@param opts { exts: string[], rootName: string, excludesFor: fun(alias: string): string[]? }
 function nativeext.scan(modulesDir, opts)
@@ -51,6 +52,10 @@ function nativeext.scan(modulesDir, opts)
 	for entry in fs.readdir(modulesDir) do
 		if entry.name == "tests" and opts.rootName ~= "tests" then
 			-- A package *named* tests owns its module dir there; every other package's tests must never reach a bundle.
+			goto continue
+		end
+		if entry.name:sub(1, 1) == "." then
+			-- A build cache keeps a library per target side by side; only what the build installed as a module ships.
 			goto continue
 		end
 

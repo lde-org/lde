@@ -50,6 +50,17 @@ end
 function M.getTargetFlag()
 	local target = currentTarget
 	if not target then return nil end
+
+	-- The NDK's clang wrapper already carries its target and sysroot. Passing
+	-- --target again is not harmful but is not what makes the build work; not
+	-- passing it keeps build.lua's cc invocation exactly the wrapper's.
+	if target.android then
+		const cc = M.getCCBin()
+		if cc:find(target.triple .. "-clang", 1, true) then
+			return nil
+		end
+	end
+
 	return "--target=" .. target.triple
 end
 
@@ -83,6 +94,22 @@ function M.getCCBin()
 	end
 
 	if currentTarget then
+		-- Android native extensions link against bionic, not the host libc.
+		-- The NDK wrapper is the only clang that carries that sysroot and
+		-- runtime, so use it whenever the NDK is installed.
+		if currentTarget.android then
+			const declared = env.var("LDE_ANDROID_CC")
+			if declared and declared ~= "" then
+				return declared
+			end
+
+			const ndkcc = require("sea.android").getNDKCompiler(currentTarget)
+			if ndkcc then return ndkcc end
+
+			lde.error.raise("Android builds need the NDK's clang (it carries the bionic sysroot), "
+				.. "but no NDK was found. Set ANDROID_NDK_HOME or LDE_ANDROID_CC.")
+		end
+
 		-- Cross compile: clang only (it carries -target). Prefer the bundled
 		-- clang toolchain on Windows — it is llvm-mingw and cross-compiles
 		-- every Windows target out of the box. Otherwise a clang on PATH (the

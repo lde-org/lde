@@ -46,6 +46,45 @@ test.it("platform flags: bsd is mapped (it used to have no flag at all)", functi
 	if jit.os == "BSD" then test.equal(flags[1], "bsd") end
 end)
 
+test.it("platform flags: an Android target takes an android flag over linux", function()
+	features.setTarget({
+		name = "android-aarch64-apk", platform = "linux", arch = "aarch64",
+		libc = "android", triple = "aarch64-linux-android24", android = true,
+	})
+
+	local ok, err = pcall(function()
+		local defs = features.parse({
+			android = { "android-dep" },
+			linux = { "linux-dep" },
+			unix = { "unix-dep" },
+		}, "pkg")
+		local enabled = features.enabledDependencies(defs, nil)
+		test.truthy(enabled["android-dep"])
+		test.truthy(enabled["unix-dep"])
+		test.falsy(enabled["linux-dep"])
+	end)
+
+	features.setTarget(nil)
+	assert(ok, err)
+end)
+
+test.it("platform flags: an Android target falls back to linux when no android flag exists", function()
+	features.setTarget({
+		name = "android-aarch64-apk", platform = "linux", arch = "aarch64",
+		libc = "android", triple = "aarch64-linux-android24", android = true,
+	})
+
+	local ok, err = pcall(function()
+		local defs = features.parse({ linux = { "linux-dep" }, unix = { "unix-dep" } }, "pkg")
+		local enabled = features.enabledDependencies(defs, nil)
+		test.truthy(enabled["linux-dep"])
+		test.truthy(enabled["unix-dep"])
+	end)
+
+	features.setTarget(nil)
+	assert(ok, err)
+end)
+
 -- ── the list: dependency alias vs module name ────────────────────────────────
 
 test.it("list: a bare name is a dependency alias", function()
@@ -419,6 +458,38 @@ test.it("bundle: the filtered bundle still runs", function()
 	const result = chunk()
 	test.equal(type(result), "table")
 	test.truthy(result.win or result.unix)
+end)
+
+test.it("bundle: what a build caches in build.cacheDir never ships", function()
+	local dir = path.join(tmpBase, "cache-dep")
+	fs.mkdirAll(path.join(dir, "src"))
+	fs.write(path.join(dir, "src", "init.lua"), "return {}")
+	-- A library cached for another target beside the one installed, as image and treble do.
+	fs.write(path.join(dir, "build.lua"), [[
+local build = require("lde-build")
+build:write(build.cacheDir .. "/other-target.]] .. nativeExt .. [[", "CACHED-FOR-ANOTHER-TARGET")
+build:write("mod.]] .. nativeExt .. [[", "INSTALLED-MODULE")
+]])
+	fs.write(path.join(dir, "lde.json"), json.encode({ name = "cache-dep", version = "0.1.0" }))
+
+	local appWithCache = path.join(tmpBase, "cache-app")
+	fs.mkdirAll(path.join(appWithCache, "src"))
+	fs.write(path.join(appWithCache, "src", "init.lua"), 'return require("cache-dep")')
+	fs.write(path.join(appWithCache, "lde.json"), json.encode({
+		name = "cache-app",
+		version = "0.1.0",
+		dependencies = { ["cache-dep"] = { path = "../cache-dep" } },
+	}))
+
+	local app = lde.Package.open(appWithCache) ---@cast app -nil
+	app:build()
+	app:installDependencies()
+	test.truthy(fs.exists(path.join(app:getModulesDir(), ".lde-cache", "cache-dep", "other-target." .. nativeExt)),
+		"the cache is beside the module dir")
+
+	const source = bundlePackage(app, {}) --[[@as string]]
+	test.truthy(source:find("INSTALLED-MODULE", 1, true), "the installed module ships")
+	test.falsy(source:find("CACHED-FOR-ANOTHER-TARGET", 1, true), "the cached copy does not")
 end)
 
 test.it("bundle: the lockfile records the resolved excludes", function()

@@ -89,6 +89,10 @@ end
 ---@field arch string # "x86-64" | "aarch64"
 ---@field libc? string # "gnu" | "musl" | "android"; nil on macos/freebsd (no libc component in the dist name)
 ---@field triple string # clang -target used for cross compilation
+---@field kind? "exe" | "apk" # artifact the target produces
+---@field android? boolean # Android target (bionic); used by the APK builder
+---@field apiLevel? number # Android API level for APK targets
+---@field abi? string # Android ABI directory, e.g. arm64-v8a
 
 -- The targets lde ships in GitHub releases (see .github/workflows/release.yml).
 -- Cross-compiling to one of these uses clang's --target with the target's
@@ -104,6 +108,9 @@ Target.targets = {
 	["freebsd-x86-64"]  = { name = "freebsd-x86-64",  platform = "freebsd", arch = "x86-64",                  triple = "x86_64-unknown-freebsd" },
 	["freebsd-aarch64"] = { name = "freebsd-aarch64", platform = "freebsd", arch = "aarch64",                 triple = "aarch64-unknown-freebsd" },
 	["android-aarch64"] = { name = "android-aarch64", platform = "linux",   arch = "aarch64", libc = "android", triple = "aarch64-linux-android" },
+	["android-aarch64-apk"] = { name = "android-aarch64-apk", platform = "linux", arch = "aarch64", libc = "android", triple = "aarch64-linux-android24", kind = "apk", android = true, apiLevel = 24, abi = "arm64-v8a" },
+	["android-x86-64"] = { name = "android-x86-64", platform = "linux",   arch = "x86-64",  libc = "android", triple = "x86_64-linux-android" },
+	["android-x86-64-apk"] = { name = "android-x86-64-apk", platform = "linux", arch = "x86-64", libc = "android", triple = "x86_64-linux-android24", kind = "apk", android = true, apiLevel = 24, abi = "x86_64" },
 }
 
 --- Look up a release target by name.
@@ -133,6 +140,7 @@ end
 --- Whether a target matches the host (a native build, not a cross compile).
 ---@param target sea.Target
 function Target.isHostTarget(target)
+	if target.kind == "apk" then return false end
 	const host = Target.getHostTarget()
 	return target.platform == host.platform
 		and target.arch == host.arch

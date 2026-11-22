@@ -69,6 +69,53 @@ local function commitLockfile(pkg, stack, modulesDir, isStale)
 	fs.write(path.join(modulesDir, ".installed"), installedHash(content, manifest))
 end
 
+-- target/ is shared by runtime deps, dev deps, the root's own build and any rock modules
+-- installed flat by module name, so it can't be wiped to what this install wants. Instead each
+-- full root install records the aliases it materialized here, and the next one removes those it
+-- no longer wants: a dependency dropped from lde.json, or an optional one the current --target
+-- leaves off (a desktop backend after switching to an Android target). Without that, the old
+-- entry stays in target/ and every bundle and compile picks it up.
+const RUNTIME_MARKER = ".runtime-deps"
+
+---@param alias string
+local function isPlainAlias(alias)
+	return alias ~= "" and alias:sub(1, 1) ~= "." and not alias:find("[/\\]")
+end
+
+---@param modulesDir string
+---@param order lde.install.Node[]
+---@param rootName string
+local function pruneUnwanted(modulesDir, order, rootName)
+	---@type table<string, true>
+	const wanted = {}
+	---@type string[]
+	const names = {}
+	for _, node in ipairs(order) do
+		if node.wanted ~= false and not node.error and not wanted[node.alias] then
+			wanted[node.alias] = true
+			names[#names + 1] = node.alias
+		end
+	end
+
+	const markerPath = path.join(modulesDir, RUNTIME_MARKER)
+	const previous = fs.read(markerPath)
+	if previous then
+		for alias in previous:gmatch("[^\n]+") do
+			if not wanted[alias] and alias ~= rootName and isPlainAlias(alias) then
+				const dest = path.join(modulesDir, alias)
+				if fs.islink(dest) then
+					fs.delete(dest)
+				elseif fs.isdir(dest) then
+					fs.rmdir(dest)
+				end
+			end
+		end
+	end
+
+	table.sort(names)
+	fs.write(markerPath, table.concat(names, "\n") .. "\n")
+end
+
 --- True when every requested dependency is actually materialized in the modules
 --- dir. The .installed marker hash only proves the lockfile/manifest didn't
 --- change; it can't see materialization wiped out of band — deleting ~/.lde/git
@@ -301,6 +348,8 @@ local function installDependencies(package, dependencies, relativeTo, features, 
 		lde.error.raise("Failed to install " .. #ctx.failures .. " dependenc"
 			.. (#ctx.failures == 1 ? "y" : "ies") .. ":\n" .. table.concat(parts, "\n"))
 	end
+
+	if isRoot then pruneUnwanted(modulesDir, ctx.order or {}, package:getName()) end
 
 	commitLockfile(package, ctx.stack, modulesDir, isLockfileStale)
 
