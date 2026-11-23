@@ -89,6 +89,8 @@ local function compilePackage(package, targetName, opts)
 				icon = androidConfig.icon and path.join(package:getDir(), androidConfig.icon) or nil,
 				fullscreen = androidConfig.fullscreen,
 				libs = libs,
+				dex = androidConfig.dex and path.join(package:getDir(), androidConfig.dex) or nil,
+				services = androidConfig.services,
 				modules = modules,
 			})
 			if seaHandle then timings.finish(seaHandle) end

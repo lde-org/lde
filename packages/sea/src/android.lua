@@ -398,12 +398,21 @@ local function manifest(opts)
 	for _, name in ipairs(opts.permissions or {}) do
 		permissions[#permissions + 1] = string.format('\t<uses-permission android:name="%s" />\n', xmlEscape(name))
 	end
+	-- Services the app's own Java code implements. Android starts a service from the APK's
+	-- classes.dex and nowhere else, which is why an app with services ships `dex` too.
+	local services = {}
+	for _, service in ipairs(opts.services or {}) do
+		local kind = service.foregroundServiceType
+		services[#services + 1] = string.format('\t\t<service android:name="%s" android:exported="false"%s />\n',
+			xmlEscape(service.name),
+			kind and string.format(' android:foregroundServiceType="%s"', xmlEscape(kind)) or "")
+	end
 	return string.format([[
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
 	package="%s" android:versionCode="%d" android:versionName="%s">
 %s	<uses-feature android:name="android.hardware.vulkan.version" android:required="false" />
 	<uses-feature android:name="android.hardware.touchscreen" android:required="false" />
-	<application android:hasCode="false" android:extractNativeLibs="true"%s
+	<application android:hasCode="%s" android:extractNativeLibs="true"%s
 		android:label="%s" android:theme="@style/LdeTheme">
 		<activity android:name="android.app.NativeActivity" android:exported="true"
 			android:screenOrientation="fullSensor"
@@ -414,10 +423,11 @@ local function manifest(opts)
 				<category android:name="android.intent.category.LAUNCHER" />
 			</intent-filter>
 		</activity>
-	</application>
+%s	</application>
 </manifest>
 ]], opts.packageName, opts.versionCode, xmlEscape(opts.versionName), table.concat(permissions),
-		opts.icon and ' android:icon="@mipmap/ic_launcher"' or "", xmlEscape(opts.label))
+		opts.hasCode and "true" or "false", opts.icon and ' android:icon="@mipmap/ic_launcher"' or "",
+		xmlEscape(opts.label), table.concat(services))
 end
 
 ---@param keystore string
@@ -527,7 +537,7 @@ end
 ---@param source string # Lua source bundle, without native libraries
 ---@param compiler string
 ---@param targetName string
----@param opts? { packageName: string?, label: string?, versionName: string?, versionCode: number?, icon: string?, fullscreen: boolean?, permissions: string[]?, libs: string[]?, modules: { name: string, path: string }[]? } # icon: a PNG shown in the launcher; fullscreen: hide the status bar; permissions: `uses-permission` names for the manifest; modules: native modules of the dependency tree, shipped in the APK and reached through require/ffi.load
+---@param opts? { packageName: string?, label: string?, versionName: string?, versionCode: number?, icon: string?, fullscreen: boolean?, permissions: string[]?, libs: string[]?, dex: string?, services: { name: string, foregroundServiceType: string? }[]?, modules: { name: string, path: string }[]? } # icon: a PNG shown in the launcher; fullscreen: hide the status bar; permissions: `uses-permission` names for the manifest; dex: a prebuilt classes.dex with the app's Java code; services: `<service>` entries for classes in that dex; modules: native modules of the dependency tree, shipped in the APK and reached through require/ffi.load
 ---@return string apkPath
 function android.compileAPK(main, source, compiler, targetName, opts)
 	opts = opts or {}
@@ -575,6 +585,8 @@ lde_bundle_end:
 		versionCode = versionCode,
 		permissions = opts.permissions,
 		icon = opts.icon ~= nil,
+		hasCode = opts.dex ~= nil,
+		services = opts.services,
 	}))
 
 	compileShim(target, compiler, stage)
@@ -644,7 +656,19 @@ lde_bundle_end:
 	for _, module in ipairs(modules) do
 		fs.copy(module.path, path.join(libDir, moduleFileName(module.name)))
 	end
-	run(zip, { "-q", "-r", unsigned, "lib" }, { cwd = stage })
+	-- The app's Java code goes in at the root as classes.dex, where the platform's class loader
+	-- reads it: services named in the manifest are started from there.
+	local entries = { "lib" }
+	if opts.dex ~= nil then
+		if not fs.exists(opts.dex) then
+			error("android: dex not found: " .. tostring(opts.dex))
+		end
+		fs.copy(opts.dex, path.join(stage, "classes.dex"))
+		entries[#entries + 1] = "classes.dex"
+	end
+	local zipArgs = { "-q", "-r", unsigned }
+	for _, entry in ipairs(entries) do zipArgs[#zipArgs + 1] = entry end
+	run(zip, zipArgs, { cwd = stage })
 
 	local aligned = path.join(stage, "aligned.apk")
 	local zipalign = env.var("LDE_ZIPALIGN")

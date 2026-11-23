@@ -208,6 +208,23 @@
 					"type": "array",
 					"items": { "type": "string" },
 					"description": "Shared libraries to ship in the APK native library directory, relative to the package"
+				},
+				"dex": {
+					"type": "string",
+					"description": "A prebuilt classes.dex with the app's own Java code, relative to the package. Shipped as the APK's classes.dex; required for `services`"
+				},
+				"services": {
+					"type": "array",
+					"items": {
+						"type": "object",
+						"properties": {
+							"name": { "type": "string", "description": "Fully qualified class name of the service, in `dex`" },
+							"foregroundServiceType": { "type": "string", "description": "e.g. mediaPlayback; needs the matching FOREGROUND_SERVICE_* permission" }
+						},
+						"required": ["name"],
+						"additionalProperties": false
+					},
+					"description": "`<service>` entries for the manifest, for services implemented in `dex`"
 				}
 			},
 			"additionalProperties": false
