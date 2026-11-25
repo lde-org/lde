@@ -1,3 +1,4 @@
+const sea = require("sea")
 const fs = require("fs")
 const path = require("path")
 
@@ -100,10 +101,9 @@ local function entryModuleName(package)
 end
 
 ---@param package lde.Package
----@param opts { bytecode: boolean?, raw: boolean?, native: boolean?, features: lde.Package.Config.FeatureFlag[]?, transform: (fun(content: string, chunkName: string): string)? }? # transform rewrites each of the package's own modules (not its dependencies) before bundling; native = false leaves native libraries out, for a caller that ships them itself
+---@param opts { bytecode: boolean?, raw: boolean?, native: boolean?, features: lde.Package.Config.FeatureFlag[]?, transform: (fun(content: string, chunkName: string): string)?, platform: string? }
 ---@return string|{ name: string, modules: { name: string, code: string }[] }
-local function bundlePackage(package, opts)
-	opts = opts or {}
+local function bundleModules(package, opts)
 	const useBytecode = opts.bytecode or opts.raw
 	const raw = opts.raw
 
@@ -192,11 +192,11 @@ local function bundlePackage(package, opts)
 		return { name = mainName, modules = modules }
 	end
 
-	-- Native modules (.so/.dll/.dylib) are embedded as raw bytes and extracted next to the bundle at load time so `require` resolves through package.cpath as in a normal project. They use the host's suffixes: a source bundle is not cross-compiled.
+	-- Native modules (.so/.dll/.dylib) are embedded as raw bytes and extracted next to the bundle at load time so `require` resolves through package.cpath as in a normal project. They use the suffixes of the platform the bundle is for.
 	---@type table<string, string> # cpath-relative path ("cmod/core.so") -> bytes
 	const nativeFiles = {}
 	for _, file in ipairs(opts.native == false and {} or nativeext.scan(modulesDir, {
-		exts = nativeext.extsFor(nativeext.hostPlatform()),
+		exts = nativeext.extsFor(opts.platform or nativeext.hostPlatform()),
 		rootName = package:getName(),
 		excludesFor = excludesFor,
 	})) do
@@ -284,6 +284,45 @@ local function bundlePackage(package, opts)
 		result = compileBytecode(result, package:getName())
 	end
 
+	return result
+end
+
+---@param package lde.Package
+---@param opts { bytecode: boolean?, raw: boolean?, native: boolean?, features: lde.Package.Config.FeatureFlag[]?, transform: (fun(content: string, chunkName: string): string)?, target: string? }? # transform rewrites each of the package's own modules (not its dependencies) before bundling; native = false leaves native libraries out, for a caller that ships them itself; target builds the package and its dependencies for another machine (e.g. "android-aarch64") first and embeds the native libraries built for it
+---@return string|{ name: string, modules: { name: string, code: string }[] }
+local function bundlePackage(package, opts)
+	opts = opts or {}
+	if opts.target == nil then return bundleModules(package, opts) end
+
+	const target, terr = sea.getTarget(opts.target)
+	if not target then
+		lde.error.raise(terr)
+	end ---@cast target -nil
+	-- A target matching the host is a native build, as with `lde compile`.
+	const cross = not sea.isHostTarget(target)
+
+	-- The build scripts and rockspec native modules read the current target, so the dependencies are built for it rather than for the host; the target is cleared again whatever happens.
+	if cross then
+		lde.global.setTarget(target)
+		features.setTarget(target)
+	end
+	const ok, result = pcall(function()
+		package:build()
+		package:installDependencies()
+		return bundleModules(package, {
+			bytecode = opts.bytecode,
+			raw = opts.raw,
+			native = opts.native,
+			features = opts.features,
+			transform = opts.transform,
+			platform = target.platform,
+		})
+	end)
+	if cross then
+		lde.global.setTarget(nil)
+		features.setTarget(nil)
+	end
+	if not ok then error(result, 0) end
 	return result
 end
 

@@ -16,6 +16,15 @@ lde bundle
 > [!TIP]
 > You can also pass `--bytecode` to compile into a luajit bytecode file (smaller and faster to run). Note you will need to run the file with the same version of LuaJIT lde supports.
 
+If you use native dependencies, lde bundle will still include them, hence, they are going to be system dependent. Use `--target` to cross compile your program for different platforms.
+
+```sh
+lde bundle --target android-aarch64
+lde bundle --target windows-x86-64
+```
+
+This is only relevant if you use native
+
 ## Native executables
 
 Using lde's C compilation support, you can compile your lua program into a native executable.
@@ -24,7 +33,7 @@ Using lde's C compilation support, you can compile your lua program into a nativ
 lde compile
 ```
 
-The created executable can run without lua, lde, or any of your dependencies on the user's system. It just *works*.
+The created executable can run without lua, lde, or any of your dependencies on the user's system. It just _works_.
 
 > [!TIP]
 > lde itself is created with `lde compile`!

@@ -181,10 +181,11 @@ local commands = {
 		},
 	},
 	bundle = {
-		usage = "lde bundle [--outfile <path>] [--bytecode]",
+		usage = "lde bundle [--outfile <path>] [--target <target>] [--bytecode]",
 		description = "Bundle the current project into a single Lua file.",
 		options = {
-			["--outfile"] = { arg = "path", desc = "Output path (defaults to ./<name>.lua)" },
+			["--outfile"] = { arg = "path", desc = "Output path (defaults to ./<name>.lua, or ./<name>-<target>.lua with --target)" },
+			["--target"] = { arg = "target", desc = "Build native dependencies for another platform and embed those (e.g. android-aarch64, windows-x86-64)" },
 			["--bytecode"] = { desc = "Precompile bundled modules to bytecode" },
 		},
 	},

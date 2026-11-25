@@ -107,9 +107,9 @@ Target.targets = {
 	["macos-aarch64"]   = { name = "macos-aarch64",   platform = "macos",   arch = "aarch64",                 triple = "aarch64-apple-darwin" },
 	["freebsd-x86-64"]  = { name = "freebsd-x86-64",  platform = "freebsd", arch = "x86-64",                  triple = "x86_64-unknown-freebsd" },
 	["freebsd-aarch64"] = { name = "freebsd-aarch64", platform = "freebsd", arch = "aarch64",                 triple = "aarch64-unknown-freebsd" },
-	["android-aarch64"] = { name = "android-aarch64", platform = "linux",   arch = "aarch64", libc = "android", triple = "aarch64-linux-android" },
+	["android-aarch64"] = { name = "android-aarch64", platform = "linux",   arch = "aarch64", libc = "android", triple = "aarch64-linux-android24", android = true, apiLevel = 24, abi = "arm64-v8a" },
 	["android-aarch64-apk"] = { name = "android-aarch64-apk", platform = "linux", arch = "aarch64", libc = "android", triple = "aarch64-linux-android24", kind = "apk", android = true, apiLevel = 24, abi = "arm64-v8a" },
-	["android-x86-64"] = { name = "android-x86-64", platform = "linux",   arch = "x86-64",  libc = "android", triple = "x86_64-linux-android" },
+	["android-x86-64"] = { name = "android-x86-64", platform = "linux",   arch = "x86-64",  libc = "android", triple = "x86_64-linux-android24", android = true, apiLevel = 24, abi = "x86_64" },
 	["android-x86-64-apk"] = { name = "android-x86-64-apk", platform = "linux", arch = "x86-64", libc = "android", triple = "x86_64-linux-android24", kind = "apk", android = true, apiLevel = 24, abi = "x86_64" },
 }
 
